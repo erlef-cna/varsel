@@ -10,7 +10,20 @@
 
   languages.elixir.enable = true;
 
-  services.postgres.enable = true;
+  services.postgres = {
+    enable = true;
+    listen_addresses = "*";
+
+    initialDatabases = [
+      { name = "cve_management_dev";  user = "postgres"; pass = "postgres"; }
+      { name = "cve_management_test"; user = "postgres"; pass = "postgres"; }
+      { name = "cve_management_prod"; user = "postgres"; pass = "postgres"; }
+    ];
+
+    initialScript = ''
+      ALTER ROLE postgres WITH CREATEDB SUPERUSER;
+    '';
+  };
 
   claude.code = {
     enable = true;
