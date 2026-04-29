@@ -15,12 +15,19 @@ defmodule CveManagement.Application do
       CveManagementWeb.Telemetry,
       CveManagement.Repo,
       {DNSCluster, query: Application.get_env(:cve_management, :dns_cluster_query) || :ignore},
+      {Oban,
+       AshOban.config(
+         Application.fetch_env!(:cve_management, :ash_domains),
+         Application.fetch_env!(:cve_management, Oban)
+       )},
       {Phoenix.PubSub, name: CveManagement.PubSub},
       # Start a worker by calling: CveManagement.Worker.start_link(arg)
       # {CveManagement.Worker, arg},
       # Start to serve requests, typically the last entry
       CveManagementWeb.Endpoint,
-      {AshAuthentication.Supervisor, [otp_app: :cve_management]}
+      {AshAuthentication.Supervisor, [otp_app: :cve_management]},
+      {Absinthe.Subscription, CveManagementWeb.Endpoint},
+      AshGraphql.Subscription.Batcher
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

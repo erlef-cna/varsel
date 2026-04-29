@@ -28,8 +28,8 @@ The application needs two kinds of external API access:
 
 REST endpoints:
 
-- `GET /api/cves` — CVE JSON 5.x index
-- `GET /api/cves/:cve_id` — CVE JSON 5.x detail
+- `GET /cves/index.json` — CVE JSON 5.x index (see ADR-015 for details)
+- `GET /cves/:cve_id.json` — CVE JSON 5.x detail (see ADR-015 for details)
 - `GET /api/osv` — OSV JSON index
 - `GET /api/osv/:cve_id` — OSV JSON detail
 

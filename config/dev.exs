@@ -74,7 +74,9 @@ config :cve_management, CveManagementWeb.Endpoint,
   ]
 
 # Enable dev routes for dashboard and mailbox
-config :cve_management, dev_routes: true, token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F"
+config :cve_management,
+  dev_routes: true,
+  token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F"
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"

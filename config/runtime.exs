@@ -26,6 +26,35 @@ end
 
 config :cve_management, CveManagementWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+if config_env() != :test do
+  config :cve_management,
+    mitre_cve_api: [
+      base_url:
+        System.get_env("MITRE_CVE_API_BASE_URL") ||
+          raise("Missing environment variable `MITRE_CVE_API_BASE_URL`!"),
+      org:
+        System.get_env("MITRE_CVE_API_ORG") ||
+          raise("Missing environment variable `MITRE_CVE_API_ORG`!"),
+      user:
+        System.get_env("MITRE_CVE_API_USER") ||
+          raise("Missing environment variable `MITRE_CVE_API_USER`!"),
+      api_key:
+        System.get_env("MITRE_CVE_API_KEY") ||
+          raise("Missing environment variable `MITRE_CVE_API_KEY`!")
+    ],
+    github: [
+      client_id:
+        System.get_env("GITHUB_CLIENT_ID") ||
+          raise("Missing environment variable `GITHUB_CLIENT_ID`!"),
+      client_secret:
+        System.get_env("GITHUB_CLIENT_SECRET") ||
+          raise("Missing environment variable `GITHUB_CLIENT_SECRET`!"),
+      redirect_uri:
+        System.get_env("GITHUB_REDIRECT_URI") ||
+          raise("Missing environment variable `GITHUB_REDIRECT_URI`!")
+    ]
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

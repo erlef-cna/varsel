@@ -245,34 +245,26 @@ to `cancelled`.
 
 #### Resource: CveRecord
 
-| Field | Type | Encrypted? | Notes |
-| --- | --- | --- | --- |
-| `id` | UUID | No | |
-| `case_id` | UUID (FK) | No | |
-| `cve_id` | string | No | e.g., `CVE-2025-12345` |
-| `cve_json` | map (jsonb) | Yes | CVE JSON 5.x; decrypted on publish |
-| `osv_json` | map (jsonb) | Yes | OSV format; decrypted on publish |
-| `cvss_vector` | string (nullable) | No | |
-| `cvss_score` | decimal (nullable) | No | |
-| `cvss_base_severity` | string (nullable) | No | |
-| `cwe_ids` | array of strings | No | |
-| `capec_ids` | array of strings | No | |
-| `description` | text | Yes | Decrypted on publish |
-| `workarounds` | text (nullable) | Yes | Decrypted on publish |
-| `configurations` | text (nullable) | Yes | Decrypted on publish |
-| `patch_url` | string (nullable) | No | |
-| `introduced_commit` | string (nullable) | No | |
-| `fixed_commit` | string (nullable) | No | |
-| `published_at` | utc_datetime (nullable) | No | |
-| `inserted_at` | utc_datetime | No | |
-| `updated_at` | utc_datetime | No | |
+See [ADR-012](decisions/012-case-data-model.md) for the full field list,
+CVE JSON 5.x / OSV JSON field mapping, and encryption decisions.
 
 Actions:
 
 - `build` — AI-assisted CVE record construction from case/thread data
-- `publish` — sends record to MITRE CVE Services API, marks record public, updates
-  reservation status to `published`
+- `publish` — derives plain-text and HTML from Markdown fields, assembles and
+  validates CVE JSON 5.x and OSV JSON, submits to MITRE CVE Services API,
+  marks record public, updates reservation status to `published`
 - `update` — normal update action; allowed after publish (CVEs can be amended)
+
+#### Resource: CveFieldProposal
+
+See [ADR-012](decisions/012-case-data-model.md). Tracks proposed values for
+individual `CveRecord` fields, with reasoning, from both human and AI actors.
+
+#### Resource: CveFieldComment
+
+See [ADR-012](decisions/012-case-data-model.md). Append-only threaded comments
+on a `CveFieldProposal`.
 
 ______________________________________________________________________
 

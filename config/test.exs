@@ -31,7 +31,17 @@ config :cve_management, CveManagementWeb.Endpoint,
   secret_key_base: "jdkXkwkaDUSqRpTF7YCN23q+0nRXBt17mEoKtX93dp8D/gmeUcpyZ3Vp0z9rLsmr",
   server: false
 
-config :cve_management, token_signing_secret: "6efZN/F7dwuoM9KP4oUWol4pbbSwNQ8J"
+config :cve_management, Oban, testing: :manual
+
+config :cve_management,
+  token_signing_secret: "6efZN/F7dwuoM9KP4oUWol4pbbSwNQ8J",
+  mitre_cve_api: [
+    base_url: "https://cveawg-test.mitre.org/api",
+    org: "test-org",
+    user: "test-user@example.com",
+    api_key: "test-api-key",
+    plug: {Req.Test, CveManagement.CVE.MitreCveApi}
+  ]
 
 # Print only warnings and errors during test
 config :logger, level: :warning

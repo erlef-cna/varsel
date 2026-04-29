@@ -25,6 +25,10 @@ config :ash,
   redact_sensitive_values_in_errors?: true,
   known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec]
 
+config :ash_graphql, authorize_update_destroy_with_error?: true
+
+config :ash_oban, pro?: false
+
 # Configure the mailer
 #
 # By default it uses the "Local" adapter which stores the emails
@@ -45,10 +49,25 @@ config :cve_management, CveManagementWeb.Endpoint,
   pubsub_server: CveManagement.PubSub,
   live_view: [signing_salt: "zOuaRJlV"]
 
+config :cve_management, Oban,
+  engine: Oban.Engines.Basic,
+  notifier: Oban.Notifiers.Postgres,
+  queues: [default: 10, cve_publishing: 1, cve_pool: 1],
+  repo: CveManagement.Repo,
+  plugins: [{Oban.Plugins.Cron, []}]
+
 config :cve_management,
+  cve_pool_min_size: 5,
   ecto_repos: [CveManagement.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [CveManagement.Accounts]
+  ash_domains: [
+    CveManagement.GPG,
+    CveManagement.AI,
+    CveManagement.CVE,
+    CveManagement.ReportChannels,
+    CveManagement.Cases,
+    CveManagement.Accounts
+  ]
 
 # Configure esbuild (the version is required)
 config :esbuild,
@@ -73,6 +92,8 @@ config :spark,
     remove_parens?: true,
     "Ash.Resource": [
       section_order: [
+        :admin,
+        :graphql,
         :authentication,
         :token,
         :user_identity,
@@ -93,7 +114,17 @@ config :spark,
         :identities
       ]
     ],
-    "Ash.Domain": [section_order: [:resources, :policies, :authorization, :domain, :execution]]
+    "Ash.Domain": [
+      section_order: [
+        :admin,
+        :graphql,
+        :resources,
+        :policies,
+        :authorization,
+        :domain,
+        :execution
+      ]
+    ]
   ]
 
 # Configure tailwind (the version is required)

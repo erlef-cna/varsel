@@ -1,0 +1,13 @@
+defmodule CveManagement.Cases do
+  @moduledoc false
+  use Ash.Domain, otp_app: :cve_management, extensions: [AshAdmin.Domain]
+
+  admin do
+    show? true
+  end
+
+  resources do
+    resource CveManagement.Cases.Case
+    resource CveManagement.Cases.CaseThread
+  end
+end

@@ -10,6 +10,8 @@
 
   languages.elixir.enable = true;
 
+  dotenv.enable = true;
+
   services.postgres = {
     enable = true;
     listen_addresses = "*";

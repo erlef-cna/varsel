@@ -24,6 +24,8 @@ defmodule CveManagement.DataCase do
 
   using do
     quote do
+      use AshOban.Test, repo: CveManagement.Repo
+
       import CveManagement.DataCase
       import Ecto
       import Ecto.Changeset

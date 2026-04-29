@@ -46,11 +46,18 @@ defmodule CveManagement.MixProject do
   defp deps do
     # styler:sort
     [
+      {:absinthe_phoenix, "~> 2.0"},
       {:ash, "~> 3.0"},
+      {:ash_admin, "~> 1.0"},
       {:ash_authentication, "~> 4.0"},
       {:ash_authentication_phoenix, "~> 2.0"},
+      {:ash_cloak, "~> 0.2"},
+      {:ash_events, "~> 0.7"},
+      {:ash_graphql, "~> 1.0"},
+      {:ash_oban, "~> 0.8"},
       {:ash_phoenix, "~> 2.0"},
       {:ash_postgres, "~> 2.0"},
+      {:ash_state_machine, "~> 0.2"},
       {:bandit, "~> 1.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
@@ -63,6 +70,8 @@ defmodule CveManagement.MixProject do
       {:igniter, "~> 0.6", only: [:dev, :test]},
       {:jason, "~> 1.2"},
       {:lazy_html, ">= 0.1.0", only: :test},
+      {:oban, "~> 2.0"},
+      {:oban_web, "~> 2.0"},
       {:phoenix, "~> 1.8.5"},
       {:phoenix_ecto, "~> 4.5"},
       {:phoenix_html, "~> 4.1"},

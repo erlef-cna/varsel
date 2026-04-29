@@ -11,6 +11,10 @@ defmodule CveManagementWeb.Router do
   alias CveManagement.Accounts.User
   alias Elixir.AshAuthentication.Phoenix.Overrides.DaisyUI
 
+  pipeline :graphql do
+    plug AshGraphql.Plug
+  end
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -25,6 +29,17 @@ defmodule CveManagementWeb.Router do
     plug :accepts, ["json"]
     plug :load_from_bearer
     plug :set_actor, :user
+  end
+
+  scope "/gql" do
+    pipe_through [:graphql]
+
+    forward "/playground", Absinthe.Plug.GraphiQL,
+      schema: Module.concat(["CveManagementWeb.GraphqlSchema"]),
+      socket: Module.concat(["CveManagementWeb.GraphqlSocket"]),
+      interface: :simple
+
+    forward "/", Absinthe.Plug, schema: Module.concat(["CveManagementWeb.GraphqlSchema"])
   end
 
   scope "/", CveManagementWeb do
@@ -86,10 +101,12 @@ defmodule CveManagementWeb.Router do
     )
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", CveManagementWeb do
-  #   pipe_through :api
-  # end
+  scope "/cves", CveManagementWeb do
+    pipe_through :api
+
+    get "/index.json", CveController, :index
+    get "/*path", CveController, :show
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:cve_management, :dev_routes) do
@@ -98,6 +115,8 @@ defmodule CveManagementWeb.Router do
     # If your application does not have an admins-only section yet,
     # you can use Plug.BasicAuth to set up some basic authentication
     # as long as you are also using SSL (which you should anyway).
+    import AshAdmin.Router
+    import Oban.Web.Router
     import Phoenix.LiveDashboard.Router
 
     scope "/dev" do
@@ -105,6 +124,10 @@ defmodule CveManagementWeb.Router do
 
       live_dashboard "/dashboard", metrics: CveManagementWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview
+
+      oban_dashboard("/oban")
+
+      ash_admin "/admin"
     end
   end
 end

@@ -4,6 +4,13 @@
 
 [
   import_deps: [
+    :ash_admin,
+    :ash_events,
+    :ash_graphql,
+    :absinthe,
+    :ash_oban,
+    :oban,
+    :ash_state_machine,
     :ash_authentication_phoenix,
     :ash_authentication,
     :ash_postgres,
@@ -15,6 +22,6 @@
     :phoenix
   ],
   subdirectories: ["priv/*/migrations"],
-  plugins: [Spark.Formatter, Styler, Phoenix.LiveView.HTMLFormatter],
+  plugins: [Absinthe.Formatter, Spark.Formatter, Styler, Phoenix.LiveView.HTMLFormatter],
   inputs: ["*.{heex,ex,exs}", "{config,lib,test}/**/*.{heex,ex,exs}", "priv/*/seeds.exs"]
 ]
