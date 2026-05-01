@@ -101,6 +101,23 @@ defmodule CveManagementWeb.Router do
     )
   end
 
+  scope "/mcp" do
+    forward "/", AshAi.Mcp.Router,
+      tools: [
+        :list_weaknesses,
+        :get_weakness,
+        :search_weaknesses,
+        :list_attack_patterns,
+        :get_attack_pattern,
+        :search_attack_patterns,
+        :list_cves,
+        :get_cve,
+        :search_cves,
+        :list_cves_by_purl
+      ],
+      otp_app: :cve_management
+  end
+
   scope "/cves", CveManagementWeb do
     pipe_through :api
 

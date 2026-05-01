@@ -57,7 +57,66 @@ defmodule CveManagement.CVE.CveRecord do
     repo CveManagement.Repo
 
     calculations_to_sql cve_id: "cve_json->'cveMetadata'->>'cveId'",
-                        title: "cve_json->'containers'->'cna'->>'title'"
+                        title: "cve_json->'containers'->'cna'->>'title'",
+                        search_vector: "search_vector"
+
+    custom_statements do
+      statement :cve_record_search_vector_fn do
+        up """
+        CREATE FUNCTION cve_record_search_vector(cve_json jsonb)
+        RETURNS tsvector
+        LANGUAGE sql
+        IMMUTABLE PARALLEL SAFE
+        AS $$
+          SELECT
+            setweight(to_tsvector('english', coalesce(cve_json->'cveMetadata'->>'cveId', '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(cve_json->'containers'->'cna'->>'title', '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(
+              (SELECT string_agg(d->>'value', ' ')
+               FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'descriptions', '[]'::jsonb)) AS d),
+              ''
+            )), 'B') ||
+            setweight(to_tsvector('english', coalesce(
+              (SELECT string_agg(
+                 coalesce(a->>'packageName', '') || ' ' ||
+                 coalesce(a->>'product', '') || ' ' ||
+                 coalesce(a->>'vendor', ''),
+                 ' ')
+               FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'affected', '[]'::jsonb)) AS a),
+              ''
+            )), 'B') ||
+            setweight(to_tsvector('english', coalesce(
+              (SELECT string_agg(w->>'value', ' ')
+               FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'workarounds', '[]'::jsonb)) AS w),
+              ''
+            )), 'C') ||
+            setweight(to_tsvector('english', coalesce(
+              (SELECT string_agg(c->>'value', ' ')
+               FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'configurations', '[]'::jsonb)) AS c),
+              ''
+            )), 'C') ||
+            setweight(to_tsvector('simple', regexp_replace(cve_json::text, '[^a-zA-Z0-9\s]', ' ', 'g')), 'D')
+        $$
+        """
+
+        down "DROP FUNCTION IF EXISTS cve_record_search_vector(jsonb)"
+      end
+
+      statement :add_search_vector do
+        up "ALTER TABLE cve_records ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (cve_record_search_vector(cve_json)) STORED"
+        down "ALTER TABLE cve_records DROP COLUMN IF EXISTS search_vector"
+      end
+
+      statement :add_search_vector_gin_index do
+        up "CREATE INDEX cve_records_search_vector_gin ON cve_records USING GIN (search_vector)"
+        down "DROP INDEX IF EXISTS cve_records_search_vector_gin"
+      end
+
+      statement :add_affected_gin_index do
+        up "CREATE INDEX cve_records_affected_gin ON cve_records USING GIN ((cve_json->'containers'->'cna'->'affected'))"
+        down "DROP INDEX IF EXISTS cve_records_affected_gin"
+      end
+    end
   end
 
   state_machine do
@@ -131,6 +190,28 @@ defmodule CveManagement.CVE.CveRecord do
       argument :cve_id, :string, allow_nil?: false
       get? true
       filter expr(cve_id == ^arg(:cve_id))
+    end
+
+    read :search do
+      description "Full-text search over CVE ID, title, descriptions, affected packages, workarounds, and configurations."
+      argument :query, :string, allow_nil?: false
+
+      prepare build(load: [:cve_id, :title, :date_published, :date_updated, :purls])
+      filter expr(matches_query(query: ^arg(:query)) and state == :published)
+    end
+
+    read :list_by_purl do
+      description "Lists published CVE records that affect a given package URL (PURL)."
+      argument :purl, :string, allow_nil?: false
+
+      prepare build(load: [:cve_id, :title, :date_published, :date_updated, :purls])
+
+      filter expr(
+               fragment(
+                 "cve_json->'containers'->'cna'->'affected' @> jsonb_build_array(jsonb_build_object('packageURL', ?::text))",
+                 ^arg(:purl)
+               ) and state == :published
+             )
     end
 
     create :create do
@@ -324,6 +405,27 @@ defmodule CveManagement.CVE.CveRecord do
                 )
               ) do
       public? true
+    end
+
+    calculate :purls,
+              {:array, :string},
+              expr(
+                fragment(
+                  "ARRAY(SELECT a->>'packageURL' FROM jsonb_array_elements(coalesce(?->'containers'->'cna'->'affected', '[]'::jsonb)) AS a WHERE a->>'packageURL' IS NOT NULL)",
+                  cve_json
+                )
+              ) do
+      public? true
+    end
+
+    calculate :matches_query,
+              :boolean,
+              expr(fragment("search_vector @@ plainto_tsquery('english', ?)", ^arg(:query))) do
+      public? false
+
+      argument :query, :string do
+        allow_nil? false
+      end
     end
   end
 

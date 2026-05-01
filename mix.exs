@@ -49,6 +49,7 @@ defmodule CveManagement.MixProject do
       {:absinthe_phoenix, "~> 2.0"},
       {:ash, "~> 3.0"},
       {:ash_admin, "~> 1.0"},
+      {:ash_ai, "~> 0.6"},
       {:ash_authentication, "~> 4.0"},
       {:ash_authentication_phoenix, "~> 2.0"},
       {:ash_cloak, "~> 0.2"},
