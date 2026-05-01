@@ -52,7 +52,7 @@ config :cve_management, CveManagementWeb.Endpoint,
 config :cve_management, Oban,
   engine: Oban.Engines.Basic,
   notifier: Oban.Notifiers.Postgres,
-  queues: [default: 10, cve_publishing: 1, cve_pool: 1],
+  queues: [default: 10, cve_publishing: 1, cve_pool: 1, cwe_sync: 1],
   repo: CveManagement.Repo,
   plugins: [{Oban.Plugins.Cron, []}]
 
@@ -61,6 +61,7 @@ config :cve_management,
   ecto_repos: [CveManagement.Repo],
   generators: [timestamp_type: :utc_datetime],
   ash_domains: [
+    CveManagement.CWE,
     CveManagement.GPG,
     CveManagement.AI,
     CveManagement.CVE,

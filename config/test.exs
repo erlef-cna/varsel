@@ -35,6 +35,7 @@ config :cve_management, Oban, testing: :manual
 
 config :cve_management,
   token_signing_secret: "6efZN/F7dwuoM9KP4oUWol4pbbSwNQ8J",
+  cwe_catalog: [plug: {Req.Test, CveManagement.CWE.Weakness}],
   mitre_cve_api: [
     base_url: "https://cveawg-test.mitre.org/api",
     org: "test-org",
