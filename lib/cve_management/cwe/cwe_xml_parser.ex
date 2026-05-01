@@ -11,7 +11,7 @@ defmodule CveManagement.CWE.CweXmlParser do
 
   Usage:
 
-      {:ok, weaknesses} = CweXmlParser.parse(xml_binary)
+      weaknesses = CweXmlParser.parse!(xml_binary)
 
   Each map has the keys:
 
@@ -40,24 +40,15 @@ defmodule CveManagement.CWE.CweXmlParser do
   Record.defrecord(:xmlText, Record.extract(:xmlText, from_lib: "xmerl/include/xmerl.hrl"))
 
   @doc """
-  Parses the given XML binary and returns `{:ok, [weakness_map]}`.
+  Parses the given XML binary and returns a list of weakness maps.
 
   The XML must be the content of `cwec_latest.xml` from the MITRE CWE ZIP.
-  Returns `{:error, reason}` if parsing fails.
+  Raises on parse failure.
   """
-  @spec parse(binary()) :: {:ok, [map()]} | {:error, term()}
-  def parse(xml) when is_binary(xml) do
-    # xmerl expects a charlist
-    charlist = :erlang.binary_to_list(xml)
-
-    try do
-      {root, _rest} = :xmerl_scan.string(charlist, quiet: true)
-      weaknesses = extract_weaknesses(root)
-      {:ok, weaknesses}
-    catch
-      :exit, reason -> {:error, reason}
-      :error, reason -> {:error, reason}
-    end
+  @spec parse!(binary()) :: [map()]
+  def parse!(xml) when is_binary(xml) do
+    {root, _rest} = :xmerl_scan.string(:erlang.binary_to_list(xml), quiet: true)
+    extract_weaknesses(root)
   end
 
   # ---------------------------------------------------------------------------
@@ -131,7 +122,7 @@ defmodule CveManagement.CWE.CweXmlParser do
 
     %{
       nature: parse_nature(attrs["Nature"]),
-      cwe_id: String.to_integer(attrs["CWE_ID"]),
+      target_cwe_id: String.to_integer(attrs["CWE_ID"]),
       view_id: String.to_integer(attrs["View_ID"]),
       ordinal: attrs["Ordinal"]
     }
@@ -187,6 +178,7 @@ defmodule CveManagement.CWE.CweXmlParser do
   defp parse_status("Draft"), do: :draft
   defp parse_status("Incomplete"), do: :incomplete
   defp parse_status("Deprecated"), do: :deprecated
+  defp parse_status("Obsolete"), do: :obsolete
 
   # Map XML "Nature" attribute strings to our enum atoms
   defp parse_nature("ChildOf"), do: :child_of
@@ -243,7 +235,7 @@ defmodule CveManagement.CWE.CweXmlParser do
 
   defp collect_text(el) do
     Enum.flat_map(xmlElement(el, :content), fn
-      xmlText() = t -> [List.to_string(xmlText(t, :value))]
+      xmlText() = t -> [:unicode.characters_to_binary(xmlText(t, :value))]
       xmlElement() = child -> collect_text(child)
       _ -> []
     end)

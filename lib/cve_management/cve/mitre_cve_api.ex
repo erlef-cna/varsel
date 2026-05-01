@@ -120,28 +120,24 @@ defmodule CveManagement.CVE.MitreCveApi do
   def stream_rejected_ids do
     req = build_req()
 
-    Stream.resource(
-      fn -> {req, 1} end,
-      fn
-        :done ->
-          {:halt, nil}
+    Stream.resource(fn -> {req, 1} end, &fetch_rejected_ids_page/1, fn _ -> :ok end)
+  end
 
-        {req, page} ->
-          case Req.get(req, url: "/cve-id", params: [state: "REJECTED", page: page]) do
-            {:ok, %{status: 200, body: %{"cve_ids" => ids}}} ->
-              cve_ids = Enum.map(ids, & &1["cve_id"])
-              next = if ids == [], do: :done, else: {req, page + 1}
-              {cve_ids, next}
+  defp fetch_rejected_ids_page(:done), do: {:halt, nil}
 
-            {:ok, %{status: status, body: body}} ->
-              raise "MITRE API error listing rejected CVE IDs: #{format_error(status, body)}"
+  defp fetch_rejected_ids_page({req, page}) do
+    case Req.get(req, url: "/cve-id", params: [state: "REJECTED", page: page]) do
+      {:ok, %{status: 200, body: %{"cve_ids" => ids}}} ->
+        cve_ids = Enum.map(ids, & &1["cve_id"])
+        next = if ids == [], do: :done, else: {req, page + 1}
+        {cve_ids, next}
 
-            {:error, exception} ->
-              raise "MITRE API error listing rejected CVE IDs: #{Exception.message(exception)}"
-          end
-      end,
-      fn _ -> :ok end
-    )
+      {:ok, %{status: status, body: body}} ->
+        raise "MITRE API error listing rejected CVE IDs: #{format_error(status, body)}"
+
+      {:error, exception} ->
+        raise "MITRE API error listing rejected CVE IDs: #{Exception.message(exception)}"
+    end
   end
 
   @doc """
@@ -188,28 +184,23 @@ defmodule CveManagement.CVE.MitreCveApi do
 
   defp stream_id_objects(state) do
     req = build_req()
+    Stream.resource(fn -> {req, 1} end, &fetch_id_objects_page(&1, state), fn _ -> :ok end)
+  end
 
-    Stream.resource(
-      fn -> {req, 1} end,
-      fn
-        :done ->
-          {:halt, nil}
+  defp fetch_id_objects_page(:done, _state), do: {:halt, nil}
 
-        {req, page} ->
-          case Req.get(req, url: "/cve-id", params: [state: state, page: page]) do
-            {:ok, %{status: 200, body: %{"cve_ids" => ids}}} ->
-              next = if ids == [], do: :done, else: {req, page + 1}
-              {ids, next}
+  defp fetch_id_objects_page({req, page}, state) do
+    case Req.get(req, url: "/cve-id", params: [state: state, page: page]) do
+      {:ok, %{status: 200, body: %{"cve_ids" => ids}}} ->
+        next = if ids == [], do: :done, else: {req, page + 1}
+        {ids, next}
 
-            {:ok, %{status: status, body: body}} ->
-              raise "MITRE API error listing CVE IDs (state=#{state}): #{format_error(status, body)}"
+      {:ok, %{status: status, body: body}} ->
+        raise "MITRE API error listing CVE IDs (state=#{state}): #{format_error(status, body)}"
 
-            {:error, exception} ->
-              raise "MITRE API error listing CVE IDs (state=#{state}): #{Exception.message(exception)}"
-          end
-      end,
-      fn _ -> :ok end
-    )
+      {:error, exception} ->
+        raise "MITRE API error listing CVE IDs (state=#{state}): #{Exception.message(exception)}"
+    end
   end
 
   defp build_req do

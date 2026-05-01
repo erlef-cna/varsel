@@ -5,7 +5,8 @@ SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
 
 # ADR-012: Case and CVE Record Data Model
 
-**Status**: Proposed (not yet implemented — current implementation uses `cve_json` as an opaque blob)
+**Status**: Proposed (not yet implemented — current implementation uses
+`cve_json` as an opaque blob)
 
 ## Context
 
@@ -22,10 +23,10 @@ granular discussion threads.
 The data model must support:
 
 1. All CVE JSON 5.x `cna` container fields actually used by EEF
-2. All OSV JSON fields
-3. Structured proposals and discussions on individual fields — by humans and AI
-4. Reasoning / justification captured alongside every proposed value
-5. Acceptance / rejection of proposals with audit trail
+1. All OSV JSON fields
+1. Structured proposals and discussions on individual fields — by humans and AI
+1. Reasoning / justification captured alongside every proposed value
+1. Acceptance / rejection of proposals with audit trail
 
 ## Decision
 
@@ -53,10 +54,10 @@ truth human-readable.
 
 #### `CveRecord` — structured fields
 
-**Identity / metadata**
+### Identity / metadata
 
 | Field | Type | Encrypted? | CVE JSON path | OSV path |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `cve_id` | string | No | `cveMetadata.cveId` | `aliases[]` |
 | `title` | string | Yes | `containers.cna.title` | `summary` |
 | `description` | text (Markdown) | Yes | `containers.cna.descriptions[].value` / `supportingMedia[html]` | `details` (intro section) |
@@ -64,10 +65,10 @@ truth human-readable.
 | `configurations` | text (Markdown, nullable) | Yes | `containers.cna.configurations[].value` / `supportingMedia[html]` | — |
 | `source_discovery` | enum: `user`, `internal`, `unknown`, `external` | No | `containers.cna.source.discovery` | — |
 
-**CVSS 4.0**
+### CVSS 4.0
 
 | Field | Type | Encrypted? | CVE JSON path | OSV path |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `cvss_vector` | string (nullable) | No | `containers.cna.metrics[].cvssV4_0.vectorString` | `severity[type=CVSS_V4].score` |
 | `cvss_score` | decimal (nullable) | No | `containers.cna.metrics[].cvssV4_0.baseScore` | — |
 | `cvss_severity` | string (nullable) | No | `containers.cna.metrics[].cvssV4_0.baseSeverity` | — |
@@ -75,17 +76,17 @@ truth human-readable.
 Score and severity are derived from the vector at publish time using a CVSS
 library. Storing them separately allows display without re-parsing.
 
-**Weakness / attack classifications**
+### Weakness / attack classifications
 
 | Field | Type | Encrypted? | CVE JSON path | OSV path |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `cwe_ids` | `{id, description}[]` (jsonb) | No | `containers.cna.problemTypes[].descriptions[]` | `database_specific.cwe_ids[]` |
 | `capec_ids` | `{id, description}[]` (jsonb) | No | `containers.cna.impacts[].capecId` + `.descriptions[]` | `database_specific.capec_ids[]` |
 
 The full `{id, description}` pair is stored so the publish step does not need
 to re-derive human-readable labels.
 
-**Affected products**
+### Affected products
 
 Stored as a jsonb array `affected` mirroring `containers.cna.affected[]`. Each
 element follows this shape:
@@ -120,34 +121,34 @@ element follows this shape:
 OSV `affected[].ranges` are derived from this data at publish time.
 
 | Field | Type | Encrypted? | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `affected` | jsonb array | Yes | Array of product entries above |
 | `cpe_applicability` | jsonb (nullable) | No | `containers.cna.cpeApplicability` — often derived from `affected`; rarely edited manually |
 
-**References**
+### References
 
 | Field | Type | Encrypted? | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `references` | `{url, tags[]}[]` (jsonb) | No | `containers.cna.references[]`; CVE JSON 5.x tag vocabulary: `patch`, `vendor-advisory`, `related`, `x_version-scheme`, etc. OSV `references[].type` is derived from tags at publish time (see §5). |
 
-**Credits**
+### Credits
 
 | Field | Type | Encrypted? | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `credits` | `{name, type, lang}[]` (jsonb) | Yes | `containers.cna.credits[]`; encrypted until publish because it may identify the reporter before disclosure |
 
-**OSV-specific fields**
+### OSV-specific fields
 
 | Field | Type | Encrypted? | OSV path | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `osv_id` | string (nullable) | No | `id` | e.g., `EEF-CVE-2025-4748`; set on publish |
 | `osv_aliases` | string[] (nullable) | No | `aliases[]` | GHSA IDs and the CVE ID; populated from known sources |
 | `osv_related` | string[] (nullable) | No | `related[]` | Adjacent OSV IDs |
 
-**Publication timestamps** (managed by system, not directly editable)
+### Publication timestamps (managed by system, not directly editable)
 
 | Field | Type | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `published_at` | utc_datetime (nullable) | Set when published to MITRE |
 | `inserted_at` | utc_datetime | |
 | `updated_at` | utc_datetime | |
@@ -165,7 +166,7 @@ OSV `affected[].ranges` are derived from this data at publish time.
 - `description` — the Case retains only `title` (internal working title, not
   the published CVE title); the CVE description lives on `CveRecord`
 
----
+______________________________________________________________________
 
 ### 2. `CveFieldProposal` — structured proposals and discussions
 
@@ -176,7 +177,7 @@ state.
 #### Resource: `CveFieldProposal`
 
 | Field | Type | Encrypted? | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `id` | UUID | No | |
 | `cve_record_id` | UUID (FK) | No | |
 | `case_id` | UUID (FK) | No | Denormalized for policy checks |
@@ -196,11 +197,11 @@ state.
 **Lifecycle:**
 
 1. Any actor (human or AI) creates an `open` proposal for a field.
-2. A PoC or assigned Supporter `accept`s a proposal → the value is written to
+1. A PoC or assigned Supporter `accept`s a proposal → the value is written to
    `CveRecord`; all other `open` proposals for the same field are marked
    `superseded`.
-3. Any actor can `reject` a proposal with an optional note.
-4. A new proposal for the same field while another is open creates a sibling.
+1. Any actor can `reject` a proposal with an optional note.
+1. A new proposal for the same field while another is open creates a sibling.
    Setting `parent_proposal_id` marks it explicitly as a counter-proposal.
 
 **Ash Policies:**
@@ -211,7 +212,7 @@ state.
 - AI actor (system, no user session): can only create proposals; cannot accept
   or reject
 
----
+______________________________________________________________________
 
 ### 3. `CveFieldComment` — threaded comments on proposals
 
@@ -220,7 +221,7 @@ Allows humans and AI to comment on a specific proposal before it is resolved.
 #### Resource: `CveFieldComment`
 
 | Field | Type | Encrypted? | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `id` | UUID | No | |
 | `proposal_id` | UUID (FK) | No | |
 | `case_id` | UUID (FK) | No | Denormalized for policy checks |
@@ -233,7 +234,7 @@ Allows humans and AI to comment on a specific proposal before it is resolved.
 Comments are append-only (no update/delete). Ash Events covers all mutations
 for the audit trail.
 
----
+______________________________________________________________________
 
 ### 4. AI skill → field mapping
 
@@ -242,7 +243,7 @@ Each AI skill that targets CVE fields creates `CveFieldProposal` records with
 the list of proposal IDs created so the UI can link from skill run to proposals.
 
 | Skill | Fields proposed |
-|---|---|
+| --- | --- |
 | `triage` | No proposals; produces boolean + reasoning stored in `AiSkillRun.output` only |
 | `cvss_assist` | `cvss_vector` |
 | `cwe_capec` | `cwe_ids`, `capec_ids` |
@@ -254,7 +255,7 @@ the list of proposal IDs created so the UI can link from skill run to proposals.
 Users must explicitly accept every proposal. AI never directly mutates
 `CveRecord`.
 
----
+______________________________________________________________________
 
 ### 5. Publish-time derivation
 
@@ -265,22 +266,22 @@ When the `publish` action runs on `CveRecord`, the system:
      `cna.descriptions[].supportingMedia[type=text/html].value` (HTML)
    - `workarounds` → `cna.workarounds[].value` + `supportingMedia`
    - `configurations` → `cna.configurations[].value` + `supportingMedia`
-2. Derives `cvss_score` and `cvss_severity` from `cvss_vector` if not already set
-3. Assembles `cve_json` (CVE JSON 5.x) from all structured fields
-4. Assembles `osv_json` (OSV JSON 1.x) using the mapping in §6
-5. Validates both against their respective JSON schemas
-6. Submits `cve_json` to MITRE CVE Services API
-7. Sets `osv_id` and `published_at`
-8. Stores the final `cve_json` and `osv_json` blobs on `CveRecord` for audit
+1. Derives `cvss_score` and `cvss_severity` from `cvss_vector` if not already set
+1. Assembles `cve_json` (CVE JSON 5.x) from all structured fields
+1. Assembles `osv_json` (OSV JSON 1.x) using the mapping in §6
+1. Validates both against their respective JSON schemas
+1. Submits `cve_json` to MITRE CVE Services API
+1. Sets `osv_id` and `published_at`
+1. Stores the final `cve_json` and `osv_json` blobs on `CveRecord` for audit
    and re-serving (these are outputs, not the editable source of truth)
 
----
+______________________________________________________________________
 
 ### 6. Field mapping reference
 
 #### CVE JSON 5.x → `CveRecord`
 
-```
+```text
 cveMetadata.cveId                                   → cve_id
 cveMetadata.datePublished                           → published_at
 containers.cna.title                                → title
@@ -307,7 +308,7 @@ containers.cna.credits[]                            → credits
 
 #### OSV JSON → `CveRecord`
 
-```
+```text
 id                                                  → osv_id
 summary                                             → title
 details                                             → description + workarounds (Markdown sections)
@@ -325,12 +326,12 @@ credits[].name, .type                               → credits[].name, .type (t
 #### OSV reference type ↔ CVE JSON tag mapping
 
 | CVE JSON tag | OSV reference type |
-|---|---|
+| --- | --- |
 | `patch` | `FIX` |
 | `vendor-advisory` | `ADVISORY` |
 | `related` | `WEB` |
 | `x_version-scheme` | `WEB` |
-| _(none / other)_ | `WEB` |
+| *(none / other)* | `WEB` |
 
 ## Consequences
 

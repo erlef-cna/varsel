@@ -42,6 +42,7 @@ defmodule CveManagement.CWE.Weakness do
   alias CveManagement.CWE.CweMetadata
   alias CveManagement.CWE.CweXmlParser
   alias CveManagement.CWE.Weakness.OkResult
+  alias CveManagement.CWE.WeaknessRelationship
 
   @catalog_url "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip"
 
@@ -122,10 +123,18 @@ defmodule CveManagement.CWE.Weakness do
         :status,
         :description,
         :extended_description,
-        :related_weaknesses,
         :potential_mitigations,
         :common_consequences
       ]
+
+      argument :related_weaknesses, {:array, :map}, default: []
+
+      change manage_relationship(:related_weaknesses, :related_weakness_relationships,
+               on_no_match: :create,
+               on_match: :ignore,
+               on_missing: :unrelate,
+               use_identities: [:_primary_key]
+             )
 
       upsert? true
 
@@ -135,7 +144,6 @@ defmodule CveManagement.CWE.Weakness do
         :status,
         :description,
         :extended_description,
-        :related_weaknesses,
         :potential_mitigations,
         :common_consequences,
         :updated_at
@@ -164,13 +172,12 @@ defmodule CveManagement.CWE.Weakness do
             {:ok, :ok}
 
           {:ok, %{status: 200, body: body, headers: resp_headers}} ->
-            with {:ok, xml} <- extract_xml(body),
-                 {:ok, weaknesses} <- CweXmlParser.parse(xml) do
-              upsert_all(weaknesses)
-              new_last_modified = get_header(resp_headers, "last-modified")
-              update_metadata(new_last_modified)
-              {:ok, :ok}
-            end
+            {:ok, xml} = extract_xml(body)
+            weaknesses = CweXmlParser.parse!(xml)
+            upsert_all(weaknesses)
+            new_last_modified = get_header(resp_headers, "last-modified")
+            update_metadata(new_last_modified)
+            {:ok, :ok}
 
           {:ok, %{status: status}} ->
             {:error, "CWE catalog download failed with HTTP #{status}"}
@@ -226,12 +233,6 @@ defmodule CveManagement.CWE.Weakness do
       public? true
     end
 
-    attribute :related_weaknesses, {:array, CveManagement.CWE.RelatedWeakness} do
-      allow_nil? false
-      default []
-      public? true
-    end
-
     attribute :potential_mitigations, :string do
       allow_nil? true
       public? true
@@ -245,6 +246,14 @@ defmodule CveManagement.CWE.Weakness do
     end
 
     timestamps()
+  end
+
+  relationships do
+    has_many :related_weakness_relationships, WeaknessRelationship do
+      source_attribute :cwe_id
+      destination_attribute :source_cwe_id
+      public? true
+    end
   end
 
   calculations do
@@ -287,15 +296,18 @@ defmodule CveManagement.CWE.Weakness do
   end
 
   defp upsert_all(weaknesses) do
-    weaknesses
-    |> Stream.chunk_every(200)
-    |> Enum.each(fn chunk ->
-      Ash.bulk_create!(chunk, __MODULE__, :upsert,
-        authorize?: false,
-        return_errors?: true,
-        stop_on_error?: true
-      )
-    end)
+    {:ok, _} =
+      Ash.transact(__MODULE__, fn ->
+        weaknesses
+        |> Stream.chunk_every(200)
+        |> Enum.each(fn chunk ->
+          Ash.bulk_create!(chunk, __MODULE__, :upsert,
+            authorize?: false,
+            return_errors?: true,
+            stop_on_error?: true
+          )
+        end)
+      end)
   end
 
   defp update_metadata(last_modified) do

@@ -4,5 +4,5 @@
 
 defmodule CveManagement.CWE.Weakness.Status do
   @moduledoc false
-  use Ash.Type.Enum, values: [:stable, :draft, :incomplete, :deprecated]
+  use Ash.Type.Enum, values: [:stable, :draft, :incomplete, :deprecated, :obsolete]
 end

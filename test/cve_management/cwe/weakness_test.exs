@@ -88,12 +88,12 @@ defmodule CveManagement.CWE.WeaknessTest do
 
   describe "CweXmlParser.parse/1" do
     test "parses all weaknesses from XML" do
-      {:ok, weaknesses} = CweXmlParser.parse(@sample_xml)
+      weaknesses = CweXmlParser.parse!(@sample_xml)
       assert length(weaknesses) == 2
     end
 
     test "correctly parses CWE-79 attributes" do
-      {:ok, weaknesses} = CweXmlParser.parse(@sample_xml)
+      weaknesses = CweXmlParser.parse!(@sample_xml)
       cwe79 = Enum.find(weaknesses, &(&1.cwe_id == 79))
 
       assert cwe79.name =~ "Improper Neutralization"
@@ -104,18 +104,18 @@ defmodule CveManagement.CWE.WeaknessTest do
     end
 
     test "parses related weaknesses with typed nature" do
-      {:ok, weaknesses} = CweXmlParser.parse(@sample_xml)
+      weaknesses = CweXmlParser.parse!(@sample_xml)
       cwe79 = Enum.find(weaknesses, &(&1.cwe_id == 79))
 
       assert [
-               %{nature: :child_of, cwe_id: 74, view_id: 1000, ordinal: "Primary"},
-               %{nature: :peer_of, cwe_id: 80}
+               %{nature: :child_of, target_cwe_id: 74, view_id: 1000, ordinal: "Primary"},
+               %{nature: :peer_of, target_cwe_id: 80}
              ] =
                cwe79.related_weaknesses
     end
 
     test "parses mitigations concatenated with phase prefix" do
-      {:ok, weaknesses} = CweXmlParser.parse(@sample_xml)
+      weaknesses = CweXmlParser.parse!(@sample_xml)
       cwe79 = Enum.find(weaknesses, &(&1.cwe_id == 79))
 
       assert cwe79.potential_mitigations =~ "Architecture and Design"
@@ -123,7 +123,7 @@ defmodule CveManagement.CWE.WeaknessTest do
     end
 
     test "parses common consequences with scope prefix" do
-      {:ok, weaknesses} = CweXmlParser.parse(@sample_xml)
+      weaknesses = CweXmlParser.parse!(@sample_xml)
       cwe79 = Enum.find(weaknesses, &(&1.cwe_id == 79))
 
       assert cwe79.common_consequences =~ "Confidentiality"
@@ -131,7 +131,7 @@ defmodule CveManagement.CWE.WeaknessTest do
     end
 
     test "handles missing optional fields gracefully" do
-      {:ok, weaknesses} = CweXmlParser.parse(@sample_xml)
+      weaknesses = CweXmlParser.parse!(@sample_xml)
       cwe89 = Enum.find(weaknesses, &(&1.cwe_id == 89))
 
       assert cwe89.related_weaknesses == []

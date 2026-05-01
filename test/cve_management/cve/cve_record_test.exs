@@ -351,43 +351,45 @@ defmodule CveManagement.CVE.CveRecordTest do
 
   defp stub_mitre_list_ids(ids) do
     cve_id_entries = Enum.map(ids, &%{"cve_id" => &1})
+    Req.Test.stub(MitreCveApi, &handle_list_ids_request(&1, cve_id_entries))
+  end
 
-    Req.Test.stub(MitreCveApi, fn conn ->
-      conn = Plug.Conn.fetch_query_params(conn)
+  defp handle_list_ids_request(conn, cve_id_entries) do
+    conn = Plug.Conn.fetch_query_params(conn)
 
-      cond do
-        conn.method == "GET" && String.ends_with?(conn.request_path, "/cve-id") ->
-          entries = if conn.query_params["page"] == "1", do: cve_id_entries, else: []
-          Req.Test.json(conn, %{"cve_ids" => entries})
+    cond do
+      conn.method == "GET" && String.ends_with?(conn.request_path, "/cve-id") ->
+        entries = if conn.query_params["page"] == "1", do: cve_id_entries, else: []
+        Req.Test.json(conn, %{"cve_ids" => entries})
 
-        conn.method == "GET" ->
-          Req.Test.json(conn, @published_cve_json)
+      conn.method == "GET" ->
+        Req.Test.json(conn, @published_cve_json)
 
-        true ->
-          Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
-      end
-    end)
+      true ->
+        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+    end
   end
 
   defp stub_mitre_list_ids_with_get_error(ids) do
     cve_id_entries = Enum.map(ids, &%{"cve_id" => &1})
+    Req.Test.stub(MitreCveApi, &handle_list_ids_with_get_error_request(&1, cve_id_entries))
+  end
 
-    Req.Test.stub(MitreCveApi, fn conn ->
-      conn = Plug.Conn.fetch_query_params(conn)
+  defp handle_list_ids_with_get_error_request(conn, cve_id_entries) do
+    conn = Plug.Conn.fetch_query_params(conn)
 
-      cond do
-        conn.method == "GET" && String.ends_with?(conn.request_path, "/cve-id") ->
-          entries = if conn.query_params["page"] == "1", do: cve_id_entries, else: []
-          Req.Test.json(conn, %{"cve_ids" => entries})
+    cond do
+      conn.method == "GET" && String.ends_with?(conn.request_path, "/cve-id") ->
+        entries = if conn.query_params["page"] == "1", do: cve_id_entries, else: []
+        Req.Test.json(conn, %{"cve_ids" => entries})
 
-        conn.method == "GET" ->
-          conn
-          |> Plug.Conn.put_resp_content_type("application/json")
-          |> Plug.Conn.send_resp(500, Jason.encode!(%{"message" => "Internal server error"}))
+      conn.method == "GET" ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(500, Jason.encode!(%{"message" => "Internal server error"}))
 
-        true ->
-          Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
-      end
-    end)
+      true ->
+        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+    end
   end
 end

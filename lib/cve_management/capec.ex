@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule CveManagement.CWE do
+defmodule CveManagement.CAPEC do
   @moduledoc false
   use Ash.Domain, otp_app: :cve_management, extensions: [AshAdmin.Domain]
 
@@ -11,8 +11,9 @@ defmodule CveManagement.CWE do
   end
 
   resources do
-    resource CveManagement.CWE.Weakness
-    resource CveManagement.CWE.WeaknessRelationship
-    resource CveManagement.CWE.CweMetadata
+    resource CveManagement.CAPEC.AttackPattern
+    resource CveManagement.CAPEC.AttackPatternWeakness
+    resource CveManagement.CAPEC.AttackPatternRelationship
+    resource CveManagement.CAPEC.CapecMetadata
   end
 end

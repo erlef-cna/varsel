@@ -26,48 +26,49 @@ defmodule CveManagement.CVE.CveReservationTest do
   end
 
   defp stub_mitre_reserve(ids) do
-    Req.Test.stub(MitreCveApi, fn conn ->
-      conn = Plug.Conn.fetch_query_params(conn)
+    Req.Test.stub(MitreCveApi, &handle_reserve_request(&1, ids))
+  end
 
-      cond do
-        conn.method == "POST" && String.ends_with?(conn.request_path, "/cve-id") ->
-          entries = Enum.map(ids, &reservation_json/1)
-          Req.Test.json(conn, %{"cve_ids" => entries})
+  defp handle_reserve_request(conn, ids) do
+    conn = Plug.Conn.fetch_query_params(conn)
 
-        conn.method == "GET" && String.ends_with?(conn.request_path, "/cve-id") ->
-          entries = if conn.query_params["page"] == "1", do: [], else: []
-          Req.Test.json(conn, %{"cve_ids" => entries})
+    cond do
+      conn.method == "POST" && String.ends_with?(conn.request_path, "/cve-id") ->
+        Req.Test.json(conn, %{"cve_ids" => Enum.map(ids, &reservation_json/1)})
 
-        true ->
-          Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
-      end
-    end)
+      conn.method == "GET" && String.ends_with?(conn.request_path, "/cve-id") ->
+        Req.Test.json(conn, %{"cve_ids" => []})
+
+      true ->
+        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+    end
   end
 
   defp stub_mitre_reserve_and_list_reserved(reserve_ids, reserved_ids) do
-    Req.Test.stub(MitreCveApi, fn conn ->
-      conn = Plug.Conn.fetch_query_params(conn)
+    Req.Test.stub(MitreCveApi, &handle_reserve_and_list_request(&1, reserve_ids, reserved_ids))
+  end
 
-      cond do
-        conn.method == "POST" ->
-          entries = Enum.map(reserve_ids, &reservation_json/1)
-          Req.Test.json(conn, %{"cve_ids" => entries})
+  defp handle_reserve_and_list_request(conn, reserve_ids, reserved_ids) do
+    conn = Plug.Conn.fetch_query_params(conn)
 
-        conn.method == "GET" && conn.query_params["state"] == "RESERVED" ->
-          entries =
-            if conn.query_params["page"] == "1",
-              do: Enum.map(reserved_ids, &reservation_json/1),
-              else: []
+    cond do
+      conn.method == "POST" ->
+        Req.Test.json(conn, %{"cve_ids" => Enum.map(reserve_ids, &reservation_json/1)})
 
-          Req.Test.json(conn, %{"cve_ids" => entries})
+      conn.method == "GET" && conn.query_params["state"] == "RESERVED" ->
+        entries =
+          if conn.query_params["page"] == "1",
+            do: Enum.map(reserved_ids, &reservation_json/1),
+            else: []
 
-        conn.method == "GET" && conn.query_params["state"] in ["REJECTED", "PUBLISHED"] ->
-          Req.Test.json(conn, %{"cve_ids" => []})
+        Req.Test.json(conn, %{"cve_ids" => entries})
 
-        true ->
-          Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
-      end
-    end)
+      conn.method == "GET" && conn.query_params["state"] in ["REJECTED", "PUBLISHED"] ->
+        Req.Test.json(conn, %{"cve_ids" => []})
+
+      true ->
+        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+    end
   end
 
   defp stub_mitre_reject do
