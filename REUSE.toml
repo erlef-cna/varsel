@@ -1,0 +1,7 @@
+version = 1
+
+[[annotations]]
+path = ["priv/repo/migrations/**", "priv/resource_snapshots/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "NOASSERTION"
+SPDX-License-Identifier = "CC0-1.0"

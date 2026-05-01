@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule CveManagement.ReportChannels.ApiReport do
   @moduledoc false
   use Ash.Resource,
