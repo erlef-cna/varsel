@@ -27,6 +27,31 @@ end
 config :cve_management, CveManagementWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 if config_env() != :test do
+  config :cve_management, CveManagement.Vault,
+    ciphers: [
+      default:
+        {Cloak.Ciphers.AES.GCM,
+         tag: "AES.GCM.V1",
+         key:
+           Base.decode64!(
+             System.get_env("CLOAK_KEY") ||
+               raise("Missing environment variable `CLOAK_KEY`!")
+           )}
+    ]
+
+  config :cve_management,
+    github_app: [
+      client_id:
+        System.get_env("GITHUB_APP_CLIENT_ID") ||
+          raise("Missing environment variable `GITHUB_APP_CLIENT_ID`!"),
+      client_secret:
+        System.get_env("GITHUB_APP_CLIENT_SECRET") ||
+          raise("Missing environment variable `GITHUB_APP_CLIENT_SECRET`!"),
+      redirect_uri:
+        System.get_env("GITHUB_APP_REDIRECT_URI") ||
+          raise("Missing environment variable `GITHUB_APP_REDIRECT_URI`!")
+    ]
+
   config :cve_management,
     mitre_cve_api: [
       base_url:

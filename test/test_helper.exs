@@ -2,5 +2,5 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-ExUnit.start()
+ExUnit.start(capture_log: true)
 Ecto.Adapters.SQL.Sandbox.mode(CveManagement.Repo, :manual)

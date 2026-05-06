@@ -23,7 +23,7 @@ config :ash,
   bulk_actions_default_to_errors?: true,
   transaction_rollback_on_error?: true,
   redact_sensitive_values_in_errors?: true,
-  known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec]
+  known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec, CveManagement.Types.CVSS]
 
 config :ash_graphql, authorize_update_destroy_with_error?: true
 
@@ -52,7 +52,14 @@ config :cve_management, CveManagementWeb.Endpoint,
 config :cve_management, Oban,
   engine: Oban.Engines.Basic,
   notifier: Oban.Notifiers.Postgres,
-  queues: [default: 10, cve_publishing: 1, cve_pool: 1, cwe_sync: 1, capec_sync: 1],
+  queues: [
+    default: 10,
+    cve_publishing: 1,
+    cve_pool: 1,
+    cwe_sync: 1,
+    capec_sync: 1,
+    github_advisory_sync: 5
+  ],
   repo: CveManagement.Repo,
   plugins: [{Oban.Plugins.Cron, []}]
 

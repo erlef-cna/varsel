@@ -131,6 +131,12 @@ defmodule CveManagement.Accounts.User do
     update_timestamp :updated_at
   end
 
+  relationships do
+    has_one :git_hub_app_token, CveManagement.Accounts.GitHubAppToken do
+      public? true
+    end
+  end
+
   identities do
     identity :unique_github_id, [:github_id]
   end

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
-    <.live_title default="CveManagement" suffix=" · Phoenix Framework">
+    <.live_title default="Erlang Ecosystem Foundation CNA">
       {assigns[:page_title]}
     </.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
@@ -25,12 +25,50 @@
           setTheme(localStorage.getItem("phx:theme") || "system");
         }
         window.addEventListener("storage", (e) => e.key === "phx:theme" && setTheme(e.newValue || "system"));
-        
+
         window.addEventListener("phx:set-theme", (e) => setTheme(e.target.dataset.phxTheme));
       })();
     </script>
   </head>
   <body>
+    <nav class="navbar px-4 sm:px-6 lg:px-8 border-b border-base-300 bg-base-100">
+      <div class="flex-1">
+        <a href="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
+          <img
+            src="https://erlef.org/images/eef-header-logo.svg"
+            alt="EEF Logo"
+            class="h-9 w-9"
+          />
+          <span class="font-semibold text-base hidden sm:block">
+            Erlang Ecosystem Foundation CNA
+          </span>
+          <span class="font-semibold text-base sm:hidden">EEF CNA</span>
+        </a>
+      </div>
+      <div class="flex-none">
+        <ul class="flex items-center gap-2">
+          <li>
+            <.theme_toggle />
+          </li>
+          <%= if assigns[:current_user] do %>
+            <li>
+              <span class="text-sm text-base-content/70 hidden sm:block">
+                {@current_user.name || @current_user.email}
+              </span>
+            </li>
+            <li>
+              <a href={~p"/sign-out"} method="delete" class="btn btn-ghost btn-sm">
+                Sign out
+              </a>
+            </li>
+          <% else %>
+            <li>
+              <a href={~p"/sign-in"} class="btn btn-primary btn-sm">Login</a>
+            </li>
+          <% end %>
+        </ul>
+      </div>
+    </nav>
     {@inner_content}
   </body>
 </html>

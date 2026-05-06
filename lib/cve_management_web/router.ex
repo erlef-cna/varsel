@@ -45,7 +45,11 @@ defmodule CveManagementWeb.Router do
   scope "/", CveManagementWeb do
     pipe_through :browser
 
-    ash_authentication_live_session :authenticated_routes do
+    get "/auth/github_app", GitHubAppController, :authorize
+    get "/auth/github_app/callback", GitHubAppController, :callback
+
+    ash_authentication_live_session :authenticated_routes,
+      on_mount: [{CveManagementWeb.LiveUserAuth, :live_user_required}] do
       # in each liveview, add one of the following at the top of the module:
       #
       # If an authenticated user must be present:
@@ -56,13 +60,14 @@ defmodule CveManagementWeb.Router do
       #
       # If an authenticated user must *not* be present:
       # on_mount {CveManagementWeb.LiveUserAuth, :live_no_user}
+      live "/settings", SettingsLive
     end
-  end
-
-  scope "/", CveManagementWeb do
-    pipe_through :browser
 
     get "/", PageController, :home
+    get "/scope", PageController, :page, assigns: %{page_id: "scope"}
+    get "/contact", PageController, :page, assigns: %{page_id: "contact"}
+    get "/cve-criteria", PageController, :page, assigns: %{page_id: "cve-criteria"}
+    get "/security-policy", PageController, :page, assigns: %{page_id: "security-policy"}
     auth_routes AuthController, User, path: "/auth"
     sign_out_route AuthController
 

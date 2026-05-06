@@ -24,6 +24,12 @@ config :cve_management, CveManagement.Repo,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 
+config :cve_management, CveManagement.Vault,
+  ciphers: [
+    default:
+      {Cloak.Ciphers.AES.GCM, tag: "AES.GCM.V1", key: Base.decode64!("q69rFPGIqHZTHBNhGOKNZRpORMoGBiGDLKBpKpfMWQo=")}
+  ]
+
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :cve_management, CveManagementWeb.Endpoint,
@@ -35,6 +41,8 @@ config :cve_management, Oban, testing: :manual
 
 config :cve_management,
   token_signing_secret: "6efZN/F7dwuoM9KP4oUWol4pbbSwNQ8J",
+  github_app: [plug: {Req.Test, CveManagement.GitHub.AppClient}],
+  github_advisory: [plug: {Req.Test, CveManagement.GitHub.AdvisoryClient}],
   cwe_catalog: [plug: {Req.Test, CveManagement.CWE.Weakness}],
   capec_catalog: [plug: {Req.Test, CveManagement.CAPEC.AttackPattern}],
   mitre_cve_api: [

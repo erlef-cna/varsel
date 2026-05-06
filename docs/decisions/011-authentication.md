@@ -28,6 +28,14 @@ login.
 Visiting `/c/:token` verifies the token and grants read-only access to that specific
 case and its threads. No account is created.
 
+**GitHub App connection (advisory access)**: A separate optional OAuth flow allows
+users to connect a dedicated GitHub App (distinct from the login OAuth App) from
+their `/settings` page. This grants the application permission to fetch GitHub
+Security Advisories on behalf of that user. Scope: `security_events`. Tokens
+are stored in `Accounts.GitHubAppToken`, encrypted via Ash Cloak (ADR-004). This
+connection is independent of login. See ADR-018 for the full token lifecycle, refresh
+strategy, and Oban job design.
+
 ## Consequences
 
 - GitHub OAuth eliminates password management for internal users
@@ -37,3 +45,5 @@ case and its threads. No account is created.
   explicit expiry; short expiry (e.g., 30 days) is recommended
 - Case Contacts cannot take any write actions; the token grants read-only access
   enforced by Ash Policies
+- The GitHub App connection is optional and per-user; users who have not connected
+  will not have advisories fetched on their behalf

@@ -13,6 +13,7 @@ defmodule CveManagement.Application do
   def start(_type, _args) do
     children = [
       CveManagementWeb.Telemetry,
+      CveManagement.Vault,
       CveManagement.Repo,
       {DNSCluster, query: Application.get_env(:cve_management, :dns_cluster_query) || :ignore},
       {Oban,

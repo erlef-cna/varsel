@@ -12,7 +12,9 @@ defmodule CveManagement.ReportChannels do
 
   resources do
     resource CveManagement.ReportChannels.EmailMessage
-    resource CveManagement.ReportChannels.GitHubReport
+    resource CveManagement.ReportChannels.GitHubAdvisory
+    resource CveManagement.ReportChannels.GitHubAdvisoryWeakness
+    resource CveManagement.ReportChannels.GitHubWatchedTarget
     resource CveManagement.ReportChannels.ApiReport
   end
 end

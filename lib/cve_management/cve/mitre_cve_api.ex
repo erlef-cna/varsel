@@ -203,6 +203,11 @@ defmodule CveManagement.CVE.MitreCveApi do
     end
   end
 
+  @extra_req_opts Keyword.take(
+                    Application.compile_env(:cve_management, :mitre_cve_api, []),
+                    [:plug]
+                  )
+
   defp build_req do
     cfg = Application.get_env(:cve_management, :mitre_cve_api, [])
 
@@ -216,12 +221,7 @@ defmodule CveManagement.CVE.MitreCveApi do
       ]
     ]
 
-    # Allow Req.Test to intercept requests. In test, set
-    # `plug: {Req.Test, CveManagement.CVE.MitreCveApi}` in the :mitre_cve_api config
-    # and register stubs via Req.Test.stub/2.
-    extra = Keyword.take(cfg, [:plug])
-
-    Req.new(base_opts ++ extra)
+    Req.new(base_opts ++ @extra_req_opts)
   end
 
   defp format_error(status, body) when is_map(body) do

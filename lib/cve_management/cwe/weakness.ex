@@ -317,10 +317,10 @@ defmodule CveManagement.CWE.Weakness do
     )
   end
 
+  @extra_req_opts Keyword.take(Application.compile_env(:cve_management, :cwe_catalog, []), [:plug])
+
   defp build_req do
-    cfg = Application.get_env(:cve_management, :cwe_catalog, [])
-    extra = Keyword.take(cfg, [:plug])
-    Req.new([retry: false] ++ extra)
+    Req.new([retry: false] ++ @extra_req_opts)
   end
 
   defp get_header(headers, name) do

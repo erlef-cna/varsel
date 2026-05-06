@@ -57,6 +57,23 @@ ______________________________________________________________________
 - Auth: AshAuthentication with GitHub OAuth strategy
 - PoC has full access to all resources; Supporter access is case-gated via `CaseAssignment`
 
+#### Resource: GitHubAppToken
+
+Stores per-user GitHub App OAuth tokens for advisory fetching. One record per user.
+
+| Field | Type | Encrypted? | Notes |
+| --- | --- | --- | --- |
+| `id` | UUID | No | |
+| `user_id` | UUID (FK) | No | References `User`; unique |
+| `access_token` | string | Yes | Ash Cloak encrypted |
+| `refresh_token` | string | Yes | Ash Cloak encrypted |
+| `expires_at` | utc_datetime | No | Expiry of access token; plain for scheduling |
+| `status` | enum: `valid`, `invalid` | No | `invalid` on 401 or refresh failure |
+| `inserted_at` | utc_datetime | No | |
+| `updated_at` | utc_datetime | No | |
+
+Policy: only the owning user may read or modify their own token. See ADR-018.
+
 #### Resource: CaseAssignment
 
 | Field | Type | Notes |
@@ -191,22 +208,27 @@ On ingest (Oban job):
 1. Match to existing case via `in_reply_to` / subject pattern → add `CaseThread`
 1. If no match → create new `Case` + `CaseThread`
 
-#### Resource: GitHubReport
+#### Resource: GitHubAdvisory
+
+Replaces `GitHubReport`. Stores advisory data fetched using per-user GitHub App tokens
+(see ADR-018).
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | UUID | |
-| `github_advisory_id` | string | GHSA identifier |
+| `github_advisory_id` | string | GHSA identifier; unique |
+| `fetched_by_user_id` | UUID (FK) | References `User` — the user whose token was used |
 | `repository` | string | e.g., `owner/repo` |
 | `title` | string | |
 | `body` | text | |
 | `severity` | string (nullable) | |
+| `state` | string | e.g., `published`, `triage`, `draft` |
 | `raw_payload` | map (jsonb) | |
 | `processed_at` | utc_datetime (nullable) | |
 | `case_id` | UUID (FK, nullable) | |
 | `inserted_at` | utc_datetime | |
 
-Ingest: Oban periodic job polls GitHub notifications API for the EEF CNA bot account.
+Ingest: `FetchGitHubAdvisories` Oban job runs per connected user (~every 5 min).
 On ingest: upsert by `github_advisory_id`, create/update Case, create CaseThread.
 
 #### Resource: ApiReport
@@ -397,6 +419,7 @@ ______________________________________________________________________
 | `/cases/:id/publish` | Publish action | poc |
 | `/reservations` | CVE ID pool management | poc |
 | `/admin/users` | User management, role assignment | poc |
+| `/settings` | User settings: connect/disconnect GitHub App for advisory fetching | poc, supporter |
 | `/c/:token` | Case Contact view (token-authenticated, read-only) | Case Contact |
 
 ______________________________________________________________________
@@ -405,7 +428,8 @@ ______________________________________________________________________
 
 | Job | Schedule | Description |
 | --- | --- | --- |
-| `PollGitHubNotifications` | every 5 min | Poll GitHub notifications API for CNA bot account |
+| `FetchGitHubAdvisories` | ~every 5 min (per user) | Fetch GitHub Security Advisories using the connected user's GitHub App token; self-re-enqueues |
+| `RefreshGitHubAppToken` | proactive (per user) | Refresh GitHub App access token ~10 min before expiry; re-schedules itself |
 | `PollImap` | every 2 min | Poll IMAP inbox; ingest new emails |
 | `TopUpCvePool` | every 15 min | Reserve CVE IDs from MITRE if pool below threshold |
 | `SlaEnforcement` | every 1 hour | Check open cases for SLA breaches; emit events |
@@ -476,9 +500,9 @@ ______________________________________________________________________
 
 ## Open / Deferred Decisions
 
-- **GitHub Advisory channel**: TBD whether EEF uses a GitHub App (webhook) or bot
-  account (notification polling). Spec covers the bot/polling path; webhook can
-  be added later as a second `ReportChannel` strategy. See ADR-007.
+- **GitHub Advisory channel**: Implemented as per-user GitHub App OAuth tokens
+  (ADR-018). Webhook support can be added later as a second `ReportChannel` strategy
+  without replacing the polling path. See ADR-007 (amended) and ADR-018.
 - **Embargo / coordinated disclosure**: `published_at` can be set to a future date
   and the `publish` action can check it, but a full embargo workflow is out of scope
   for v1.
