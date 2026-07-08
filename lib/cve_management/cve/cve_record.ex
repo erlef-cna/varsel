@@ -216,8 +216,12 @@ defmodule CveManagement.CVE.CveRecord do
         queue: :cve_publishing,
         max_attempts: 3
 
+      # skip_on_empty prevents the scheduled run from reserving IDs before the
+      # first MITRE sync on a fresh database — the pool must be bootstrapped by
+      # triggering :top_up_pool manually once (see the action's description).
       schedule :top_up_pool, "*/15 * * * *",
         action: :top_up_pool,
+        action_input: %{skip_on_empty: true},
         worker_module_name: CveManagement.CVE.CveRecord.TopUpPoolWorker,
         queue: :cve_pool,
         max_attempts: 3
@@ -476,6 +480,13 @@ defmodule CveManagement.CVE.CveRecord do
       description """
       Ensures the open pool for the given year meets the configured minimum size.
       Defaults to the current year. Reserves additional IDs from MITRE if needed.
+
+      With skip_on_empty (set by the scheduled run), a completely empty database
+      is left untouched: an empty table usually means the first
+      sync_reserved_from_mitre has not run yet, and reserving would create
+      duplicates of IDs that already exist at MITRE. On a genuinely new MITRE
+      account, trigger this action manually once (skip_on_empty defaults to
+      false) to bootstrap the pool.
       """
 
       argument :year, :integer do
@@ -483,30 +494,42 @@ defmodule CveManagement.CVE.CveRecord do
         description "The CVE year to top up. Defaults to the current year."
       end
 
+      argument :skip_on_empty, :boolean do
+        allow_nil? true
+        default false
+        description "Skip (no MITRE call) when no CVE records exist locally at all."
+      end
+
       run fn input, _context ->
-        year = input.arguments[:year] || Date.utc_today().year
-        min_size = Application.get_env(:cve_management, :cve_pool_min_size, 10)
+        skip_on_empty = input.arguments[:skip_on_empty]
 
-        open_count =
-          __MODULE__
-          |> Ash.Query.for_read(:available, %{year: year}, authorize?: false)
-          |> Ash.count!(authorize?: false)
+        if skip_on_empty and Ash.count!(__MODULE__, authorize?: false) == 0 do
+          {:ok, :ok}
+        else
+          year = input.arguments[:year] || Date.utc_today().year
+          min_size = Application.get_env(:cve_management, :cve_pool_min_size, 10)
 
-        if open_count < min_size do
-          amount = min_size - open_count
+          open_count =
+            __MODULE__
+            |> Ash.Query.for_read(:available, %{year: year}, authorize?: false)
+            |> Ash.count!(authorize?: false)
 
-          case MitreCveApi.reserve(year, amount) do
-            {:ok, reservation_jsons} ->
-              inputs = Enum.map(reservation_jsons, &%{reservation_json: &1})
+          if open_count < min_size do
+            amount = min_size - open_count
 
-              Ash.bulk_create!(inputs, __MODULE__, :reserve, authorize?: false)
+            case MitreCveApi.reserve(year, amount) do
+              {:ok, reservation_jsons} ->
+                inputs = Enum.map(reservation_jsons, &%{reservation_json: &1})
 
-            {:error, reason} ->
-              raise "Failed to reserve CVE IDs from MITRE: #{reason}"
+                Ash.bulk_create!(inputs, __MODULE__, :reserve, authorize?: false)
+
+              {:error, reason} ->
+                raise "Failed to reserve CVE IDs from MITRE: #{reason}"
+            end
           end
-        end
 
-        {:ok, :ok}
+          {:ok, :ok}
+        end
       end
     end
 

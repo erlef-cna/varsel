@@ -483,6 +483,63 @@ defmodule CveManagement.CVE.CveRecordTest do
       assert Ash.count!(CveRecord, authorize?: false) == 2
     end
 
+    test "skip_on_empty: skips entirely when no records exist at all" do
+      Req.Test.stub(MitreCveApi, fn conn ->
+        flunk(
+          "MITRE should not be called on an empty database with skip_on_empty, got: #{conn.method} #{conn.request_path}"
+        )
+      end)
+
+      CveRecord
+      |> Ash.ActionInput.for_action(:top_up_pool, %{year: @year, skip_on_empty: true}, authorize?: false)
+      |> Ash.run_action!()
+
+      assert Ash.count!(CveRecord, authorize?: false) == 0
+    end
+
+    test "scheduled run passes skip_on_empty: empty database is left untouched" do
+      Req.Test.stub(MitreCveApi, fn conn ->
+        flunk(
+          "MITRE should not be called by the scheduled top_up on an empty database, got: #{conn.method} #{conn.request_path}"
+        )
+      end)
+
+      assert %{success: 1, failure: 0} =
+               AshOban.Test.schedule_and_run_triggers(
+                 {CveRecord, :top_up_pool},
+                 scheduled_actions?: true,
+                 triggers?: false
+               )
+
+      assert Ash.count!(CveRecord, authorize?: false) == 0
+    end
+
+    test "skip_on_empty: tops up normally when any record exists" do
+      reserved_record("CVE-#{@year}-1101")
+      stub_mitre_reserve(["CVE-#{@year}-1102"])
+
+      CveRecord
+      |> Ash.ActionInput.for_action(:top_up_pool, %{year: @year, skip_on_empty: true}, authorize?: false)
+      |> Ash.run_action!()
+
+      assert Ash.count!(CveRecord, authorize?: false) == 2
+    end
+
+    test "skip_on_empty: a non-pool record (e.g. imported) counts as non-empty" do
+      Ash.create!(CveRecord, %{cve_json: @published_cve_json},
+        action: :import,
+        authorize?: false
+      )
+
+      stub_mitre_reserve(["CVE-#{@year}-1201"])
+
+      CveRecord
+      |> Ash.ActionInput.for_action(:top_up_pool, %{year: @year, skip_on_empty: true}, authorize?: false)
+      |> Ash.run_action!()
+
+      assert Ash.count!(CveRecord, authorize?: false) == 2
+    end
+
     test "does not reserve more when pool already meets the minimum" do
       min_size = Application.get_env(:cve_management, :cve_pool_min_size, 10)
 
