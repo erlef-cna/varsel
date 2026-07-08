@@ -9,6 +9,7 @@ defmodule CveManagement.CVE do
     extensions: [AshAdmin.Domain, AshAi, AshPaperTrail.Domain]
 
   alias CveManagement.CVE.CveRecord
+  alias CveManagement.CVE.CveValidation
 
   admin do
     show? true
@@ -30,6 +31,11 @@ defmodule CveManagement.CVE do
     tool :list_cves_by_purl, CveRecord, :list_by_purl do
       load [:cve_id, :title, :date_published, :date_updated, :purls]
     end
+
+    tool :validate_cve_record, CveValidation, :validate
+    tool :validate_cve_record_schema, CveValidation, :validate_schema
+    tool :validate_cve_record_cvelint, CveValidation, :validate_cvelint
+    tool :validate_cve_record_hex_packages, CveValidation, :validate_hex_packages
   end
 
   paper_trail do
@@ -41,6 +47,10 @@ defmodule CveManagement.CVE do
       define :import_cves_from_mitre, action: :import_from_mitre
       define :list_published_cve_records, action: :list_published
       define :get_published_cve_record, action: :get_published, args: [:cve_id]
+    end
+
+    resource CveValidation do
+      define :validate_cve_record, action: :validate, args: [:cve_json]
     end
   end
 end

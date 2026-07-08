@@ -5,6 +5,7 @@
 [
   import_deps: [
     :ash_admin,
+    :ash_ai,
     :ash_graphql,
     :absinthe,
     :ash_oban,

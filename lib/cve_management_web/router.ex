@@ -100,7 +100,11 @@ defmodule CveManagementWeb.Router do
         :list_cves,
         :get_cve,
         :search_cves,
-        :list_cves_by_purl
+        :list_cves_by_purl,
+        :validate_cve_record,
+        :validate_cve_record_schema,
+        :validate_cve_record_cvelint,
+        :validate_cve_record_hex_packages
       ],
       otp_app: :cve_management
   end

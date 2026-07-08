@@ -41,6 +41,8 @@ config :cve_management, Oban, testing: :manual
 
 config :cve_management,
   token_signing_secret: "6efZN/F7dwuoM9KP4oUWol4pbbSwNQ8J",
+  cvelint_bin: System.get_env("CVELINT_BIN", "cvelint"),
+  hex_core: %{http_adapter: {CveManagement.Test.HexHTTPStub, %{}}},
   cwe_catalog: [plug: {Req.Test, CveManagement.CWE.Weakness}],
   capec_catalog: [plug: {Req.Test, CveManagement.CAPEC.AttackPattern}],
   mitre_cve_api: [

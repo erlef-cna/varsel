@@ -10,29 +10,60 @@ defmodule CveManagement.CVE.CveRecordTest do
 
   @year Date.utc_today().year
   @cve_id "CVE-2025-12345"
+  @org_id "b33eab0a-aa47-4189-b7ec-b71bbfeee3e3"
 
   @cna_container %{
+    "providerMetadata" => %{"orgId" => @org_id},
     "title" => "Test vulnerability",
-    "descriptions" => [%{"lang" => "en", "value" => "A test vulnerability."}],
-    "affected" => [],
-    "references" => []
+    "descriptions" => [
+      %{"lang" => "en", "value" => "A test vulnerability in test_lib allowing denial of service."}
+    ],
+    "affected" => [
+      %{
+        "vendor" => "Erlang Ecosystem Foundation",
+        "product" => "test_lib",
+        "packageURL" => "pkg:hex/test_lib",
+        "defaultStatus" => "unaffected",
+        "versions" => [
+          %{
+            "version" => "0",
+            "lessThan" => "1.2.3",
+            "status" => "affected",
+            "versionType" => "semver"
+          }
+        ]
+      }
+    ],
+    "references" => [%{"url" => "https://example.com/advisory"}]
   }
 
   @updated_cna_container %{
-    "title" => "Updated vulnerability",
-    "descriptions" => [%{"lang" => "en", "value" => "An updated description."}],
-    "affected" => [],
-    "references" => []
+    @cna_container
+    | "title" => "Updated vulnerability",
+      "descriptions" => [
+        %{"lang" => "en", "value" => "An updated description of the test_lib vulnerability."}
+      ]
   }
 
   @cve_json %{
-    "cveMetadata" => %{"cveId" => @cve_id, "state" => "RESERVED"},
+    "dataType" => "CVE_RECORD",
+    "dataVersion" => "5.1",
+    "cveMetadata" => %{
+      "cveId" => @cve_id,
+      "assignerOrgId" => @org_id,
+      "assignerShortName" => "EEF",
+      "state" => "PUBLISHED"
+    },
     "containers" => %{"cna" => @cna_container}
   }
 
   @published_cve_json %{
+    "dataType" => "CVE_RECORD",
+    "dataVersion" => "5.1",
     "cveMetadata" => %{
       "cveId" => @cve_id,
+      "assignerOrgId" => @org_id,
+      "assignerShortName" => "EEF",
       "state" => "PUBLISHED",
       "datePublished" => "2026-04-27T12:00:00.000Z",
       "dateUpdated" => "2026-04-27T12:00:00.000Z"
@@ -41,14 +72,18 @@ defmodule CveManagement.CVE.CveRecordTest do
   }
 
   @updated_cve_json %{
-    "cveMetadata" => %{
-      "cveId" => @cve_id,
-      "state" => "PUBLISHED",
-      "datePublished" => "2026-04-27T12:00:00.000Z",
-      "dateUpdated" => "2026-04-27T13:00:00.000Z"
-    },
-    "containers" => %{"cna" => @updated_cna_container}
+    @published_cve_json
+    | "cveMetadata" => %{
+        @published_cve_json["cveMetadata"]
+        | "dateUpdated" => "2026-04-27T13:00:00.000Z"
+      },
+      "containers" => %{"cna" => @updated_cna_container}
   }
+
+  setup do
+    Application.put_env(:cve_management, :hex_stub_packages, ["test_lib"])
+    on_exit(fn -> Application.delete_env(:cve_management, :hex_stub_packages) end)
+  end
 
   defp reservation_json(cve_id, year \\ @year) do
     %{
@@ -336,6 +371,61 @@ defmodule CveManagement.CVE.CveRecordTest do
       assert {:error, _} = Ash.update(record, %{}, action: :push_update, authorize?: false)
 
       assert Ash.get!(CveRecord, record.id, authorize?: false).state == :pending_update
+    end
+  end
+
+  describe "validation gating" do
+    @invalid_cve_json %{"cveMetadata" => %{"cveId" => @cve_id, "state" => "BOGUS"}}
+
+    test "reserve and assign accept records without valid cve_json" do
+      # The pool lifecycle never validates: reservation_json is not a CVE record
+      record = reserved_record()
+      assert Ash.update!(record, %{}, action: :assign, authorize?: false).state == :draft
+    end
+
+    test "request_publish rejects an invalid record" do
+      draft = draft_record()
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               Ash.update(draft, %{cve_json: @invalid_cve_json},
+                 action: :request_publish,
+                 authorize?: false
+               )
+
+      assert Exception.message(error) =~ "[schema]"
+      assert Ash.get!(CveRecord, draft.id, authorize?: false).state == :draft
+    end
+
+    test "request_publish rejects a record with a nonexistent hex package" do
+      draft = draft_record()
+
+      cve_json =
+        put_in(
+          @cve_json,
+          ["containers", "cna", "affected", Access.at(0), "packageURL"],
+          "pkg:hex/ghost_package"
+        )
+
+      assert {:error, error} =
+               Ash.update(draft, %{cve_json: cve_json},
+                 action: :request_publish,
+                 authorize?: false
+               )
+
+      assert Exception.message(error) =~ "ghost_package"
+    end
+
+    test "update rejects an invalid record" do
+      record = published_record()
+
+      assert {:error, error} =
+               Ash.update(record, %{cve_json: @invalid_cve_json},
+                 action: :update,
+                 authorize?: false
+               )
+
+      assert Exception.message(error) =~ "CVE record is not valid"
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :published
     end
   end
 

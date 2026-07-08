@@ -83,6 +83,9 @@ config :esbuild,
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
 
+# Resolve `file:` references in the vendored CVE record schema (priv/cve_schema)
+config :ex_json_schema, :remote_schema_resolver, {CveManagement.CVE.CveSchema, :resolve_ref}
+
 # Configure Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",

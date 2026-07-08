@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
+defmodule CveManagement.CVE.CveRecord.Validations.ValidCveRecord do
+  @moduledoc """
+  Validates the changeset's `cve_json` via the CVE domain's
+  `validate_cve_record/1` code interface (schema, cvelint, and hex.pm package
+  checks — see `CveManagement.CVE.CveValidation`).
+
+  Used on the actions that hand a record to MITRE (`request_publish` and
+  `update`); records in earlier lifecycle states may hold invalid JSON.
+  """
+
+  use Ash.Resource.Validation
+
+  @impl true
+  def atomic(_changeset, _opts, _context) do
+    # Only reached when the validation's `where` conditions match (Ash skips
+    # it otherwise), i.e. on actions that must set `require_atomic? false`
+    # anyway: the validators call external services.
+    {:not_atomic, "CVE record validation calls external services and cannot run atomically"}
+  end
+
+  @impl true
+  def validate(changeset, _opts, _context) do
+    cve_json = Ash.Changeset.get_attribute(changeset, :cve_json)
+
+    case CveManagement.CVE.validate_cve_record!(cve_json) do
+      %{valid: true} ->
+        :ok
+
+      %{errors: errors} ->
+        message =
+          Enum.map_join(errors, "\n", fn error ->
+            location = if error.path, do: " (at #{error.path})", else: ""
+            "[#{error.source}] #{error.message}#{location}"
+          end)
+
+        {:error, field: :cve_json, message: "CVE record is not valid:\n" <> message}
+    end
+  end
+end

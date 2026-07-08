@@ -83,6 +83,7 @@ defmodule CveManagement.CVE.CveRecord do
   import Ash.Expr
 
   alias CveManagement.CVE.CveRecord.OkResult
+  alias CveManagement.CVE.CveRecord.Validations.ValidCveRecord
   alias CveManagement.CVE.MitreCveApi
 
   require Ash.Query
@@ -347,6 +348,7 @@ defmodule CveManagement.CVE.CveRecord do
 
     update :update do
       accept [:cve_json]
+      require_atomic? false
       change transition_state(:pending_update)
       change run_oban_trigger(:push_update)
     end
@@ -420,6 +422,7 @@ defmodule CveManagement.CVE.CveRecord do
       """
 
       accept [:cve_json]
+      require_atomic? false
       change transition_state(:publishing)
       change run_oban_trigger(:publish)
     end
@@ -601,6 +604,14 @@ defmodule CveManagement.CVE.CveRecord do
 
     policy action_type(:read) do
       authorize_if expr(state == :published)
+    end
+  end
+
+  validations do
+    # Records are only required to be valid when handed to MITRE; earlier
+    # lifecycle states may hold incomplete or invalid JSON.
+    validate ValidCveRecord do
+      where action_is([:request_publish, :update])
     end
   end
 

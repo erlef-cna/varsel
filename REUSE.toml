@@ -5,3 +5,9 @@ path = ["priv/repo/migrations/**", "priv/resource_snapshots/**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "NOASSERTION"
 SPDX-License-Identifier = "CC0-1.0"
+
+[[annotations]]
+path = ["priv/cve_schema/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "https://github.com/CVEProject/cve-schema"
+SPDX-License-Identifier = "CC0-1.0"

@@ -3,9 +3,27 @@
 
 { pkgs, lib, config, inputs, ... }:
 
+let
+  cvelint = pkgs.stdenvNoCC.mkDerivation {
+    pname = "cvelint";
+    version = "0.4.0";
+
+    src = pkgs.fetchurl {
+      url = "https://github.com/mprpic/cvelint/releases/download/v0.4.0/cvelint_Darwin_arm64.tar.gz";
+      sha256 = "sha256-F4IFQ9SVZN9IuRgacitWYeKw7MaavBJ1vbPWzdg20dk=";
+    };
+
+    sourceRoot = ".";
+
+    installPhase = ''
+      install -Dm755 cvelint $out/bin/cvelint
+    '';
+  };
+in
 {
   packages = with pkgs; [
     git
+    cvelint
   ];
 
   languages.elixir = {
