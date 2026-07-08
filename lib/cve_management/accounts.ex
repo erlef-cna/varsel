@@ -15,5 +15,6 @@ defmodule CveManagement.Accounts do
     resource CveManagement.Accounts.User
     resource CveManagement.Accounts.CaseAssignment
     resource CveManagement.Accounts.GitHubAppToken
+    resource CveManagement.Accounts.UserIdentity
   end
 end

@@ -31,6 +31,7 @@ defmodule CveManagement.Accounts.User do
         client_id CveManagement.Secrets
         redirect_uri CveManagement.Secrets
         client_secret CveManagement.Secrets
+        identity_resource CveManagement.Accounts.UserIdentity
       end
     end
   end

@@ -8,7 +8,10 @@
     git
   ];
 
-  languages.elixir.enable = true;
+  languages.elixir = {
+    enable = true;
+    package = pkgs.beam29Packages.elixir_1_20;
+  };
 
   dotenv.enable = true;
 
