@@ -98,7 +98,6 @@ ______________________________________________________________________
 | `description` | text | Yes | Encrypted while unpublished |
 | `severity_estimate` | enum (low/med/high/crit) | No | |
 | `status` | enum (see state machine) | No | |
-| `cve_reservation_id` | UUID (FK, nullable) | No | |
 | `published_at` | utc_datetime (nullable) | No | |
 | `approved_at` | utc_datetime (nullable) | No | |
 | `approved_by_id` | UUID (FK, nullable) | No | References `User` |
@@ -113,7 +112,7 @@ ______________________________________________________________________
 | `inserted_at` | utc_datetime | No | |
 | `updated_at` | utc_datetime | No | |
 
-Relationships: `has_many :threads`, `has_many :assignments`, `belongs_to :cve_reservation`
+Relationships: `has_many :threads`, `has_many :assignments`, `has_one :cve_record`
 
 **Case Status State Machine** (managed via `ash_state_machine`)
 
@@ -248,35 +247,33 @@ ______________________________________________________________________
 
 ### Domain: CVE
 
-#### Resource: CveReservation
+#### Resource: CveRecord
+
+A single resource covering the entire lifecycle of a CVE ID — from reservation
+in the MITRE pool, through assignment to a case and publication, to eventual
+update or rejection. See
+[ADR-019](decisions/019-unified-cve-record-lifecycle.md) for the state
+machine, storage model, and pool-management jobs.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | UUID | |
-| `cve_id` | string | e.g., `CVE-2025-12345` |
-| `status` | enum: `available`, `assigned`, `published`, `cancelled` | |
-| `reserved_at` | utc_datetime | |
-| `case_id` | UUID (FK, nullable) | Set when assigned to a case |
-| `inserted_at` | utc_datetime | |
-| `updated_at` | utc_datetime | |
+| `reservation_json` | jsonb (nullable) | Raw MITRE reservation object; present from `reserved` onward |
+| `cve_json` | jsonb (nullable) | Full MITRE CVE record; present once publishing/imported |
+| `case_id` | UUID (FK, nullable) | Set from `draft` onward |
+| `last_synced_at` | utc_datetime (nullable) | |
+| `rejected_at` | utc_datetime (nullable) | Set on rejection |
+| `rejection_reason` | text (nullable) | Set on rejection |
+| `state` | enum: `reserved`, `draft`, `publishing`, `published`, `pending_update`, `rejected` | `ash_state_machine` |
+| `inserted_at` / `updated_at` | utc_datetime | |
 
-Pool management: Oban periodic job (`TopUpCvePool`) checks count of `available`
-reservations. If below a configurable threshold, it calls the MITRE CVE Services
-API to reserve a batch. When a case is rejected, its reservation (if any) transitions
-to `cancelled`.
+`cve_id`, `reserved_at`, `year`, `title`, `date_published`, `date_updated`,
+and `purls` are calculated fields derived from the JSON payloads.
 
-#### Resource: CveRecord
-
-See [ADR-012](decisions/012-case-data-model.md) for the full field list,
-CVE JSON 5.x / OSV JSON field mapping, and encryption decisions.
-
-Actions:
-
-- `build` — AI-assisted CVE record construction from case/thread data
-- `publish` — derives plain-text and HTML from Markdown fields, assembles and
-  validates CVE JSON 5.x and OSV JSON, submits to MITRE CVE Services API,
-  marks record public, updates reservation status to `published`
-- `update` — normal update action; allowed after publish (CVEs can be amended)
+Pool management: an Oban scheduled action (`top_up_pool`) keeps a configurable
+minimum of `reserved` records for the current year, reserving batches from the
+MITRE CVE Services API as needed. Nightly sync reconciles externally reserved
+and rejected IDs; stale prior-year pool entries are rejected each Feb 1st.
 
 #### Resource: CveFieldProposal
 

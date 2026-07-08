@@ -52,6 +52,22 @@ defmodule CveManagementWeb.CveControllerTest do
     Ash.create!(CveRecord, %{cve_json: cve_json}, action: :import, authorize?: false)
   end
 
+  defp insert_reserved(cve_id) do
+    Ash.create!(
+      CveRecord,
+      %{
+        reservation_json: %{
+          "cve_id" => cve_id,
+          "cve_year" => "2025",
+          "state" => "RESERVED",
+          "reserved" => "2025-01-01T00:00:00.000Z"
+        }
+      },
+      action: :reserve,
+      authorize?: false
+    )
+  end
+
   describe "GET /cves/index.json" do
     test "returns empty list when no published records", %{conn: conn} do
       conn = get(conn, "/cves/index.json")
@@ -75,7 +91,7 @@ defmodule CveManagementWeb.CveControllerTest do
     end
 
     test "does not include unpublished records", %{conn: conn} do
-      Ash.create!(CveRecord, %{cve_json: @published_cve_json}, authorize?: false)
+      insert_reserved(@cve_id)
 
       conn = get(conn, "/cves/index.json")
       assert json_response(conn, 200) == []
@@ -100,7 +116,7 @@ defmodule CveManagementWeb.CveControllerTest do
     end
 
     test "returns 404 for unpublished record", %{conn: conn} do
-      Ash.create!(CveRecord, %{cve_json: @published_cve_json}, authorize?: false)
+      insert_reserved(@cve_id)
 
       conn = get(conn, "/cves/#{@cve_id}.json")
       assert json_response(conn, 404) == %{}

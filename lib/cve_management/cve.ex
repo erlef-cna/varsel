@@ -31,8 +31,6 @@ defmodule CveManagement.CVE do
   end
 
   resources do
-    resource CveManagement.CVE.CveReservation
-
     resource CveRecord do
       define :import_cves_from_mitre, action: :import_from_mitre
       define :list_published_cve_records, action: :list_published

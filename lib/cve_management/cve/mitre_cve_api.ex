@@ -75,7 +75,7 @@ defmodule CveManagement.CVE.MitreCveApi do
   Reserves `amount` CVE IDs for the given `year` from MITRE.
 
   Returns `{:ok, [reservation_json]}` where each element is the raw reservation object
-  returned by the MITRE API (suitable for storing as `reservation_json` on `CveReservation`).
+  returned by the MITRE API (suitable for storing as `reservation_json` on `CveRecord`).
   Returns `{:error, reason}` on failure.
   """
   @spec reserve(pos_integer(), pos_integer()) :: {:ok, [map()]} | {:error, String.t()}

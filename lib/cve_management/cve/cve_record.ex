@@ -9,36 +9,70 @@ end
 
 defmodule CveManagement.CVE.CveRecord do
   @moduledoc """
-  Represents a CVE record and its lifecycle from initial submission through publication.
+  Represents a single CVE ID through its entire lifecycle — from reservation in the
+  MITRE pool, through assignment to a case and publication, to eventual update or
+  rejection.
+
+  A CVE ID is a MITRE-owned resource that moves through one continuous lifecycle.
+  Earlier states carry only `reservation_json` (the raw MITRE reservation object);
+  once published the row also carries `cve_json` (the full MITRE record with
+  `cveMetadata` and `containers`). Both blobs live side by side on the same row.
 
   ## State Machine
 
   ```mermaid
   stateDiagram-v2
-    [*] --> publishing
+    [*] --> reserved : reserve (pool top-up)
     [*] --> published : import
+    reserved --> draft : assign (to a case)
+    reserved --> rejected : reject (stale / external)
+    draft --> publishing : request_publish (user)
+    draft --> rejected : reject
     publishing --> published : publish (Oban)
     published --> pending_update : update (user)
+    published --> rejected : reject
     pending_update --> published : push_update (Oban)
   ```
 
+  | State | Meaning |
+  | --- | --- |
+  | `reserved` | Reserved from MITRE, open in the pool, no case assigned |
+  | `draft` | Reserved and assigned to a case, not yet published |
+  | `publishing` | Publish job enqueued; pushing the CNA container to MITRE |
+  | `published` | MITRE accepted the record; `cve_json` set |
+  | `pending_update` | Local edits to `cve_json` awaiting push to MITRE |
+  | `rejected` | Terminal — rejected at MITRE; the ID is burned and never reused |
+
+  At MITRE both `reserved` and `draft` are simply `RESERVED`; assignment to a case is
+  a purely local distinction. `draft` is one-way — a CVE assigned to a case is never
+  returned to the open pool; it can only be published or rejected.
+
   ## Actions
 
-  - `:create` — Creates a new record in the `:publishing` state and immediately enqueues a
-    publish job. The Oban worker calls the MITRE API to submit the CNA container, then
-    transitions the record to `:published`.
+  - `:reserve` (create) — Inserts/upserts a pool entry in the `:reserved` state from a
+    raw MITRE reservation object.
 
-  - `:update` — Transitions a `:published` record to `:pending_update` with new `cve_json`
-    and immediately enqueues a push_update job. The Oban worker pushes the changes to MITRE.
+  - `:import` — Upserts a record directly into the `:published` state from a full MITRE
+    record. Used by the scheduled `import_from_mitre` action.
 
-  - `:import` — Upserts a record from MITRE directly into the `:published` state. Used by
-    the scheduled `import_from_mitre` action. No-op if the CVE ID already exists locally.
+  - `:assign` (update) — Transitions a `:reserved` record to `:draft` and links it to a
+    case.
 
-  - `:import_from_mitre` (generic) — Scheduled daily via Oban. Fetches all published CVE IDs
-    owned by the org from MITRE and imports any that do not exist locally.
+  - `:request_publish` (update) — Accepts the `cve_json` for a `:draft` record, transitions
+    it to `:publishing`, and enqueues a publish job. The Oban `:publish` worker then calls
+    the MITRE API to submit the CNA container and transitions the record to `:published`.
 
-  - `:sync_from_mitre` (update) — Scheduled daily via Oban. For each `:published` record,
-    fetches the current state from MITRE and updates `cve_json` if MITRE has a newer version.
+  - `:update` (update) — Transitions a `:published` record to `:pending_update` with new
+    `cve_json` and enqueues a push_update job.
+
+  - `:reject` (update) — Transitions a `:reserved`, `:draft`, or `:published` record to
+    the terminal `:rejected` state, rejecting the ID at MITRE and recording the reason.
+
+  - `:import_from_mitre` / `:sync_from_mitre` — Scheduled daily; keep published records
+    in sync with MITRE.
+
+  - `:top_up_pool` / `:sync_reserved_from_mitre` / `:run_reject_stale` — Scheduled pool
+    maintenance (see ADR-014).
   """
   use Ash.Resource,
     otp_app: :cve_management,
@@ -47,7 +81,9 @@ defmodule CveManagement.CVE.CveRecord do
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshOban]
 
-  alias CveManagement.CVE.CveReservation
+  import Ash.Expr
+
+  alias CveManagement.CVE.CveRecord.OkResult
   alias CveManagement.CVE.MitreCveApi
 
   require Ash.Query
@@ -56,8 +92,10 @@ defmodule CveManagement.CVE.CveRecord do
     table "cve_records"
     repo CveManagement.Repo
 
-    calculations_to_sql cve_id: "cve_json->'cveMetadata'->>'cveId'",
+    calculations_to_sql cve_id: "coalesce(cve_json->'cveMetadata'->>'cveId', reservation_json->>'cve_id')",
                         title: "cve_json->'containers'->'cna'->>'title'",
+                        reserved_at: "(reservation_json->>'reserved')::timestamptz",
+                        year: "(reservation_json->>'cve_year')::integer",
                         search_vector: "search_vector"
 
     custom_statements do
@@ -103,7 +141,7 @@ defmodule CveManagement.CVE.CveRecord do
       end
 
       statement :add_search_vector do
-        up "ALTER TABLE cve_records ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (cve_record_search_vector(cve_json)) STORED"
+        up "ALTER TABLE cve_records ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (cve_record_search_vector(coalesce(cve_json, '{}'::jsonb))) STORED"
         down "ALTER TABLE cve_records DROP COLUMN IF EXISTS search_vector"
       end
 
@@ -120,14 +158,18 @@ defmodule CveManagement.CVE.CveRecord do
   end
 
   state_machine do
-    initial_states [:publishing, :published]
-    default_initial_state :publishing
+    initial_states [:reserved, :published]
+    default_initial_state :reserved
 
     transitions do
+      transition :assign, from: :reserved, to: :draft
+      transition :request_publish, from: :draft, to: :publishing
       transition :publish, from: :publishing, to: :published
       transition :update, from: :published, to: :pending_update
       transition :update, from: :pending_update, to: :pending_update
       transition :push_update, from: :pending_update, to: :published
+      transition :reject, from: [:reserved, :draft, :published], to: :rejected
+      transition :mark_rejected, from: [:reserved, :draft, :published], to: :rejected
     end
   end
 
@@ -173,6 +215,24 @@ defmodule CveManagement.CVE.CveRecord do
         worker_module_name: CveManagement.CVE.CveRecord.ImportFromMitreWorker,
         queue: :cve_publishing,
         max_attempts: 3
+
+      schedule :top_up_pool, "*/15 * * * *",
+        action: :top_up_pool,
+        worker_module_name: CveManagement.CVE.CveRecord.TopUpPoolWorker,
+        queue: :cve_pool,
+        max_attempts: 3
+
+      schedule :sync_reserved_from_mitre, "0 3 * * *",
+        action: :sync_reserved_from_mitre,
+        worker_module_name: CveManagement.CVE.CveRecord.SyncReservedFromMitreWorker,
+        queue: :cve_pool,
+        max_attempts: 3
+
+      schedule :reject_stale, "0 4 1 2 *",
+        action: :run_reject_stale,
+        worker_module_name: CveManagement.CVE.CveRecord.RejectStaleWorker,
+        queue: :cve_pool,
+        max_attempts: 3
     end
   end
 
@@ -184,12 +244,14 @@ defmodule CveManagement.CVE.CveRecord do
                 load: [:cve_id, :title, :date_published, :date_updated],
                 sort: [date_published: :desc]
               )
+
+      filter expr(state == :published)
     end
 
     read :get_published do
       argument :cve_id, :string, allow_nil?: false
       get? true
-      filter expr(cve_id == ^arg(:cve_id))
+      filter expr(cve_id == ^arg(:cve_id) and state == :published)
     end
 
     read :search do
@@ -214,23 +276,40 @@ defmodule CveManagement.CVE.CveRecord do
              )
     end
 
-    create :create do
-      primary? true
-      accept [:cve_json, :case_id]
-      change run_oban_trigger(:publish)
+    read :available do
+      description "Returns open (unassigned) reservations in the pool for a given year."
+
+      argument :year, :integer, allow_nil?: false
+
+      filter expr(state == :reserved and year == ^arg(:year))
+    end
+
+    create :reserve do
+      description "Creates a pool reservation from a raw MITRE API reservation object."
+      accept [:reservation_json]
+
+      upsert? true
+      upsert_identity :unique_cve_id
+      upsert_fields [:reservation_json]
+
+      change set_attribute(:state, :reserved)
     end
 
     create :import do
-      description "Imports a CVE record from MITRE as already-published. No-op if it already exists."
+      description """
+      Imports a CVE record from MITRE as already-published. Upserting an existing row
+      (e.g. a local reservation published externally) fills cve_json and marks it published.
+      """
+
       accept [:cve_json]
       upsert? true
       upsert_identity :unique_cve_id
-      upsert_fields [:state]
+      upsert_fields [:state, :cve_json]
 
       change set_attribute(:state, :published)
     end
 
-    action :import_from_mitre, CveManagement.CVE.CveRecord.OkResult do
+    action :import_from_mitre, OkResult do
       description "Fetches all CVE IDs from MITRE and imports any that do not exist locally."
 
       run fn _input, _context ->
@@ -246,6 +325,12 @@ defmodule CveManagement.CVE.CveRecord do
 
         {:ok, :ok}
       end
+    end
+
+    update :assign do
+      description "Assigns a reserved CVE ID to a case, moving it into the draft state."
+      accept [:case_id]
+      change transition_state(:draft)
     end
 
     update :update do
@@ -312,7 +397,20 @@ defmodule CveManagement.CVE.CveRecord do
       end
     end
 
+    update :request_publish do
+      description """
+      User-facing publish request. Accepts the CNA/ADP container JSON for a drafted
+      CVE, transitions :draft -> :publishing, and enqueues the publish job. The Oban
+      worker (:publish action) performs the remote MITRE call.
+      """
+
+      accept [:cve_json]
+      change transition_state(:publishing)
+      change run_oban_trigger(:publish)
+    end
+
     update :publish do
+      description "Oban worker action: pushes the CNA container to MITRE and marks the record published."
       accept []
       require_atomic? false
 
@@ -336,11 +434,129 @@ defmodule CveManagement.CVE.CveRecord do
           end
         end
       end
+    end
 
-      change after_action(fn changeset, record, _context ->
-               destroy_reservation(record)
-               {:ok, record}
+    update :reject do
+      description """
+      Rejects this CVE ID at MITRE and moves the row to the terminal :rejected state.
+      Valid from :reserved, :draft, or :published. The ID is burned and never reused.
+      """
+
+      accept [:rejection_reason]
+      require_atomic? false
+
+      change transition_state(:rejected)
+      change set_attribute(:rejected_at, &DateTime.utc_now/0)
+
+      change before_action(fn changeset, _context ->
+               cve_id =
+                 get_in(changeset.data.cve_json || %{}, ["cveMetadata", "cveId"]) ||
+                   get_in(changeset.data.reservation_json || %{}, ["cve_id"])
+
+               case MitreCveApi.reject(cve_id) do
+                 {:ok, _} -> changeset
+                 {:error, reason} -> Ash.Changeset.add_error(changeset, reason)
+               end
              end)
+    end
+
+    update :mark_rejected do
+      description """
+      Marks this CVE ID rejected locally without calling MITRE — used when MITRE
+      already rejected the ID externally.
+      """
+
+      accept [:rejection_reason]
+
+      change transition_state(:rejected)
+      change set_attribute(:rejected_at, &DateTime.utc_now/0)
+    end
+
+    action :top_up_pool, OkResult do
+      description """
+      Ensures the open pool for the given year meets the configured minimum size.
+      Defaults to the current year. Reserves additional IDs from MITRE if needed.
+      """
+
+      argument :year, :integer do
+        allow_nil? true
+        description "The CVE year to top up. Defaults to the current year."
+      end
+
+      run fn input, _context ->
+        year = input.arguments[:year] || Date.utc_today().year
+        min_size = Application.get_env(:cve_management, :cve_pool_min_size, 10)
+
+        open_count =
+          __MODULE__
+          |> Ash.Query.for_read(:available, %{year: year}, authorize?: false)
+          |> Ash.count!(authorize?: false)
+
+        if open_count < min_size do
+          amount = min_size - open_count
+
+          case MitreCveApi.reserve(year, amount) do
+            {:ok, reservation_jsons} ->
+              inputs = Enum.map(reservation_jsons, &%{reservation_json: &1})
+
+              Ash.bulk_create!(inputs, __MODULE__, :reserve, authorize?: false)
+
+            {:error, reason} ->
+              raise "Failed to reserve CVE IDs from MITRE: #{reason}"
+          end
+        end
+
+        {:ok, :ok}
+      end
+    end
+
+    action :sync_reserved_from_mitre, OkResult do
+      description """
+      Upserts IDs currently RESERVED at MITRE (catching external reservations) and
+      marks local pool rows rejected whose IDs MITRE has already rejected externally.
+      IDs published externally are picked up by the import_from_mitre action instead.
+      """
+
+      run fn _input, _context ->
+        # 1. Upsert all RESERVED IDs from MITRE
+        MitreCveApi.stream_reserved_ids()
+        |> Stream.map(&%{reservation_json: &1})
+        |> Stream.chunk_every(100)
+        |> Enum.each(fn chunk ->
+          Ash.bulk_create!(chunk, __MODULE__, :reserve, authorize?: false)
+        end)
+
+        # 2. Mark local pool rows rejected for IDs that MITRE has rejected externally.
+        #    Only un-published pool rows are affected; published records are left intact.
+        Enum.each(MitreCveApi.stream_rejected_ids(), fn rejected_cve_id ->
+          reject_pool_row(rejected_cve_id, "Rejected externally at MITRE")
+        end)
+
+        {:ok, :ok}
+      end
+    end
+
+    action :run_reject_stale, OkResult do
+      description """
+      Scheduled entry point for stale rejection. Runs Feb 1st each year.
+      Rejects all open prior-year reservations at MITRE via :reject.
+      """
+
+      run fn _input, _context ->
+        current_year = Date.utc_today().year
+        current_year_start = DateTime.new!(Date.new!(current_year, 1, 1), ~T[00:00:00])
+
+        __MODULE__
+        |> Ash.Query.filter(state == :reserved and reserved_at < ^current_year_start)
+        |> Ash.bulk_update!(:reject, %{rejection_reason: "Stale prior-year reservation"},
+          authorize?: false,
+          return_errors?: true,
+          strategy: :stream,
+          allow_stream_with: :full_read
+        )
+
+        {:ok, :ok}
+      end
     end
   end
 
@@ -357,12 +573,27 @@ defmodule CveManagement.CVE.CveRecord do
   attributes do
     uuid_primary_key :id
 
+    attribute :reservation_json, :map do
+      description "Raw MITRE reservation object. Present from the :reserved state onward."
+      public? true
+    end
+
     attribute :cve_json, :map do
-      allow_nil? false
+      description "Full MITRE CVE record. Populated once the record is published."
       public? true
     end
 
     attribute :last_synced_at, :utc_datetime do
+      public? true
+    end
+
+    attribute :rejected_at, :utc_datetime do
+      description "When this CVE ID was rejected at MITRE."
+      public? true
+    end
+
+    attribute :rejection_reason, :string do
+      description "Why this CVE ID was rejected."
       public? true
     end
 
@@ -377,11 +608,31 @@ defmodule CveManagement.CVE.CveRecord do
   end
 
   calculations do
-    calculate :cve_id, :string, expr(fragment("?->'cveMetadata'->>'cveId'", cve_json)) do
+    calculate :cve_id,
+              :string,
+              expr(
+                fragment(
+                  "coalesce(?->'cveMetadata'->>'cveId', ?->>'cve_id')",
+                  cve_json,
+                  reservation_json
+                )
+              ) do
       public? true
     end
 
     calculate :title, :string, expr(fragment("?->'containers'->'cna'->>'title'", cve_json)) do
+      public? true
+    end
+
+    calculate :reserved_at,
+              :utc_datetime,
+              expr(fragment("(?->>'reserved')::timestamptz", reservation_json)) do
+      public? true
+    end
+
+    calculate :year,
+              :integer,
+              expr(fragment("(?->>'cve_year')::integer", reservation_json)) do
       public? true
     end
 
@@ -433,12 +684,15 @@ defmodule CveManagement.CVE.CveRecord do
     identity :unique_cve_id, [:cve_id]
   end
 
-  defp destroy_reservation(record) do
-    cve_id = get_in(record.cve_json, ["cveMetadata", "cveId"])
-
-    CveReservation
-    |> Ash.Query.filter(cve_id: cve_id)
-    |> Ash.bulk_destroy!(:destroy, %{}, authorize?: false, return_errors?: true)
+  defp reject_pool_row(cve_id, reason) do
+    __MODULE__
+    |> Ash.Query.filter(cve_id == ^cve_id and state == :reserved)
+    |> Ash.bulk_update!(:mark_rejected, %{rejection_reason: reason},
+      authorize?: false,
+      return_errors?: true,
+      strategy: :stream,
+      allow_stream_with: :full_read
+    )
 
     :ok
   end

@@ -94,12 +94,7 @@ defmodule CveManagement.Cases.Case do
       destination_attribute :case_id
     end
 
-    has_one :cve_reservation, CveManagement.CVE.CveReservation do
-      public? true
-      destination_attribute :case_id
-    end
-
-    has_many :cve_records, CveManagement.CVE.CveRecord do
+    has_one :cve_record, CveManagement.CVE.CveRecord do
       public? true
       destination_attribute :case_id
     end
