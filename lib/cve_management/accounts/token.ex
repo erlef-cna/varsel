@@ -9,11 +9,24 @@ defmodule CveManagement.Accounts.Token do
     domain: CveManagement.Accounts,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
-    extensions: [AshAuthentication.TokenResource]
+    extensions: [AshAuthentication.TokenResource, AshPaperTrail.Resource]
 
   postgres do
     table "tokens"
     repo CveManagement.Repo
+  end
+
+  paper_trail do
+    change_tracking_mode :changes_only
+    ignore_attributes [:created_at, :updated_at]
+    only_when_changed? true
+    store_action_name? true
+    sensitive_attributes :redact
+    # Expired tokens are hard-deleted by expunge_expired; the cleanup itself
+    # is not an audit-worthy event
+    reference_source? false
+    create_version_on_destroy? false
+    belongs_to_actor :user, CveManagement.Accounts.User, domain: CveManagement.Accounts
   end
 
   actions do

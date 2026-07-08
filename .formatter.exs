@@ -5,10 +5,10 @@
 [
   import_deps: [
     :ash_admin,
-    :ash_events,
     :ash_graphql,
     :absinthe,
     :ash_oban,
+    :ash_paper_trail,
     :oban,
     :ash_state_machine,
     :ash_authentication_phoenix,

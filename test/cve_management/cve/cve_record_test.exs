@@ -114,6 +114,59 @@ defmodule CveManagement.CVE.CveRecordTest do
     end
   end
 
+  describe "paper trail" do
+    defp versions(record) do
+      record
+      |> Ash.load!([:paper_trail_versions], authorize?: false)
+      |> Map.fetch!(:paper_trail_versions)
+      |> Enum.sort_by(& &1.version_inserted_at)
+    end
+
+    test "reserve creates a version" do
+      record = reserved_record()
+
+      assert [version] = versions(record)
+      assert version.version_action_name == :reserve
+      assert version.state == :reserved
+      assert version.changes["reservation_json"]["cve_id"] == @cve_id
+    end
+
+    test "lifecycle transitions are recorded with action name and state" do
+      record = published_record()
+
+      actions = record |> versions() |> Enum.map(&{&1.version_action_name, &1.state})
+
+      assert actions == [
+               {:reserve, :reserved},
+               {:assign, :draft},
+               {:request_publish, :publishing},
+               {:publish, :published}
+             ]
+    end
+
+    test "no-op sync_from_mitre does not create a version" do
+      record = published_record()
+      count_before = length(versions(record))
+
+      stub_mitre_get(@published_cve_json)
+      Ash.update!(record, %{}, action: :sync_from_mitre, authorize?: false)
+
+      assert length(versions(record)) == count_before
+    end
+
+    test "sync_from_mitre with a newer record creates a version" do
+      record = published_record()
+      count_before = length(versions(record))
+
+      stub_mitre_get(@updated_cve_json)
+      Ash.update!(record, %{}, action: :sync_from_mitre, authorize?: false)
+
+      new_versions = versions(record)
+      assert length(new_versions) == count_before + 1
+      assert List.last(new_versions).changes["cve_json"] == @updated_cve_json
+    end
+  end
+
   describe "assign" do
     test "transitions reserved → draft" do
       record = reserved_record()

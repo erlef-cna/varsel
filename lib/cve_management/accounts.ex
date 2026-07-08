@@ -4,10 +4,16 @@
 
 defmodule CveManagement.Accounts do
   @moduledoc false
-  use Ash.Domain, otp_app: :cve_management, extensions: [AshAdmin.Domain]
+  use Ash.Domain,
+    otp_app: :cve_management,
+    extensions: [AshAdmin.Domain, AshPaperTrail.Domain]
 
   admin do
     show? true
+  end
+
+  paper_trail do
+    include_versions? true
   end
 
   resources do

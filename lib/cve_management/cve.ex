@@ -4,7 +4,9 @@
 
 defmodule CveManagement.CVE do
   @moduledoc false
-  use Ash.Domain, otp_app: :cve_management, extensions: [AshAdmin.Domain, AshAi]
+  use Ash.Domain,
+    otp_app: :cve_management,
+    extensions: [AshAdmin.Domain, AshAi, AshPaperTrail.Domain]
 
   alias CveManagement.CVE.CveRecord
 
@@ -28,6 +30,10 @@ defmodule CveManagement.CVE do
     tool :list_cves_by_purl, CveRecord, :list_by_purl do
       load [:cve_id, :title, :date_published, :date_updated, :purls]
     end
+  end
+
+  paper_trail do
+    include_versions? true
   end
 
   resources do

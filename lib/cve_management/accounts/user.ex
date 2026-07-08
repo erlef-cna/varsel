@@ -9,7 +9,7 @@ defmodule CveManagement.Accounts.User do
     domain: CveManagement.Accounts,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
-    extensions: [AshAuthentication]
+    extensions: [AshAuthentication, AshPaperTrail.Resource]
 
   authentication do
     add_ons do
@@ -39,6 +39,14 @@ defmodule CveManagement.Accounts.User do
   postgres do
     table "users"
     repo CveManagement.Repo
+  end
+
+  paper_trail do
+    change_tracking_mode :changes_only
+    ignore_attributes [:inserted_at, :updated_at]
+    only_when_changed? true
+    store_action_name? true
+    belongs_to_actor :user, __MODULE__, domain: CveManagement.Accounts
   end
 
   actions do

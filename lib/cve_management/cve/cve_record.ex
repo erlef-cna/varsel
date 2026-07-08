@@ -78,7 +78,7 @@ defmodule CveManagement.CVE.CveRecord do
     domain: CveManagement.CVE,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshStateMachine, AshOban]
+    extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource]
 
   import Ash.Expr
 
@@ -239,6 +239,15 @@ defmodule CveManagement.CVE.CveRecord do
     end
   end
 
+  paper_trail do
+    change_tracking_mode :changes_only
+    attributes_as_attributes [:state]
+    ignore_attributes [:last_synced_at, :inserted_at, :updated_at]
+    only_when_changed? true
+    store_action_name? true
+    belongs_to_actor :user, CveManagement.Accounts.User, domain: CveManagement.Accounts
+  end
+
   actions do
     defaults [:read]
 
@@ -391,7 +400,10 @@ defmodule CveManagement.CVE.CveRecord do
               |> Ash.Changeset.force_change_attribute(:cve_json, remote_record)
               |> Ash.Changeset.force_change_attribute(:last_synced_at, DateTime.utc_now())
             else
-              Ash.Changeset.force_change_attribute(changeset, :last_synced_at, DateTime.utc_now())
+              # Only bookkeeping changes — not worth an audit version
+              changeset
+              |> Ash.Changeset.force_change_attribute(:last_synced_at, DateTime.utc_now())
+              |> Ash.Changeset.set_context(%{ash_paper_trail_disabled?: true})
             end
 
           {:error, reason} ->
