@@ -84,13 +84,6 @@ config :cve_management,
   dev_routes: true,
   token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F"
 
-config :cve_management,
-  github_app: [
-    client_id: System.get_env("GITHUB_APP_CLIENT_ID", "dev_app_client_id"),
-    client_secret: System.get_env("GITHUB_APP_CLIENT_SECRET", "dev_app_client_secret"),
-    redirect_uri: System.get_env("GITHUB_APP_REDIRECT_URI", "http://localhost:4000/auth/github_app/callback")
-  ]
-
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

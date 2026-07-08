@@ -40,19 +40,6 @@ if config_env() != :test do
     ]
 
   config :cve_management,
-    github_app: [
-      client_id:
-        System.get_env("GITHUB_APP_CLIENT_ID") ||
-          raise("Missing environment variable `GITHUB_APP_CLIENT_ID`!"),
-      client_secret:
-        System.get_env("GITHUB_APP_CLIENT_SECRET") ||
-          raise("Missing environment variable `GITHUB_APP_CLIENT_SECRET`!"),
-      redirect_uri:
-        System.get_env("GITHUB_APP_REDIRECT_URI") ||
-          raise("Missing environment variable `GITHUB_APP_REDIRECT_URI`!")
-    ]
-
-  config :cve_management,
     mitre_cve_api: [
       base_url:
         System.get_env("MITRE_CVE_API_BASE_URL") ||

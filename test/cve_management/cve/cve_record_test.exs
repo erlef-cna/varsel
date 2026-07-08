@@ -65,18 +65,6 @@ defmodule CveManagement.CVE.CveRecordTest do
     }
   end
 
-  defp create_case do
-    {:ok, %{id: id}} =
-      "cases"
-      |> CveManagement.Repo.insert_all(
-        [%{status: "open", inserted_at: DateTime.utc_now(), updated_at: DateTime.utc_now()}],
-        returning: [:id]
-      )
-      |> then(fn {1, [row]} -> {:ok, row} end)
-
-    Ecto.UUID.load!(id)
-  end
-
   defp reserved_record(cve_id \\ @cve_id, year \\ @year) do
     Ash.create!(CveRecord, %{reservation_json: reservation_json(cve_id, year)},
       action: :reserve,
@@ -85,9 +73,8 @@ defmodule CveManagement.CVE.CveRecordTest do
   end
 
   defp draft_record do
-    case_id = create_case()
     record = reserved_record()
-    Ash.update!(record, %{case_id: case_id}, action: :assign, authorize?: false)
+    Ash.update!(record, %{}, action: :assign, authorize?: false)
   end
 
   defp publishing_record do
@@ -108,10 +95,9 @@ defmodule CveManagement.CVE.CveRecordTest do
   end
 
   describe "reserve" do
-    test "new record starts in :reserved with no case" do
+    test "new record starts in :reserved" do
       record = reserved_record()
       assert record.state == :reserved
-      assert record.case_id == nil
       assert record.cve_json == nil
     end
 
@@ -129,22 +115,18 @@ defmodule CveManagement.CVE.CveRecordTest do
   end
 
   describe "assign" do
-    test "transitions reserved → draft and links the case" do
-      case_id = create_case()
+    test "transitions reserved → draft" do
       record = reserved_record()
 
-      draft = Ash.update!(record, %{case_id: case_id}, action: :assign, authorize?: false)
+      draft = Ash.update!(record, %{}, action: :assign, authorize?: false)
 
       assert draft.state == :draft
-      assert draft.case_id == case_id
     end
 
     test "cannot assign a draft record again" do
       draft = draft_record()
-      other_case = create_case()
 
-      assert {:error, _} =
-               Ash.update(draft, %{case_id: other_case}, action: :assign, authorize?: false)
+      assert {:error, _} = Ash.update(draft, %{}, action: :assign, authorize?: false)
     end
   end
 
@@ -341,10 +323,7 @@ defmodule CveManagement.CVE.CveRecordTest do
       stub_mitre_reject()
       rejected = Ash.update!(record, %{}, action: :reject, authorize?: false)
 
-      case_id = create_case()
-
-      assert {:error, _} =
-               Ash.update(rejected, %{case_id: case_id}, action: :assign, authorize?: false)
+      assert {:error, _} = Ash.update(rejected, %{}, action: :assign, authorize?: false)
 
       assert {:error, _} =
                Ash.update(rejected, %{cve_json: @cve_json},
@@ -562,11 +541,10 @@ defmodule CveManagement.CVE.CveRecordTest do
     test "only counts open (reserved) records for the current year" do
       min_size = Application.get_env(:cve_management, :cve_pool_min_size, 10)
 
-      # Fill the pool but assign every record to a case (state moves to :draft)
+      # Fill the pool but assign every record (state moves to :draft)
       for i <- 1..min_size do
-        case_id = create_case()
         record = reserved_record("CVE-#{@year}-#{2000 + i}")
-        Ash.update!(record, %{case_id: case_id}, action: :assign, authorize?: false)
+        Ash.update!(record, %{}, action: :assign, authorize?: false)
       end
 
       stub_mitre_reserve(["CVE-#{@year}-9001"])
@@ -704,9 +682,8 @@ defmodule CveManagement.CVE.CveRecordTest do
 
     test "does not reject assigned (draft) prior-year reservations" do
       prior_year = @year - 1
-      case_id = create_case()
       record = reserved_record("CVE-#{prior_year}-9003", prior_year)
-      Ash.update!(record, %{case_id: case_id}, action: :assign, authorize?: false)
+      Ash.update!(record, %{}, action: :assign, authorize?: false)
 
       # MITRE should not be called
       Req.Test.stub(MitreCveApi, fn conn ->

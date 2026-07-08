@@ -41,8 +41,6 @@ config :cve_management, Oban, testing: :manual
 
 config :cve_management,
   token_signing_secret: "6efZN/F7dwuoM9KP4oUWol4pbbSwNQ8J",
-  github_app: [plug: {Req.Test, CveManagement.GitHub.AppClient}],
-  github_advisory: [plug: {Req.Test, CveManagement.GitHub.AdvisoryClient}],
   cwe_catalog: [plug: {Req.Test, CveManagement.CWE.Weakness}],
   capec_catalog: [plug: {Req.Test, CveManagement.CAPEC.AttackPattern}],
   mitre_cve_api: [

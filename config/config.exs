@@ -57,8 +57,7 @@ config :cve_management, Oban,
     cve_publishing: 1,
     cve_pool: 1,
     cwe_sync: 1,
-    capec_sync: 1,
-    github_advisory_sync: 5
+    capec_sync: 1
   ],
   repo: CveManagement.Repo,
   plugins: [{Oban.Plugins.Cron, []}]
@@ -70,11 +69,7 @@ config :cve_management,
   ash_domains: [
     CveManagement.CAPEC,
     CveManagement.CWE,
-    CveManagement.GPG,
-    CveManagement.AI,
     CveManagement.CVE,
-    CveManagement.ReportChannels,
-    CveManagement.Cases,
     CveManagement.Accounts
   ]
 

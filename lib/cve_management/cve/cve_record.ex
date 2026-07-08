@@ -10,8 +10,7 @@ end
 defmodule CveManagement.CVE.CveRecord do
   @moduledoc """
   Represents a single CVE ID through its entire lifecycle — from reservation in the
-  MITRE pool, through assignment to a case and publication, to eventual update or
-  rejection.
+  MITRE pool, through drafting and publication, to eventual update or rejection.
 
   A CVE ID is a MITRE-owned resource that moves through one continuous lifecycle.
   Earlier states carry only `reservation_json` (the raw MITRE reservation object);
@@ -24,7 +23,7 @@ defmodule CveManagement.CVE.CveRecord do
   stateDiagram-v2
     [*] --> reserved : reserve (pool top-up)
     [*] --> published : import
-    reserved --> draft : assign (to a case)
+    reserved --> draft : assign
     reserved --> rejected : reject (stale / external)
     draft --> publishing : request_publish (user)
     draft --> rejected : reject
@@ -36,16 +35,16 @@ defmodule CveManagement.CVE.CveRecord do
 
   | State | Meaning |
   | --- | --- |
-  | `reserved` | Reserved from MITRE, open in the pool, no case assigned |
-  | `draft` | Reserved and assigned to a case, not yet published |
+  | `reserved` | Reserved from MITRE, open in the pool |
+  | `draft` | Taken out of the pool for drafting, not yet published |
   | `publishing` | Publish job enqueued; pushing the CNA container to MITRE |
   | `published` | MITRE accepted the record; `cve_json` set |
   | `pending_update` | Local edits to `cve_json` awaiting push to MITRE |
   | `rejected` | Terminal — rejected at MITRE; the ID is burned and never reused |
 
-  At MITRE both `reserved` and `draft` are simply `RESERVED`; assignment to a case is
-  a purely local distinction. `draft` is one-way — a CVE assigned to a case is never
-  returned to the open pool; it can only be published or rejected.
+  At MITRE both `reserved` and `draft` are simply `RESERVED`; the distinction is
+  purely local. `draft` is one-way — an assigned CVE is never returned to the open
+  pool; it can only be published or rejected.
 
   ## Actions
 
@@ -55,8 +54,8 @@ defmodule CveManagement.CVE.CveRecord do
   - `:import` — Upserts a record directly into the `:published` state from a full MITRE
     record. Used by the scheduled `import_from_mitre` action.
 
-  - `:assign` (update) — Transitions a `:reserved` record to `:draft` and links it to a
-    case.
+  - `:assign` (update) — Transitions a `:reserved` record to `:draft`, taking it out of
+    the open pool.
 
   - `:request_publish` (update) — Accepts the `cve_json` for a `:draft` record, transitions
     it to `:publishing`, and enqueues a publish job. The Oban `:publish` worker then calls
@@ -332,8 +331,8 @@ defmodule CveManagement.CVE.CveRecord do
     end
 
     update :assign do
-      description "Assigns a reserved CVE ID to a case, moving it into the draft state."
-      accept [:case_id]
+      description "Takes a reserved CVE ID out of the open pool, moving it into the draft state."
+      accept []
       change transition_state(:draft)
     end
 
@@ -621,13 +620,6 @@ defmodule CveManagement.CVE.CveRecord do
     end
 
     timestamps()
-  end
-
-  relationships do
-    belongs_to :case, CveManagement.Cases.Case do
-      public? true
-      allow_nil? true
-    end
   end
 
   calculations do

@@ -73,7 +73,7 @@ defmodule CveManagement.Accounts.User do
     end
 
     update :update do
-      accept [:name, :role, :public_gpg_key]
+      accept [:name, :role]
       primary? true
     end
   end
@@ -123,19 +123,8 @@ defmodule CveManagement.Accounts.User do
       allow_nil? true
     end
 
-    attribute :public_gpg_key, :string do
-      public? true
-      allow_nil? true
-    end
-
     create_timestamp :inserted_at
     update_timestamp :updated_at
-  end
-
-  relationships do
-    has_one :git_hub_app_token, CveManagement.Accounts.GitHubAppToken do
-      public? true
-    end
   end
 
   identities do
