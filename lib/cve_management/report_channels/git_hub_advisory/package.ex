@@ -10,8 +10,10 @@ defmodule CveManagement.ReportChannels.GitHubAdvisory.Package do
   use Ash.Resource, data_layer: :embedded
 
   attributes do
+    # GitHub can return packages without an ecosystem (e.g. draft advisories
+    # where the reporter has not selected one yet)
     attribute :ecosystem, :string do
-      allow_nil? false
+      allow_nil? true
       public? true
     end
 

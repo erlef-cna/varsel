@@ -172,6 +172,24 @@ defmodule CveManagement.ReportChannels.GitHubAdvisoryTest do
       assert Enum.any?(loaded.weaknesses, &(&1.cwe_id == 89))
     end
 
+    test "accepts a vulnerability package without an ecosystem (draft advisory)" do
+      user = create_user()
+
+      json =
+        Map.put(@advisory_json, "vulnerabilities", [
+          %{
+            "package" => %{"ecosystem" => nil, "name" => "test_lib"},
+            "vulnerable_version_range" => nil,
+            "patched_versions" => nil,
+            "vulnerable_functions" => []
+          }
+        ])
+
+      advisory = ingest(user, json)
+
+      assert [%{package: %{ecosystem: nil, name: "test_lib"}}] = advisory.vulnerabilities
+    end
+
     test "upserts on re-ingest" do
       user = create_user()
       ingest(user)
