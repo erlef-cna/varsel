@@ -31,6 +31,15 @@ in
     package = pkgs.beam29Packages.elixir_1_20;
   };
 
+  languages.javascript = {
+    enable = true;
+    npm = {
+      enable = true;
+      install.enable = true;
+    };
+    directory = "./assets";
+  };
+
   dotenv.enable = true;
 
   services.postgres = {
