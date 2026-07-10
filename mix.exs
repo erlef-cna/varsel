@@ -16,7 +16,16 @@ defmodule CveManagement.MixProject do
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader],
-      consolidate_protocols: Mix.env() != :dev
+      consolidate_protocols: Mix.env() != :dev,
+      dialyzer: [
+        ignore_warnings: ".dialyzer_ignore.exs",
+        # Fail if an ignore entry no longer matches any warning, so stale
+        # skips (e.g. once the upstream fix lands) get cleaned up.
+        list_unused_filters: true,
+        # precommit runs in MIX_ENV=test, so the test-support helpers are
+        # analysed too; add ExUnit to the PLT so its callbacks resolve.
+        plt_add_apps: [:ex_unit]
+      ]
     ]
   end
 
@@ -120,7 +129,14 @@ defmodule CveManagement.MixProject do
         "esbuild cve_management --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: [
+        "compile --warnings-as-errors",
+        "deps.unlock --unused",
+        "format",
+        "credo --strict",
+        "dialyzer",
+        "test"
+      ]
     ]
   end
 end

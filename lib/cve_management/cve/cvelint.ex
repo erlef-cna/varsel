@@ -87,14 +87,16 @@ defmodule CveManagement.CVE.Cvelint do
   defp parse_errors(out) do
     case Jason.decode(out) do
       {:ok, %{"results" => results}} when results != [] ->
-        Enum.map(results, fn result ->
-          message = "#{result["errorCode"]} (#{result["ruleName"]}): #{result["errorText"]}"
-          path = if result["errorPath"] == "", do: nil, else: result["errorPath"]
-          {message, path}
-        end)
+        Enum.map(results, &parse_error/1)
 
       _ ->
         [{"cvelint failed: #{String.trim(out)}", nil}]
     end
+  end
+
+  defp parse_error(result) do
+    message = "#{result["errorCode"]} (#{result["ruleName"]}): #{result["errorText"]}"
+    path = if result["errorPath"] == "", do: nil, else: result["errorPath"]
+    {message, path}
   end
 end

@@ -214,35 +214,40 @@ defmodule CveManagement.CVE.OsvConverter do
   defp convert_registry_affected(affected, registry) do
     affected
     |> Enum.filter(&registry_affected?(&1, registry))
-    |> Enum.map(fn item ->
-      package_name = registry_package_name(item, registry)
+    |> Enum.map(&affected_entry(&1, registry))
+  end
 
-      semver_versions =
-        item |> Map.get("versions", []) |> Enum.filter(&(&1["versionType"] == "semver"))
+  defp affected_entry(item, registry) do
+    package_name = registry_package_name(item, registry)
 
-      ranges =
-        if semver_versions == [] and item["defaultStatus"] == "affected" do
-          # All versions affected
-          [%{"type" => "SEMVER", "events" => [%{"introduced" => "0"}]}]
-        else
-          # Each version entry becomes its own range with its own event set
-          Enum.map(semver_versions, fn version_entry ->
-            %{
-              "type" => "SEMVER",
-              "events" => version_entry |> convert_version_events(:semver) |> finalize_events()
-            }
-          end)
-        end
+    %{
+      "package" => %{
+        "ecosystem" => registry.ecosystem,
+        "name" => package_name,
+        "purl" => package_purl(item, registry, package_name)
+      },
+      "ranges" => semver_ranges(item)
+    }
+  end
 
-      %{
-        "package" => %{
-          "ecosystem" => registry.ecosystem,
-          "name" => package_name,
-          "purl" => package_purl(item, registry, package_name)
-        },
-        "ranges" => ranges
-      }
-    end)
+  defp semver_ranges(item) do
+    semver_versions =
+      item |> Map.get("versions", []) |> Enum.filter(&(&1["versionType"] == "semver"))
+
+    if semver_versions == [] and item["defaultStatus"] == "affected" do
+      # All versions affected
+      [%{"type" => "SEMVER", "events" => [%{"introduced" => "0"}]}]
+    else
+      # Each version entry becomes its own range with its own event set
+      Enum.map(semver_versions, &semver_range/1)
+    end
+  end
+
+  defp semver_range(version_entry) do
+    %{
+      "type" => "SEMVER",
+      "events" => version_entry |> convert_version_events(:semver) |> finalize_events()
+    }
   end
 
   # The OSV package purl: prefer the affected entry's own packageURL as-is,
@@ -289,50 +294,44 @@ defmodule CveManagement.CVE.OsvConverter do
   # Converts one CVE version entry into OSV range events.
   defp convert_version_events(version_entry, type) do
     status = Map.get(version_entry, "status", "affected")
-    version = version_entry["version"]
-    less_than = version_entry["lessThan"]
-    less_than_or_equal = version_entry["lessThanOrEqual"]
 
-    base_events =
-      case {version, status} do
-        {nil, _status} -> []
-        {"0", "affected"} -> [%{"introduced" => "0"}]
-        {v, "affected"} when v != "*" -> [%{"introduced" => clean_version(v, type)}]
-        {v, "unaffected"} when v != "*" -> [%{"fixed" => clean_version(v, type)}]
-        _other -> []
-      end
-
-    upper_bound_events =
-      cond do
-        # versions < X are affected, so X is fixed
-        less_than not in [nil, "*"] and status == "affected" ->
-          [%{"fixed" => clean_version(less_than, type)}]
-
-        # versions <= X are affected, so X is the last affected version
-        less_than_or_equal not in [nil, "*"] and status == "affected" ->
-          [%{"last_affected" => clean_version(less_than_or_equal, type)}]
-
-        # versions < X are unaffected (unusual but possible)
-        less_than not in [nil, "*"] and status == "unaffected" ->
-          [%{"limit" => clean_version(less_than, type)}]
-
-        true ->
-          []
-      end
-
-    change_events =
-      version_entry
-      |> Map.get("changes", [])
-      |> Enum.flat_map(fn change ->
-        case {change["status"], change["at"]} do
-          {"unaffected", at} when is_binary(at) -> [%{"fixed" => clean_version(at, type)}]
-          {"affected", at} when is_binary(at) and type == :git -> [%{"introduced" => at}]
-          _other -> []
-        end
-      end)
-
-    Enum.uniq(base_events ++ upper_bound_events ++ change_events)
+    Enum.uniq(
+      base_events(version_entry["version"], status, type) ++
+        upper_bound_events(version_entry, status, type) ++ change_events(version_entry, type)
+    )
   end
+
+  defp base_events(nil, _status, _type), do: []
+  defp base_events("0", "affected", _type), do: [%{"introduced" => "0"}]
+  defp base_events("*", _status, _type), do: []
+  defp base_events(v, "affected", type), do: [%{"introduced" => clean_version(v, type)}]
+  defp base_events(v, "unaffected", type), do: [%{"fixed" => clean_version(v, type)}]
+  defp base_events(_v, _status, _type), do: []
+
+  defp upper_bound_events(%{"lessThan" => lt}, "affected", type) when lt not in [nil, "*"],
+    do: [%{"fixed" => clean_version(lt, type)}]
+
+  defp upper_bound_events(%{"lessThanOrEqual" => lte}, "affected", type) when lte not in [nil, "*"],
+    do: [%{"last_affected" => clean_version(lte, type)}]
+
+  # versions < X are unaffected (unusual but possible)
+  defp upper_bound_events(%{"lessThan" => lt}, "unaffected", type) when lt not in [nil, "*"],
+    do: [%{"limit" => clean_version(lt, type)}]
+
+  defp upper_bound_events(_version_entry, _status, _type), do: []
+
+  defp change_events(version_entry, type) do
+    version_entry
+    |> Map.get("changes", [])
+    |> Enum.flat_map(&change_event(&1, type))
+  end
+
+  defp change_event(%{"status" => "unaffected", "at" => at}, type) when is_binary(at),
+    do: [%{"fixed" => clean_version(at, type)}]
+
+  defp change_event(%{"status" => "affected", "at" => at}, :git) when is_binary(at), do: [%{"introduced" => at}]
+
+  defp change_event(_change, _type), do: []
 
   # Makes a range's event set valid per the OSV schema: every range needs at
   # least one introduced event, and fixed and last_affected are mutually
@@ -399,18 +398,19 @@ defmodule CveManagement.CVE.OsvConverter do
   end
 
   defp add_github_advisory_alias(aliases, references) do
-    references
-    |> Enum.find_value(fn %{"url" => url} ->
-      if String.contains?(url, "github.com") and String.contains?(url, "advisories/GHSA-") do
-        case Regex.run(~r/GHSA-[a-z0-9-]+/, url) do
-          [ghsa_id] -> ghsa_id
-          _no_match -> nil
-        end
-      end
-    end)
-    |> case do
+    case Enum.find_value(references, &ghsa_id/1) do
       nil -> aliases
       ghsa_id -> [ghsa_id | aliases]
+    end
+  end
+
+  defp ghsa_id(%{"url" => url}) do
+    with true <- String.contains?(url, "github.com"),
+         true <- String.contains?(url, "advisories/GHSA-"),
+         [ghsa_id] <- Regex.run(~r/GHSA-[a-z0-9-]+/, url) do
+      ghsa_id
+    else
+      _ -> nil
     end
   end
 

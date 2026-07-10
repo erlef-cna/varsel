@@ -85,8 +85,6 @@ in
     credo.enable = true;
     detect-private-keys.enable = true;
     dialyzer.enable = true;
-    markdownlint.enable = true;
-    mdformat.enable = true;
     mix-format.enable = true;
     reuse.enable = true;
     zizmor.enable = true;

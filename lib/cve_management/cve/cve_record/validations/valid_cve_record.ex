@@ -31,13 +31,13 @@ defmodule CveManagement.CVE.CveRecord.Validations.ValidCveRecord do
         :ok
 
       %{errors: errors} ->
-        message =
-          Enum.map_join(errors, "\n", fn error ->
-            location = if error.path, do: " (at #{error.path})", else: ""
-            "[#{error.source}] #{error.message}#{location}"
-          end)
-
+        message = Enum.map_join(errors, "\n", &format_error/1)
         {:error, field: :cve_json, message: "CVE record is not valid:\n" <> message}
     end
+  end
+
+  defp format_error(error) do
+    location = if error.path, do: " (at #{error.path})", else: ""
+    "[#{error.source}] #{error.message}#{location}"
   end
 end

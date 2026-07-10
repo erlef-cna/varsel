@@ -31,13 +31,15 @@ defmodule CveManagementWeb.CveView do
     metrics = cna["metrics"] || []
 
     Enum.find_value(["cvssV4_0", "cvssV3_1", "cvssV3_0"], fn key ->
-      Enum.find_value(metrics, fn metric ->
-        case metric[key] do
-          %{} = cvss -> Map.put_new(cvss, "version", version_of(key))
-          _ -> nil
-        end
-      end)
+      Enum.find_value(metrics, &cvss_of(&1, key))
     end)
+  end
+
+  defp cvss_of(%{} = metric, key) do
+    case metric do
+      %{^key => %{} = cvss} -> Map.put_new(cvss, "version", version_of(key))
+      _ -> nil
+    end
   end
 
   defp version_of("cvssV4_0"), do: "4.0"
