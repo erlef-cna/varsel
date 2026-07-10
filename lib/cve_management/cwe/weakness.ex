@@ -116,6 +116,9 @@ defmodule CveManagement.CWE.Weakness do
     create :upsert do
       description "Upserts a weakness parsed from the CWE XML catalog."
 
+      # Relationships are synced separately (see `sync_relationships/1`) rather
+      # than via manage_relationship: nesting it in a chunked bulk_create
+      # mis-assigns target_cwe_id across rows in the same batch.
       accept [
         :cwe_id,
         :name,
@@ -126,15 +129,6 @@ defmodule CveManagement.CWE.Weakness do
         :potential_mitigations,
         :common_consequences
       ]
-
-      argument :related_weaknesses, {:array, :map}, default: []
-
-      change manage_relationship(:related_weaknesses, :related_weakness_relationships,
-               on_no_match: :create,
-               on_match: :ignore,
-               on_missing: :unrelate,
-               use_identities: [:_primary_key]
-             )
 
       upsert? true
 
@@ -298,16 +292,48 @@ defmodule CveManagement.CWE.Weakness do
   defp upsert_all(weaknesses) do
     {:ok, _} =
       Ash.transact(__MODULE__, fn ->
+        # 1. Upsert the weaknesses themselves (without relationships).
         weaknesses
         |> Stream.chunk_every(200)
         |> Enum.each(fn chunk ->
-          Ash.bulk_create!(chunk, __MODULE__, :upsert,
+          chunk
+          |> Enum.map(&Map.delete(&1, :related_weaknesses))
+          |> Ash.bulk_create!(__MODULE__, :upsert,
             authorize?: false,
             return_errors?: true,
             stop_on_error?: true
           )
         end)
+
+        # 2. Sync relationships as a flat set, now that every target exists.
+        sync_relationships(weaknesses)
       end)
+  end
+
+  # Rebuilds the relationship table from the parsed catalog. Relationships are
+  # inserted flat (with an explicit source_cwe_id) instead of through the
+  # weakness upsert's manage_relationship, which mis-maps targets under a
+  # chunked bulk_create. Rows referencing an unknown weakness are dropped
+  # (the target FK would reject them anyway).
+  defp sync_relationships(weaknesses) do
+    known = MapSet.new(weaknesses, & &1.cwe_id)
+
+    rows =
+      Enum.flat_map(weaknesses, fn %{cwe_id: source_cwe_id} = weakness ->
+        weakness
+        |> Map.get(:related_weaknesses, [])
+        |> Enum.filter(&MapSet.member?(known, &1.target_cwe_id))
+        |> Enum.map(&Map.put(&1, :source_cwe_id, source_cwe_id))
+      end)
+
+    Ash.bulk_create!(rows, WeaknessRelationship, :create,
+      authorize?: false,
+      return_errors?: true,
+      stop_on_error?: true,
+      batch_size: 500
+    )
+
+    :ok
   end
 
   defp update_metadata(last_modified) do

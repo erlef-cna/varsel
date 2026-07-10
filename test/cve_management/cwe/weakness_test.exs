@@ -13,6 +13,10 @@ defmodule CveManagement.CWE.WeaknessTest do
   <?xml version="1.0" encoding="UTF-8"?>
   <Weakness_Catalog>
     <Weaknesses>
+      <Weakness ID="74" Name="Improper Neutralization of Special Elements in Output ('Injection')"
+                Abstraction="Class" Status="Stable">
+        <Description>The product constructs output using externally-influenced input.</Description>
+      </Weakness>
       <Weakness ID="79" Name="Improper Neutralization of Input During Web Page Generation"
                 Abstraction="Base" Status="Stable">
         <Description>The product does not neutralize or incorrectly neutralizes user-controllable input before it is placed in output that is used as a web page.</Description>
@@ -36,7 +40,9 @@ defmodule CveManagement.CWE.WeaknessTest do
       </Weakness>
       <Weakness ID="89" Name="SQL Injection" Abstraction="Base" Status="Stable">
         <Description>Improper neutralization of special elements used in an SQL command.</Description>
-        <Related_Weaknesses/>
+        <Related_Weaknesses>
+          <Related_Weakness Nature="ChildOf" CWE_ID="74" View_ID="1000" Ordinal="Primary"/>
+        </Related_Weaknesses>
       </Weakness>
     </Weaknesses>
   </Weakness_Catalog>
@@ -89,7 +95,7 @@ defmodule CveManagement.CWE.WeaknessTest do
   describe "CweXmlParser.parse/1" do
     test "parses all weaknesses from XML" do
       weaknesses = CweXmlParser.parse!(@sample_xml)
-      assert length(weaknesses) == 2
+      assert length(weaknesses) == 3
     end
 
     test "correctly parses CWE-79 attributes" do
@@ -132,12 +138,12 @@ defmodule CveManagement.CWE.WeaknessTest do
 
     test "handles missing optional fields gracefully" do
       weaknesses = CweXmlParser.parse!(@sample_xml)
-      cwe89 = Enum.find(weaknesses, &(&1.cwe_id == 89))
+      cwe74 = Enum.find(weaknesses, &(&1.cwe_id == 74))
 
-      assert cwe89.related_weaknesses == []
-      assert is_nil(cwe89.extended_description)
-      assert is_nil(cwe89.potential_mitigations)
-      assert is_nil(cwe89.common_consequences)
+      assert cwe74.related_weaknesses == []
+      assert is_nil(cwe74.extended_description)
+      assert is_nil(cwe74.potential_mitigations)
+      assert is_nil(cwe74.common_consequences)
     end
   end
 
@@ -147,7 +153,7 @@ defmodule CveManagement.CWE.WeaknessTest do
       run_sync()
 
       weaknesses = Ash.read!(Weakness, authorize?: false)
-      assert length(weaknesses) == 2
+      assert length(weaknesses) == 3
     end
 
     test "is idempotent: running twice does not duplicate rows" do
@@ -156,7 +162,40 @@ defmodule CveManagement.CWE.WeaknessTest do
       stub_catalog(zip_xml(@sample_xml))
       run_sync()
 
-      assert Ash.count!(Weakness, authorize?: false) == 2
+      assert Ash.count!(Weakness, authorize?: false) == 3
+    end
+
+    test "stores relationships with correct source and target" do
+      stub_catalog(zip_xml(@sample_xml))
+      run_sync()
+
+      cwe79 =
+        Ash.get!(Weakness, %{cwe_id: 79},
+          load: [:related_weakness_relationships],
+          authorize?: false
+        )
+
+      children =
+        cwe79.related_weakness_relationships
+        |> Enum.filter(&(&1.nature == :child_of))
+        |> Enum.map(&{&1.source_cwe_id, &1.target_cwe_id})
+
+      # CWE-79 ChildOf CWE-74 — the target must not be mis-assigned.
+      assert children == [{79, 74}]
+    end
+
+    test "drops relationships whose target is not in the catalog" do
+      stub_catalog(zip_xml(@sample_xml))
+      run_sync()
+
+      cwe79 =
+        Ash.get!(Weakness, %{cwe_id: 79},
+          load: [:related_weakness_relationships],
+          authorize?: false
+        )
+
+      # CWE-79 PeerOf CWE-80, but CWE-80 is not in the sample catalog.
+      refute Enum.any?(cwe79.related_weakness_relationships, &(&1.target_cwe_id == 80))
     end
 
     test "stores last-modified header in CweMetadata" do

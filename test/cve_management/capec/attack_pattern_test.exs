@@ -111,8 +111,7 @@ defmodule CveManagement.CAPEC.AttackPatternTest do
           name: "CWE-#{id}",
           abstraction: :base,
           status: :stable,
-          description: "Weakness #{id}",
-          related_weaknesses: []
+          description: "Weakness #{id}"
         },
         action: :upsert,
         authorize?: false
