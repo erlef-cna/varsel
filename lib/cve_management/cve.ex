@@ -49,6 +49,14 @@ defmodule CveManagement.CVE do
       define :list_published_cve_records, action: :list_published
       define :get_published_cve_record, action: :get_published, args: [:cve_id]
       define :search_cve_records, action: :search, args: [:query]
+
+      # Admin (POC-only) lifecycle management, used by the CVE-management LiveView.
+      define :list_all_cve_records, action: :list_all
+      define :get_cve_record, action: :read, get_by: [:id]
+      define :assign_cve_record, action: :assign
+      define :request_publish_cve_record, action: :request_publish
+      define :update_cve_record, action: :update
+      define :reject_cve_record, action: :reject
     end
 
     resource CveValidation do

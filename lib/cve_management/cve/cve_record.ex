@@ -83,7 +83,7 @@ defmodule CveManagement.CVE.CveRecord do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource],
-    notifiers: [CveManagement.CVE.OsvRecord.Notifier]
+    notifiers: [CveManagement.CVE.OsvRecord.Notifier, Ash.Notifier.PubSub]
 
   import Ash.Expr
 
@@ -264,6 +264,15 @@ defmodule CveManagement.CVE.CveRecord do
               )
 
       filter expr(state == :published)
+    end
+
+    read :list_all do
+      description "Admin: lists CVE records in every state. POCs see all states; the read policy filters other actors down to published records."
+
+      prepare build(
+                load: [:cve_id, :title, :date_published, :date_updated],
+                sort: [state: :asc, date_published: :desc]
+              )
     end
 
     read :get_published do
@@ -607,9 +616,35 @@ defmodule CveManagement.CVE.CveRecord do
       authorize_if always()
     end
 
+    # Public/anonymous reads only ever return published records; a POC actor
+    # bypasses the published filter (the first check short-circuits the block,
+    # so the whole read is authorized regardless of state).
     policy action_type(:read) do
+      authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(state == :published)
     end
+
+    # POC-only admin lifecycle actions, used by the CVE-management LiveView.
+    # The Oban worker actions (:publish, :push_update, :sync_from_mitre,
+    # :mark_rejected) and the create actions (:reserve, :import) are not listed
+    # here; they keep running only via the AshOban bypass / authorize?: false.
+    policy action([:assign, :request_publish, :update, :reject]) do
+      authorize_if actor_attribute_equals(:role, :poc)
+    end
+  end
+
+  pub_sub do
+    module CveManagementWeb.Endpoint
+    prefix "cve_record"
+
+    # A single stable topic ("cve_record:all") that the CVE-management LiveView
+    # subscribes to, so any change to any record (assign, request_publish,
+    # update, reject, and the Oban publish/push transitions) re-runs its list
+    # query. Every connected POC sees the update without a reload; the query
+    # re-applies authorization on refetch.
+    publish_all :create, ["all"]
+    publish_all :update, ["all"]
+    publish_all :destroy, ["all"]
   end
 
   validations do
