@@ -50,6 +50,10 @@ defmodule CveManagementWeb.Router do
     get "/contact", PageController, :page, assigns: %{page_id: "contact"}
     get "/cve-criteria", PageController, :page, assigns: %{page_id: "cve-criteria"}
     get "/security-policy", PageController, :page, assigns: %{page_id: "security-policy"}
+    get "/data-licensing", PageController, :page, assigns: %{page_id: "data-licensing"}
+    get "/coordinator-process", PageController, :page, assigns: %{page_id: "coordinator-process"}
+    get "/maintainer-process", PageController, :page, assigns: %{page_id: "maintainer-process"}
+    live "/common-weaknesses", CommonWeaknessesLive, :index
     auth_routes AuthController, User, path: "/auth"
     sign_out_route AuthController
 
@@ -109,11 +113,28 @@ defmodule CveManagementWeb.Router do
       otp_app: :cve_management
   end
 
+  # Public HTML surface (browser pipeline: session, root layout, navbar).
+  scope "/", CveManagementWeb do
+    pipe_through :browser
+
+    live "/cves", CveListLive, :index
+    # HTML detail. `.json` requests fall through to the JSON scope below since
+    # this matches a single non-".json" segment.
+    get "/cves/:cve_id", CveController, :show_html
+
+    get "/feed.atom", FeedController, :atom
+    get "/feed.rss", FeedController, :rss
+
+    # OSV vulnerability id -> CVE detail page (mirrors the Jekyll redirect).
+    get "/osv/:osv_id", OsvController, :redirect_to_cve
+  end
+
+  # Machine-readable JSON API (kept on its own pipeline).
   scope "/cves", CveManagementWeb do
     pipe_through :api
 
     get "/index.json", CveController, :index
-    get "/*path", CveController, :show
+    get "/*path", CveController, :show_json
   end
 
   scope "/osv", CveManagementWeb do

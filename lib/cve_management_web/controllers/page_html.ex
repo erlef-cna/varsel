@@ -10,5 +10,11 @@ defmodule CveManagementWeb.PageHTML do
   """
   use CveManagementWeb, :html
 
+  alias CveManagementWeb.ChartComponents
+
   embed_templates "page_html/*"
+
+  @doc "Short date for the homepage CVE cards."
+  def format_home_date(nil), do: ""
+  def format_home_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %-d, %Y")
 end

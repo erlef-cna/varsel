@@ -1,81 +1,53 @@
-<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 max-w-5xl">
-  <p class="text-lg text-base-content/80 mb-10 max-w-2xl">
-    The Erlang Ecosystem Foundation CNA is a collaborative effort to assign and
-    maintain CVE identifiers within the ecosystem, providing a consistent and
-    transparent process for reporting, documenting, and mitigating security
-    vulnerabilities.
-  </p>
+<%!-- Hero band: text on the left, ecosystem logos on the right (below on mobile) --%>
+<section class="eef-band">
+  <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24 max-w-5xl">
+    <div class="grid lg:grid-cols-[1fr_auto] gap-12 lg:gap-16 items-center">
+      <div>
+        <p class="eef-eyebrow mb-3">Erlang Ecosystem Foundation</p>
+        <h1 class="text-4xl lg:text-5xl font-bold text-white leading-tight">
+          CVE Numbering Authority for the BEAM ecosystem
+        </h1>
+        <p class="text-lg text-white/70 mt-6 leading-relaxed">
+          A collaborative effort to assign and maintain CVE identifiers within the
+          Erlang, Elixir, and Gleam ecosystem — a consistent, transparent process for
+          reporting, documenting, and mitigating security vulnerabilities.
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href={~p"/cves"} class="btn btn-primary">Browse CVEs →</a>
+          <a
+            href={~p"/contact"}
+            class="btn btn-outline text-white border-white/30 hover:bg-white/10 hover:border-white/50"
+          >
+            Report a vulnerability
+          </a>
+        </div>
+      </div>
 
-  <%!-- Ecosystem logos --%>
-  <div class="flex flex-wrap justify-center gap-4 mb-12">
-    <a
-      href="https://www.erlang.org/"
-      class="flex items-center justify-center h-16 w-32 bg-white rounded-lg border border-base-300 px-3 hover:shadow-md transition-shadow"
-    >
-      <img
-        src={~p"/images/erlang-logo.svg"}
-        alt="Erlang"
-        class="max-h-10 max-w-full object-contain"
-      />
-    </a>
-    <a
-      href="https://erlef.org/"
-      class="flex items-center justify-center h-16 w-32 bg-white rounded-lg border border-base-300 px-3 hover:shadow-md transition-shadow"
-    >
-      <img
-        src={~p"/images/eef-logo.svg"}
-        alt="Erlang Ecosystem Foundation"
-        class="max-h-10 max-w-full object-contain"
-      />
-    </a>
-    <a
-      href="https://elixir-lang.org/"
-      class="flex items-center justify-center h-16 w-32 bg-white rounded-lg border border-base-300 px-3 hover:shadow-md transition-shadow"
-    >
-      <img
-        src={~p"/images/elixir-logo.png"}
-        alt="Elixir"
-        class="max-h-10 max-w-full object-contain"
-      />
-    </a>
-    <a
-      href="https://gleam.run/"
-      class="flex items-center justify-center h-16 w-32 bg-white rounded-lg border border-base-300 px-3 hover:shadow-md transition-shadow"
-    >
-      <img
-        src={~p"/images/gleam-logo.svg"}
-        alt="Gleam"
-        class="max-h-10 max-w-full object-contain"
-      />
-    </a>
-    <a
-      href="https://hex.pm/"
-      class="flex items-center justify-center h-16 w-32 bg-white rounded-lg border border-base-300 px-3 hover:shadow-md transition-shadow"
-    >
-      <img src={~p"/images/hex-logo.png"} alt="Hex.pm" class="max-h-10 max-w-full object-contain" />
-    </a>
-    <a
-      href="https://nerves-project.org/"
-      class="flex items-center justify-center h-16 w-32 bg-white rounded-lg border border-base-300 px-3 hover:shadow-md transition-shadow"
-    >
-      <img
-        src={~p"/images/nerves-logo.svg"}
-        alt="Nerves"
-        class="max-h-10 max-w-full object-contain"
-      />
-    </a>
-    <a
-      href="https://openriak.org/"
-      class="flex items-center justify-center h-16 w-32 bg-white rounded-lg border border-base-300 px-3 hover:shadow-md transition-shadow"
-    >
-      <img
-        src={~p"/images/openriak-logo.png"}
-        alt="OpenRiak"
-        class="max-h-10 max-w-full object-contain"
-      />
-    </a>
+      <%!-- Ecosystem logos --%>
+      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-2 gap-3 justify-items-center lg:w-72">
+        <a
+          :for={
+            {href, src, alt} <- [
+              {"https://www.erlang.org/", ~p"/images/erlang-logo.svg", "Erlang"},
+              {"https://erlef.org/", ~p"/images/eef-logo.svg", "Erlang Ecosystem Foundation"},
+              {"https://elixir-lang.org/", ~p"/images/elixir-logo.png", "Elixir"},
+              {"https://gleam.run/", ~p"/images/gleam-logo.svg", "Gleam"},
+              {"https://hex.pm/", ~p"/images/hex-logo.png", "Hex.pm"},
+              {"https://nerves-project.org/", ~p"/images/nerves-logo.svg", "Nerves"},
+              {"https://openriak.org/", ~p"/images/openriak-logo.png", "OpenRiak"}
+            ]
+          }
+          href={href}
+          class="flex items-center justify-center h-14 w-full max-w-[8rem] bg-white rounded-lg px-3 hover:shadow-md transition-shadow"
+        >
+          <img src={src} alt={alt} class="max-h-9 max-w-full object-contain" />
+        </a>
+      </div>
+    </div>
   </div>
+</section>
 
+<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 max-w-5xl">
   <p class="mb-10">
     As a <a href="https://www.cve.org/programorganization/cnas" class="link link-primary">CNA (CVE Numbering Authority)</a>,
     we assign CVE IDs for vulnerabilities in active packages hosted on
@@ -88,7 +60,48 @@
     This CNA is hosted by the <a href="https://erlef.org/wg/security" class="link link-primary">Erlang Ecosystem Foundation's Security Working Group</a>.
   </p>
 
+  <%!-- CVE activity chart --%>
+  <section class="mb-12">
+    <p class="eef-eyebrow mb-1">Activity</p>
+    <h2 class="text-2xl font-bold mb-4">CVE publications by quarter</h2>
+    <div class="cve-chart-wrapper rounded-box border border-base-300 bg-base-100 p-4">
+      <ChartComponents.cve_activity_chart data={@activity_data} />
+    </div>
+  </section>
+
+  <%!-- Latest CVEs --%>
+  <section :if={@latest != []} class="mb-12">
+    <div class="flex items-end justify-between mb-4">
+      <div>
+        <p class="eef-eyebrow mb-1">Latest</p>
+        <h2 class="text-2xl font-bold">Recently published</h2>
+      </div>
+      <.link navigate={~p"/cves"} class="link link-primary text-sm">View all CVEs →</.link>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <.link
+        :for={record <- @latest}
+        navigate={~p"/cves/#{record.cve_id}"}
+        class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
+      >
+        <div class="card-body p-5">
+          <div class="text-xs text-base-content/60">
+            {record.cve_id} · {format_home_date(record.date_published)}
+          </div>
+          <h3 class="font-medium text-sm mt-1">{record.title || record.cve_id}</h3>
+          <div :if={record.purls != []} class="text-xs text-base-content/60 mt-2 truncate">
+            {List.first(record.purls)}
+          </div>
+        </div>
+      </.link>
+    </div>
+  </section>
+
   <%!-- Resource cards --%>
+  <section class="mb-4">
+    <p class="eef-eyebrow mb-1">Resources</p>
+    <h2 class="text-2xl font-bold mb-4">Learn more</h2>
+  </section>
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
     <a
       href={~p"/scope"}
@@ -136,6 +149,66 @@
         </div>
         <h2 class="card-title text-base">Security Policy</h2>
         <p class="text-sm text-base-content/70">Disclosure process</p>
+      </div>
+    </a>
+    <a
+      href={~p"/common-weaknesses"}
+      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
+    >
+      <div class="card-body p-5">
+        <div class="text-primary mb-2">
+          <.icon name="hero-chart-pie" class="size-7" />
+        </div>
+        <h2 class="card-title text-base">Common Weaknesses</h2>
+        <p class="text-sm text-base-content/70">CWE distribution</p>
+      </div>
+    </a>
+    <a
+      href={~p"/maintainer-process"}
+      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
+    >
+      <div class="card-body p-5">
+        <div class="text-primary mb-2">
+          <.icon name="hero-wrench-screwdriver" class="size-7" />
+        </div>
+        <h2 class="card-title text-base">Maintainer Process</h2>
+        <p class="text-sm text-base-content/70">Coordinated disclosure guide</p>
+      </div>
+    </a>
+    <a
+      href={~p"/coordinator-process"}
+      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
+    >
+      <div class="card-body p-5">
+        <div class="text-primary mb-2">
+          <.icon name="hero-users" class="size-7" />
+        </div>
+        <h2 class="card-title text-base">Coordinator Process</h2>
+        <p class="text-sm text-base-content/70">For CNA volunteers</p>
+      </div>
+    </a>
+    <a
+      href={~p"/data-licensing"}
+      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
+    >
+      <div class="card-body p-5">
+        <div class="text-primary mb-2">
+          <.icon name="hero-scale" class="size-7" />
+        </div>
+        <h2 class="card-title text-base">Data Licensing</h2>
+        <p class="text-sm text-base-content/70">CC-BY 4.0 terms</p>
+      </div>
+    </a>
+    <a
+      href={~p"/cves"}
+      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
+    >
+      <div class="card-body p-5">
+        <div class="text-primary mb-2">
+          <.icon name="hero-list-bullet" class="size-7" />
+        </div>
+        <h2 class="card-title text-base">All CVEs</h2>
+        <p class="text-sm text-base-content/70">Browse published records</p>
       </div>
     </a>
   </div>

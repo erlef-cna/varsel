@@ -5,8 +5,19 @@
 defmodule CveManagementWeb.PageController do
   use CveManagementWeb, :controller
 
+  alias CveManagement.CVE
+  alias CveManagementWeb.Charts
+
   def home(conn, _params) do
-    render(conn, :home)
+    latest =
+      [load: [:cve_id, :title, :date_published, :purls], actor: nil]
+      |> CVE.list_published_cve_records!()
+      |> Enum.take(3)
+
+    render(conn, :home,
+      activity_data: Charts.cve_activity_data(),
+      latest: latest
+    )
   end
 
   def page(conn, _params) do

@@ -17,6 +17,10 @@
    The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";
 
+/* Typography plugin for rendered markdown content (the `prose` class).
+   Installed via assets/package.json (see languages.javascript in devenv.nix). */
+@plugin "@tailwindcss/typography";
+
 /* daisyUI Tailwind Plugin. You can update this file by fetching the latest version with:
    curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.js
    Make sure to look at the daisyUI changelog: https://daisyui.com/docs/changelog/ */
@@ -33,26 +37,27 @@
   default: false;
   prefersdark: true;
   color-scheme: "dark";
-  --color-base-100: oklch(30.33% 0.016 252.42);
-  --color-base-200: oklch(25.26% 0.014 253.1);
-  --color-base-300: oklch(20.15% 0.012 254.09);
-  --color-base-content: oklch(97.807% 0.029 256.847);
-  --color-primary: oklch(58% 0.233 277.117);
-  --color-primary-content: oklch(96% 0.018 272.314);
-  --color-secondary: oklch(58% 0.233 277.117);
-  --color-secondary-content: oklch(96% 0.018 272.314);
-  --color-accent: oklch(60% 0.25 292.717);
-  --color-accent-content: oklch(96% 0.016 293.756);
-  --color-neutral: oklch(37% 0.044 257.287);
-  --color-neutral-content: oklch(98% 0.003 247.858);
-  --color-info: oklch(58% 0.158 241.966);
-  --color-info-content: oklch(97% 0.013 236.62);
-  --color-success: oklch(60% 0.118 184.704);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
+  /* EEF navy (#1f2c34) surfaces with the same bright-blue accent. */
+  --color-base-100: oklch(26% 0.018 245);
+  --color-base-200: oklch(22% 0.016 245);
+  --color-base-300: oklch(18% 0.014 245);
+  --color-base-content: oklch(96% 0.01 245);
+  --color-primary: oklch(68% 0.13 245);
+  --color-primary-content: oklch(18% 0.03 245);
+  --color-secondary: oklch(80% 0.04 245);
+  --color-secondary-content: oklch(20% 0.02 245);
+  --color-accent: oklch(68% 0.13 245);
+  --color-accent-content: oklch(18% 0.03 245);
+  --color-neutral: oklch(30% 0.02 245);
+  --color-neutral-content: oklch(96% 0.01 245);
+  --color-info: oklch(70% 0.13 240);
+  --color-info-content: oklch(18% 0.03 240);
+  --color-success: oklch(68% 0.15 149);
+  --color-success-content: oklch(18% 0.03 149);
+  --color-warning: oklch(78% 0.16 78);
+  --color-warning-content: oklch(24% 0.05 78);
+  --color-error: oklch(66% 0.2 27);
+  --color-error-content: oklch(18% 0.03 27);
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
@@ -68,26 +73,27 @@
   default: true;
   prefersdark: false;
   color-scheme: "light";
-  --color-base-100: oklch(98% 0 0);
-  --color-base-200: oklch(96% 0.001 286.375);
-  --color-base-300: oklch(92% 0.004 286.32);
-  --color-base-content: oklch(21% 0.006 285.885);
-  --color-primary: oklch(70% 0.213 47.604);
-  --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(55% 0.027 264.364);
-  --color-secondary-content: oklch(98% 0.002 247.839);
-  --color-accent: oklch(0% 0 0);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(44% 0.017 285.786);
-  --color-neutral-content: oklch(98% 0 0);
-  --color-info: oklch(62% 0.214 259.815);
-  --color-info-content: oklch(97% 0.014 254.604);
-  --color-success: oklch(70% 0.14 182.503);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
+  /* EEF brand: bright blue accent (#1b85cb) on white, navy bands (#1f2c34). */
+  --color-base-100: oklch(100% 0 0);
+  --color-base-200: oklch(97% 0.002 247);
+  --color-base-300: oklch(92% 0.004 247);
+  --color-base-content: oklch(27% 0.02 250);
+  --color-primary: oklch(60% 0.13 245);
+  --color-primary-content: oklch(99% 0.01 245);
+  --color-secondary: oklch(28% 0.02 245);
+  --color-secondary-content: oklch(98% 0.005 245);
+  --color-accent: oklch(60% 0.13 245);
+  --color-accent-content: oklch(99% 0.01 245);
+  --color-neutral: oklch(28% 0.02 245);
+  --color-neutral-content: oklch(98% 0.005 245);
+  --color-info: oklch(62% 0.13 240);
+  --color-info-content: oklch(98% 0.014 240);
+  --color-success: oklch(64% 0.15 149);
+  --color-success-content: oklch(98% 0.014 149);
+  --color-warning: oklch(75% 0.16 78);
+  --color-warning-content: oklch(28% 0.05 78);
+  --color-error: oklch(58% 0.22 27);
+  --color-error-content: oklch(98% 0.015 27);
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
@@ -109,4 +115,268 @@
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
+/* ---------------------------------------------------------------- EEF brand */
+/* Deep navy for full-bleed bands (hero, footer, feature strips), matching
+   erlef.org / sponsor.erlef.org. Fixed regardless of light/dark theme. */
+:root {
+  --eef-navy: #1f2c34;
+  --eef-navy-2: #17222a;
+  --eef-blue: #1b85cb;
+}
+
+/* Inline EEF wordmark: the SVG fills the height set on its .eef-logo wrapper. */
+.eef-logo > svg {
+  height: 100%;
+  width: auto;
+}
+
+/* A dark navy band with light text and blue links. */
+.eef-band {
+  background-color: var(--eef-navy);
+  color: #f5f7f8;
+}
+
+.eef-band a:not(.btn):not(.eef-band-plain) {
+  color: #6cb8ec;
+}
+
+.eef-band a:not(.btn):not(.eef-band-plain):hover {
+  color: #9ed0f3;
+}
+
+/* Links that should stay in the band's own text color (logo, nav items). */
+.eef-band a.eef-band-plain {
+  color: inherit;
+}
+
+/* Small uppercase letter-spaced eyebrow label above section titles. */
+.eef-eyebrow {
+  color: var(--eef-blue);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eef-band .eef-eyebrow {
+  color: #6cb8ec;
+}
+
 /* This file is for your main application CSS */
+
+/* ---------------------------------------------------------------- Charts */
+/* Ported from the Jekyll site's head-custom.html. CSS-only hover popovers. */
+
+.cve-chart-wrapper {
+  margin: 1.5rem 0;
+}
+
+.cve-activity-chart,
+.cwe-donut-svg {
+  width: 100%;
+  height: auto;
+}
+
+.chart-dot {
+  cursor: default;
+  transition: r 0.15s ease;
+}
+
+.chart-dot-group:hover .chart-dot,
+.chart-dot-group:focus .chart-dot {
+  r: 7;
+}
+
+.chart-popover {
+  display: none;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.12));
+}
+
+.chart-dot-group:hover .chart-popover,
+.chart-dot-group:focus .chart-popover {
+  display: block;
+}
+
+/* CWE donut + legend */
+.cwe-chart-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+@media (min-width: 640px) {
+  .cwe-chart-wrapper {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .cwe-donut {
+    flex: 0 0 auto;
+    width: 340px;
+  }
+
+  .cwe-legend {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+.cwe-slice-group {
+  cursor: pointer;
+  /* No focus outline on click (request); focus-visible still shows for keyboard. */
+  outline: none;
+}
+
+.cwe-slice-group path {
+  transition: opacity 0.12s ease;
+}
+
+.cwe-slice-group:hover path,
+.cwe-slice-group:focus-visible path {
+  opacity: 0.82;
+}
+
+.cwe-slice-group:focus-visible path {
+  stroke: var(--color-base-content);
+  stroke-width: 1.5;
+}
+
+.cwe-legend-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.cwe-legend-row {
+  border-bottom: 1px solid var(--color-base-300, #e9ecef);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.cwe-legend-row:hover {
+  background-color: var(--color-base-200);
+}
+
+.cwe-legend-row:last-child {
+  border-bottom: none;
+}
+
+.cwe-legend-row td {
+  padding: 0.4rem 0.5rem;
+}
+
+.cwe-legend-id {
+  color: var(--color-base-content);
+  opacity: 0.45;
+  font-size: 0.8em;
+}
+
+.cwe-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.cwe-legend-count {
+  text-align: right;
+  white-space: nowrap;
+  color: var(--color-base-content, #6c757d);
+}
+
+/* ---------------------------------------------------------------- Content pages */
+/* Anchored headings clear the sticky navbar (h-16 = 4rem) when jumped to. The
+   scroll target is Comrak's nested `<a id>`, so the margin must sit on any id
+   target, not just the heading. */
+html {
+  scroll-behavior: smooth;
+}
+
+:target,
+.prose :is(h2, h3),
+.prose :is(h2, h3) > a[id],
+[id] {
+  scroll-margin-top: 5.5rem;
+}
+
+.prose :is(h2, h3) {
+  position: relative;
+  scroll-margin-top: 5.5rem;
+}
+
+/* Comrak heading permalink: a "#" that fades in on hover. */
+.prose :is(h2, h3) > a.anchor {
+  position: absolute;
+  left: -1.25em;
+  padding-right: 0.35em;
+  opacity: 0;
+  text-decoration: none;
+  color: var(--color-primary, #6610f2);
+  transition: opacity 0.15s ease;
+}
+
+.prose :is(h2, h3) > a.anchor::before {
+  content: "#";
+}
+
+.prose :is(h2, h3):hover > a.anchor,
+.prose :is(h2, h3) > a.anchor:focus {
+  opacity: 1;
+}
+
+/* Step cards: markdown `:::steps` wraps an ordered list in <div class="steps">.
+   Each list item becomes a bordered card with a circular number badge. Plain
+   ordered lists (not wrapped) are unaffected. */
+.prose .steps {
+  margin: 1.5rem 0;
+  counter-reset: step;
+}
+
+.prose .steps > ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.prose .steps > ol > li {
+  counter-increment: step;
+  position: relative;
+  margin: 0;
+  padding: 1.1rem 1.25rem 1.1rem 3.75rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: 0.6rem;
+  background: var(--color-base-100);
+}
+
+.prose .steps > ol > li::before {
+  content: counter(step);
+  position: absolute;
+  top: 1.1rem;
+  left: 1.15rem;
+  width: 1.85rem;
+  height: 1.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* First line of each step reads as its title. */
+.prose .steps > ol > li > :first-child {
+  margin-top: 0;
+}
+
+.prose .steps > ol > li > :last-child {
+  margin-bottom: 0;
+}
