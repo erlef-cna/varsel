@@ -1,5 +1,39 @@
-<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 max-w-4xl">
-  <div class="prose prose-base max-w-none">
-    {raw(@page.body)}
+<%!--
+SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+SPDX-License-Identifier: Apache-2.0
+--%>
+<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-6xl">
+  <header class="mb-8 pb-6 border-b border-base-300">
+    <p class="eef-eyebrow mb-2">Documentation</p>
+    <h1 class="text-3xl sm:text-4xl font-bold">{@page.title}</h1>
+    <p :if={@page.description} class="text-base-content/60 mt-2 max-w-2xl">{@page.description}</p>
+  </header>
+
+  <div class={[@page.toc != [] && "lg:grid lg:grid-cols-[1fr_15rem] lg:gap-12"]}>
+    <article class="prose prose-base max-w-none min-w-0">
+      {raw(@page.body)}
+    </article>
+
+    <nav
+      :if={@page.toc != []}
+      class="hidden lg:block order-first lg:order-last"
+      aria-label="Table of contents"
+    >
+      <div class="sticky top-24">
+        <p class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-3">
+          On this page
+        </p>
+        <ul class="space-y-1 text-sm border-l border-base-300">
+          <li :for={item <- @page.toc} class={[item.level == 3 && "ml-3"]}>
+            <a
+              href={"##{item.id}"}
+              class="block border-l-2 border-transparent -ml-px pl-3 py-0.5 text-base-content/70 hover:text-primary hover:border-primary transition-colors"
+            >
+              {item.text}
+            </a>
+          </li>
+        </ul>
+      </div>
+    </nav>
   </div>
 </div>
