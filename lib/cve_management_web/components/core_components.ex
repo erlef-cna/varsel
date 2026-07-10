@@ -312,13 +312,18 @@ defmodule CveManagementWeb.CoreComponents do
   @doc """
   Renders a header with title.
   """
+  attr :class, :string, default: nil
+  attr :rest, :global
   slot :inner_block, required: true
   slot :subtitle
   slot :actions
 
   def header(assigns) do
     ~H"""
-    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
+    <header
+      class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4", @class]}
+      {@rest}
+    >
       <div>
         <h1 class="text-lg font-semibold leading-8">
           {render_slot(@inner_block)}

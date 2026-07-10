@@ -41,19 +41,19 @@ defmodule CveManagement.Accounts.PaperTrailTest do
     assert version.changes["email"] == user.email
   end
 
-  test "updating a user records the change and the acting user" do
+  test "changing a user's role records the change and the acting user" do
     user = register_user()
     poc = register_user()
-    poc = Ash.update!(poc, %{role: :poc}, action: :update, authorize?: false)
+    poc = Ash.update!(poc, %{role: :poc}, action: :set_role, authorize?: false)
 
-    Ash.update!(user, %{role: :supporter}, action: :update, actor: poc)
+    Ash.update!(user, %{role: :supporter}, action: :set_role, actor: poc)
 
     versions =
       user
       |> Ash.load!([:paper_trail_versions], authorize?: false)
       |> Map.fetch!(:paper_trail_versions)
 
-    update_version = Enum.find(versions, &(&1.version_action_name == :update))
+    update_version = Enum.find(versions, &(&1.version_action_name == :set_role))
     assert update_version.changes == %{"role" => "supporter"}
     assert update_version.user_id == poc.id
   end

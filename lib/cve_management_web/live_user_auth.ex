@@ -36,6 +36,14 @@ defmodule CveManagementWeb.LiveUserAuth do
     end
   end
 
+  def on_mount(:live_poc_required, _params, _session, socket) do
+    case socket.assigns[:current_user] do
+      %{role: :poc} -> {:cont, socket}
+      nil -> {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/sign-in")}
+      _other -> {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/")}
+    end
+  end
+
   def on_mount(:live_no_user, _params, _session, socket) do
     if socket.assigns[:current_user] do
       {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/")}

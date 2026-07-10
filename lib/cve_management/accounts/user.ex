@@ -9,6 +9,7 @@ defmodule CveManagement.Accounts.User do
     domain: CveManagement.Accounts,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
+    notifiers: [Ash.Notifier.PubSub],
     extensions: [AshAuthentication, AshPaperTrail.Resource]
 
   authentication do
@@ -78,11 +79,32 @@ defmodule CveManagement.Accounts.User do
         |> Ash.Changeset.force_change_attribute(:name, user_info["name"])
         |> Ash.Changeset.force_change_attribute(:email, user_info["email"])
       end
+
+      # The very first user to ever log in becomes a POC, so the CNA always
+      # has someone who can manage roles. Only applies on insert (the upsert
+      # leaves existing users' roles untouched).
+      change fn changeset, _context ->
+        Ash.Changeset.before_action(changeset, fn changeset ->
+          if changeset.action_type == :create and Ash.count!(__MODULE__, authorize?: false) == 0 do
+            Ash.Changeset.force_change_attribute(changeset, :role, :poc)
+          else
+            changeset
+          end
+        end)
+      end
     end
 
     update :update do
-      accept [:name, :role]
+      # Role is intentionally NOT accepted here: :update is self-editable
+      # (see the policy below), and accepting role would let a non-POC
+      # self-promote. Role changes go through :set_role, which is POC-only.
+      accept [:name]
       primary? true
+    end
+
+    update :set_role do
+      description "Sets a user's role. Restricted to POCs."
+      accept [:role]
     end
   end
 
@@ -100,6 +122,23 @@ defmodule CveManagement.Accounts.User do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
     end
+
+    policy action(:set_role) do
+      authorize_if actor_attribute_equals(:role, :poc)
+    end
+  end
+
+  pub_sub do
+    module CveManagementWeb.Endpoint
+    prefix "user"
+
+    # A single stable topic ("user:all") that the user-management LiveView
+    # subscribes to, so any change to any user (registration, role change)
+    # re-runs its list query. Actor-scoped topics aren't needed: only POCs
+    # can view the list, and the query itself re-applies authorization.
+    publish_all :create, ["all"]
+    publish_all :update, ["all"]
+    publish_all :destroy, ["all"]
   end
 
   attributes do

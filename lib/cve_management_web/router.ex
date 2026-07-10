@@ -54,6 +54,13 @@ defmodule CveManagementWeb.Router do
     get "/coordinator-process", PageController, :page, assigns: %{page_id: "coordinator-process"}
     get "/maintainer-process", PageController, :page, assigns: %{page_id: "maintainer-process"}
     live "/common-weaknesses", CommonWeaknessesLive, :index
+
+    # POC-only user management (loads current_user + gates on the POC role).
+    ash_authentication_live_session :poc_required,
+      on_mount: [{CveManagementWeb.LiveUserAuth, :live_poc_required}] do
+      live "/users", UserManagementLive, :index
+    end
+
     auth_routes AuthController, User, path: "/auth"
     sign_out_route AuthController
 

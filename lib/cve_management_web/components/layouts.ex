@@ -182,6 +182,14 @@ defmodule CveManagementWeb.Layouts do
               </ul>
             </div>
           </li>
+          <li :if={poc?(@current_user)}>
+            <a
+              href={~p"/users"}
+              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
+            >
+              Users
+            </a>
+          </li>
         </ul>
 
         <div class="ml-auto flex items-center gap-2">
@@ -290,6 +298,9 @@ defmodule CveManagementWeb.Layouts do
       {"Contact", "/contact"}
     ]
   end
+
+  defp poc?(%{role: :poc}), do: true
+  defp poc?(_user), do: false
 
   @doc """
   Provides dark vs light theme toggle based on themes defined in app.css.

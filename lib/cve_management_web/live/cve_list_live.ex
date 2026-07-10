@@ -16,7 +16,7 @@ defmodule CveManagementWeb.CveListLive do
 
   @load [:cve_id, :title, :date_published, :date_updated, :purls]
 
-  @impl true
+  @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
     socket =
       socket
@@ -26,7 +26,7 @@ defmodule CveManagementWeb.CveListLive do
     {:ok, socket}
   end
 
-  @impl true
+  @impl Phoenix.LiveView
   def handle_event("search", %{"query" => query}, socket) do
     {:noreply, socket |> assign(query: query) |> load_records()}
   end
@@ -52,7 +52,7 @@ defmodule CveManagementWeb.CveListLive do
     Enum.sort_by(records, &Map.get(&1, sort), {:desc, DateTime})
   end
 
-  @impl true
+  @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-8">

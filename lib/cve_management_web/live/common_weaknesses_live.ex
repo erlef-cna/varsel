@@ -22,13 +22,13 @@ defmodule CveManagementWeb.CommonWeaknessesLive do
   alias CveManagement.CVE
   alias CveManagementWeb.Charts
 
-  @impl true
+  @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
     page = CveManagement.Content.get_page!("common-weaknesses")
     {:ok, assign(socket, page: page, page_title: page.title)}
   end
 
-  @impl true
+  @impl Phoenix.LiveView
   def handle_params(params, _uri, socket) do
     focus = normalize_cwe(params["focus"])
     selected = normalize_cwe(params["cwe"])
@@ -54,7 +54,7 @@ defmodule CveManagementWeb.CommonWeaknessesLive do
   end
 
   # A slice: drill down when it has children, otherwise select it for the list.
-  @impl true
+  @impl Phoenix.LiveView
   def handle_event("slice", %{"cwe" => cwe, "drill" => "true"}, socket) do
     {:noreply, push_patch(socket, to: chart_path(cwe, nil))}
   end
@@ -105,7 +105,7 @@ defmodule CveManagementWeb.CommonWeaknessesLive do
   defp normalize_cwe("CWE-" <> _ = cwe), do: cwe
   defp normalize_cwe(n), do: "CWE-#{n}"
 
-  @impl true
+  @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl py-10">

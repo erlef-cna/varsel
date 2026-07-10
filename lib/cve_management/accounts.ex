@@ -18,7 +18,12 @@ defmodule CveManagement.Accounts do
 
   resources do
     resource CveManagement.Accounts.Token
-    resource CveManagement.Accounts.User
+
+    resource CveManagement.Accounts.User do
+      define :list_users, action: :read
+      define :set_user_role, action: :set_role, args: [:role]
+    end
+
     resource CveManagement.Accounts.UserIdentity
   end
 end
