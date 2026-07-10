@@ -72,13 +72,18 @@ defmodule CveManagement.CVE.CveRecord do
 
   - `:top_up_pool` / `:sync_reserved_from_mitre` / `:run_reject_stale` — Scheduled pool
     maintenance (see ADR-014).
+
+  Published records additionally have a derived OSV document; that lifecycle lives
+  entirely on `CveManagement.CVE.OsvRecord`, which observes this resource through
+  its own Oban triggers.
   """
   use Ash.Resource,
     otp_app: :cve_management,
     domain: CveManagement.CVE,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource]
+    extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource],
+    notifiers: [CveManagement.CVE.OsvRecord.Notifier]
 
   import Ash.Expr
 
@@ -643,6 +648,12 @@ defmodule CveManagement.CVE.CveRecord do
     end
 
     timestamps()
+  end
+
+  relationships do
+    has_one :osv_record, CveManagement.CVE.OsvRecord do
+      public? true
+    end
   end
 
   calculations do

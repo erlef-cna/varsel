@@ -116,6 +116,13 @@ defmodule CveManagementWeb.Router do
     get "/*path", CveController, :show
   end
 
+  scope "/osv", CveManagementWeb do
+    pipe_through :api
+
+    get "/all.json", OsvController, :index
+    get "/*path", OsvController, :show
+  end
+
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:cve_management, :dev_routes) do
     # If you want to use the LiveDashboard in production, you should put

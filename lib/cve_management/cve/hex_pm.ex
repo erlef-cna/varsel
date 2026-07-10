@@ -28,6 +28,26 @@ defmodule CveManagement.CVE.HexPm do
   end
 
   @doc """
+  Lists all released versions of a package on hex.pm.
+
+  Returns `{:ok, versions}` or `{:error, reason}` when the package does not
+  exist or the request fails.
+  """
+  @spec package_versions(String.t()) :: {:ok, [String.t()]} | {:error, String.t()}
+  def package_versions(name) when is_binary(name) do
+    case :hex_api_package.get(config(), name) do
+      {:ok, {200, _headers, body}} ->
+        {:ok, body |> Map.get("releases", []) |> Enum.map(& &1["version"])}
+
+      {:ok, {status, _headers, _body}} ->
+        {:error, "hex.pm returned #{status} for #{name}"}
+
+      {:error, reason} ->
+        {:error, "hex.pm request for #{name} failed: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
   Extracts the package names of all `pkg:hex/...` package URLs in a CVE
   record's affected entries.
 

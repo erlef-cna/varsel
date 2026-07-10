@@ -57,7 +57,8 @@ config :cve_management, Oban,
     cve_publishing: 1,
     cve_pool: 1,
     cwe_sync: 1,
-    capec_sync: 1
+    capec_sync: 1,
+    osv_sync: 1
   ],
   repo: CveManagement.Repo,
   plugins: [{Oban.Plugins.Cron, []}]

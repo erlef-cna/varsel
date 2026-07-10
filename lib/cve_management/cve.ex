@@ -10,6 +10,7 @@ defmodule CveManagement.CVE do
 
   alias CveManagement.CVE.CveRecord
   alias CveManagement.CVE.CveValidation
+  alias CveManagement.CVE.OsvRecord
 
   admin do
     show? true
@@ -51,6 +52,11 @@ defmodule CveManagement.CVE do
 
     resource CveValidation do
       define :validate_cve_record, action: :validate, args: [:cve_json]
+    end
+
+    resource OsvRecord do
+      define :list_osv_feed, action: :list_feed
+      define :get_osv_record, action: :get, args: [:osv_id]
     end
   end
 end
