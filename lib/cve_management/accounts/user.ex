@@ -125,9 +125,8 @@ defmodule CveManagement.Accounts.User do
       allow_nil? true
     end
 
-    attribute :role, :atom do
+    attribute :role, CveManagement.Accounts.User.Role do
       public? true
-      constraints one_of: [:poc, :supporter]
       allow_nil? true
     end
 

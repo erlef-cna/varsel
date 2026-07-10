@@ -10,9 +10,8 @@ defmodule CveManagement.CVE.CveValidation.Error do
   use Ash.Resource, data_layer: :embedded
 
   attributes do
-    attribute :source, :atom do
+    attribute :source, CveManagement.CVE.CveValidation.Source do
       description "Which validator produced this finding."
-      constraints one_of: [:schema, :cvelint, :hex]
       allow_nil? false
       public? true
     end
