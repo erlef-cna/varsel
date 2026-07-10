@@ -1,0 +1,228 @@
+<%!--
+SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+SPDX-License-Identifier: Apache-2.0
+--%>
+<% cve_id = @cve["cveMetadata"]["cveId"] %>
+<% cvss = best_cvss(@cna) %>
+<% cwe = cwe_description(@cna) %>
+<% capecs = capec_items(@cna) %>
+<% self_url = url(~p"/cves/#{cve_id}") %>
+
+<header class="bg-primary text-primary-content py-10">
+  <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl">
+    <h1 class="text-lg font-normal opacity-90">{cve_id}</h1>
+    <h2 class="text-3xl sm:text-4xl font-bold mt-3 break-words">
+      {raw(String.replace(@cve["containers"]["cna"]["title"] || cve_id, "_", "_<wbr>"))}
+    </h2>
+
+    <div :if={(@cna["tags"] || []) != []} class="mt-4 flex flex-wrap gap-2">
+      <span :for={tag <- @cna["tags"]} class={["badge uppercase", cna_tag_class(tag)]}>
+        {humanize_tag(tag)}
+      </span>
+    </div>
+
+    <div class="mt-6 flex justify-between text-sm">
+      <.link navigate={~p"/cves"} class="link link-hover">&laquo; Back to all CVEs</.link>
+      <a href={"https://osv.dev/vulnerability/EEF-#{cve_id}"} class="link link-hover">
+        See on OSV.dev &raquo;
+      </a>
+    </div>
+  </div>
+</header>
+
+<main class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl py-8">
+  <%!-- At a glance --%>
+  <section :if={cvss || cwe || capecs != []} class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+    <div>
+      <div :if={cwe}>
+        <h3 class="font-semibold mb-2">Weakness Type (CWE)</h3>
+        <p class="mb-4">
+          <a href={cwe_url(cwe["cweId"])} class="link link-primary">
+            {cwe["cweId"]} — {cwe["description"]}
+          </a>
+        </p>
+      </div>
+
+      <div :if={capecs != []}>
+        <h3 class="font-semibold mb-2">CAPEC</h3>
+        <ul class="space-y-1">
+          <li :for={capec <- capecs}>
+            <a href={capec_url(capec["capecId"])} class="link link-primary">
+              {capec["capecId"]} — {capec_text(capec)}
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div :if={cvss}>
+      <h3 class="font-semibold mb-2">CVSS {cvss["version"]} Score</h3>
+      <p class="text-4xl font-bold mb-1">{cvss["baseScore"]}</p>
+      <span class={["badge uppercase mb-2", severity_class(cvss["baseSeverity"])]}>
+        {cvss["baseSeverity"]}
+      </span>
+      <p class="text-sm">
+        <a :if={cvss_calculator_url(cvss)} href={cvss_calculator_url(cvss)} class="link">
+          <code>{cvss["vectorString"]}</code>
+        </a>
+        <code :if={is_nil(cvss_calculator_url(cvss))}>{cvss["vectorString"]}</code>
+      </p>
+    </div>
+  </section>
+
+  <%!-- Description --%>
+  <section class="prose max-w-none mb-8">
+    <h2>Vulnerability description</h2>
+    {prose(@cna["descriptions"], @cna["references"] || [])}
+  </section>
+
+  <%!-- Affected --%>
+  <section :if={(@cna["affected"] || []) != []} class="mb-8">
+    <h2 class="text-2xl font-bold mb-4">Affected</h2>
+    <div :for={entry <- @cna["affected"]} class="mb-6">
+      <h3 class="font-semibold mb-3">
+        <.package_ref entry={entry} link={true} />
+      </h3>
+
+      <%!-- Components table --%>
+      <div
+        :if={entry["modules"] || entry["programFiles"] || entry["programRoutines"]}
+        class="overflow-x-auto mb-3"
+      >
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th :if={entry["modules"]}>Module</th>
+              <th :if={entry["programFiles"]}>Source File</th>
+              <th :if={entry["programRoutines"]}>Routine</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={row <- component_rows(entry)}>
+              <td :if={entry["modules"]}><code :if={row.module}>{row.module}</code></td>
+              <td :if={entry["programFiles"]}><code :if={row.file}>{row.file}</code></td>
+              <td :if={entry["programRoutines"]}><code :if={row.routine}>{row.routine}</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <%!-- Versions table --%>
+      <div :if={(entry["versions"] || []) != []} class="overflow-x-auto mb-3">
+        <table class="table table-sm table-zebra">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Type</th>
+              <th>Version</th>
+              <th :if={any_changes?(entry)}>Changes / Fixed in</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={version <- entry["versions"]}>
+              <td class="font-semibold capitalize">{version["status"]}</td>
+              <td>
+                {version["versionType"]}
+                <a
+                  :if={version_type_info(version["versionType"])}
+                  href={elem(version_type_info(version["versionType"]), 0)}
+                  title={elem(version_type_info(version["versionType"]), 1)}
+                  target="_blank"
+                  rel="noopener"
+                ><sup>ⓘ</sup></a>
+              </td>
+              <td>
+                <.version_ref
+                  version={version["version"]}
+                  type={version["versionType"]}
+                  entry={entry}
+                />
+              </td>
+              <td :if={any_changes?(entry)}>
+                <ul :if={(version["changes"] || []) != []} class="list-disc pl-4 mb-0">
+                  <li :for={change <- version["changes"]}>
+                    {change["status"]} at
+                    <.version_ref
+                      version={change["at"]}
+                      type={version["versionType"]}
+                      entry={entry}
+                    />
+                  </li>
+                </ul>
+                <span :if={(version["changes"] || []) == [] and version["lessThan"] == "*"}>
+                  <.version_ref version="*" type={version["versionType"]} entry={entry} />
+                </span>
+                <span :if={
+                  ((version["changes"] || []) == [] and version["lessThan"]) &&
+                    version["lessThan"] != "*"
+                }>
+                  &lt;
+                  <.version_ref
+                    version={version["lessThan"]}
+                    type={version["versionType"]}
+                    entry={entry}
+                  />
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div
+        :if={(entry["versions"] || []) == [] and entry["defaultStatus"] == "affected"}
+        class="alert alert-warning mb-3"
+      >
+        <div>
+          <strong>All versions affected.</strong>
+          No patched version is currently available. If a fix becomes available, please
+          <.link navigate={~p"/contact"} class="link">let us know</.link>
+          so we can update this record.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <%!-- Configurations / Workarounds / Solutions --%>
+  <section :for={
+    {heading, key} <- [
+      {"Configurations", "configurations"},
+      {"Workarounds", "workarounds"},
+      {"Solutions", "solutions"}
+    ]
+  }>
+    <div :if={prose(@cna[key], @cna["references"] || [])} class="prose max-w-none mb-8">
+      <h2>{heading}</h2>
+      {prose(@cna[key], @cna["references"] || [])}
+    </div>
+  </section>
+
+  <%!-- References --%>
+  <section :if={visible_references(@cna, self_url) != []} class="mb-8">
+    <h2 class="text-2xl font-bold mb-4">References</h2>
+    <ul class="list-disc pl-5 space-y-1">
+      <li :for={ref <- visible_references(@cna, self_url)}>
+        <a href={ref["url"]} class="link link-primary">{ref["name"] || ref["url"]}</a>
+        <span :for={tag <- ref["tags"] || []} class={["badge badge-sm ml-1", ref_tag_class(tag)]}>
+          {tag}
+        </span>
+      </li>
+    </ul>
+  </section>
+
+  <%!-- Credits --%>
+  <section :if={(@cna["credits"] || []) != []} class="mb-8">
+    <h2 class="text-2xl font-bold mb-4">Credits</h2>
+    <ul class="list-disc pl-5 space-y-1">
+      <li :for={credit <- @cna["credits"]}>
+        <strong>{humanize_credit(credit["type"] || "")}</strong>: {credit["value"]}
+      </li>
+    </ul>
+  </section>
+
+  <%!-- JSON links --%>
+  <p class="mt-10 text-sm text-base-content/60">
+    CVE record as JSON:
+    <a href={~p"/cves/#{cve_id <> ".json"}"} class="link"><code>GET /cves/{cve_id}.json</code></a>
+  </p>
+</main>

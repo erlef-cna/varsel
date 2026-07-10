@@ -1,0 +1,16 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Contact: mailto:cna@erlef.org
+Encryption: https://keys.openpgp.org/vks/v1/by-fingerprint/38BD201B397E28F1F3D93EC76E031A811F266E21
+Encryption: openpgp4fpr:38BD201B397E28F1F3D93EC76E031A811F266E21
+Policy: https://cna.erlef.org/security-policy
+Preferred-Languages: en
+Expires: 2025-11-26T11:32:00Z
+-----BEGIN PGP SIGNATURE-----
+
+iHUEARYKAB0WIQQ4vSAbOX4o8fPZPsduAxqBHyZuIQUCZ0Wk2wAKCRBuAxqBHyZu
+IaRVAQDgI327aVEjgPb/YupDRIZ3RwKDt/43nDczbvtzTXJS/wEAi3vKRz5UoQ3O
+6PiNdC+latG1YbaH3EI8G24QsdRMMgo=
+=SiGW
+-----END PGP SIGNATURE-----

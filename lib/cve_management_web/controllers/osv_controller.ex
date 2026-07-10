@@ -20,4 +20,25 @@ defmodule CveManagementWeb.OsvController do
     Ash.Error.Invalid ->
       conn |> put_status(:not_found) |> json(%{})
   end
+
+  # `/osv/EEF-CVE-2025-1234` -> `/cves/CVE-2025-1234` (the Jekyll redirect).
+  # A `.json` id keeps serving the raw OSV document via show/2 instead.
+  def redirect_to_cve(conn, %{"osv_id" => "all.json"}), do: conn |> put_format(:json) |> index(%{})
+
+  def redirect_to_cve(conn, %{"osv_id" => osv_id}) do
+    if String.ends_with?(osv_id, ".json") do
+      show(conn, %{"path" => [osv_id]})
+    else
+      case String.replace_prefix(osv_id, "EEF-", "") do
+        ^osv_id -> conn |> put_status(:not_found) |> render_404()
+        cve_id -> redirect(conn, to: ~p"/cves/#{cve_id}")
+      end
+    end
+  end
+
+  defp render_404(conn) do
+    conn
+    |> put_view(html: CveManagementWeb.ErrorHTML)
+    |> render(:"404")
+  end
 end
