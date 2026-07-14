@@ -22,6 +22,7 @@ defmodule Varsel.Application do
          Application.fetch_env!(:varsel, Oban)
        )},
       {Phoenix.PubSub, name: Varsel.PubSub},
+      {Varsel.Cases.Derivation.GitRepo, []},
       # Start a worker by calling: Varsel.Worker.start_link(arg)
       # {Varsel.Worker, arg},
       # Start to serve requests, typically the last entry

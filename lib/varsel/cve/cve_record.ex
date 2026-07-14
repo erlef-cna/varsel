@@ -83,7 +83,7 @@ defmodule Varsel.CVE.CveRecord do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
-    notifiers: [Varsel.CVE.OsvRecord.Notifier, Ash.Notifier.PubSub]
+    notifiers: [Varsel.CVE.OsvRecord.Notifier, Varsel.Cases.Case.Notifier, Ash.Notifier.PubSub]
 
   import Ash.Expr
 
@@ -691,6 +691,11 @@ defmodule Varsel.CVE.CveRecord do
 
   relationships do
     has_one :osv_record, Varsel.CVE.OsvRecord do
+      public? true
+    end
+
+    has_one :case, Varsel.Cases.Case do
+      description "The editorial case this CVE record backs, if any."
       public? true
     end
   end

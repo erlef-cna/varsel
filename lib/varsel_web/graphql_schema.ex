@@ -10,6 +10,7 @@ defmodule VarselWeb.GraphqlSchema do
     domains: [
       Varsel.Accounts,
       Varsel.CAPEC,
+      Varsel.Cases,
       Varsel.CVE,
       Varsel.CWE
     ]

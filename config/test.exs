@@ -64,6 +64,8 @@ config :varsel,
   hex_core: %{http_adapter: {Varsel.Test.HexHTTPStub, %{}}},
   cwe_catalog: [plug: {Req.Test, Varsel.CWE.Weakness}],
   capec_catalog: [plug: {Req.Test, Varsel.CAPEC.AttackPattern}],
+  otp_versions_table: [plug: {Req.Test, Varsel.Cases.Derivation.OtpVersionsTable}],
+  git_backend: Varsel.Test.StubGitBackend,
   mitre_cve_api: [
     base_url: "https://cveawg-test.mitre.org/api",
     org: "test-org",

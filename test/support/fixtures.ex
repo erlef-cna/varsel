@@ -73,4 +73,44 @@ defmodule Varsel.Fixtures do
 
     Ash.create!(CveRecord, %{cve_json: cve_json}, action: :import, authorize?: false)
   end
+
+  @doc "Opens a draft case as `actor` (a POC)."
+  def open_case(actor, attrs \\ %{}) do
+    Varsel.Cases.open_case!(Map.put_new(attrs, :title, "Test case"), actor: actor)
+  end
+
+  @doc "Adds an affected package with sensible defaults to a case."
+  def add_affected_package(actor, case_record, attrs \\ %{}) do
+    Varsel.Cases.add_affected_package!(
+      Enum.into(attrs, %{
+        case_id: case_record.id,
+        vendor: "acme",
+        product: "acme_lib",
+        repo_url: "https://github.com/acme/acme_lib"
+      }),
+      actor: actor
+    )
+  end
+
+  @doc "Seeds a CWE catalog row (bypasses the sync pipeline)."
+  def seed_weakness(cwe_id, name) do
+    Ash.Seed.seed!(Varsel.CWE.Weakness, %{
+      cwe_id: cwe_id,
+      name: name,
+      abstraction: :base,
+      status: :stable,
+      description: "#{name} description"
+    })
+  end
+
+  @doc "Seeds a CAPEC catalog row (bypasses the sync pipeline)."
+  def seed_attack_pattern(capec_id, name) do
+    Ash.Seed.seed!(Varsel.CAPEC.AttackPattern, %{
+      capec_id: capec_id,
+      name: name,
+      abstraction: :standard,
+      status: :stable,
+      description: "#{name} description"
+    })
+  end
 end

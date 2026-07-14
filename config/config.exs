@@ -142,6 +142,13 @@ config :varsel, VarselWeb.Endpoint,
 # report submissions sent to POCs).
 config :varsel, :cna_email_from, "cna@erlef.org"
 
+# CNA identity constants rendered into every CVE record's providerMetadata /
+# cveMetadata, and the public website self-links appended to references.
+config :varsel,
+  cna_org_id: "6b3ad84c-e1a6-4bf7-a703-f496b71e49db",
+  cna_short_name: "EEF",
+  cna_website_base_url: "https://cna.erlef.org"
+
 config :varsel,
   cve_pool_min_size: 5,
   ecto_repos: [Varsel.Repo],
@@ -150,6 +157,7 @@ config :varsel,
     Varsel.CAPEC,
     Varsel.CWE,
     Varsel.CVE,
+    Varsel.Cases,
     Varsel.Accounts
   ]
 

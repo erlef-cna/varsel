@@ -168,7 +168,17 @@ defmodule VarselWeb.Router do
         :reject_cve,
         :list_users,
         :update_user,
-        :set_user_role
+        :set_user_role,
+        :list_cases,
+        :get_case,
+        :render_case_preview,
+        :refresh_case_derivation,
+        :list_case_proposals,
+        :list_open_case_proposals,
+        :create_case_proposal,
+        :withdraw_case_proposal,
+        :list_case_comments,
+        :create_case_comment
       ],
       otp_app: :varsel
   end

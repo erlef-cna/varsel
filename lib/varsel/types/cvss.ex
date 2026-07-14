@@ -13,12 +13,27 @@ defmodule Varsel.Types.CVSS do
   are accepted, e.g. `constraints: [version: [:v3, :v4]]`.
   """
 
+  @behaviour AshGraphql.Type
+
   use Ash.Type
 
   @enforce_keys [:vector, :version, :score, :severity]
   defstruct [:vector, :version, :score, :severity]
 
   @versions [:v1, :v2, :v3, :v4]
+
+  @type t :: %__MODULE__{
+          vector: String.t(),
+          version: :v1 | :v2 | :v3 | :v4,
+          score: float(),
+          severity: atom() | nil
+        }
+
+  @impl AshGraphql.Type
+  def graphql_type(_constraints), do: :json
+
+  @impl AshGraphql.Type
+  def graphql_input_type(_constraints), do: :string
 
   @impl Ash.Type
   def storage_type(_), do: :map
