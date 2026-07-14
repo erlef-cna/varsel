@@ -89,10 +89,13 @@ defmodule VarselWeb.Router do
     end
 
     # Any logged-in user may report a vulnerability and manage their own tokens.
+    # Cases are visible to POCs and assigned supporters (policies scope reads).
     ash_authentication_live_session :authenticated,
       on_mount: [{VarselWeb.LiveUserAuth, :live_user_required}] do
       live "/report", VulnerabilityReportLive, :new
       live "/settings/tokens", ApiKeySettingsLive, :index
+      live "/cases", CaseManagementLive, :index
+      live "/cases/:id", CaseDetailLive, :show
     end
   end
 
