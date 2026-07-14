@@ -25,7 +25,7 @@ config :ash,
   redact_sensitive_values_in_errors?: true,
   known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec, CveManagement.Types.CVSS]
 
-config :ash_graphql, authorize_update_destroy_with_error?: true
+config :ash_graphql, authorize_update_destroy_with_error?: true, json_type: :json
 
 config :ash_oban, pro?: false
 

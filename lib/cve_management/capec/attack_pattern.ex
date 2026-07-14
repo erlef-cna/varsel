@@ -36,7 +36,7 @@ defmodule CveManagement.CAPEC.AttackPattern do
     domain: CveManagement.CAPEC,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshOban]
+    extensions: [AshOban, AshGraphql.Resource]
 
   import Ash.Expr
 
@@ -47,7 +47,9 @@ defmodule CveManagement.CAPEC.AttackPattern do
   alias CveManagement.CAPEC.CapecXmlParser
   alias CveManagement.CWE.CweMetadata
 
-  @catalog_url "https://capec.mitre.org/data/xml/capec_latest.xml"
+  graphql do
+    type :attack_pattern
+  end
 
   postgres do
     table "capec_attack_patterns"
@@ -80,6 +82,8 @@ defmodule CveManagement.CAPEC.AttackPattern do
       end
     end
   end
+
+  @catalog_url "https://capec.mitre.org/data/xml/capec_latest.xml"
 
   oban do
     scheduled_actions do

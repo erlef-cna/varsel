@@ -9,9 +9,13 @@ defmodule CveManagementWeb.Router do
   import AshAuthentication.Plug.Helpers
 
   alias CveManagement.Accounts.User
+  alias CveManagementWeb.Plugs.ApiKeyAuth
   alias Elixir.AshAuthentication.Phoenix.Overrides.DaisyUI
 
   pipeline :graphql do
+    plug ApiKeyAuth
+    plug :load_from_bearer
+    plug :set_actor, :user
     plug AshGraphql.Plug
   end
 
@@ -27,8 +31,15 @@ defmodule CveManagementWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug ApiKeyAuth
     plug :load_from_bearer
     plug :set_actor, :user
+  end
+
+  # MCP tool calls read the actor from the conn (Ash.PlugHelpers); anonymous
+  # requests keep actor nil, so public tools work without a key.
+  pipeline :mcp do
+    plug ApiKeyAuth
   end
 
   scope "/gql" do
@@ -63,6 +74,12 @@ defmodule CveManagementWeb.Router do
       live "/users", UserManagementLive, :index
       live "/cves/manage", CveManagementLive, :index
       live "/cves/manage/:id", CveManagementEditLive, :edit
+    end
+
+    # Any logged-in user manages their own API tokens.
+    ash_authentication_live_session :authenticated,
+      on_mount: [{CveManagementWeb.LiveUserAuth, :live_user_required}] do
+      live "/settings/tokens", ApiKeySettingsLive, :index
     end
 
     auth_routes AuthController, User, path: "/auth"
@@ -104,6 +121,8 @@ defmodule CveManagementWeb.Router do
   end
 
   scope "/mcp" do
+    pipe_through :mcp
+
     forward "/", AshAi.Mcp.Router,
       tools: [
         :list_weaknesses,
@@ -119,7 +138,18 @@ defmodule CveManagementWeb.Router do
         :validate_cve_record,
         :validate_cve_record_schema,
         :validate_cve_record_cvelint,
-        :validate_cve_record_hex_packages
+        :validate_cve_record_hex_packages,
+        :list_osv_records,
+        :get_osv_record,
+        :list_all_cves,
+        :available_cve_ids,
+        :assign_cve,
+        :update_cve,
+        :request_publish_cve,
+        :reject_cve,
+        :list_users,
+        :update_user,
+        :set_user_role
       ],
       otp_app: :cve_management
   end

@@ -7,7 +7,11 @@ defmodule CveManagement.CVE.CveValidation.Error do
   A single validation finding for a CVE record.
   """
 
-  use Ash.Resource, data_layer: :embedded
+  use Ash.Resource, data_layer: :embedded, extensions: [AshGraphql.Resource]
+
+  graphql do
+    type :cve_validation_error
+  end
 
   attributes do
     attribute :source, CveManagement.CVE.CveValidation.Source do
@@ -34,7 +38,11 @@ defmodule CveManagement.CVE.CveValidation.Result do
   Aggregated result of validating a CVE record.
   """
 
-  use Ash.Resource, data_layer: :embedded
+  use Ash.Resource, data_layer: :embedded, extensions: [AshGraphql.Resource]
+
+  graphql do
+    type :cve_validation_result
+  end
 
   attributes do
     attribute :valid, :boolean do

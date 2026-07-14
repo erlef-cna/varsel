@@ -35,7 +35,7 @@ defmodule CveManagement.CWE.Weakness do
     domain: CveManagement.CWE,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshOban]
+    extensions: [AshOban, AshGraphql.Resource]
 
   import Ash.Expr
 
@@ -44,7 +44,9 @@ defmodule CveManagement.CWE.Weakness do
   alias CveManagement.CWE.Weakness.OkResult
   alias CveManagement.CWE.WeaknessRelationship
 
-  @catalog_url "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip"
+  graphql do
+    type :weakness
+  end
 
   postgres do
     table "cwe_weaknesses"
@@ -76,6 +78,8 @@ defmodule CveManagement.CWE.Weakness do
       end
     end
   end
+
+  @catalog_url "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip"
 
   oban do
     scheduled_actions do

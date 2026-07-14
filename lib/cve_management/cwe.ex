@@ -4,7 +4,9 @@
 
 defmodule CveManagement.CWE do
   @moduledoc false
-  use Ash.Domain, otp_app: :cve_management, extensions: [AshAdmin.Domain, AshAi]
+  use Ash.Domain,
+    otp_app: :cve_management,
+    extensions: [AshAdmin.Domain, AshAi, AshGraphql.Domain]
 
   alias CveManagement.CWE.Weakness
 
@@ -23,6 +25,14 @@ defmodule CveManagement.CWE do
 
     tool :search_weaknesses, Weakness, :search do
       load [:related_weakness_relationships]
+    end
+  end
+
+  graphql do
+    queries do
+      list Weakness, :list_weaknesses, :read
+      get Weakness, :get_weakness, :get_by_cwe_id, identity: false
+      list Weakness, :search_weaknesses, :search
     end
   end
 

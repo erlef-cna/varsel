@@ -24,8 +24,16 @@ defmodule CveManagement.CVE.CveRecord.Validations.ValidCveRecord do
 
   @impl true
   def validate(changeset, _opts, _context) do
-    cve_json = Ash.Changeset.get_attribute(changeset, :cve_json)
+    case Ash.Changeset.get_attribute(changeset, :cve_json) do
+      # Leave missing JSON to the action's own presence checks. This also keeps
+      # authorization dry-runs (e.g. `Ash.can?` when MCP filters visible tools)
+      # from calling the external validators with no data.
+      nil -> :ok
+      cve_json -> validate_cve_json(cve_json)
+    end
+  end
 
+  defp validate_cve_json(cve_json) do
     case CveManagement.CVE.validate_cve_record!(cve_json) do
       %{valid: true} ->
         :ok

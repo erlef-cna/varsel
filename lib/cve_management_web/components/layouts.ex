@@ -198,6 +198,14 @@ defmodule CveManagementWeb.Layouts do
               Users
             </a>
           </li>
+          <li :if={@current_user}>
+            <a
+              href={~p"/settings/tokens"}
+              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
+            >
+              API Tokens
+            </a>
+          </li>
         </ul>
 
         <div class="ml-auto flex items-center gap-2">
@@ -231,6 +239,7 @@ defmodule CveManagementWeb.Layouts do
               <li><a href={~p"/common-weaknesses"}>Weaknesses</a></li>
               <li class="menu-title mt-1">Documentation</li>
               <li :for={{label, path} <- doc_links()}><a href={path}>{label}</a></li>
+              <li :if={@current_user}><a href={~p"/settings/tokens"}>API Tokens</a></li>
             </ul>
           </div>
         </div>

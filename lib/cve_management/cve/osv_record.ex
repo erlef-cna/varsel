@@ -42,7 +42,7 @@ defmodule CveManagement.CVE.OsvRecord do
     domain: CveManagement.CVE,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshOban]
+    extensions: [AshOban, AshGraphql.Resource]
 
   import Ash.Expr
 
@@ -52,6 +52,10 @@ defmodule CveManagement.CVE.OsvRecord do
   alias CveManagement.CVE.OsvConverter
 
   require Ash.Query
+
+  graphql do
+    type :osv_record
+  end
 
   postgres do
     table "osv_records"

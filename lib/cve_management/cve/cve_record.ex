@@ -82,7 +82,7 @@ defmodule CveManagement.CVE.CveRecord do
     domain: CveManagement.CVE,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource],
+    extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [CveManagement.CVE.OsvRecord.Notifier, Ash.Notifier.PubSub]
 
   import Ash.Expr
@@ -92,6 +92,10 @@ defmodule CveManagement.CVE.CveRecord do
   alias CveManagement.CVE.MitreCveApi
 
   require Ash.Query
+
+  graphql do
+    type :cve_record
+  end
 
   postgres do
     table "cve_records"

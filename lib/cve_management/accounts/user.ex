@@ -10,7 +10,11 @@ defmodule CveManagement.Accounts.User do
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
     notifiers: [Ash.Notifier.PubSub],
-    extensions: [AshAuthentication, AshPaperTrail.Resource]
+    extensions: [AshAuthentication, AshPaperTrail.Resource, AshGraphql.Resource]
+
+  graphql do
+    type :user
+  end
 
   authentication do
     add_ons do
@@ -33,6 +37,10 @@ defmodule CveManagement.Accounts.User do
         redirect_uri CveManagement.Secrets
         client_secret CveManagement.Secrets
         identity_resource CveManagement.Accounts.UserIdentity
+      end
+
+      api_key do
+        api_key_relationship :valid_api_keys
       end
     end
   end
@@ -58,6 +66,11 @@ defmodule CveManagement.Accounts.User do
       argument :subject, :string, allow_nil?: false
       get? true
       prepare AshAuthentication.Preparations.FilterBySubject
+    end
+
+    read :sign_in_with_api_key do
+      argument :api_key, :string, allow_nil?: false, sensitive?: true
+      prepare AshAuthentication.Strategy.ApiKey.SignInPreparation
     end
 
     create :register_with_github do
@@ -171,6 +184,12 @@ defmodule CveManagement.Accounts.User do
 
     create_timestamp :inserted_at
     update_timestamp :updated_at
+  end
+
+  relationships do
+    has_many :valid_api_keys, CveManagement.Accounts.ApiKey do
+      filter expr(valid)
+    end
   end
 
   identities do

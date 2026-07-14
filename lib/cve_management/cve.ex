@@ -6,7 +6,7 @@ defmodule CveManagement.CVE do
   @moduledoc false
   use Ash.Domain,
     otp_app: :cve_management,
-    extensions: [AshAdmin.Domain, AshAi, AshPaperTrail.Domain]
+    extensions: [AshAdmin.Domain, AshAi, AshGraphql.Domain, AshPaperTrail.Domain]
 
   alias CveManagement.CVE.CveRecord
   alias CveManagement.CVE.CveValidation
@@ -37,6 +37,52 @@ defmodule CveManagement.CVE do
     tool :validate_cve_record_schema, CveValidation, :validate_schema
     tool :validate_cve_record_cvelint, CveValidation, :validate_cvelint
     tool :validate_cve_record_hex_packages, CveValidation, :validate_hex_packages
+
+    tool :list_osv_records, OsvRecord, :read
+    tool :get_osv_record, OsvRecord, :get
+
+    # POC-only lifecycle tooling (policy-gated; requires an API key actor).
+    tool :list_all_cves, CveRecord, :list_all do
+      load [:cve_id, :title, :date_published, :date_updated, :purls]
+    end
+
+    tool :available_cve_ids, CveRecord, :available do
+      load [:cve_id]
+    end
+
+    tool :assign_cve, CveRecord, :assign
+    tool :update_cve, CveRecord, :update
+    tool :request_publish_cve, CveRecord, :request_publish
+    tool :reject_cve, CveRecord, :reject
+  end
+
+  graphql do
+    queries do
+      list CveRecord, :list_published_cves, :list_published
+      get CveRecord, :get_published_cve, :get_published, identity: false
+      list CveRecord, :search_cves, :search
+      list CveRecord, :list_cves_by_purl, :list_by_purl
+
+      # POC-only (policy-gated; anonymous callers see published records only).
+      list CveRecord, :list_all_cves, :list_all
+      list CveRecord, :available_cve_ids, :available
+
+      list OsvRecord, :list_osv_records, :read
+      read_one OsvRecord, :get_osv_record, :get
+
+      action CveValidation, :validate_cve, :validate
+      action CveValidation, :validate_cve_schema, :validate_schema
+      action CveValidation, :validate_cve_cvelint, :validate_cvelint
+      action CveValidation, :validate_cve_hex_packages, :validate_hex_packages
+    end
+
+    mutations do
+      # POC-only lifecycle transitions (policy-gated).
+      update CveRecord, :assign_cve, :assign
+      update CveRecord, :update_cve, :update
+      update CveRecord, :request_publish_cve, :request_publish
+      update CveRecord, :reject_cve, :reject
+    end
   end
 
   paper_trail do
