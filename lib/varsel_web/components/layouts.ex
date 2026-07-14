@@ -192,6 +192,14 @@ defmodule VarselWeb.Layouts do
           </li>
           <li :if={poc?(@current_user)}>
             <a
+              href={~p"/reports"}
+              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
+            >
+              Reports
+            </a>
+          </li>
+          <li :if={poc?(@current_user)}>
+            <a
               href={~p"/cves/manage"}
               class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
             >

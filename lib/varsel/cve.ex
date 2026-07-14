@@ -74,6 +74,9 @@ defmodule Varsel.CVE do
       list OsvRecord, :list_osv_records, :read
       read_one OsvRecord, :get_osv_record, :get
 
+      # POC-only report triage (policy-gated).
+      list VulnerabilityReport, :list_vulnerability_reports, :list_reports
+
       action CveValidation, :validate_cve, :validate
       action CveValidation, :validate_cve_schema, :validate_schema
       action CveValidation, :validate_cve_cvelint, :validate_cvelint
@@ -83,6 +86,12 @@ defmodule Varsel.CVE do
     mutations do
       # Public intake: anyone (including anonymous callers) may submit a report.
       create VulnerabilityReport, :submit_vulnerability_report, :submit
+
+      # POC-only report triage (policy-gated). Accepting without a case_id
+      # opens a fresh draft case titled from the report summary.
+      update VulnerabilityReport, :triage_vulnerability_report, :triage
+      update VulnerabilityReport, :accept_vulnerability_report, :accept
+      update VulnerabilityReport, :reject_vulnerability_report, :reject
 
       # POC-only lifecycle transitions (policy-gated).
       update CveRecord, :assign_cve, :assign

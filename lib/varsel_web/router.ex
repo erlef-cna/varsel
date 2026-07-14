@@ -86,6 +86,7 @@ defmodule VarselWeb.Router do
       live "/users", UserManagementLive, :index
       live "/cves/manage", VarselLive, :index
       live "/cves/manage/:id", VarselEditLive, :edit
+      live "/reports", ReportTriageLive, :index
     end
 
     # Any logged-in user may report a vulnerability and manage their own tokens.
