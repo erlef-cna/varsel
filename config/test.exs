@@ -38,6 +38,7 @@ config :cve_management, CveManagementWeb.Endpoint,
   server: false
 
 config :cve_management, Oban, testing: :manual
+config :cve_management, :cna_email_from, "cna@erlef.org"
 
 config :cve_management,
   token_signing_secret: "6efZN/F7dwuoM9KP4oUWol4pbbSwNQ8J",

@@ -76,9 +76,10 @@ defmodule CveManagementWeb.Router do
       live "/cves/manage/:id", CveManagementEditLive, :edit
     end
 
-    # Any logged-in user manages their own API tokens.
+    # Any logged-in user may report a vulnerability and manage their own tokens.
     ash_authentication_live_session :authenticated,
       on_mount: [{CveManagementWeb.LiveUserAuth, :live_user_required}] do
+      live "/report", VulnerabilityReportLive, :new
       live "/settings/tokens", ApiKeySettingsLive, :index
     end
 
@@ -141,6 +142,7 @@ defmodule CveManagementWeb.Router do
         :validate_cve_record_hex_packages,
         :list_osv_records,
         :get_osv_record,
+        :submit_vulnerability_report,
         :list_all_cves,
         :available_cve_ids,
         :assign_cve,

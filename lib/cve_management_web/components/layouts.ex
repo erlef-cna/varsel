@@ -286,6 +286,7 @@ defmodule CveManagementWeb.Layouts do
         <div>
           <p class="eef-eyebrow mb-3">More</p>
           <ul class="space-y-2">
+            <li><a href={~p"/report"}>Report a Vulnerability</a></li>
             <li><a href={~p"/contact"}>Contact</a></li>
             <li><a href={~p"/security-policy"}>Security Policy</a></li>
             <li><a href={~p"/data-licensing"}>Data Licensing</a></li>

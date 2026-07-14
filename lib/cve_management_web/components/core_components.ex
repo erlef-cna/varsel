@@ -164,7 +164,6 @@ defmodule CveManagementWeb.CoreComponents do
   """
   attr :id, :any, default: nil
   attr :name, :any
-  attr :label, :string, default: nil
   attr :value, :any
 
   attr :type, :string,
@@ -184,6 +183,8 @@ defmodule CveManagementWeb.CoreComponents do
 
   attr :rest, :global, include: ~w(accept autocomplete capture cols disabled form list max maxlength min minlength
                 multiple pattern placeholder readonly required rows size step)
+
+  slot :label, doc: "the field label; may contain rich content such as links"
 
   def input(%{field: %FormField{} = field} = assigns) do
     errors = if Phoenix.Component.used_input?(field), do: field.errors, else: []
@@ -210,7 +211,7 @@ defmodule CveManagementWeb.CoreComponents do
 
     ~H"""
     <div class="fieldset mb-2">
-      <label for={@id}>
+      <label for={@id} class="flex items-center gap-2">
         <input
           type="hidden"
           name={@name}
@@ -218,17 +219,16 @@ defmodule CveManagementWeb.CoreComponents do
           disabled={@rest[:disabled]}
           form={@rest[:form]}
         />
-        <span class="label">
-          <input
-            type="checkbox"
-            id={@id}
-            name={@name}
-            value="true"
-            checked={@checked}
-            class={@class || "checkbox checkbox-sm"}
-            {@rest}
-          />{@label}
-        </span>
+        <input
+          type="checkbox"
+          id={@id}
+          name={@name}
+          value="true"
+          checked={@checked}
+          class={@class || "checkbox checkbox-sm"}
+          {@rest}
+        />
+        <span :if={@label != []}>{render_slot(@label)}</span>
       </label>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
@@ -239,7 +239,7 @@ defmodule CveManagementWeb.CoreComponents do
     ~H"""
     <div class="fieldset mb-2">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label != []} class="label mb-1">{render_slot(@label)}</span>
         <select
           id={@id}
           name={@name}
@@ -260,7 +260,7 @@ defmodule CveManagementWeb.CoreComponents do
     ~H"""
     <div class="fieldset mb-2">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label != []} class="label mb-1">{render_slot(@label)}</span>
         <textarea
           id={@id}
           name={@name}
@@ -281,7 +281,7 @@ defmodule CveManagementWeb.CoreComponents do
     ~H"""
     <div class="fieldset mb-2">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label != []} class="label mb-1">{render_slot(@label)}</span>
         <input
           type={@type}
           name={@name}

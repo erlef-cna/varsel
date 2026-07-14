@@ -39,6 +39,11 @@ if config_env() != :test do
            )}
     ]
 
+  # "From" address for CNA notification emails (e.g. new vulnerability reports).
+  config :cve_management,
+         :cna_email_from,
+         System.get_env("CNA_EMAIL_FROM", "cna@erlef.org")
+
   config :cve_management,
     mitre_cve_api: [
       base_url:
@@ -91,32 +96,6 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
-  config :cve_management, CveManagement.Repo,
-    # ssl: true,
-    url: database_url,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
-    # For machines with several cores, consider starting multiple pools of `pool_size`
-    # pool_count: 4,
-    socket_options: maybe_ipv6
-
-  config :cve_management, CveManagementWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
-    http: [
-      # Enable IPv6 and bind on all interfaces.
-      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-      # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
-      # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-      ip: {0, 0, 0, 0, 0, 0, 0, 0}
-    ],
-    secret_key_base: secret_key_base
-
-  config :cve_management, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
-
-  config :cve_management,
-    token_signing_secret:
-      System.get_env("TOKEN_SIGNING_SECRET") ||
-        raise("Missing environment variable `TOKEN_SIGNING_SECRET`!")
-
   # ## SSL Support
   #
   # To get SSL working, you will need to add the `https` key
@@ -149,21 +128,47 @@ if config_env() == :prod do
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :cve_management, CveManagement.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
+  # Deliver mail over SMTP in production (adapter needs :gen_smtp).
+  config :cve_management, CveManagement.Mailer,
+    adapter: Swoosh.Adapters.SMTP,
+    relay:
+      System.get_env("SMTP_RELAY_HOST") ||
+        raise("Missing environment variable `SMTP_RELAY_HOST`!"),
+    ssl: true,
+    auth: :always,
+    port: String.to_integer(System.get_env("SMTP_PORT") || "465"),
+    retries: 2,
+    no_mx_lookups: false,
+    username:
+      System.get_env("SMTP_USER") ||
+        raise("Missing environment variable `SMTP_USER`!"),
+    password:
+      System.get_env("SMTP_PASSWORD") ||
+        raise("Missing environment variable `SMTP_PASSWORD`!")
+
+  config :cve_management, CveManagement.Repo,
+    # ssl: true,
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+    # For machines with several cores, consider starting multiple pools of `pool_size`
+    # pool_count: 4,
+    socket_options: maybe_ipv6
+
+  config :cve_management, CveManagementWeb.Endpoint,
+    url: [host: host, port: 443, scheme: "https"],
+    http: [
+      # Enable IPv6 and bind on all interfaces.
+      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
+      # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
+      # for details about using IPv6 vs IPv4 and loopback vs public addresses.
+      ip: {0, 0, 0, 0, 0, 0, 0, 0}
+    ],
+    secret_key_base: secret_key_base
+
+  config :cve_management, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+
+  config :cve_management,
+    token_signing_secret:
+      System.get_env("TOKEN_SIGNING_SECRET") ||
+        raise("Missing environment variable `TOKEN_SIGNING_SECRET`!")
 end

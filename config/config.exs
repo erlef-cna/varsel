@@ -63,6 +63,10 @@ config :cve_management, Oban,
   repo: CveManagement.Repo,
   plugins: [{Oban.Plugins.Cron, []}]
 
+# The "from" address used for CNA notification emails (e.g. new vulnerability
+# report submissions sent to POCs).
+config :cve_management, :cna_email_from, "cna@erlef.org"
+
 config :cve_management,
   cve_pool_min_size: 5,
   ecto_repos: [CveManagement.Repo],

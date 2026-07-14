@@ -14,6 +14,7 @@ defmodule CveManagementWeb.ApiKeySettingsLive do
   use CveManagementWeb, :live_view
 
   alias CveManagement.Accounts
+  alias CveManagement.Accounts.ApiKey
 
   @expiry_presets [
     {"30 days", "30"},
@@ -26,29 +27,40 @@ defmodule CveManagementWeb.ApiKeySettingsLive do
   def mount(_params, _session, socket) do
     socket =
       socket
-      |> assign(page_title: "API Tokens", expiry_presets: @expiry_presets, created_key: nil)
+      |> assign(
+        page_title: "API Tokens",
+        expiry_presets: @expiry_presets,
+        created_key: nil,
+        expiry: "30"
+      )
+      |> assign_form()
       |> assign_api_keys()
 
     {:ok, socket}
   end
 
   @impl Phoenix.LiveView
-  def handle_event("create", %{"name" => name, "expiry" => expiry}, socket) do
-    actor = socket.assigns.current_user
+  def handle_event("validate", %{"form" => params} = raw, socket) do
+    socket = assign(socket, expiry: raw["expiry"] || socket.assigns.expiry)
+    {:noreply, assign(socket, form: AshPhoenix.Form.validate(socket.assigns.form, params))}
+  end
 
-    socket =
-      case Accounts.create_api_key(%{name: name, expires_at: expires_at(expiry)}, actor: actor) do
-        {:ok, api_key} ->
-          socket
-          |> assign(created_key: {api_key, api_key.__metadata__.plaintext_api_key})
-          |> assign_api_keys()
-          |> put_flash(:info, "Token #{api_key.name} created.")
+  @impl Phoenix.LiveView
+  def handle_event("create", %{"form" => params} = raw, socket) do
+    params = Map.put(params, "expires_at", expires_at(raw["expiry"]))
 
-        {:error, error} ->
-          put_flash(socket, :error, "Could not create token: #{errors_to_string(error)}")
-      end
+    case AshPhoenix.Form.submit(socket.assigns.form, params: params) do
+      {:ok, api_key} ->
+        {:noreply,
+         socket
+         |> assign(created_key: {api_key, api_key.__metadata__.plaintext_api_key}, expiry: "30")
+         |> assign_form()
+         |> assign_api_keys()
+         |> put_flash(:info, "Token #{api_key.name} created.")}
 
-    {:noreply, socket}
+      {:error, form} ->
+        {:noreply, assign(socket, form: form)}
+    end
   end
 
   def handle_event("revoke", %{"id" => id}, socket) do
@@ -62,11 +74,20 @@ defmodule CveManagementWeb.ApiKeySettingsLive do
           |> assign_api_keys()
           |> put_flash(:info, "Token #{api_key.name} revoked.")
 
-        {:error, error} ->
-          put_flash(socket, :error, "Could not revoke token: #{errors_to_string(error)}")
+        {:error, _error} ->
+          put_flash(socket, :error, "Could not revoke token #{api_key.name}.")
       end
 
     {:noreply, socket}
+  end
+
+  defp assign_form(socket) do
+    form =
+      ApiKey
+      |> AshPhoenix.Form.for_create(:create, as: "form", actor: socket.assigns.current_user)
+      |> to_form()
+
+    assign(socket, :form, form)
   end
 
   defp assign_api_keys(socket) do
@@ -82,13 +103,6 @@ defmodule CveManagementWeb.ApiKeySettingsLive do
 
   defp expires_at(days) do
     DateTime.add(DateTime.utc_now(), String.to_integer(days), :day)
-  end
-
-  defp errors_to_string(error) do
-    error
-    |> Ash.Error.to_error_class()
-    |> Map.get(:errors, [])
-    |> Enum.map_join("\n", &Exception.message/1)
   end
 
   defp format_date(nil), do: "never"
@@ -119,25 +133,32 @@ defmodule CveManagementWeb.ApiKeySettingsLive do
         </div>
       </div>
 
-      <form phx-submit="create" class="flex flex-wrap items-end gap-3 mb-8">
-        <label class="fieldset">
-          <span class="label mb-1">Name</span>
-          <input
-            type="text"
-            name="name"
-            required
-            placeholder="e.g. CI pipeline"
-            class="input input-bordered input-sm w-56"
-          />
-        </label>
+      <.form
+        for={@form}
+        id="api-key-form"
+        phx-submit="create"
+        phx-change="validate"
+        class="flex flex-wrap items-end gap-3 mb-8"
+      >
+        <.input
+          field={@form[:name]}
+          type="text"
+          required
+          placeholder="e.g. CI pipeline"
+          class="input input-bordered input-sm w-56"
+        >
+          <:label>Name</:label>
+        </.input>
         <label class="fieldset">
           <span class="label mb-1">Expires</span>
           <select name="expiry" class="select select-bordered select-sm">
-            <option :for={{label, value} <- @expiry_presets} value={value}>{label}</option>
+            <option :for={{label, value} <- @expiry_presets} value={value} selected={value == @expiry}>
+              {label}
+            </option>
           </select>
         </label>
         <button type="submit" class="btn btn-primary btn-sm">Create token</button>
-      </form>
+      </.form>
 
       <div class="overflow-x-auto">
         <table class="table table-zebra">

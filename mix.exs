@@ -77,6 +77,7 @@ defmodule CveManagement.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:ex_json_schema, "~> 0.10"},
+      {:gen_smtp, "~> 1.2"},
       {:gettext, "~> 1.0"},
       {:heroicons,
        github: "tailwindlabs/heroicons", tag: "v2.2.0", sparse: "optimized", app: false, compile: false, depth: 1},

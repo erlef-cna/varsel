@@ -28,7 +28,10 @@ defmodule CveManagementWeb.ApiKeySettingsLiveTest do
 
     html =
       lv
-      |> form("form[phx-submit=create]", %{"name" => "CI pipeline", "expiry" => "never"})
+      |> form("form[phx-submit=create]", %{
+        "form" => %{"name" => "CI pipeline"},
+        "expiry" => "never"
+      })
       |> render_submit()
 
     assert html =~ "CI pipeline"

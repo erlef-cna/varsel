@@ -11,6 +11,7 @@ defmodule CveManagement.CVE do
   alias CveManagement.CVE.CveRecord
   alias CveManagement.CVE.CveValidation
   alias CveManagement.CVE.OsvRecord
+  alias CveManagement.CVE.VulnerabilityReport
 
   admin do
     show? true
@@ -40,6 +41,9 @@ defmodule CveManagement.CVE do
 
     tool :list_osv_records, OsvRecord, :read
     tool :get_osv_record, OsvRecord, :get
+
+    # Public intake: anyone (including anonymous callers) may submit a report.
+    tool :submit_vulnerability_report, VulnerabilityReport, :submit
 
     # POC-only lifecycle tooling (policy-gated; requires an API key actor).
     tool :list_all_cves, CveRecord, :list_all do
@@ -77,6 +81,9 @@ defmodule CveManagement.CVE do
     end
 
     mutations do
+      # Public intake: anyone (including anonymous callers) may submit a report.
+      create VulnerabilityReport, :submit_vulnerability_report, :submit
+
       # POC-only lifecycle transitions (policy-gated).
       update CveRecord, :assign_cve, :assign
       update CveRecord, :update_cve, :update
@@ -112,6 +119,17 @@ defmodule CveManagement.CVE do
     resource OsvRecord do
       define :list_osv_feed, action: :list_feed
       define :get_osv_record, action: :get, args: [:osv_id]
+    end
+
+    resource VulnerabilityReport do
+      define :submit_vulnerability_report, action: :submit
+
+      # POC-only triage, used by the (future) report-management LiveView.
+      define :list_vulnerability_reports, action: :list_reports
+      define :get_vulnerability_report, action: :read, get_by: [:id]
+      define :triage_vulnerability_report, action: :triage
+      define :accept_vulnerability_report, action: :accept
+      define :reject_vulnerability_report, action: :reject
     end
   end
 end
