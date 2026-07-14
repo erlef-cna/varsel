@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule CveManagementWeb.ConnCase do
+defmodule VarselWeb.ConnCase do
   @moduledoc """
   This module defines the test case to be used by
   tests that require setting up a connection.
@@ -15,7 +15,7 @@ defmodule CveManagementWeb.ConnCase do
   we enable the SQL sandbox, so changes done to the database
   are reverted at the end of every test. If you are using
   PostgreSQL, you can even run database tests asynchronously
-  by setting `use CveManagementWeb.ConnCase, async: true`, although
+  by setting `use VarselWeb.ConnCase, async: true`, although
   this option is not recommended for other databases.
   """
 
@@ -23,20 +23,21 @@ defmodule CveManagementWeb.ConnCase do
 
   using do
     quote do
-      use CveManagementWeb, :verified_routes
+      use VarselWeb, :verified_routes
 
-      import CveManagementWeb.ConnCase
       import Phoenix.ConnTest
       import Plug.Conn
+      import VarselWeb.ConnCase
+
       # The default endpoint for testing
-      @endpoint CveManagementWeb.Endpoint
+      @endpoint VarselWeb.Endpoint
 
       # Import conveniences for testing with connections
     end
   end
 
   setup tags do
-    CveManagement.DataCase.setup_sandbox(tags)
+    Varsel.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 end

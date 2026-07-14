@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule CveManagement.Test.HexHTTPStub do
+defmodule Varsel.Test.HexHTTPStub do
   @moduledoc """
   `:hex_http` adapter stub for tests.
 
@@ -10,8 +10,8 @@ defmodule CveManagement.Test.HexHTTPStub do
   `:hex_stub_packages` application env, which is either a list of names
   (packages without releases) or a map of name to released versions:
 
-      Application.put_env(:cve_management, :hex_stub_packages, ["plug"])
-      Application.put_env(:cve_management, :hex_stub_packages, %{"plug" => ["1.0.0", "1.1.0"]})
+      Application.put_env(:varsel, :hex_stub_packages, ["plug"])
+      Application.put_env(:varsel, :hex_stub_packages, %{"plug" => ["1.0.0", "1.1.0"]})
   """
 
   @behaviour :hex_http
@@ -41,7 +41,7 @@ defmodule CveManagement.Test.HexHTTPStub do
   end
 
   defp stubbed_versions(name) do
-    case Application.get_env(:cve_management, :hex_stub_packages, []) do
+    case Application.get_env(:varsel, :hex_stub_packages, []) do
       %{} = packages -> Map.fetch(packages, name)
       packages when is_list(packages) -> if name in packages, do: {:ok, []}, else: :error
     end

@@ -1,4 +1,4 @@
-defmodule CveManagement.Repo.Migrations.InitialSchema do
+defmodule Varsel.Repo.Migrations.InitialSchema do
   @moduledoc """
   Updates resources based on their most recent snapshots.
 

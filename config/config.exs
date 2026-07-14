@@ -23,65 +23,16 @@ config :ash,
   bulk_actions_default_to_errors?: true,
   transaction_rollback_on_error?: true,
   redact_sensitive_values_in_errors?: true,
-  known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec, CveManagement.Types.CVSS]
+  known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec, Varsel.Types.CVSS]
 
 config :ash_graphql, authorize_update_destroy_with_error?: true, json_type: :json
 
 config :ash_oban, pro?: false
 
-# Configure the mailer
-#
-# By default it uses the "Local" adapter which stores the emails
-# locally. You can see the emails in your browser, at "/dev/mailbox".
-#
-# For production it's recommended to configure a different adapter
-# at the `config/runtime.exs`.
-config :cve_management, CveManagement.Mailer, adapter: Swoosh.Adapters.Local
-
-# Configure the endpoint
-config :cve_management, CveManagementWeb.Endpoint,
-  url: [host: "localhost"],
-  adapter: Bandit.PhoenixAdapter,
-  render_errors: [
-    formats: [html: CveManagementWeb.ErrorHTML, json: CveManagementWeb.ErrorJSON],
-    layout: false
-  ],
-  pubsub_server: CveManagement.PubSub,
-  live_view: [signing_salt: "zOuaRJlV"]
-
-config :cve_management, Oban,
-  engine: Oban.Engines.Basic,
-  notifier: Oban.Notifiers.Postgres,
-  queues: [
-    default: 10,
-    cve_publishing: 1,
-    cve_pool: 1,
-    cwe_sync: 1,
-    capec_sync: 1,
-    osv_sync: 1
-  ],
-  repo: CveManagement.Repo,
-  plugins: [{Oban.Plugins.Cron, []}]
-
-# The "from" address used for CNA notification emails (e.g. new vulnerability
-# report submissions sent to POCs).
-config :cve_management, :cna_email_from, "cna@erlef.org"
-
-config :cve_management,
-  cve_pool_min_size: 5,
-  ecto_repos: [CveManagement.Repo],
-  generators: [timestamp_type: :utc_datetime],
-  ash_domains: [
-    CveManagement.CAPEC,
-    CveManagement.CWE,
-    CveManagement.CVE,
-    CveManagement.Accounts
-  ]
-
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.25.4",
-  cve_management: [
+  varsel: [
     args:
       ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/* --alias:@=.),
     cd: Path.expand("../assets", __DIR__),
@@ -89,7 +40,7 @@ config :esbuild,
   ]
 
 # Resolve `file:` references in the vendored CVE record schema (priv/cve_schema)
-config :ex_json_schema, :remote_schema_resolver, {CveManagement.CVE.CveSchema, :resolve_ref}
+config :ex_json_schema, :remote_schema_resolver, {Varsel.CVE.CveSchema, :resolve_ref}
 
 # Configure Elixir's Logger
 config :logger, :default_formatter,
@@ -142,7 +93,7 @@ config :spark,
 # Configure tailwind (the version is required)
 config :tailwind,
   version: "4.1.12",
-  cve_management: [
+  varsel: [
     args: ~w(
       --input=assets/css/app.css
       --output=priv/static/assets/css/app.css
@@ -151,6 +102,55 @@ config :tailwind,
     # Import environment specific config. This must remain at the bottom
     # of this file so it overrides the configuration defined above.
     cd: Path.expand("..", __DIR__)
+  ]
+
+config :varsel, Oban,
+  engine: Oban.Engines.Basic,
+  notifier: Oban.Notifiers.Postgres,
+  queues: [
+    default: 10,
+    cve_publishing: 1,
+    cve_pool: 1,
+    cwe_sync: 1,
+    capec_sync: 1,
+    osv_sync: 1
+  ],
+  repo: Varsel.Repo,
+  plugins: [{Oban.Plugins.Cron, []}]
+
+# Configure the mailer
+#
+# By default it uses the "Local" adapter which stores the emails
+# locally. You can see the emails in your browser, at "/dev/mailbox".
+#
+# For production it's recommended to configure a different adapter
+# at the `config/runtime.exs`.
+config :varsel, Varsel.Mailer, adapter: Swoosh.Adapters.Local
+
+# Configure the endpoint
+config :varsel, VarselWeb.Endpoint,
+  url: [host: "localhost"],
+  adapter: Bandit.PhoenixAdapter,
+  render_errors: [
+    formats: [html: VarselWeb.ErrorHTML, json: VarselWeb.ErrorJSON],
+    layout: false
+  ],
+  pubsub_server: Varsel.PubSub,
+  live_view: [signing_salt: "zOuaRJlV"]
+
+# The "from" address used for CNA notification emails (e.g. new vulnerability
+# report submissions sent to POCs).
+config :varsel, :cna_email_from, "cna@erlef.org"
+
+config :varsel,
+  cve_pool_min_size: 5,
+  ecto_repos: [Varsel.Repo],
+  generators: [timestamp_type: :utc_datetime],
+  ash_domains: [
+    Varsel.CAPEC,
+    Varsel.CWE,
+    Varsel.CVE,
+    Varsel.Accounts
   ]
 
 import_config "#{config_env()}.exs"

@@ -1,4 +1,4 @@
-defmodule CveManagement.Repo.Migrations.AddOsvRecords do
+defmodule Varsel.Repo.Migrations.AddOsvRecords do
   @moduledoc """
   Updates resources based on their most recent snapshots.
 

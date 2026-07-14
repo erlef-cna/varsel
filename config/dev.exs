@@ -6,17 +6,38 @@ import Config
 
 config :ash, policies: [show_policy_breakdowns?: true]
 
+# Do not include metadata nor timestamps in development logs
+config :logger, :default_formatter, format: "[$level] $message\n"
+
+# Initialize plugs at runtime for faster development compilation
+config :phoenix, :plug_init_mode, :runtime
+
+# Set a higher stacktrace during development. Avoid configuring such
+# in production as building large stacktraces may be expensive.
+config :phoenix, :stacktrace_depth, 20
+
+config :phoenix_live_view,
+  # Include debug annotations and locations in rendered markup.
+  # Changing this configuration will require mix clean and a full recompile.
+  debug_heex_annotations: true,
+  debug_attributes: true,
+  # Enable helpful, but potentially expensive runtime checks
+  enable_expensive_runtime_checks: true
+
+# Disable swoosh api client as it is only required for production adapters.
+config :swoosh, :api_client, false
+
 # Configure your database
-config :cve_management, CveManagement.Repo,
+config :varsel, Varsel.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "cve_management_dev",
+  database: "varsel_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
 
-config :cve_management, CveManagement.Vault,
+config :varsel, Varsel.Vault,
   ciphers: [
     default:
       {Cloak.Ciphers.AES.GCM, tag: "AES.GCM.V1", key: Base.decode64!("bvVixCuGMqaxlGEZiUEAWISf5p8qlrmpT+EvGhAJi2A=")}
@@ -28,7 +49,7 @@ config :cve_management, CveManagement.Vault,
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
-config :cve_management, CveManagementWeb.Endpoint,
+config :varsel, VarselWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
   http: [ip: {127, 0, 0, 1}],
@@ -37,8 +58,8 @@ config :cve_management, CveManagementWeb.Endpoint,
   debug_errors: true,
   secret_key_base: "03e4VyftWvYtYjGop9u2I8Gqe+vY/d5WJxFc41MiX7SRqh7UVgNaE3aAt0Ta1QRS",
   watchers: [
-    esbuild: {Esbuild, :install_and_run, [:cve_management, ~w(--sourcemap=inline --watch)]},
-    tailwind: {Tailwind, :install_and_run, [:cve_management, ~w(--watch)]}
+    esbuild: {Esbuild, :install_and_run, [:varsel, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:varsel, ~w(--watch)]}
   ]
 
 # ## SSL Support
@@ -65,7 +86,7 @@ config :cve_management, CveManagementWeb.Endpoint,
 # different ports.
 
 # Reload browser tabs when matching files change.
-config :cve_management, CveManagementWeb.Endpoint,
+config :varsel, VarselWeb.Endpoint,
   live_reload: [
     web_console_logger: true,
     patterns: [
@@ -74,33 +95,12 @@ config :cve_management, CveManagementWeb.Endpoint,
       # Gettext translations
       ~r"priv/gettext/.*\.po$",
       # Router, Controllers, LiveViews and LiveComponents
-      ~r"lib/cve_management_web/router\.ex$",
-      ~r"lib/cve_management_web/(controllers|live|components)/.*\.(ex|heex)$"
+      ~r"lib/varsel_web/router\.ex$",
+      ~r"lib/varsel_web/(controllers|live|components)/.*\.(ex|heex)$"
     ]
   ]
 
 # Enable dev routes for dashboard and mailbox
-config :cve_management,
+config :varsel,
   dev_routes: true,
   token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F"
-
-# Do not include metadata nor timestamps in development logs
-config :logger, :default_formatter, format: "[$level] $message\n"
-
-# Initialize plugs at runtime for faster development compilation
-config :phoenix, :plug_init_mode, :runtime
-
-# Set a higher stacktrace during development. Avoid configuring such
-# in production as building large stacktraces may be expensive.
-config :phoenix, :stacktrace_depth, 20
-
-config :phoenix_live_view,
-  # Include debug annotations and locations in rendered markup.
-  # Changing this configuration will require mix clean and a full recompile.
-  debug_heex_annotations: true,
-  debug_attributes: true,
-  # Enable helpful, but potentially expensive runtime checks
-  enable_expensive_runtime_checks: true
-
-# Disable swoosh api client as it is only required for production adapters.
-config :swoosh, :api_client, false

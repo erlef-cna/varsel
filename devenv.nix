@@ -47,9 +47,9 @@ in
     listen_addresses = "*";
 
     initialDatabases = [
-      { name = "cve_management_dev";  user = "postgres"; pass = "postgres"; }
-      { name = "cve_management_test"; user = "postgres"; pass = "postgres"; }
-      { name = "cve_management_prod"; user = "postgres"; pass = "postgres"; }
+      { name = "varsel_dev";  user = "postgres"; pass = "postgres"; }
+      { name = "varsel_test"; user = "postgres"; pass = "postgres"; }
+      { name = "varsel_prod"; user = "postgres"; pass = "postgres"; }
     ];
 
     initialScript = ''

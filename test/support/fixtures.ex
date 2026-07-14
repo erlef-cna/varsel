@@ -2,14 +2,14 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule CveManagement.Fixtures do
+defmodule Varsel.Fixtures do
   @moduledoc """
   Shared test data helpers: users, API keys and CVE records.
   """
 
-  alias CveManagement.Accounts.ApiKey
-  alias CveManagement.Accounts.User
-  alias CveManagement.CVE.CveRecord
+  alias Varsel.Accounts.ApiKey
+  alias Varsel.Accounts.User
+  alias Varsel.CVE.CveRecord
 
   def register_user(handle, role \\ nil) do
     user =

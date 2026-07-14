@@ -50,7 +50,7 @@
     "global": null,
     "strategy": null
   },
-  "repo": "Elixir.CveManagement.Repo",
+  "repo": "Elixir.Varsel.Repo",
   "schema": null,
   "table": "cwe_metadata"
 }

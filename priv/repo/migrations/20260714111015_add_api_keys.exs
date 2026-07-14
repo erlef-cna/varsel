@@ -1,4 +1,4 @@
-defmodule CveManagement.Repo.Migrations.AddApiKeys do
+defmodule Varsel.Repo.Migrations.AddApiKeys do
   @moduledoc """
   Updates resources based on their most recent snapshots.
 

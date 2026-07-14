@@ -4,7 +4,23 @@ SPDX-FileCopyrightText: 2026 2026 Erlang Ecosystem Foundation
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# CveManagement
+# Varsel
+
+Varsel is the software behind the [Erlang Ecosystem Foundation](https://erlef.org/)'s
+CNA (CVE Numbering Authority): it manages the full lifecycle of CVE records for
+the BEAM ecosystem — from vulnerability reports through reservation, drafting
+and publication — and serves the public CVE, OSV, CWE and CAPEC data over HTML,
+JSON, GraphQL and MCP.
+
+## The name
+
+*Varsel* is the Danish, Norwegian and Swedish word for "warning" or "advance
+notice" — a vulnerability advisory in Norwegian is literally a
+*sårbarhetsvarsel*. It nods to the Scandinavian roots of Erlang, which is named
+after the Danish mathematician Agner Krarup Erlang and was created at Ericsson
+in Sweden.
+
+## Development
 
 To start your Phoenix server:
 

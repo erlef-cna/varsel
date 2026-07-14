@@ -1,4 +1,4 @@
-defmodule CveManagement.Repo.Migrations.AddOban do
+defmodule Varsel.Repo.Migrations.AddOban do
   use Ecto.Migration
 
   def up, do: Oban.Migration.up()

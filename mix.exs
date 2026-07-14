@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule CveManagement.MixProject do
+defmodule Varsel.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :cve_management,
+      app: :varsel,
       version: "0.1.0",
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -34,7 +34,7 @@ defmodule CveManagement.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {CveManagement.Application, []},
+      mod: {Varsel.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
   end
@@ -124,10 +124,10 @@ defmodule CveManagement.MixProject do
         "esbuild.install --if-missing",
         "cmd --cd assets npm install"
       ],
-      "assets.build": ["compile", "tailwind cve_management", "esbuild cve_management"],
+      "assets.build": ["compile", "tailwind varsel", "esbuild varsel"],
       "assets.deploy": [
-        "tailwind cve_management --minify",
-        "esbuild cve_management --minify",
+        "tailwind varsel --minify",
+        "esbuild varsel --minify",
         "phx.digest"
       ],
       precommit: [

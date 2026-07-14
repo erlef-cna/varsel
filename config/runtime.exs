@@ -16,18 +16,18 @@ import Config
 # If you use `mix release`, you need to explicitly enable the server
 # by passing the PHX_SERVER=true when you start it:
 #
-#     PHX_SERVER=true bin/cve_management start
+#     PHX_SERVER=true bin/varsel start
 #
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
 if System.get_env("PHX_SERVER") do
-  config :cve_management, CveManagementWeb.Endpoint, server: true
+  config :varsel, VarselWeb.Endpoint, server: true
 end
 
-config :cve_management, CveManagementWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+config :varsel, VarselWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 if config_env() != :test do
-  config :cve_management, CveManagement.Vault,
+  config :varsel, Varsel.Vault,
     ciphers: [
       default:
         {Cloak.Ciphers.AES.GCM,
@@ -40,11 +40,11 @@ if config_env() != :test do
     ]
 
   # "From" address for CNA notification emails (e.g. new vulnerability reports).
-  config :cve_management,
+  config :varsel,
          :cna_email_from,
          System.get_env("CNA_EMAIL_FROM", "cna@erlef.org")
 
-  config :cve_management,
+  config :varsel,
     mitre_cve_api: [
       base_url:
         System.get_env("MITRE_CVE_API_BASE_URL") ||
@@ -101,7 +101,7 @@ if config_env() == :prod do
   # To get SSL working, you will need to add the `https` key
   # to your endpoint configuration:
   #
-  #     config :cve_management, CveManagementWeb.Endpoint,
+  #     config :varsel, VarselWeb.Endpoint,
   #       https: [
   #         ...,
   #         port: 443,
@@ -123,13 +123,13 @@ if config_env() == :prod do
   # We also recommend setting `force_ssl` in your config/prod.exs,
   # ensuring no data is ever sent via http, always redirecting to https:
   #
-  #     config :cve_management, CveManagementWeb.Endpoint,
+  #     config :varsel, VarselWeb.Endpoint,
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
   # Deliver mail over SMTP in production (adapter needs :gen_smtp).
-  config :cve_management, CveManagement.Mailer,
+  config :varsel, Varsel.Mailer,
     adapter: Swoosh.Adapters.SMTP,
     relay:
       System.get_env("SMTP_RELAY_HOST") ||
@@ -146,7 +146,7 @@ if config_env() == :prod do
       System.get_env("SMTP_PASSWORD") ||
         raise("Missing environment variable `SMTP_PASSWORD`!")
 
-  config :cve_management, CveManagement.Repo,
+  config :varsel, Varsel.Repo,
     # ssl: true,
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
@@ -154,7 +154,7 @@ if config_env() == :prod do
     # pool_count: 4,
     socket_options: maybe_ipv6
 
-  config :cve_management, CveManagementWeb.Endpoint,
+  config :varsel, VarselWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [
       # Enable IPv6 and bind on all interfaces.
@@ -165,9 +165,9 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
-  config :cve_management, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+  config :varsel, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
-  config :cve_management,
+  config :varsel,
     token_signing_secret:
       System.get_env("TOKEN_SIGNING_SECRET") ||
         raise("Missing environment variable `TOKEN_SIGNING_SECRET`!")
