@@ -6,20 +6,18 @@ defmodule CveManagementWeb.AuthOverrides do
   @moduledoc false
   use AshAuthentication.Phoenix.Overrides
 
-  # configure your UI overrides here
+  alias AshAuthentication.Phoenix.Components
 
-  # First argument to `override` is the component name you are overriding.
-  # The body contains any number of configurations you wish to override
-  # Below are some examples
+  # No banner/logo on the auth pages.
+  override Components.SignIn do
+    set :show_banner, false
+  end
 
-  # For a complete reference, see https://hexdocs.pm/ash_authentication_phoenix/ui-overrides.html
+  override Components.Confirm do
+    set :show_banner, false
+  end
 
-  # override AshAuthentication.Phoenix.Components.Banner do
-  #   set :image_url, "https://media.giphy.com/media/g7GKcSzwQfugw/giphy.gif"
-  #   set :text_class, "bg-red-500"
-  # end
-
-  # override AshAuthentication.Phoenix.Components.SignIn do
-  #  set :show_banner, false
-  # end
+  override Components.Reset do
+    set :show_banner, false
+  end
 end

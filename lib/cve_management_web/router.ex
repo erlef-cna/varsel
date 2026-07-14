@@ -29,6 +29,18 @@ defmodule CveManagementWeb.Router do
     plug :load_from_session
   end
 
+  # Auth pages (sign in / register / reset / confirm) use a bare, centered
+  # layout with no site nav or footer.
+  pipeline :auth_browser do
+    plug :accepts, ["html"]
+    plug :fetch_session
+    plug :fetch_live_flash
+    plug :put_root_layout, html: {CveManagementWeb.Layouts, :root_auth}
+    plug :protect_from_forgery
+    plug :put_secure_browser_headers
+    plug :load_from_session
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
     plug ApiKeyAuth
@@ -82,6 +94,11 @@ defmodule CveManagementWeb.Router do
       live "/report", VulnerabilityReportLive, :new
       live "/settings/tokens", ApiKeySettingsLive, :index
     end
+  end
+
+  # Authentication pages — bare, centered layout (no site nav/footer).
+  scope "/", CveManagementWeb do
+    pipe_through :auth_browser
 
     auth_routes AuthController, User, path: "/auth"
     sign_out_route AuthController
