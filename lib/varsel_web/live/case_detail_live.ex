@@ -67,7 +67,7 @@ defmodule VarselWeb.CaseDetailLive do
 
         {:ok,
          socket
-         |> assign(case_id: id, child_form: nil, preview: nil, users: nil)
+         |> assign(case_id: id, child_form: nil, preview: nil, users: nil, catalog_options: nil)
          |> assign_case(case_record)}
 
       {:error, _error} ->
@@ -216,7 +216,10 @@ defmodule VarselWeb.CaseDetailLive do
       |> Map.put("case_id", socket.assigns.case_record.id)
       |> put_append_position(type, socket.assigns.case_record)
 
-    {:noreply, assign(socket, child_form: %{form: form, type: type, title: "Add #{title}", parent: parent})}
+    {:noreply,
+     socket
+     |> ensure_catalog_options(type)
+     |> assign(child_form: %{form: form, type: type, title: "Add #{title}", parent: parent})}
   end
 
   def handle_event("edit_child", %{"type" => type, "id" => id}, socket) do
@@ -432,7 +435,11 @@ defmodule VarselWeb.CaseDetailLive do
 
   # Splits comma/newline separated list inputs and merges the parent ids.
   defp normalize_child_params(type, params, parent) do
-    params = params |> Map.merge(parent) |> merge_reference_tags(type)
+    params =
+      params
+      |> Map.merge(parent)
+      |> merge_reference_tags(type)
+      |> parse_classification_id(type)
 
     Enum.reduce(Map.get(@list_params, type, []), params, fn key, params ->
       case params[key] do
@@ -443,6 +450,22 @@ defmodule VarselWeb.CaseDetailLive do
           params
       end
     end)
+  end
+
+  # The classification inputs autocomplete to "CWE-613 Insufficient Session
+  # Expiration"-style datalist values; extract the numeric id (bare numbers
+  # keep working too).
+  defp parse_classification_id(params, "weakness"), do: extract_numeric_id(params, "cwe_id")
+  defp parse_classification_id(params, "impact"), do: extract_numeric_id(params, "capec_id")
+  defp parse_classification_id(params, _type), do: params
+
+  defp extract_numeric_id(params, key) do
+    with value when is_binary(value) <- params[key],
+         [digits] <- Regex.run(~r/\d+/, value) do
+      Map.put(params, key, digits)
+    else
+      _no_number -> params
+    end
   end
 
   # Reference tags arrive as a checkbox list (with an empty sentinel) plus a
@@ -606,7 +629,15 @@ defmodule VarselWeb.CaseDetailLive do
             can_edit={can_edit?(@case_record, @current_user)}
           >
             <:row :let={weakness}>
-              <span class="font-mono">CWE-{weakness.cwe_id}</span> {weakness.weakness.name}
+              <a
+                href={"https://cwe.mitre.org/data/definitions/#{weakness.cwe_id}.html"}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="link font-mono"
+              >
+                CWE-{weakness.cwe_id}
+              </a>
+              {weakness.weakness.name}
             </:row>
           </.rows_section>
           <.rows_section
@@ -618,7 +649,15 @@ defmodule VarselWeb.CaseDetailLive do
             can_edit={can_edit?(@case_record, @current_user)}
           >
             <:row :let={impact}>
-              <span class="font-mono">CAPEC-{impact.capec_id}</span> {impact.attack_pattern.name}
+              <a
+                href={"https://capec.mitre.org/data/definitions/#{impact.capec_id}.html"}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="link font-mono"
+              >
+                CAPEC-{impact.capec_id}
+              </a>
+              {impact.attack_pattern.name}
             </:row>
           </.rows_section>
         </div>
@@ -644,7 +683,7 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
       </div>
 
-      <.child_modal :if={@child_form} child_form={@child_form} />
+      <.child_modal :if={@child_form} child_form={@child_form} catalog_options={@catalog_options} />
     </div>
     """
   end
@@ -1322,7 +1361,11 @@ defmodule VarselWeb.CaseDetailLive do
           phx-change="validate_child"
           phx-submit="submit_child"
         >
-          <.child_fields type={@child_form.type} form={@child_form.form} />
+          <.child_fields
+            type={@child_form.type}
+            form={@child_form.form}
+            catalog_options={@catalog_options}
+          />
 
           <div class="modal-action">
             <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_child">Cancel</button>
@@ -1482,17 +1525,35 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp child_fields(%{type: "weakness"} = assigns) do
     ~H"""
-    <.input field={@form[:cwe_id]} type="number" placeholder="613">
-      <:label>CWE number</:label>
+    <.input
+      field={@form[:cwe_id]}
+      type="text"
+      list="cwe-options"
+      placeholder="Type a CWE number or name…"
+      autocomplete="off"
+    >
+      <:label>CWE</:label>
     </.input>
+    <datalist id="cwe-options">
+      <option :for={{id, name} <- @catalog_options.cwe} value={"CWE-#{id} #{name}"}></option>
+    </datalist>
     """
   end
 
   defp child_fields(%{type: "impact"} = assigns) do
     ~H"""
-    <.input field={@form[:capec_id]} type="number" placeholder="593">
-      <:label>CAPEC number</:label>
+    <.input
+      field={@form[:capec_id]}
+      type="text"
+      list="capec-options"
+      placeholder="Type a CAPEC number or name…"
+      autocomplete="off"
+    >
+      <:label>CAPEC</:label>
     </.input>
+    <datalist id="capec-options">
+      <option :for={{id, name} <- @catalog_options.capec} value={"CAPEC-#{id} #{name}"}></option>
+    </datalist>
     """
   end
 
@@ -1504,6 +1565,32 @@ defmodule VarselWeb.CaseDetailLive do
       value -> value
     end
   end
+
+  # The CWE/CAPEC catalogs back the classification datalists; load them once
+  # per LiveView, only when a weakness/impact modal first opens.
+  defp ensure_catalog_options(socket, type) when type in ["weakness", "impact"] do
+    if socket.assigns.catalog_options do
+      socket
+    else
+      weaknesses =
+        Varsel.CWE.Weakness
+        |> Ash.Query.select([:cwe_id, :name])
+        |> Ash.Query.sort(:cwe_id)
+        |> Ash.read!(authorize?: false)
+        |> Enum.map(&{&1.cwe_id, &1.name})
+
+      attack_patterns =
+        Varsel.CAPEC.AttackPattern
+        |> Ash.Query.select([:capec_id, :name])
+        |> Ash.Query.sort(:capec_id)
+        |> Ash.read!(authorize?: false)
+        |> Enum.map(&{&1.capec_id, &1.name})
+
+      assign(socket, catalog_options: %{cwe: weaknesses, capec: attack_patterns})
+    end
+  end
+
+  defp ensure_catalog_options(socket, _type), do: socket
 
   # Pushed by the DragSort hook: rewrite positions to match the new id order.
   defp reorder_rows(socket, rows, edit_fun, ids) do

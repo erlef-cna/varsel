@@ -299,6 +299,47 @@ defmodule VarselWeb.CaseLiveTest do
       assert second_at < first_at
     end
 
+    test "CWE/CAPEC rows link to the official pages and the modal autocompletes", %{
+      conn: conn,
+      poc: poc
+    } do
+      Fixtures.seed_weakness(613, "Insufficient Session Expiration")
+      Fixtures.seed_weakness(79, "Improper Neutralization of Input During Web Page Generation")
+      Fixtures.seed_attack_pattern(593, "Session Hijacking")
+
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # The add modal offers the catalog as a datalist…
+      lv |> element("button[phx-value-type=weakness]", "Add CWE") |> render_click()
+      html = render(lv)
+      assert html =~ ~s(<datalist id="cwe-options">)
+      assert html =~ "CWE-79 Improper Neutralization"
+
+      # …and an autocompleted "CWE-<id> <name>" value resolves to the id.
+      lv
+      |> form("#child-form", %{
+        "child" => %{"cwe_id" => "CWE-613 Insufficient Session Expiration"}
+      })
+      |> render_submit()
+
+      lv |> element("button[phx-value-type=impact]", "Add CAPEC") |> render_click()
+
+      lv
+      |> form("#child-form", %{"child" => %{"capec_id" => "593"}})
+      |> render_submit()
+
+      case_record = Ash.load!(case_record, [:weaknesses, :impacts], authorize?: false)
+      assert [%{cwe_id: 613}] = case_record.weaknesses
+      assert [%{capec_id: 593}] = case_record.impacts
+
+      # The rows link to the official definitions.
+      html = render(lv)
+      assert html =~ ~s(href="https://cwe.mitre.org/data/definitions/613.html")
+      assert html =~ ~s(href="https://capec.mitre.org/data/definitions/593.html")
+    end
+
     test "credits append without a position field and reorder by drag & drop", %{
       conn: conn,
       poc: poc
