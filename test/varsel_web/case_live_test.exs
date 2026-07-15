@@ -111,6 +111,58 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Uses `zip:unzip/1` **unsafely**."
     end
 
+    test "the CVSS calculator scores toggle selections and persists the vector", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "CVSS case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # First toggle starts from the all-benign baseline (0.0 NONE), then
+      # raising vulnerable-system confidentiality to High yields a real score.
+      html =
+        lv
+        |> element(~s{#case-cvss-v4 button[phx-value-code="VC"][phx-value-value="H"]})
+        |> render_click()
+
+      assert html =~ "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+      assert html =~ "8.7"
+      assert html =~ "high"
+
+      # Submitting the form persists the built vector through the CVSS type.
+      lv
+      |> form("#case-content-form")
+      |> render_submit()
+
+      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+
+      assert case_record.cvss_v4.vector ==
+               "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+
+      assert case_record.cvss_v4.score == 8.7
+      assert case_record.cvss_v4.severity == :high
+
+      # A pasted vector updates the toggles: physical attack vector selected.
+      lv
+      |> element(~s{#case-cvss-v4 input[name="form[cvss_v4]"]})
+      |> render_keyup(%{
+        "value" => "CVSS:4.0/AV:P/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+      })
+
+      assert lv
+             |> element(~s{#case-cvss-v4 button[phx-value-code="AV"][phx-value-value="P"]})
+             |> render() =~ "btn-primary"
+
+      # Garbage flags an invalid vector instead of scoring.
+      html =
+        lv
+        |> element(~s{#case-cvss-v4 input[name="form[cvss_v4]"]})
+        |> render_keyup(%{"value" => "CVSS:4.0/bogus"})
+
+      assert html =~ "invalid vector"
+    end
+
     test "walks the review lifecycle", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 

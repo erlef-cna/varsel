@@ -715,23 +715,19 @@ defmodule VarselWeb.CaseDetailLive do
           label="Solutions (Markdown, optional)"
           rows={3}
         />
-        <div class="grid sm:grid-cols-2 gap-x-4">
-          <.input
-            field={@content_form[:cvss_v4]}
-            type="text"
-            placeholder="CVSS:4.0/AV:N/…"
-            class="w-full input font-mono"
-          >
-            <:label>CVSS v4.0 vector</:label>
-          </.input>
-          <.input
-            field={@content_form[:discovery]}
-            type="select"
-            options={enum_options(Varsel.Cases.Case.Discovery)}
-          >
-            <:label>Discovery</:label>
-          </.input>
-        </div>
+        <.live_component
+          module={VarselWeb.CvssInput}
+          id="case-cvss-v4"
+          field={@content_form[:cvss_v4]}
+          label="CVSS v4.0"
+        />
+        <.input
+          field={@content_form[:discovery]}
+          type="select"
+          options={enum_options(Varsel.Cases.Case.Discovery)}
+        >
+          <:label>Discovery</:label>
+        </.input>
         <.input
           field={@content_form[:internal_notes]}
           type="textarea"
