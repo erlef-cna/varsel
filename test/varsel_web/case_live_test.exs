@@ -261,4 +261,76 @@ defmodule VarselWeb.CaseLiveTest do
                conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
     end
   end
+
+  describe "attached reports" do
+    setup %{poc: poc} do
+      reporter = Fixtures.register_user("case_report_reporter")
+
+      report =
+        Varsel.CVE.submit_vulnerability_report!(
+          %{
+            report_json: %{"package" => "acme_lib"},
+            summary: "acme_lib leaks secrets",
+            confirms_criteria: true,
+            confirms_in_scope: true
+          },
+          actor: reporter
+        )
+
+      {:ok, report} = Varsel.CVE.accept_vulnerability_report(report, %{}, actor: poc)
+      %{report: report, case_id: report.case_id}
+    end
+
+    test "the case page lists attached reports in a collapsible section", %{
+      conn: conn,
+      poc: poc,
+      case_id: case_id
+    } do
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_id}")
+
+      assert html =~ "Reports (1)"
+      assert html =~ "acme_lib leaks secrets"
+      assert html =~ "case_report_reporter"
+    end
+
+    test "an assigned supporter sees the report through the case, but not directly", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter,
+      report: report,
+      case_id: case_id
+    } do
+      Cases.assign_case_user!(%{case_id: case_id, user_id: supporter.id}, actor: poc)
+
+      {:ok, _lv, html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_id}")
+
+      # Visible through the case relationship (accessing_from) …
+      assert html =~ "Reports (1)"
+      assert html =~ "acme_lib leaks secrets"
+      # … including the reporter's name, while field policies hide the rest.
+      assert html =~ "case_report_reporter name"
+      refute html =~ "case_report_reporter@example.com"
+
+      # … and direct report reads/lists stay POC-only.
+      assert Varsel.CVE.list_vulnerability_reports!(actor: supporter) == []
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               Ash.get(Varsel.CVE.VulnerabilityReport, report.id, actor: supporter)
+
+      # The same field scoping holds for a direct authorized load through the case.
+      loaded_case =
+        Cases.get_case!(case_id, actor: supporter, load: [vulnerability_reports: [:reporter]])
+
+      [loaded_report] = loaded_case.vulnerability_reports
+      assert loaded_report.reporter.name == "case_report_reporter name"
+      assert %Ash.ForbiddenField{} = loaded_report.reporter.email
+    end
+
+    test "a case without reports shows no reports section", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "No reports"})
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      refute html =~ "Reports ("
+    end
+  end
 end

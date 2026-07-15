@@ -35,7 +35,9 @@ defmodule VarselWeb.CaseDetailLive do
     impacts: [:attack_pattern],
     affected_packages: [:channels, :version_events],
     proposals: [:author, :resolved_by],
-    comments: [:author]
+    comments: [:author],
+    # The report read policy is POC-only; supporters get an empty list here.
+    vulnerability_reports: [:reporter]
   ]
 
   # Modal child-form registry: UI type -> resource + labels. Every resource
@@ -595,6 +597,11 @@ defmodule VarselWeb.CaseDetailLive do
 
         <div class="space-y-8">
           <.preview_section preview={@preview} />
+          <.reports_section
+            :if={@case_record.vulnerability_reports != []}
+            case_record={@case_record}
+            poc={poc?(@current_user)}
+          />
           <.proposals_section
             case_record={@case_record}
             current_user={@current_user}
@@ -982,6 +989,62 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
+  defp reports_section(assigns) do
+    ~H"""
+    <section>
+      <details>
+        <summary class="cursor-pointer text-lg font-semibold mb-3">
+          Reports ({length(@case_record.vulnerability_reports)})
+        </summary>
+
+        <div
+          :for={report <- Enum.sort_by(@case_record.vulnerability_reports, & &1.inserted_at)}
+          class="card bg-base-200 mb-3"
+        >
+          <div class="card-body p-3 text-sm">
+            <div class="flex items-start justify-between gap-2">
+              <span class="font-semibold">{report.summary}</span>
+              <span class={["badge badge-sm shrink-0", report_badge_class(report.state)]}>
+                {report.state}
+              </span>
+            </div>
+
+            <p class="text-xs text-base-content/60">
+              by {display_name(report.reporter)} · {format_dt(report.inserted_at)}
+            </p>
+
+            <p :if={report.triage_notes} class="text-xs text-base-content/70 italic">
+              {report.triage_notes}
+            </p>
+
+            <details>
+              <summary class="cursor-pointer text-xs text-base-content/60">Report payload</summary>
+              <pre class="bg-base-300 rounded p-2 text-xs overflow-x-auto max-h-60 mt-1">{pretty_json(report.report_json)}</pre>
+            </details>
+          </div>
+        </div>
+
+        <.link :if={@poc} navigate={~p"/reports"} class="link text-sm">Report triage</.link>
+      </details>
+    </section>
+    """
+  end
+
+  defp report_badge_class(:submitted), do: "badge-warning"
+  defp report_badge_class(:triaged), do: "badge-info"
+  defp report_badge_class(:accepted), do: "badge-success"
+  defp report_badge_class(:rejected), do: "badge-error"
+  defp report_badge_class(_other), do: "badge-ghost"
+
+  # The User read policy is self-or-POC: a supporter sees the report through
+  # their case assignment but not the reporter account behind it.
+  # The User read policy allows loads through case-scoped relationships, but
+  # field policies hide everything except :name from non-POC viewers - and
+  # a forbidden email is an Ash.ForbiddenField struct, not nil.
+  defp display_name(%{name: name}) when is_binary(name) and name != "", do: name
+  defp display_name(%{email: email}) when is_binary(email), do: email
+  defp display_name(_user), do: "(hidden)"
+
   defp preview_section(assigns) do
     ~H"""
     <section>
@@ -1047,9 +1110,9 @@ defmodule VarselWeb.CaseDetailLive do
           </p>
 
           <p class="text-xs text-base-content/60">
-            by {proposal.author.name || proposal.author.email} · {format_dt(proposal.inserted_at)}
+            by {display_name(proposal.author)} · {format_dt(proposal.inserted_at)}
             <span :if={proposal.resolved_by}>
-              · resolved by {proposal.resolved_by.name || proposal.resolved_by.email}
+              · resolved by {display_name(proposal.resolved_by)}
             </span>
           </p>
 
@@ -1101,7 +1164,7 @@ defmodule VarselWeb.CaseDetailLive do
 
       <div :for={comment <- @case_record.comments} class="mb-3 text-sm">
         <p class="text-xs text-base-content/60">
-          {comment.author.name || comment.author.email} · {format_dt(comment.inserted_at)}
+          {display_name(comment.author)} · {format_dt(comment.inserted_at)}
           <span :if={comment.proposal_id} class="badge badge-ghost badge-xs">on proposal</span>
         </p>
         <p class="whitespace-pre-wrap">{comment.body}</p>
@@ -1130,7 +1193,7 @@ defmodule VarselWeb.CaseDetailLive do
 
       <ul class="space-y-1 text-sm">
         <li :for={assignment <- @case_record.assignments} class="flex items-center justify-between">
-          <span>{assignment.user.name || assignment.user.email}</span>
+          <span>{display_name(assignment.user)}</span>
           <button
             class="btn btn-ghost btn-xs text-error"
             phx-click="unassign_user"
@@ -1150,7 +1213,7 @@ defmodule VarselWeb.CaseDetailLive do
             :if={not Enum.any?(@case_record.assignments, &(&1.user_id == user.id))}
             value={user.id}
           >
-            {user.name || user.email}
+            {display_name(user)}
           </option>
         </select>
         <button type="submit" class="btn btn-outline btn-sm">Assign</button>

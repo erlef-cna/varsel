@@ -12,6 +12,9 @@ defmodule Varsel.Accounts.User do
     notifiers: [Ash.Notifier.PubSub],
     extensions: [AshAuthentication, AshPaperTrail.Resource, AshGraphql.Resource]
 
+  alias AshAuthentication.Checks.AshAuthenticationInteraction
+  alias Varsel.Cases.Proposal
+
   graphql do
     type :user
   end
@@ -42,6 +45,23 @@ defmodule Varsel.Accounts.User do
       api_key do
         api_key_relationship :valid_api_keys
       end
+    end
+  end
+
+  field_policies do
+    field_policy_bypass :*, AshAuthenticationInteraction do
+      authorize_if always()
+    end
+
+    # Whoever can read the row may see the display name.
+    field_policy :name do
+      authorize_if always()
+    end
+
+    # Everything else is POC-or-self only.
+    field_policy [:email, :github_id, :github_handle, :role] do
+      authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if expr(id == ^actor(:id))
     end
   end
 
@@ -122,13 +142,23 @@ defmodule Varsel.Accounts.User do
   end
 
   policies do
-    bypass AshAuthentication.Checks.AshAuthenticationInteraction do
+    bypass AshAuthenticationInteraction do
       authorize_if always()
     end
 
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
+      # Users are also visible when loaded through a row the actor can read
+      # (report reporter, proposal/comment authors, case workers/credits) —
+      # the parent's own policy decided visibility, and the field policies
+      # below restrict non-POC viewers to the display name.
+      authorize_if accessing_from(Varsel.CVE.VulnerabilityReport, :reporter)
+      authorize_if accessing_from(Proposal, :author)
+      authorize_if accessing_from(Proposal, :resolved_by)
+      authorize_if accessing_from(Varsel.Cases.Comment, :author)
+      authorize_if accessing_from(Varsel.Cases.CaseAssignment, :user)
+      authorize_if accessing_from(Varsel.Cases.CaseCredit, :user)
     end
 
     policy action(:update) do
