@@ -36,6 +36,10 @@ defmodule Varsel.Cases.CaseReference do
     third-party-advisory vendor-advisory vdb-entry
   )
 
+  @doc "The CVE 5.2 reference-tag vocabulary (custom tags carry an x_ prefix instead)."
+  @spec standard_tags() :: [String.t()]
+  def standard_tags, do: Enum.sort(@reference_tags)
+
   graphql do
     type :case_reference
   end

@@ -209,6 +209,49 @@ defmodule VarselWeb.CaseLiveTest do
       assert render(lv) =~ "acme_lib"
     end
 
+    test "adds a reference with tag checkboxes and custom x_ tags", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      lv |> element("button[phx-value-type=reference]", "Add reference") |> render_click()
+      html = render(lv)
+      assert html =~ "vendor-advisory"
+      assert html =~ ~s(type="checkbox")
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{
+          "url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-x",
+          "tags" => ["", "vendor-advisory", "related"],
+          "custom_tags" => "x_version-scheme"
+        }
+      })
+      |> render_submit()
+
+      case_record = Ash.load!(case_record, [:references], authorize?: false)
+      assert [reference] = case_record.references
+      assert reference.tags == ["vendor-advisory", "related", "x_version-scheme"]
+
+      # Editing shows the stored tags: checkboxes reflect the standard ones,
+      # the custom input carries the x_ tag.
+      lv
+      |> element(~s{button[phx-click=edit_child][phx-value-type=reference]}, "Edit")
+      |> render_click()
+
+      html = render(lv)
+      assert html =~ ~s(value="vendor-advisory" checked)
+      assert html =~ ~s(value="x_version-scheme")
+
+      # Unchecking everything clears the tags (the hidden sentinel submits).
+      lv
+      |> form("#child-form", %{"child" => %{"tags" => [""], "custom_tags" => ""}})
+      |> render_submit()
+
+      case_record = Ash.load!(case_record, [:references], authorize?: false)
+      assert [%{tags: []}] = case_record.references
+    end
+
     test "posts a comment", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 

@@ -422,21 +422,37 @@ defmodule VarselWeb.CaseDetailLive do
 
   # Splits comma/newline separated list inputs and merges the parent ids.
   defp normalize_child_params(type, params, parent) do
-    params = Map.merge(params, parent)
+    params = params |> Map.merge(parent) |> merge_reference_tags(type)
 
     Enum.reduce(Map.get(@list_params, type, []), params, fn key, params ->
       case params[key] do
         value when is_binary(value) ->
-          Map.put(
-            params,
-            key,
-            value |> String.split(~r/[\n,]/, trim: true) |> Enum.map(&String.trim/1)
-          )
+          Map.put(params, key, split_list(value))
 
         _other ->
           params
       end
     end)
+  end
+
+  # Reference tags arrive as a checkbox list (with an empty sentinel) plus a
+  # comma-separated custom_tags text input; merge them into one tags list.
+  defp merge_reference_tags(params, "reference") do
+    standard = params |> Map.get("tags", []) |> List.wrap() |> Enum.reject(&(&1 == ""))
+    custom = split_list(params["custom_tags"] || "")
+
+    params
+    |> Map.put("tags", Enum.uniq(standard ++ custom))
+    |> Map.delete("custom_tags")
+  end
+
+  defp merge_reference_tags(params, _type), do: params
+
+  defp split_list(value) do
+    value
+    |> String.split(~r/[\n,]/, trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
   end
 
   defp decode_override(nil), do: {:ok, nil}
@@ -1379,14 +1395,37 @@ defmodule VarselWeb.CaseDetailLive do
     <.input field={@form[:url]} type="text" class="w-full input font-mono">
       <:label>URL</:label>
     </.input>
+
+    <fieldset class="fieldset mb-2">
+      <label class="label">Tags</label>
+      <%!-- Sentinel so unchecking every box still submits (and clears) tags. --%>
+      <input type="hidden" name="child[tags][]" value="" />
+      <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+        <label
+          :for={tag <- CaseReference.standard_tags()}
+          class="flex items-center gap-2 text-sm cursor-pointer"
+        >
+          <input
+            type="checkbox"
+            name="child[tags][]"
+            value={tag}
+            checked={tag in selected_tags(@form)}
+            class="checkbox checkbox-xs"
+          />
+          {tag}
+        </label>
+      </div>
+    </fieldset>
+
     <.input
-      field={@form[:tags]}
       type="text"
-      value={list_value(@form[:tags])}
-      placeholder="vendor-advisory, patch"
+      name="child[custom_tags]"
+      value={custom_tags_value(@form)}
+      placeholder="x_version-scheme"
     >
-      <:label>Tags (comma separated)</:label>
+      <:label>Custom tags (x_ prefixed, comma separated)</:label>
     </.input>
+
     <.input field={@form[:position]} type="number">
       <:label>Position (advisory first)</:label>
     </.input>
@@ -1433,5 +1472,16 @@ defmodule VarselWeb.CaseDetailLive do
       values when is_list(values) -> Enum.join(values, ", ")
       value -> value
     end
+  end
+
+  defp selected_tags(form), do: List.wrap(form[:tags].value)
+
+  # Custom (x_-prefixed) tags live in their own text input next to the
+  # standard-vocabulary checkboxes.
+  defp custom_tags_value(form) do
+    form
+    |> selected_tags()
+    |> Enum.filter(&String.starts_with?(&1, "x_"))
+    |> Enum.join(", ")
   end
 end
