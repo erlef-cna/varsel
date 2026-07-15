@@ -5,12 +5,14 @@
 defmodule Varsel.Cases.PackageChannel do
   @moduledoc """
   One distribution channel of a `Varsel.Cases.AffectedPackage` — rendered as
-  exactly one `affected[]` entry in the CNA container.
+  exactly one `affected[]` entry in the CNA container, identified the purl
+  way: type + namespace/name + qualifiers.
 
-  The channel type fixes the entry's constants (collectionURL, purl scheme,
-  versionType); `package_name` names the package within the channel. Version
-  boundaries come from the package's `Varsel.Cases.VersionEvent` facts,
-  resolved per channel by `Varsel.Cases.Derivation`.
+  The purl type fixes the entry's constants (collectionURL, versionType) and
+  the derivation semantics. Version boundaries come from the package's
+  `Varsel.Cases.VersionEvent` facts, resolved per channel by
+  `Varsel.Cases.Derivation`. The git/forge entry is *not* a channel — it
+  renders automatically from the package's `repo_url`.
 
   ## Escape hatches
 
@@ -31,8 +33,7 @@ defmodule Varsel.Cases.PackageChannel do
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Checks.ActorAssignedToCase
-  alias Varsel.Cases.PackageChannel.Changes.NormalizePackageName
-  alias Varsel.Cases.PackageChannel.ChannelType
+  alias Varsel.Cases.PackageChannel.PurlType
   alias Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage
   alias Varsel.Cases.Proposable
   alias Varsel.Cases.Validations.CaseEditable
@@ -66,7 +67,6 @@ defmodule Varsel.Cases.PackageChannel do
     create :add do
       description "Adds a distribution channel to a logical product."
       accept [:case_id, :affected_package_id | Proposable.fields(__MODULE__)]
-      change NormalizePackageName
       validate CaseEditable
       validate ConsistentWithPackage
     end
@@ -75,7 +75,6 @@ defmodule Varsel.Cases.PackageChannel do
       description "Edits a channel. Only allowed while the case is editable."
       accept Proposable.fields(__MODULE__)
       require_atomic? false
-      change NormalizePackageName
       validate CaseEditable
       validate ConsistentWithPackage
     end
@@ -99,7 +98,6 @@ defmodule Varsel.Cases.PackageChannel do
       validate CaseEditable
       validate ConsistentWithPackage
       change ApplyProposedField
-      change NormalizePackageName
     end
 
     create :apply_proposal_insert do
@@ -108,7 +106,6 @@ defmodule Varsel.Cases.PackageChannel do
 
       argument :proposal_id, :uuid, allow_nil?: false
 
-      change NormalizePackageName
       validate CaseEditable
       validate ConsistentWithPackage
     end
@@ -139,23 +136,38 @@ defmodule Varsel.Cases.PackageChannel do
   attributes do
     uuid_primary_key :id
 
-    attribute :channel_type, ChannelType do
+    attribute :purl_type, PurlType do
       allow_nil? false
       public? true
     end
 
-    attribute :package_name, :string do
+    attribute :namespace, :string do
       description """
-      Package name within the channel, e.g. "ash_authentication_phoenix" (hex),
-      "team-alembic/ash_authentication_phoenix" (git), "stdlib" (otp),
-      "gleam" (oci). Nil only for :hosted channels.
+      The purl namespace, e.g. "gleam.run" (sid) or an npm scope. Nil for
+      unnamespaced ecosystems like hex.
       """
 
       public? true
     end
 
-    attribute :registry_url, :string do
-      description "Registry namespace for :oci channels (e.g. \"ghcr.io/gleam-lang\") or an npm registry override."
+    attribute :name, :string do
+      description """
+      The purl name, e.g. "ash_authentication_phoenix" (hex), "stdlib" (otp),
+      "gleam" (oci/sid). Nil only for :hosted channels.
+      """
+
+      public? true
+    end
+
+    attribute :qualifiers, :map do
+      description """
+      Purl qualifiers rendered into the packageURL, e.g.
+      %{"repository_url" => "ghcr.io/gleam-lang"} for oci. OTP channels get
+      repository_url/vcs_url derived from the package's repo_url when absent.
+      """
+
+      allow_nil? false
+      default %{}
       public? true
     end
 
@@ -219,6 +231,6 @@ defmodule Varsel.Cases.PackageChannel do
   end
 
   identities do
-    identity :unique_channel, [:affected_package_id, :channel_type, :package_name]
+    identity :unique_channel, [:affected_package_id, :purl_type, :namespace, :name]
   end
 end

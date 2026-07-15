@@ -33,7 +33,7 @@ defmodule Varsel.Cases.Derivation.Platform do
   @spec for_package(Varsel.Cases.AffectedPackage.t(), [Varsel.Cases.PackageChannel.t()]) :: t()
   def for_package(package, channels) do
     otp? =
-      Enum.any?(channels, &(&1.channel_type == :otp)) or
+      Enum.any?(channels, &(&1.purl_type == :otp)) or
         (package.repo_url || "") =~ ~r{github\.com/erlang/otp}
 
     if otp? do

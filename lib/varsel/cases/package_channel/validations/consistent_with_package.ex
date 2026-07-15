@@ -6,10 +6,8 @@ defmodule Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage do
   @moduledoc """
   Channel consistency rules:
 
-  * `package_name` is required for every channel type except `:hosted` and
-    `:git` — a git channel derives its path from the package's `repo_url`.
-  * A `:git` channel needs the package to have a `repo_url` (the repository
-    is what its commit ranges resolve against).
+  * `name` is required for every purl type except `:hosted` (a hosted
+    service has no package identity).
   * The channel's denormalized `case_id` must match its parent
     `affected_package`'s `case_id` (rejects cross-case row mixups).
   """
@@ -37,22 +35,14 @@ defmodule Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage do
     end
   end
 
-  defp validate_package_name(changeset, package) do
-    channel_type = Ash.Changeset.get_attribute(changeset, :channel_type)
-    package_name = Ash.Changeset.get_attribute(changeset, :package_name)
+  defp validate_package_name(changeset, _package) do
+    purl_type = Ash.Changeset.get_attribute(changeset, :purl_type)
+    name = Ash.Changeset.get_attribute(changeset, :name)
 
-    cond do
-      channel_type == :git and is_nil(package.repo_url) ->
-        {:error, field: :channel_type, message: "a git channel needs a repository URL on the package"}
-
-      channel_type in [:hosted, :git] ->
-        :ok
-
-      is_nil(package_name) ->
-        {:error, field: :package_name, message: "is required for %{type} channels", vars: [type: channel_type]}
-
-      true ->
-        :ok
+    if purl_type != :hosted and is_nil(name) do
+      {:error, field: :name, message: "is required for %{type} channels", vars: [type: purl_type]}
+    else
+      :ok
     end
   end
 

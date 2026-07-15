@@ -602,6 +602,7 @@ defmodule VarselWeb.CaseDetailLive do
       |> Map.merge(parent)
       |> merge_reference_tags(type)
       |> parse_classification_id(type)
+      |> parse_qualifiers(type)
 
     Enum.reduce(Map.get(@list_params, type, []), params, fn key, params ->
       case params[key] do
@@ -613,6 +614,24 @@ defmodule VarselWeb.CaseDetailLive do
       end
     end)
   end
+
+  # Channel qualifiers arrive as "key=value, key=value" text.
+  defp parse_qualifiers(%{"qualifiers" => value} = params, "channel") when is_binary(value) do
+    qualifiers =
+      value
+      |> split_list()
+      |> Enum.flat_map(fn pair ->
+        case String.split(pair, "=", parts: 2) do
+          [key, value] -> [{String.trim(key), String.trim(value)}]
+          _no_value -> []
+        end
+      end)
+      |> Map.new()
+
+    Map.put(params, "qualifiers", qualifiers)
+  end
+
+  defp parse_qualifiers(params, _type), do: params
 
   ## ------------------------------------------------------ proposal building
 
@@ -1288,8 +1307,10 @@ defmodule VarselWeb.CaseDetailLive do
             <table :if={package.channels != []} class="table table-xs">
               <tbody>
                 <tr :for={channel <- package.channels}>
-                  <td><span class="badge badge-ghost badge-sm">{channel.channel_type}</span></td>
-                  <td class="font-mono">{channel.package_name || "—"}</td>
+                  <td><span class="badge badge-ghost badge-sm">{channel.purl_type}</span></td>
+                  <td class="font-mono">
+                    {Varsel.Cases.Render.Channel.purl_string(package, channel) || channel.name || "—"}
+                  </td>
                   <td class="text-xs text-base-content/60">
                     {if channel.versions_override, do: "versions overridden"}
                     {if channel.entry_override, do: "entry overridden"}
@@ -1896,20 +1917,24 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp child_fields(%{type: "channel"} = assigns) do
     ~H"""
+    <.input field={@form[:purl_type]} type="select" options={enum_options(PackageChannel.PurlType)}>
+      <:label>Purl type (the git/forge entry is added automatically)</:label>
+    </.input>
+    <div class="grid sm:grid-cols-2 gap-x-4">
+      <.input field={@form[:namespace]} type="text" placeholder="e.g. gleam.run">
+        <:label>Namespace (optional)</:label>
+      </.input>
+      <.input field={@form[:name]} type="text" placeholder="e.g. my_package">
+        <:label>Name (empty for hosted)</:label>
+      </.input>
+    </div>
     <.input
-      field={@form[:channel_type]}
-      type="select"
-      options={enum_options(PackageChannel.ChannelType)}
+      type="text"
+      name="child[qualifiers]"
+      value={qualifiers_value(@form[:qualifiers])}
+      placeholder="repository_url=ghcr.io/owner"
     >
-      <:label>Channel type</:label>
-    </.input>
-    <.input field={@form[:package_name]} type="text" placeholder="e.g. my_package or owner/repo">
-      <:label>
-        Package name (git channels default to the repository URL's path; empty for hosted)
-      </:label>
-    </.input>
-    <.input field={@form[:registry_url]} type="text" placeholder="e.g. ghcr.io/owner">
-      <:label>Registry URL (OCI/npm only)</:label>
+      <:label>Qualifiers (key=value, comma separated)</:label>
     </.input>
     <.input field={@form[:tag_suffixes]} type="text" value={list_value(@form[:tag_suffixes])}>
       <:label>OCI tag suffixes (comma separated)</:label>
@@ -2036,6 +2061,17 @@ defmodule VarselWeb.CaseDetailLive do
     case field.value do
       values when is_list(values) -> Enum.join(values, ", ")
       value -> value
+    end
+  end
+
+  # Renders a qualifiers map back into its "key=value, key=value" input form.
+  defp qualifiers_value(field) do
+    case field.value do
+      %{} = qualifiers ->
+        Enum.map_join(qualifiers, ", ", fn {key, value} -> "#{key}=#{value}" end)
+
+      value ->
+        value
     end
   end
 

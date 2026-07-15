@@ -39,23 +39,13 @@ defmodule Varsel.Cases.PublicationTest do
     package =
       Fixtures.add_affected_package(poc, case_record, %{program_files: ["lib/acme_lib.ex"]})
 
+    # One hex channel; the forge entry renders implicitly from repo_url.
     Cases.add_package_channel!(
       %{
         case_id: case_record.id,
         affected_package_id: package.id,
-        channel_type: :hex,
-        package_name: "acme_lib"
-      },
-      actor: poc
-    )
-
-    Cases.add_package_channel!(
-      %{
-        case_id: case_record.id,
-        affected_package_id: package.id,
-        channel_type: :git,
-        package_name: "acme/acme_lib",
-        position: 1
+        purl_type: :hex,
+        name: "acme_lib"
       },
       actor: poc
     )

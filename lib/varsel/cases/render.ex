@@ -264,9 +264,14 @@ defmodule Varsel.Cases.Render do
             {entry, applied} =
               Channel.render(package, channel, channel_results[channel.id] || %{})
 
-            {entry, Enum.map(applied, &"#{package.product}/#{channel.channel_type}: #{&1}")}
+            {entry, Enum.map(applied, &"#{package.product}/#{channel.purl_type}: #{&1}")}
           end)
           |> Enum.unzip()
+
+        # The implicit git/forge entry closes the package's entries, matching
+        # the published convention (registry entries first, github last).
+        git_entry = Channel.render_git(package, derivation["git"])
+        package_entries = package_entries ++ List.wrap(git_entry)
 
         {entries ++ package_entries, overrides ++ List.flatten(package_overrides),
          blockers ++ package_blockers(package, derivation)}
@@ -278,29 +283,37 @@ defmodule Varsel.Cases.Render do
   defp package_blockers(package, derivation) do
     issues = Enum.map(derivation["issues"] || [], &"#{package.product}: #{&1}")
 
+    git_issues =
+      for issue <- (derivation["git"] || %{})["issues"] || [] do
+        "#{package.product}/git: #{issue}"
+      end
+
     channel_issues =
-      for {channel_id, result} <- derivation["channels"] || %{},
-          channel = Enum.find(package.channels, &(&1.id == channel_id)),
-          channel.versions_override == nil,
+      for {channel, result} <- overridable_channel_results(package, derivation),
           issue <- result["issues"] || [] do
-        "#{package.product}/#{channel.channel_type}: #{issue}"
+        "#{package.product}/#{channel.purl_type}: #{issue}"
       end
 
-    pending =
-      if package.allow_unreleased_fix do
-        []
-      else
-        for {channel_id, result} <- derivation["channels"] || %{},
-            channel = Enum.find(package.channels, &(&1.id == channel_id)),
-            channel.channel_type != :git,
-            channel.versions_override == nil,
-            sha <- result["pending"] || [] do
-          "#{package.product}/#{channel.channel_type}: fix #{sha} has no containing release yet " <>
-            "(set allow_unreleased_fix or a versions_override to publish anyway)"
-        end
-      end
+    issues ++ git_issues ++ channel_issues ++ Enum.uniq(pending_blockers(package, derivation))
+  end
 
-    issues ++ channel_issues ++ Enum.uniq(pending)
+  defp pending_blockers(%{allow_unreleased_fix: true}, _derivation), do: []
+
+  defp pending_blockers(package, derivation) do
+    for {channel, result} <- overridable_channel_results(package, derivation),
+        sha <- result["pending"] || [] do
+      "#{package.product}/#{channel.purl_type}: fix #{sha} has no containing release yet " <>
+        "(set allow_unreleased_fix or a versions_override to publish anyway)"
+    end
+  end
+
+  # Channel results whose escape hatch is not set — only those can block.
+  defp overridable_channel_results(package, derivation) do
+    for {channel_id, result} <- derivation["channels"] || %{},
+        channel = Enum.find(package.channels, &(&1.id == channel_id)),
+        channel.versions_override == nil do
+      {channel, result}
+    end
   end
 
   defp put_cpe_applicability(cna, case_record, derivations) do

@@ -4,12 +4,16 @@
 
 defmodule Varsel.Cases.Render.Channel do
   @moduledoc """
-  Renders one `Varsel.Cases.PackageChannel` into its `affected[]` entry.
+  Renders `affected[]` entries: one per `Varsel.Cases.PackageChannel` plus
+  the implicit git/forge entry every package with a `repo_url` gets.
 
-  The channel type fixes the entry constants (collectionURL, packageURL purl
-  scheme, versionType — invariants across every published EEF record); the
-  version data comes from the package's derivation result; the two channel
-  escape hatches (`versions_override`, `entry_override`) apply last.
+  Channels are purl-shaped (type + namespace/name + qualifiers); the purl
+  type fixes the entry constants (collectionURL, versionType semantics live
+  in `Varsel.Cases.Derivation`). The two channel escape hatches
+  (`versions_override`, `entry_override`) apply last. The git entry derives
+  everything from the repository URL — a purl only for forges with a
+  registered purl type (github/gitlab/bitbucket); other forges keep
+  vendor/product/repo/packageName without inventing one.
   """
 
   alias Varsel.Cases.AffectedPackage
@@ -44,6 +48,37 @@ defmodule Varsel.Cases.Render.Channel do
     {entry, version_override_applied ++ entry_override_applied}
   end
 
+  @doc """
+  The implicit git/forge entry for a package, or nil without a `repo_url`.
+  """
+  @spec render_git(AffectedPackage.t(), map() | nil) :: map() | nil
+  def render_git(%{repo_url: nil}, _git_derivation), do: nil
+
+  def render_git(package, git_derivation) do
+    package
+    |> base_entry()
+    |> Map.merge(git_constants(package))
+    |> put_versions((git_derivation || %{})["versions"] || [])
+  end
+
+  @doc "The composed packageURL of a channel (nil for hosted channels and unnamed forges)."
+  @spec purl_string(AffectedPackage.t(), PackageChannel.t()) :: String.t() | nil
+  def purl_string(_package, %{purl_type: :hosted}), do: nil
+  def purl_string(_package, %{name: nil}), do: nil
+
+  def purl_string(package, channel) do
+    Purl.to_string(
+      struct!(Purl,
+        type: to_string(channel.purl_type),
+        namespace: split_namespace(channel.namespace),
+        name: channel.name,
+        qualifiers: qualifiers(package, channel)
+      )
+    )
+  end
+
+  ## -------------------------------------------------------- entry assembly
+
   defp base_entry(package) do
     %{
       "defaultStatus" => to_string(package.default_status),
@@ -56,110 +91,86 @@ defmodule Varsel.Cases.Render.Channel do
     |> put_non_empty("platforms", package.platforms)
   end
 
+  defp channel_constants(_package, %{purl_type: :hosted}) do
+    # Hosted services carry no package identity — just vendor/product/versions
+    # (see the hex.pm entry in CVE-2026-21618).
+    %{}
+  end
+
+  defp channel_constants(package, channel) do
+    %{"cpes" => [cpe(package)]}
+    |> put_present("packageName", package_name(package, channel))
+    |> put_present("packageURL", purl_string(package, channel))
+    |> put_present("collectionURL", collection_url(package, channel))
+    |> put_repo(channel.purl_type, package)
+  end
+
+  # The published packageName per ecosystem: oci includes the registry path
+  # ("gleam-lang/gleam"), namespaced ecosystems join namespace/name, sid and
+  # the rest use the bare name.
+  defp package_name(_package, %{purl_type: :oci} = channel) do
+    case channel |> repository_url() |> String.split("/", parts: 2) do
+      [_host, path] -> "#{path}/#{channel.name}"
+      [_host] -> channel.name
+    end
+  end
+
+  defp package_name(_package, %{purl_type: :sid} = channel), do: channel.name
+
+  defp package_name(_package, channel) do
+    case channel.namespace do
+      nil -> channel.name
+      namespace -> "#{namespace}/#{channel.name}"
+    end
+  end
+
+  defp collection_url(_package, %{purl_type: :hex}), do: "https://repo.hex.pm"
+  defp collection_url(_package, %{purl_type: :npm}), do: "https://registry.npmjs.org"
+
+  defp collection_url(_package, %{purl_type: :oci} = channel) do
+    [host | _path] = channel |> repository_url() |> String.split("/", parts: 2)
+    "https://#{host}"
+  end
+
+  defp collection_url(_package, _channel), do: nil
+
+  defp repository_url(channel), do: channel.qualifiers["repository_url"] || "ghcr.io"
+
+  # Registry entries of repo-backed packages carry the repo too (hex/otp/npm,
+  # matching the published records); oci/sid entries do not.
+  defp put_repo(constants, purl_type, %{repo_url: repo_url})
+       when purl_type in [:hex, :otp, :npm] and is_binary(repo_url) do
+    Map.put(constants, "repo", repo_url)
+  end
+
+  defp put_repo(constants, _purl_type, _package), do: constants
+
+  defp qualifiers(package, channel) do
+    auto =
+      case {channel.purl_type, package.repo_url} do
+        {:otp, repo_url} when is_binary(repo_url) ->
+          %{"repository_url" => repo_url, "vcs_url" => "git #{repo_url}.git"}
+
+        _other ->
+          %{}
+      end
+
+    Map.merge(auto, channel.qualifiers || %{})
+  end
+
+  defp split_namespace(nil), do: []
+  defp split_namespace(namespace), do: String.split(namespace, "/", trim: true)
+
   defp put_versions(entry, []), do: entry
   defp put_versions(entry, versions), do: Map.put(entry, "versions", versions)
 
   defp put_non_empty(entry, _key, []), do: entry
   defp put_non_empty(entry, key, value), do: Map.put(entry, key, value)
 
-  # Git channels are forge-aware: host and default path come from the
-  # package's repo_url; a purl is only emitted for forges with a registered
-  # purl type (github/gitlab/bitbucket) — other forges keep vendor/product/
-  # repo/packageName without a packageURL rather than inventing one.
-  defp channel_constants(package, %{channel_type: :git} = channel) do
-    constants = put_repo(%{"cpes" => [cpe(package)]}, package)
+  defp put_present(entry, _key, nil), do: entry
+  defp put_present(entry, key, value), do: Map.put(entry, key, value)
 
-    case forge(package.repo_url, channel.package_name) do
-      nil ->
-        constants
-
-      %{host: host, path: path, purl_type: purl_type} ->
-        constants
-        |> Map.put("collectionURL", "https://#{host}")
-        |> put_present("packageName", path)
-        |> put_present("packageURL", forge_purl(purl_type, path))
-    end
-  end
-
-  defp channel_constants(package, %{channel_type: :hex} = channel) do
-    put_repo(
-      %{
-        "collectionURL" => "https://repo.hex.pm",
-        "packageName" => channel.package_name,
-        "packageURL" => purl("hex", channel.package_name),
-        "cpes" => [cpe(package)]
-      },
-      package
-    )
-  end
-
-  defp channel_constants(package, %{channel_type: :otp} = channel) do
-    put_repo(
-      %{
-        "packageName" => channel.package_name,
-        "packageURL" => otp_purl(channel.package_name, package.repo_url),
-        "cpes" => [cpe(package)]
-      },
-      package
-    )
-  end
-
-  defp channel_constants(package, %{channel_type: :npm} = channel) do
-    put_repo(
-      %{
-        "collectionURL" => channel.registry_url || "https://registry.npmjs.org",
-        "packageName" => channel.package_name,
-        "packageURL" => purl("npm", channel.package_name),
-        "cpes" => [cpe(package)]
-      },
-      package
-    )
-  end
-
-  defp channel_constants(package, %{channel_type: :oci} = channel) do
-    registry = channel.registry_url || "ghcr.io"
-    [host | _] = String.split(registry, "/", parts: 2)
-
-    %{
-      "collectionURL" => "https://#{host}",
-      "packageName" => channel.package_name,
-      "packageURL" => oci_purl(channel.package_name, registry),
-      "cpes" => [cpe(package)]
-    }
-  end
-
-  defp channel_constants(package, %{channel_type: :sid} = channel) do
-    %{
-      "packageName" => channel.package_name |> String.split("/") |> List.last(),
-      "packageURL" => sid_purl(channel.package_name),
-      "cpes" => [cpe(package)]
-    }
-  end
-
-  # Hosted services carry no package identity — just vendor/product/versions
-  # (see the hex.pm entry in CVE-2026-21618).
-  defp channel_constants(_package, %{channel_type: :hosted}), do: %{}
-
-  defp put_repo(constants, %{repo_url: nil}), do: constants
-  defp put_repo(constants, %{repo_url: repo_url}), do: Map.put(constants, "repo", repo_url)
-
-  @doc "The package's CPE 2.3 string, derived from vendor/product when not set explicitly."
-  @spec cpe(AffectedPackage.t()) :: String.t()
-  def cpe(%{cpe: cpe}) when not is_nil(cpe), do: cpe
-
-  def cpe(package) do
-    "cpe:2.3:a:#{cpe_component(package.vendor)}:#{cpe_component(package.product)}:*:*:*:*:*:*:*:*"
-  end
-
-  # CPE 2.3 formatted-string escaping for the vendor/product components:
-  # anything outside the unquoted alphabet gets a backslash (erlang/otp ->
-  # erlang\/otp, as published in the real records).
-  defp cpe_component(value) do
-    value
-    |> String.downcase()
-    |> String.replace(" ", "_")
-    |> String.replace(~r/[^a-z0-9._-]/, fn char -> "\\" <> char end)
-  end
+  ## ------------------------------------------------------------------ forge
 
   @forge_purl_types %{
     "github.com" => "github",
@@ -167,39 +178,20 @@ defmodule Varsel.Cases.Render.Channel do
     "bitbucket.org" => "bitbucket"
   }
 
-  # Resolves the forge host, the in-forge path ("owner/repo"), and the purl
-  # type (nil for forges without one). The path prefers the channel's
-  # package_name — normalized, so a pasted clone URL still works — and falls
-  # back to the repo_url's own path.
-  defp forge(repo_url, package_name) do
-    case URI.parse(repo_url || "") do
-      %URI{host: host, path: repo_path} when is_binary(host) ->
-        %{
-          host: host,
-          path: forge_path(package_name) || forge_path(repo_path),
-          purl_type: Map.get(@forge_purl_types, host)
-        }
+  defp git_constants(package) do
+    %URI{host: host, path: repo_path} = URI.parse(package.repo_url)
+    path = forge_path(repo_path)
 
-      _no_repo ->
-        # No usable repo_url: a plain "owner/repo" name still renders, but
-        # without a host there is no collectionURL or purl to derive.
-        nil
-    end
+    %{"cpes" => [cpe(package)], "repo" => package.repo_url}
+    |> put_present("collectionURL", host && "https://#{host}")
+    |> put_present("packageName", path)
+    |> put_present("packageURL", forge_purl(Map.get(@forge_purl_types, host || ""), path))
   end
 
-  @doc """
-  Normalizes a forge path: a pasted clone URL, a leading/trailing-slashed
-  path, or a bare "owner/repo" all become "owner/repo" (nil when nothing
-  usable remains).
+  # "/owner/repo.git/" -> "owner/repo"
+  defp forge_path(nil), do: nil
 
-      "https://github.com/owner/repo.git" | "/owner/repo/" | "owner/repo" -> "owner/repo"
-  """
-  @spec forge_path(String.t() | nil) :: String.t() | nil
-  def forge_path(nil), do: nil
-
-  def forge_path(value) do
-    path = if value =~ "://", do: URI.parse(value).path || "", else: value
-
+  defp forge_path(path) do
     case path |> String.trim("/") |> String.replace_suffix(".git", "") do
       "" -> nil
       trimmed -> trimmed
@@ -220,35 +212,23 @@ defmodule Varsel.Cases.Render.Channel do
     end
   end
 
-  defp put_present(constants, _key, nil), do: constants
-  defp put_present(constants, key, value), do: Map.put(constants, key, value)
+  ## -------------------------------------------------------------------- cpe
 
-  defp purl(type, name), do: Purl.to_string(struct!(Purl, type: type, name: name))
+  @doc "The package's CPE 2.3 string, derived from vendor/product when not set explicitly."
+  @spec cpe(AffectedPackage.t()) :: String.t()
+  def cpe(%{cpe: cpe}) when not is_nil(cpe), do: cpe
 
-  defp otp_purl(app, repo_url) do
-    qualifiers =
-      if repo_url do
-        %{"repository_url" => repo_url, "vcs_url" => "git #{repo_url}.git"}
-      else
-        %{}
-      end
-
-    Purl.to_string(struct!(Purl, type: "otp", name: app, qualifiers: qualifiers))
+  def cpe(package) do
+    "cpe:2.3:a:#{cpe_component(package.vendor)}:#{cpe_component(package.product)}:*:*:*:*:*:*:*:*"
   end
 
-  defp oci_purl(package_name, registry) do
-    name = package_name |> String.split("/") |> List.last()
-
-    Purl.to_string(struct!(Purl, type: "oci", name: name, qualifiers: %{"repository_url" => registry}))
-  end
-
-  defp sid_purl(package_name) do
-    case String.split(package_name, "/") do
-      [name] ->
-        Purl.to_string(struct!(Purl, type: "sid", name: name))
-
-      parts ->
-        Purl.to_string(struct!(Purl, type: "sid", namespace: Enum.drop(parts, -1), name: List.last(parts)))
-    end
+  # CPE 2.3 formatted-string escaping for the vendor/product components:
+  # anything outside the unquoted alphabet gets a backslash (erlang/otp ->
+  # erlang\/otp, as published in the real records).
+  defp cpe_component(value) do
+    value
+    |> String.downcase()
+    |> String.replace(" ", "_")
+    |> String.replace(~r/[^a-z0-9._-]/, fn char -> "\\" <> char end)
   end
 end

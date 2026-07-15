@@ -54,24 +54,14 @@ defmodule Varsel.Cases.RenderTest do
         program_files: ["lib/ash_authentication_phoenix/controller.ex"]
       })
 
+    # One hex channel; the github entry renders implicitly from repo_url.
     Cases.add_package_channel!(
       %{
         case_id: case_record.id,
         affected_package_id: package.id,
-        channel_type: :hex,
-        package_name: "ash_authentication_phoenix",
+        purl_type: :hex,
+        name: "ash_authentication_phoenix",
         position: 0
-      },
-      actor: poc
-    )
-
-    Cases.add_package_channel!(
-      %{
-        case_id: case_record.id,
-        affected_package_id: package.id,
-        channel_type: :git,
-        package_name: "team-alembic/ash_authentication_phoenix",
-        position: 1
       },
       actor: poc
     )
@@ -325,7 +315,7 @@ defmodule Varsel.Cases.RenderTest do
   } do
     case_record = Ash.load!(case_record, [affected_packages: [:channels]], authorize?: false)
     [package] = case_record.affected_packages
-    hex_channel = Enum.find(package.channels, &(&1.channel_type == :hex))
+    hex_channel = Enum.find(package.channels, &(&1.purl_type == :hex))
 
     Cases.edit_package_channel!(
       hex_channel,
@@ -400,62 +390,37 @@ defmodule Varsel.Cases.RenderTest do
       %{forge_case: case_record}
     end
 
-    defp git_entry(poc, case_record, repo_url, package_name) do
-      package =
-        Fixtures.add_affected_package(poc, case_record, %{
-          vendor: "acme",
-          product: "acme_lib",
-          repo_url: repo_url
-        })
-
-      Cases.add_package_channel!(
-        %{
-          case_id: case_record.id,
-          affected_package_id: package.id,
-          channel_type: :git,
-          package_name: package_name
-        },
-        actor: poc
-      )
+    defp git_entry(poc, case_record, repo_url) do
+      Fixtures.add_affected_package(poc, case_record, %{
+        vendor: "acme",
+        product: "acme_lib",
+        repo_url: repo_url
+      })
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
       {:ok, %{result: result}} = Publication.render(case_record)
 
-      Enum.find(
-        result.cna["affected"],
-        &(&1["collectionURL"] =~ ~r{^https://} or is_nil(&1["collectionURL"]))
-      )
+      # The implicit forge entry is the package's last (here: only) entry.
+      List.last(result.cna["affected"])
     end
 
-    test "a pasted clone URL as package name is normalized, never percent-encoded", %{
+    test "the forge entry derives from the repository URL, .git suffix stripped", %{
       poc: poc,
       forge_case: case_record
     } do
-      entry =
-        git_entry(
-          poc,
-          case_record,
-          "https://github.com/ZenHive/mpp",
-          "https://github.com/ZenHive/mpp"
-        )
-
-      assert entry["packageName"] == "ZenHive/mpp"
-      assert entry["packageURL"] == "pkg:github/ZenHive/mpp"
-      assert entry["collectionURL"] == "https://github.com"
-    end
-
-    test "package name defaults from the repository URL", %{poc: poc, forge_case: case_record} do
-      entry = git_entry(poc, case_record, "https://github.com/acme/acme_lib.git", nil)
+      entry = git_entry(poc, case_record, "https://github.com/acme/acme_lib.git")
 
       assert entry["packageName"] == "acme/acme_lib"
       assert entry["packageURL"] == "pkg:github/acme/acme_lib"
+      assert entry["collectionURL"] == "https://github.com"
+      assert entry["repo"] == "https://github.com/acme/acme_lib.git"
     end
 
     test "gitlab repos get gitlab purls and collectionURL, subgroups included", %{
       poc: poc,
       forge_case: case_record
     } do
-      entry = git_entry(poc, case_record, "https://gitlab.com/group/subgroup/acme_lib", nil)
+      entry = git_entry(poc, case_record, "https://gitlab.com/group/subgroup/acme_lib")
 
       assert entry["collectionURL"] == "https://gitlab.com"
       assert entry["packageName"] == "group/subgroup/acme_lib"
@@ -466,7 +431,7 @@ defmodule Varsel.Cases.RenderTest do
       poc: poc,
       forge_case: case_record
     } do
-      entry = git_entry(poc, case_record, "https://git.sr.ht/~acme/acme_lib", nil)
+      entry = git_entry(poc, case_record, "https://git.sr.ht/~acme/acme_lib")
 
       assert entry["collectionURL"] == "https://git.sr.ht"
       assert entry["packageName"] == "~acme/acme_lib"
@@ -474,20 +439,25 @@ defmodule Varsel.Cases.RenderTest do
       assert entry["repo"] == "https://git.sr.ht/~acme/acme_lib"
     end
 
-    test "a git channel requires a repository URL on the package", %{
+    test "a package without a repository renders no forge entry", %{
       poc: poc,
       forge_case: case_record
     } do
       package =
         Fixtures.add_affected_package(poc, case_record, %{repo_url: nil, product: "hosted-only"})
 
-      assert {:error, error} =
-               Cases.add_package_channel(
-                 %{case_id: case_record.id, affected_package_id: package.id, channel_type: :git},
-                 actor: poc
-               )
+      Cases.add_package_channel!(
+        %{case_id: case_record.id, affected_package_id: package.id, purl_type: :hosted},
+        actor: poc
+      )
 
-      assert Exception.message(error) =~ "needs a repository URL"
+      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      {:ok, %{result: result}} = Publication.render(case_record)
+
+      # Only the hosted entry renders: no repo, no forge entry.
+      assert [entry] = result.cna["affected"]
+      refute Map.has_key?(entry, "collectionURL")
+      refute Map.has_key?(entry, "packageURL")
     end
   end
 end

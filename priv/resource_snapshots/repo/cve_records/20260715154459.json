@@ -1,0 +1,172 @@
+{
+  "attributes": [
+    {
+      "allow_nil?": false,
+      "default": "fragment(\"gen_random_uuid()\")",
+      "generated?": false,
+      "precision": null,
+      "primary_key?": true,
+      "references": null,
+      "scale": null,
+      "size": null,
+      "source": "id",
+      "type": "uuid"
+    },
+    {
+      "allow_nil?": true,
+      "default": "nil",
+      "generated?": false,
+      "precision": null,
+      "primary_key?": false,
+      "references": null,
+      "scale": null,
+      "size": null,
+      "source": "reservation_json",
+      "type": "map"
+    },
+    {
+      "allow_nil?": true,
+      "default": "nil",
+      "generated?": false,
+      "precision": null,
+      "primary_key?": false,
+      "references": null,
+      "scale": null,
+      "size": null,
+      "source": "cve_json",
+      "type": "map"
+    },
+    {
+      "allow_nil?": true,
+      "default": "nil",
+      "generated?": false,
+      "precision": null,
+      "primary_key?": false,
+      "references": null,
+      "scale": null,
+      "size": null,
+      "source": "last_synced_at",
+      "type": "utc_datetime"
+    },
+    {
+      "allow_nil?": true,
+      "default": "nil",
+      "generated?": false,
+      "precision": null,
+      "primary_key?": false,
+      "references": null,
+      "scale": null,
+      "size": null,
+      "source": "rejected_at",
+      "type": "utc_datetime"
+    },
+    {
+      "allow_nil?": true,
+      "default": "nil",
+      "generated?": false,
+      "precision": null,
+      "primary_key?": false,
+      "references": null,
+      "scale": null,
+      "size": null,
+      "source": "rejection_reason",
+      "type": "text"
+    },
+    {
+      "allow_nil?": false,
+      "default": "fragment(\"(now() AT TIME ZONE 'utc')\")",
+      "generated?": false,
+      "precision": null,
+      "primary_key?": false,
+      "references": null,
+      "scale": null,
+      "size": null,
+      "source": "inserted_at",
+      "type": "utc_datetime_usec"
+    },
+    {
+      "allow_nil?": false,
+      "default": "fragment(\"(now() AT TIME ZONE 'utc')\")",
+      "generated?": false,
+      "precision": null,
+      "primary_key?": false,
+      "references": null,
+      "scale": null,
+      "size": null,
+      "source": "updated_at",
+      "type": "utc_datetime_usec"
+    },
+    {
+      "allow_nil?": false,
+      "default": "\"reserved\"",
+      "generated?": false,
+      "precision": null,
+      "primary_key?": false,
+      "references": null,
+      "scale": null,
+      "size": null,
+      "source": "state",
+      "type": "text"
+    }
+  ],
+  "base_filter": null,
+  "check_constraints": [],
+  "create_table_options": null,
+  "custom_indexes": [],
+  "custom_statements": [
+    {
+      "code?": false,
+      "down": "DROP FUNCTION IF EXISTS cve_record_search_vector(jsonb)",
+      "global?": false,
+      "name": "cve_record_search_vector_fn",
+      "up": "CREATE FUNCTION cve_record_search_vector(cve_json jsonb)\nRETURNS tsvector\nLANGUAGE sql\nIMMUTABLE PARALLEL SAFE\nAS $$\n  SELECT\n    setweight(to_tsvector('english', coalesce(cve_json->'cveMetadata'->>'cveId', '')), 'A') ||\n    setweight(to_tsvector('english', coalesce(cve_json->'containers'->'cna'->>'title', '')), 'A') ||\n    setweight(to_tsvector('english', coalesce(\n      (SELECT string_agg(d->>'value', ' ')\n       FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'descriptions', '[]'::jsonb)) AS d),\n      ''\n    )), 'B') ||\n    setweight(to_tsvector('english', coalesce(\n      (SELECT string_agg(\n         coalesce(a->>'packageName', '') || ' ' ||\n         coalesce(a->>'product', '') || ' ' ||\n         coalesce(a->>'vendor', ''),\n         ' ')\n       FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'affected', '[]'::jsonb)) AS a),\n      ''\n    )), 'B') ||\n    setweight(to_tsvector('english', coalesce(\n      (SELECT string_agg(w->>'value', ' ')\n       FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'workarounds', '[]'::jsonb)) AS w),\n      ''\n    )), 'C') ||\n    setweight(to_tsvector('english', coalesce(\n      (SELECT string_agg(c->>'value', ' ')\n       FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'configurations', '[]'::jsonb)) AS c),\n      ''\n    )), 'C') ||\n    setweight(to_tsvector('simple', regexp_replace(cve_json::text, '[^a-zA-Z0-9 ]', ' ', 'g')), 'D')\n$$\n"
+    },
+    {
+      "code?": false,
+      "down": "ALTER TABLE cve_records DROP COLUMN IF EXISTS search_vector",
+      "global?": false,
+      "name": "add_search_vector",
+      "up": "ALTER TABLE cve_records ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (cve_record_search_vector(coalesce(cve_json, '{}'::jsonb))) STORED"
+    },
+    {
+      "code?": false,
+      "down": "DROP INDEX IF EXISTS cve_records_search_vector_gin",
+      "global?": false,
+      "name": "add_search_vector_gin_index",
+      "up": "CREATE INDEX cve_records_search_vector_gin ON cve_records USING GIN (search_vector)"
+    },
+    {
+      "code?": false,
+      "down": "DROP INDEX IF EXISTS cve_records_affected_gin",
+      "global?": false,
+      "name": "add_affected_gin_index",
+      "up": "CREATE INDEX cve_records_affected_gin ON cve_records USING GIN ((cve_json->'containers'->'cna'->'affected'))"
+    }
+  ],
+  "has_create_action": true,
+  "hash": "4479DFFC19CA8FA97607D66B85F6FD54E127C134BABE4B9474F5827A8704A2BE",
+  "identities": [
+    {
+      "all_tenants?": false,
+      "base_filter": null,
+      "index_name": "cve_records_unique_cve_id_index",
+      "keys": [
+        {
+          "type": "string",
+          "value": "(coalesce(cve_json->'cveMetadata'->>'cveId', reservation_json->>'cve_id'))"
+        }
+      ],
+      "name": "unique_cve_id",
+      "nils_distinct?": true,
+      "where": null
+    }
+  ],
+  "multitenancy": {
+    "attribute": null,
+    "global": null,
+    "strategy": null
+  },
+  "repo": "Elixir.Varsel.Repo",
+  "schema": null,
+  "table": "cve_records"
+}

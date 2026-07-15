@@ -30,7 +30,7 @@ defmodule Varsel.Cases.DerivationTest do
         channel =
           Cases.add_package_channel!(
             Map.merge(
-              %{case_id: case_record.id, affected_package_id: package.id, channel_type: type},
+              %{case_id: case_record.id, affected_package_id: package.id, purl_type: type},
               attrs
             ),
             actor: poc
@@ -59,7 +59,7 @@ defmodule Varsel.Cases.DerivationTest do
       package_with_channels(
         poc,
         case_record,
-        [{:hex, %{package_name: "acme_lib"}}, {:git, %{package_name: "acme/acme_lib"}}],
+        [{:hex, %{name: "acme_lib"}}],
         [
           %{event: :introduced, commit_sha: @intro_sha},
           %{event: :fixed, commit_sha: @fix_sha}
@@ -80,7 +80,8 @@ defmodule Varsel.Cases.DerivationTest do
              }
            ]
 
-    assert derivation["channels"][channels[:git].id]["versions"] == [
+    # The git/forge entry derives implicitly from the package's repo_url.
+    assert derivation["git"]["versions"] == [
              %{
                "version" => @intro_sha,
                "lessThan" => @fix_sha,
@@ -105,7 +106,7 @@ defmodule Varsel.Cases.DerivationTest do
       package_with_channels(
         poc,
         case_record,
-        [{:hex, %{package_name: "acme_lib"}}, {:git, %{package_name: "acme/acme_lib"}}],
+        [{:hex, %{name: "acme_lib"}}],
         [
           %{event: :introduced, commit_sha: @intro_sha},
           %{event: :fixed, commit_sha: @fix_sha},
@@ -129,7 +130,7 @@ defmodule Varsel.Cases.DerivationTest do
              }
            ]
 
-    assert derivation["channels"][channels[:git].id]["versions"] == [
+    assert derivation["git"]["versions"] == [
              %{
                "version" => @intro_sha,
                "lessThan" => "*",
@@ -159,7 +160,7 @@ defmodule Varsel.Cases.DerivationTest do
       package_with_channels(
         poc,
         case_record,
-        [{:hex, %{package_name: "acme_lib"}}, {:git, %{package_name: "acme/acme_lib"}}],
+        [{:hex, %{name: "acme_lib"}}],
         [
           %{event: :introduced, commit_sha: @intro_sha},
           %{event: :fixed, commit_sha: @fix_sha}
@@ -180,8 +181,8 @@ defmodule Varsel.Cases.DerivationTest do
 
     assert derivation["channels"][channels[:hex].id]["pending"] == [@fix_sha]
 
-    # The git channel still bounds on the commit itself.
-    assert derivation["channels"][channels[:git].id]["versions"] == [
+    # The implicit git entry still bounds on the commit itself.
+    assert derivation["git"]["versions"] == [
              %{
                "version" => @intro_sha,
                "lessThan" => @fix_sha,
@@ -198,7 +199,7 @@ defmodule Varsel.Cases.DerivationTest do
       package_with_channels(
         poc,
         case_record,
-        [{:hex, %{package_name: "acme_lib"}}],
+        [{:hex, %{name: "acme_lib"}}],
         [
           %{event: :introduced, commit_sha: @intro_sha},
           %{event: :fixed, commit_sha: @fix_sha}
@@ -216,7 +217,7 @@ defmodule Varsel.Cases.DerivationTest do
 
     channel =
       Cases.add_package_channel!(
-        %{case_id: case_record.id, affected_package_id: package.id, channel_type: :hosted},
+        %{case_id: case_record.id, affected_package_id: package.id, purl_type: :hosted},
         actor: poc
       )
 
@@ -273,19 +274,8 @@ defmodule Varsel.Cases.DerivationTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          channel_type: :otp,
-          package_name: "ssh"
-        },
-        actor: poc
-      )
-
-    git_channel =
-      Cases.add_package_channel!(
-        %{
-          case_id: case_record.id,
-          affected_package_id: package.id,
-          channel_type: :git,
-          package_name: "erlang/otp"
+          purl_type: :otp,
+          name: "ssh"
         },
         actor: poc
       )
@@ -324,8 +314,8 @@ defmodule Varsel.Cases.DerivationTest do
              }
            ]
 
-    # The git channel carries the OTP release block plus the git SHA block.
-    assert [otp_block, git_block] = derivation["channels"][git_channel.id]["versions"]
+    # The implicit git entry carries the OTP release block plus the git SHA block.
+    assert [otp_block, git_block] = derivation["git"]["versions"]
 
     assert otp_block == %{
              "version" => "26.0",
@@ -355,8 +345,8 @@ defmodule Varsel.Cases.DerivationTest do
         [
           {:oci,
            %{
-             package_name: "acme/acme_lib",
-             registry_url: "ghcr.io/acme",
+             name: "acme_lib",
+             qualifiers: %{"repository_url" => "ghcr.io/acme"},
              tag_suffixes: ["elixir", "erlang"]
            }}
         ],

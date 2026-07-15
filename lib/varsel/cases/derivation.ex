@@ -73,11 +73,16 @@ defmodule Varsel.Cases.Derivation do
         {channel.id, derive_channel(channel, platform, intro, lines, events)}
       end)
 
+    # The git/forge entry is implicit: every package with a repository gets
+    # one, derived from the same boundary facts.
+    git = if package.repo_url, do: derive_git_channel(platform, intro, lines)
+
     {:ok,
      %{
        "intro" => intro,
        "lines" => lines,
        "channels" => channels,
+       "git" => git,
        "cpe_matches" => cpe_matches(platform, intro, lines),
        "issues" => intro_issues ++ line_issues
      }}
@@ -219,7 +224,7 @@ defmodule Varsel.Cases.Derivation do
       scoped_events != [] ->
         derive_scoped_channel(channel, scoped_events)
 
-      channel.channel_type == :hosted ->
+      channel.purl_type == :hosted ->
         %{
           "versions" => [],
           "pending" => [],
@@ -269,21 +274,17 @@ defmodule Varsel.Cases.Derivation do
   defp boundary_value(%{version: version}) when not is_nil(version), do: version
   defp boundary_value(%{commit_sha: sha}), do: sha
 
-  defp version_type(%{channel_type: :git}), do: "git"
-  defp version_type(%{channel_type: :otp}), do: "otp"
-  defp version_type(%{channel_type: :oci}), do: "other"
-  defp version_type(%{channel_type: :hosted}), do: "date"
+  defp version_type(%{purl_type: :otp}), do: "otp"
+  defp version_type(%{purl_type: :oci}), do: "other"
+  defp version_type(%{purl_type: :hosted}), do: "date"
   defp version_type(_channel), do: "semver"
 
-  # Repo-derived channels: git SHAs, registry versions, OTP app versions, OCI tags.
-  defp derive_repo_channel(channel, platform, intro, lines) do
+  # Repo-derived channels: registry versions, OTP app versions, OCI tags.
+  defp derive_repo_channel(channel, _platform, intro, lines) do
     released = Enum.reject(lines, & &1["pending"])
     pending = pending_shas(lines)
 
-    case channel.channel_type do
-      :git ->
-        derive_git_channel(platform, intro, lines, released, pending)
-
+    case channel.purl_type do
       :otp ->
         derive_otp_channel(channel, intro, released, pending)
 
@@ -304,7 +305,15 @@ defmodule Varsel.Cases.Derivation do
     end
   end
 
-  defp derive_git_channel(platform, intro, lines, released, pending) do
+  # The implicit git/forge entry, derived for every package with a repo_url.
+  defp derive_git_channel(_platform, nil, _lines) do
+    %{"versions" => [], "pending" => [], "issues" => []}
+  end
+
+  defp derive_git_channel(platform, intro, lines) do
+    released = Enum.reject(lines, & &1["pending"])
+    pending = pending_shas(lines)
+
     # An explicit introduced version ("0" = since the beginning) stands in
     # when no introducing commit is known (see CVE-2025-4754's git entry).
     {git_range, git_issues} =
@@ -331,7 +340,7 @@ defmodule Varsel.Cases.Derivation do
   end
 
   defp derive_otp_channel(channel, intro, released, pending) do
-    app = channel.package_name
+    app = channel.name
 
     with {:intro, {:ok, intro_version}} <-
            {:intro, OtpVersionsTable.first_shipped_version(intro["tag"] || intro["version"], app)},
