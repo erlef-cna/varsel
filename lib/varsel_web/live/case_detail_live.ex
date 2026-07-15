@@ -1608,32 +1608,36 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
-  # Accepted proposals are redundant in the panel — their effect *is* the
-  # case content — so they collapse into a details block at the bottom.
+  # Only open proposals need attention; everything resolved (accepted,
+  # declined, superseded, withdrawn) collapses into a details block — an
+  # accepted proposal's effect *is* the case content, and the rest is history.
   defp proposals_section(assigns) do
-    {accepted, active} = Enum.split_with(assigns.case_record.proposals, &(&1.state == :accepted))
-    assigns = assign(assigns, accepted: accepted, active: active)
+    {open, resolved} = Enum.split_with(assigns.case_record.proposals, &(&1.state == :open))
+    assigns = assign(assigns, open: open, resolved: resolved)
 
     ~H"""
     <section>
       <h2 class="text-lg font-semibold mb-3">Proposals</h2>
 
       <.proposal_card
-        :for={proposal <- @active}
+        :for={proposal <- @open}
         proposal={proposal}
         can_resolve={@can_resolve}
         current_user={@current_user}
       />
 
       <p :if={@case_record.proposals == []} class="text-sm text-base-content/60">No proposals.</p>
+      <p :if={@open == [] and @resolved != []} class="text-sm text-base-content/60">
+        No open proposals.
+      </p>
 
-      <details :if={@accepted != []}>
+      <details :if={@resolved != []}>
         <summary class="cursor-pointer text-sm text-base-content/60">
-          Accepted ({length(@accepted)})
+          Resolved ({length(@resolved)})
         </summary>
         <div class="mt-2">
           <.proposal_card
-            :for={proposal <- @accepted}
+            :for={proposal <- @resolved}
             proposal={proposal}
             can_resolve={@can_resolve}
             current_user={@current_user}
