@@ -31,6 +31,7 @@ defmodule Varsel.Cases.PackageChannel do
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Checks.ActorAssignedToCase
+  alias Varsel.Cases.PackageChannel.Changes.NormalizePackageName
   alias Varsel.Cases.PackageChannel.ChannelType
   alias Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage
   alias Varsel.Cases.Proposable
@@ -65,6 +66,7 @@ defmodule Varsel.Cases.PackageChannel do
     create :add do
       description "Adds a distribution channel to a logical product."
       accept [:case_id, :affected_package_id | Proposable.fields(__MODULE__)]
+      change NormalizePackageName
       validate CaseEditable
       validate ConsistentWithPackage
     end
@@ -73,6 +75,7 @@ defmodule Varsel.Cases.PackageChannel do
       description "Edits a channel. Only allowed while the case is editable."
       accept Proposable.fields(__MODULE__)
       require_atomic? false
+      change NormalizePackageName
       validate CaseEditable
       validate ConsistentWithPackage
     end
@@ -96,6 +99,7 @@ defmodule Varsel.Cases.PackageChannel do
       validate CaseEditable
       validate ConsistentWithPackage
       change ApplyProposedField
+      change NormalizePackageName
     end
 
     create :apply_proposal_insert do
@@ -104,6 +108,7 @@ defmodule Varsel.Cases.PackageChannel do
 
       argument :proposal_id, :uuid, allow_nil?: false
 
+      change NormalizePackageName
       validate CaseEditable
       validate ConsistentWithPackage
     end

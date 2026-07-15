@@ -1281,7 +1281,9 @@ defmodule VarselWeb.CaseDetailLive do
       <:label>Channel type</:label>
     </.input>
     <.input field={@form[:package_name]} type="text" placeholder="e.g. my_package or owner/repo">
-      <:label>Package name (empty only for hosted)</:label>
+      <:label>
+        Package name (git channels default to the repository URL's path; empty for hosted)
+      </:label>
     </.input>
     <.input field={@form[:registry_url]} type="text" placeholder="e.g. ghcr.io/owner">
       <:label>Registry URL (OCI/npm only)</:label>

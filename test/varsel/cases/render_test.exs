@@ -386,4 +386,101 @@ defmodule Varsel.Cases.RenderTest do
     {result, _cve_json} = render!(case_record)
     refute Enum.any?(result.blockers, &(&1 =~ "no containing release"))
   end
+
+  describe "forge handling on git channels" do
+    setup %{poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Forge case"})
+      %{forge_case: case_record}
+    end
+
+    defp git_entry(poc, case_record, repo_url, package_name) do
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{
+          vendor: "acme",
+          product: "acme_lib",
+          repo_url: repo_url
+        })
+
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          channel_type: :git,
+          package_name: package_name
+        },
+        actor: poc
+      )
+
+      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      {:ok, %{result: result}} = Publication.render(case_record)
+
+      Enum.find(
+        result.cna["affected"],
+        &(&1["collectionURL"] =~ ~r{^https://} or is_nil(&1["collectionURL"]))
+      )
+    end
+
+    test "a pasted clone URL as package name is normalized, never percent-encoded", %{
+      poc: poc,
+      forge_case: case_record
+    } do
+      entry =
+        git_entry(
+          poc,
+          case_record,
+          "https://github.com/ZenHive/mpp",
+          "https://github.com/ZenHive/mpp"
+        )
+
+      assert entry["packageName"] == "ZenHive/mpp"
+      assert entry["packageURL"] == "pkg:github/ZenHive/mpp"
+      assert entry["collectionURL"] == "https://github.com"
+    end
+
+    test "package name defaults from the repository URL", %{poc: poc, forge_case: case_record} do
+      entry = git_entry(poc, case_record, "https://github.com/acme/acme_lib.git", nil)
+
+      assert entry["packageName"] == "acme/acme_lib"
+      assert entry["packageURL"] == "pkg:github/acme/acme_lib"
+    end
+
+    test "gitlab repos get gitlab purls and collectionURL, subgroups included", %{
+      poc: poc,
+      forge_case: case_record
+    } do
+      entry = git_entry(poc, case_record, "https://gitlab.com/group/subgroup/acme_lib", nil)
+
+      assert entry["collectionURL"] == "https://gitlab.com"
+      assert entry["packageName"] == "group/subgroup/acme_lib"
+      assert entry["packageURL"] == "pkg:gitlab/group/subgroup/acme_lib"
+    end
+
+    test "forges without a purl type keep the path but emit no packageURL", %{
+      poc: poc,
+      forge_case: case_record
+    } do
+      entry = git_entry(poc, case_record, "https://git.sr.ht/~acme/acme_lib", nil)
+
+      assert entry["collectionURL"] == "https://git.sr.ht"
+      assert entry["packageName"] == "~acme/acme_lib"
+      refute Map.has_key?(entry, "packageURL")
+      assert entry["repo"] == "https://git.sr.ht/~acme/acme_lib"
+    end
+
+    test "a git channel requires a repository URL on the package", %{
+      poc: poc,
+      forge_case: case_record
+    } do
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{repo_url: nil, product: "hosted-only"})
+
+      assert {:error, error} =
+               Cases.add_package_channel(
+                 %{case_id: case_record.id, affected_package_id: package.id, channel_type: :git},
+                 actor: poc
+               )
+
+      assert Exception.message(error) =~ "needs a repository URL"
+    end
+  end
 end

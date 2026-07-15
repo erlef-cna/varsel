@@ -62,16 +62,23 @@ defmodule Varsel.Cases.Render.Channel do
   defp put_non_empty(entry, _key, []), do: entry
   defp put_non_empty(entry, key, value), do: Map.put(entry, key, value)
 
+  # Git channels are forge-aware: host and default path come from the
+  # package's repo_url; a purl is only emitted for forges with a registered
+  # purl type (github/gitlab/bitbucket) — other forges keep vendor/product/
+  # repo/packageName without a packageURL rather than inventing one.
   defp channel_constants(package, %{channel_type: :git} = channel) do
-    put_repo(
-      %{
-        "collectionURL" => "https://github.com",
-        "packageName" => channel.package_name,
-        "packageURL" => github_purl(channel.package_name),
-        "cpes" => [cpe(package)]
-      },
-      package
-    )
+    constants = put_repo(%{"cpes" => [cpe(package)]}, package)
+
+    case forge(package.repo_url, channel.package_name) do
+      nil ->
+        constants
+
+      %{host: host, path: path, purl_type: purl_type} ->
+        constants
+        |> Map.put("collectionURL", "https://#{host}")
+        |> put_present("packageName", path)
+        |> put_present("packageURL", forge_purl(purl_type, path))
+    end
   end
 
   defp channel_constants(package, %{channel_type: :hex} = channel) do
@@ -154,15 +161,67 @@ defmodule Varsel.Cases.Render.Channel do
     |> String.replace(~r/[^a-z0-9._-]/, fn char -> "\\" <> char end)
   end
 
-  defp github_purl(package_name) do
-    case String.split(package_name || "", "/") do
-      [owner, name] ->
-        Purl.to_string(struct!(Purl, type: "github", namespace: [owner], name: name))
+  @forge_purl_types %{
+    "github.com" => "github",
+    "gitlab.com" => "gitlab",
+    "bitbucket.org" => "bitbucket"
+  }
 
-      _other ->
-        Purl.to_string(struct!(Purl, type: "github", name: package_name || ""))
+  # Resolves the forge host, the in-forge path ("owner/repo"), and the purl
+  # type (nil for forges without one). The path prefers the channel's
+  # package_name — normalized, so a pasted clone URL still works — and falls
+  # back to the repo_url's own path.
+  defp forge(repo_url, package_name) do
+    case URI.parse(repo_url || "") do
+      %URI{host: host, path: repo_path} when is_binary(host) ->
+        %{
+          host: host,
+          path: forge_path(package_name) || forge_path(repo_path),
+          purl_type: Map.get(@forge_purl_types, host)
+        }
+
+      _no_repo ->
+        # No usable repo_url: a plain "owner/repo" name still renders, but
+        # without a host there is no collectionURL or purl to derive.
+        nil
     end
   end
+
+  @doc """
+  Normalizes a forge path: a pasted clone URL, a leading/trailing-slashed
+  path, or a bare "owner/repo" all become "owner/repo" (nil when nothing
+  usable remains).
+
+      "https://github.com/owner/repo.git" | "/owner/repo/" | "owner/repo" -> "owner/repo"
+  """
+  @spec forge_path(String.t() | nil) :: String.t() | nil
+  def forge_path(nil), do: nil
+
+  def forge_path(value) do
+    path = if value =~ "://", do: URI.parse(value).path || "", else: value
+
+    case path |> String.trim("/") |> String.replace_suffix(".git", "") do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp forge_purl(nil, _path), do: nil
+  defp forge_purl(_type, nil), do: nil
+
+  defp forge_purl(type, path) do
+    case String.split(path, "/") do
+      [name] ->
+        Purl.to_string(struct!(Purl, type: type, name: name))
+
+      parts ->
+        # Multi-segment namespaces cover gitlab subgroups (owner/group/repo).
+        Purl.to_string(struct!(Purl, type: type, namespace: Enum.drop(parts, -1), name: List.last(parts)))
+    end
+  end
+
+  defp put_present(constants, _key, nil), do: constants
+  defp put_present(constants, key, value), do: Map.put(constants, key, value)
 
   defp purl(type, name), do: Purl.to_string(struct!(Purl, type: type, name: name))
 
