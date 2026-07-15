@@ -10,6 +10,7 @@ defmodule VarselWeb.CaseLiveTest do
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Cases
   alias Varsel.Fixtures
+  alias Varsel.Test.StubAIBackend
 
   defp log_in(conn, user) do
     conn
@@ -433,6 +434,31 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert {:error, {:live_redirect, %{to: "/cases"}}} =
                conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+    end
+  end
+
+  describe "AI research" do
+    test "the button runs research and reloads the case", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Research me"})
+      notes = "## AI research notes\n\nNothing to verify."
+
+      StubAIBackend.stub_script([
+        {:tool_calls,
+         [
+           {"create_case_comment", %{"input" => %{"case_id" => case_record.id, "body" => notes}}}
+         ]},
+        {:text, notes},
+        {:result, notes}
+      ])
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      assert html =~ "AI research"
+
+      lv |> element("button[phx-click=ai_research]") |> render_click()
+
+      html = render_async(lv)
+      assert html =~ "AI research finished"
+      assert html =~ "Nothing to verify."
     end
   end
 

@@ -9,11 +9,15 @@ defmodule Varsel.Cases.Checks.ActorAssignedToCase do
 
   Works on create (reads `case_id` from the changeset attributes/arguments),
   update, and destroy (reads it from the record; for `Varsel.Cases.Case`
-  itself the record's own `id` is used). Read actions should use the
-  equivalent `expr(exists(...))` filter check instead so lists are scoped.
+  itself the record's own `id` is used), and on generic actions (reads the
+  `id` argument on `Varsel.Cases.Case`, `case_id` elsewhere). Read actions
+  should use the equivalent `expr(exists(...))` filter check instead so
+  lists are scoped.
   """
 
   use Ash.Policy.SimpleCheck
+
+  alias Varsel.Cases.Case
 
   require Ash.Query
 
@@ -21,8 +25,8 @@ defmodule Varsel.Cases.Checks.ActorAssignedToCase do
   def describe(_opts), do: "actor is assigned to the case"
 
   @impl Ash.Policy.SimpleCheck
-  def match?(%{id: actor_id}, %{subject: %Ash.Changeset{} = changeset}, _opts) do
-    case case_id(changeset) do
+  def match?(%{id: actor_id}, %{subject: %struct{} = subject}, _opts) when struct in [Ash.Changeset, Ash.ActionInput] do
+    case case_id(subject) do
       nil ->
         false
 
@@ -35,7 +39,7 @@ defmodule Varsel.Cases.Checks.ActorAssignedToCase do
 
   def match?(_actor, _context, _opts), do: false
 
-  defp case_id(%Ash.Changeset{resource: Varsel.Cases.Case} = changeset), do: changeset.data.id
+  defp case_id(%Ash.Changeset{resource: Case} = changeset), do: changeset.data.id
 
   defp case_id(%Ash.Changeset{action_type: :create} = changeset) do
     Ash.Changeset.get_attribute(changeset, :case_id) ||
@@ -43,4 +47,7 @@ defmodule Varsel.Cases.Checks.ActorAssignedToCase do
   end
 
   defp case_id(%Ash.Changeset{} = changeset), do: changeset.data.case_id
+
+  defp case_id(%Ash.ActionInput{resource: Case} = input), do: input.arguments[:id]
+  defp case_id(%Ash.ActionInput{} = input), do: input.arguments[:case_id]
 end

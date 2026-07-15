@@ -100,6 +100,7 @@ defmodule Varsel.MixProject do
       {:postgrex, ">= 0.0.0"},
       {:purl, "~> 0.4.0"},
       {:req, "~> 0.5"},
+      {:req_llm, "~> 1.17"},
       {:sourceror, "~> 1.8", only: [:dev, :test]},
       {:styler, "~> 1.0"},
       {:swoosh, "~> 1.16"},

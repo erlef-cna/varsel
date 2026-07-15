@@ -138,6 +138,16 @@ config :varsel, VarselWeb.Endpoint,
   pubsub_server: Varsel.PubSub,
   live_view: [signing_salt: "zOuaRJlV"]
 
+# AI assistant plumbing: one ReqLLM model spec per task (cheap models for
+# mechanical work, stronger ones where it matters) and the transport backend
+# (swapped for a stub in tests). The Anthropic API key comes from the
+# ANTHROPIC_API_KEY environment variable (ReqLLM reads it directly).
+config :varsel, :ai,
+  backend: ReqLLM,
+  models: [
+    research: "anthropic:claude-sonnet-5"
+  ]
+
 # The "from" address used for CNA notification emails (e.g. new vulnerability
 # report submissions sent to POCs).
 config :varsel, :cna_email_from, "cna@erlef.org"
@@ -154,6 +164,7 @@ config :varsel,
   ecto_repos: [Varsel.Repo],
   generators: [timestamp_type: :utc_datetime],
   ash_domains: [
+    Varsel.AI,
     Varsel.CAPEC,
     Varsel.CWE,
     Varsel.CVE,

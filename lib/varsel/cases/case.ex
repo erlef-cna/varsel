@@ -52,6 +52,9 @@ defmodule Varsel.Cases.Case do
     extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
+  import AshAi.Actions, only: [prompt: 2]
+
+  alias Varsel.AI.Research
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
@@ -199,6 +202,32 @@ defmodule Varsel.Cases.Case do
       end
     end
 
+    action :research, :string do
+      description """
+      Runs the AI research assistant over the case: it reads the attached
+      vulnerability reports, verifies the basics (hex package names, canonical
+      repository URLs, referenced advisories), and files proposals for a human
+      to review. Returns the assistant's research notes (also posted as a case
+      comment).
+      """
+
+      argument :id, :uuid, allow_nil?: false
+
+      run prompt(
+            &Research.model/0,
+            prompt: &Research.context/2,
+            tools: [
+              :fetch_url,
+              :hex_package_info,
+              :create_case_proposal,
+              :create_case_comment
+            ],
+            otp_app: :varsel,
+            req_llm: Varsel.AI,
+            max_iterations: 40
+          )
+    end
+
     update :refresh_derivation do
       description "Recomputes the derived version data (SHA → version ranges) of every affected package."
       accept []
@@ -318,6 +347,14 @@ defmodule Varsel.Cases.Case do
     # scopes what any actor can render.
     policy action(:render_preview) do
       authorize_if actor_present()
+    end
+
+    # AI research files proposals and comments as the invoking user — same
+    # circle as proposing. Deliberately not exposed via GraphQL or MCP; its
+    # web-fetching tools must stay internal.
+    policy action(:research) do
+      authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if ActorAssignedToCase
     end
 
     # Case lifecycle decisions are POC-only.

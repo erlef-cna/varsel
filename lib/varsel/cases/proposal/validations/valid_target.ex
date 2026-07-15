@@ -32,6 +32,17 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
     target = Ash.Changeset.get_attribute(changeset, :target)
     target_id = Ash.Changeset.get_attribute(changeset, :target_id)
     operation = Ash.Changeset.get_attribute(changeset, :operation)
+
+    if is_nil(target) or is_nil(operation) do
+      # The attributes' own allow_nil? checks report these; dry runs (e.g.
+      # `Ash.can?` probing with empty input) must not crash here.
+      :ok
+    else
+      validate(changeset, target, target_id, operation)
+    end
+  end
+
+  defp validate(changeset, target, target_id, operation) do
     field_name = Ash.Changeset.get_attribute(changeset, :field_name)
     proposed_value = Ash.Changeset.get_attribute(changeset, :proposed_value)
     case_id = Ash.Changeset.get_attribute(changeset, :case_id)

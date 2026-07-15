@@ -104,7 +104,8 @@ defmodule VarselWeb.CaseDetailLive do
            preview: nil,
            diff: nil,
            users: nil,
-           catalog_options: nil
+           catalog_options: nil,
+           researching: false
          )}
 
       {:error, _error} ->
@@ -163,6 +164,19 @@ defmodule VarselWeb.CaseDetailLive do
       :error ->
         {:noreply, put_flash(socket, :error, "The CNA override must be valid JSON.")}
     end
+  end
+
+  ## ------------------------------------------------------------- AI research
+
+  # The research run talks to the LLM and fetches the web; run it off the
+  # LiveView. Proposals/comments it files arrive live via PubSub.
+  def handle_event("ai_research", _params, socket) do
+    %{case_id: case_id, current_user: actor} = socket.assigns
+
+    {:noreply,
+     socket
+     |> assign(researching: true)
+     |> start_async(:research, fn -> Cases.research_case(case_id, actor: actor) end)}
   end
 
   ## --------------------------------------------------------------- lifecycle
@@ -495,6 +509,30 @@ defmodule VarselWeb.CaseDetailLive do
 
   def handle_async(:publish, {:exit, reason}, socket) do
     {:noreply, put_flash(socket, :error, "Publish failed: #{Exception.format_exit(reason)}")}
+  end
+
+  def handle_async(:research, {:ok, result}, socket) do
+    socket = assign(socket, researching: false)
+
+    socket =
+      case result do
+        {:ok, _notes} ->
+          socket
+          |> put_flash(:info, "AI research finished — review the proposals and notes below.")
+          |> reload_case()
+
+        {:error, error} ->
+          put_flash(socket, :error, "AI research failed: #{errors_to_string(error)}")
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_async(:research, {:exit, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(researching: false)
+     |> put_flash(:error, "AI research failed: #{Exception.format_exit(reason)}")}
   end
 
   def handle_async(:diff, {:ok, lines}, socket) do
@@ -923,6 +961,15 @@ defmodule VarselWeb.CaseDetailLive do
           <span :if={is_nil(@case_record.cve_id)} class="text-base-content/60">no CVE ID assigned</span>
         </:subtitle>
         <:actions>
+          <button
+            :if={can_propose?(@case_record, @current_user)}
+            class="btn btn-outline btn-sm"
+            phx-click="ai_research"
+            disabled={@researching}
+          >
+            <span :if={@researching} class="loading loading-spinner loading-xs"></span>
+            {if @researching, do: "Researching…", else: "AI research"}
+          </button>
           <.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
         </:actions>
       </.header>

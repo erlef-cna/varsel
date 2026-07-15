@@ -48,6 +48,37 @@ defmodule Varsel.CVE.HexPm do
   end
 
   @doc """
+  Fetches a package's public details from hex.pm: description, links,
+  licenses, released versions, and retirements.
+
+  Returns `{:error, reason}` when the package does not exist or the request
+  fails.
+  """
+  @spec package_info(String.t()) :: {:ok, map()} | {:error, String.t()}
+  def package_info(name) when is_binary(name) do
+    case :hex_api_package.get(config(), name) do
+      {:ok, {200, _headers, body}} -> {:ok, info(body)}
+      {:ok, {404, _headers, _body}} -> {:error, "package #{name} does not exist on hex.pm"}
+      {:ok, {status, _headers, _body}} -> {:error, "hex.pm returned #{status} for #{name}"}
+      {:error, reason} -> {:error, "hex.pm request for #{name} failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp info(body) do
+    meta = Map.get(body, "meta", %{})
+
+    %{
+      "name" => body["name"],
+      "description" => meta["description"],
+      "licenses" => meta["licenses"],
+      "links" => meta["links"],
+      "latest_stable_version" => body["latest_stable_version"],
+      "versions" => body |> Map.get("releases", []) |> Enum.map(& &1["version"]),
+      "retirements" => Map.get(body, "retirements", %{})
+    }
+  end
+
+  @doc """
   Extracts the package names of all `pkg:hex/...` package URLs in a CVE
   record's affected entries.
 

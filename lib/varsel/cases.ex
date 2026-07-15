@@ -139,6 +139,10 @@ defmodule Varsel.Cases do
       define :close_case, action: :close
       define :render_case_preview, action: :render_preview
       define :refresh_case_derivation, action: :refresh_derivation
+      # Deliberately absent from the tools/graphql blocks: research uses
+      # internal-only web-fetching tools that must not be reachable from
+      # the public API surface.
+      define :research_case, action: :research, args: [:id]
     end
 
     resource CaseAssignment do
