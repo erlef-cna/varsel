@@ -165,16 +165,6 @@ defmodule VarselWeb.CaseDetailLive do
     end
   end
 
-  defp save_content(socket, params) do
-    case AshPhoenix.Form.submit(socket.assigns.content_form, params: params) do
-      {:ok, _case_record} ->
-        {:noreply, socket |> put_flash(:info, "Case saved.") |> reload_case()}
-
-      {:error, form} ->
-        {:noreply, assign(socket, content_form: form)}
-    end
-  end
-
   ## --------------------------------------------------------------- lifecycle
 
   # Publishing refreshes derivations (git fetches); run it off the LiveView.
@@ -519,6 +509,16 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   ## ----------------------------------------------------------------- helpers
+
+  defp save_content(socket, params) do
+    case AshPhoenix.Form.submit(socket.assigns.content_form, params: params) do
+      {:ok, _case_record} ->
+        {:noreply, socket |> put_flash(:info, "Case saved.") |> reload_case()}
+
+      {:error, form} ->
+        {:noreply, assign(socket, content_form: form)}
+    end
+  end
 
   defp resolve_proposal(socket, id, note, fun, verb) do
     proposal = Enum.find(socket.assigns.case_record.proposals, &(&1.id == id))
