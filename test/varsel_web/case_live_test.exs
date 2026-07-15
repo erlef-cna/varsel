@@ -121,10 +121,13 @@ defmodule VarselWeb.CaseLiveTest do
 
       # First toggle starts from the all-benign baseline (0.0 NONE), then
       # raising vulnerable-system confidentiality to High yields a real score.
+      # The extra "value" => "" emulates the browser merging the clicked
+      # button's empty DOM value into the payload (regression: it must not
+      # clobber the selection).
       html =
         lv
-        |> element(~s{#case-cvss-v4 button[phx-value-code="VC"][phx-value-value="H"]})
-        |> render_click()
+        |> element(~s{#case-cvss-v4 button[phx-value-code="VC"][phx-value-selection="H"]})
+        |> render_click(%{"value" => ""})
 
       assert html =~ "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
       assert html =~ "8.7"
@@ -151,7 +154,7 @@ defmodule VarselWeb.CaseLiveTest do
       })
 
       assert lv
-             |> element(~s{#case-cvss-v4 button[phx-value-code="AV"][phx-value-value="P"]})
+             |> element(~s{#case-cvss-v4 button[phx-value-code="AV"][phx-value-selection="P"]})
              |> render() =~ "btn-primary"
 
       # Garbage flags an invalid vector instead of scoring.

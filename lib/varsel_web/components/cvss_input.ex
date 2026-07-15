@@ -75,7 +75,10 @@ defmodule VarselWeb.CvssInput do
   end
 
   @impl Phoenix.LiveComponent
-  def handle_event("metric", %{"code" => code, "value" => value}, socket) when code in @base_codes do
+  # The param is deliberately NOT named "value": browsers merge the clicked
+  # button's own DOM value ("" for plain <button>s) into the click payload
+  # under "value", clobbering a phx-value-value attribute.
+  def handle_event("metric", %{"code" => code, "selection" => value}, socket) when code in @base_codes do
     vector =
       socket.assigns.vector
       |> parse_pairs()
@@ -139,7 +142,7 @@ defmodule VarselWeb.CvssInput do
               title={"#{code}:#{value} — #{value_label}"}
               phx-click="metric"
               phx-value-code={code}
-              phx-value-value={value}
+              phx-value-selection={value}
               phx-target={@myself}
             >
               {value_label}
