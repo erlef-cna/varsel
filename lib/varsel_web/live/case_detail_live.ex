@@ -687,38 +687,34 @@ defmodule VarselWeb.CaseDetailLive do
         <.input field={@content_form[:title]} type="text">
           <:label>Title</:label>
         </.input>
-        <.input
+        <.live_component
+          module={VarselWeb.MarkdownInput}
+          id="case-description-md"
           field={@content_form[:description_md]}
-          type="textarea"
-          rows="8"
-          class="w-full textarea font-mono text-sm"
-        >
-          <:label>Description (Markdown)</:label>
-        </.input>
-        <.input
+          label="Description (Markdown)"
+          rows={8}
+        />
+        <.live_component
+          module={VarselWeb.MarkdownInput}
+          id="case-workarounds-md"
           field={@content_form[:workarounds_md]}
-          type="textarea"
-          rows="3"
-          class="w-full textarea font-mono text-sm"
-        >
-          <:label>Workarounds (Markdown, optional)</:label>
-        </.input>
-        <.input
+          label="Workarounds (Markdown, optional)"
+          rows={3}
+        />
+        <.live_component
+          module={VarselWeb.MarkdownInput}
+          id="case-configurations-md"
           field={@content_form[:configurations_md]}
-          type="textarea"
-          rows="3"
-          class="w-full textarea font-mono text-sm"
-        >
-          <:label>Configurations (Markdown, optional)</:label>
-        </.input>
-        <.input
+          label="Configurations (Markdown, optional)"
+          rows={3}
+        />
+        <.live_component
+          module={VarselWeb.MarkdownInput}
+          id="case-solutions-md"
           field={@content_form[:solutions_md]}
-          type="textarea"
-          rows="3"
-          class="w-full textarea font-mono text-sm"
-        >
-          <:label>Solutions (Markdown, optional)</:label>
-        </.input>
+          label="Solutions (Markdown, optional)"
+          rows={3}
+        />
         <div class="grid sm:grid-cols-2 gap-x-4">
           <.input
             field={@content_form[:cvss_v4]}

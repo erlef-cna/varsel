@@ -70,6 +70,47 @@ defmodule VarselWeb.CaseLiveTest do
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Renamed case"
     end
 
+    test "markdown fields preview the rendered HTML and keep unsaved edits", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Markdown case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # Type into the description (unsaved), then switch that field to preview.
+      lv
+      |> form("#case-content-form", %{
+        "form" => %{"description_md" => "Uses `zip:unzip/1` **unsafely**."}
+      })
+      |> render_change()
+
+      html =
+        lv
+        |> element("#case-description-md button[phx-value-mode=preview]")
+        |> render_click()
+
+      assert html =~ "<code>zip:unzip/1</code>"
+      assert html =~ "<strong>unsafely</strong>"
+
+      # The textarea stays in the DOM (hidden), so submitting mid-preview
+      # still saves the unsaved edit.
+      lv
+      |> form("#case-content-form")
+      |> render_submit()
+
+      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      assert case_record.description_md == "Uses `zip:unzip/1` **unsafely**."
+
+      # And switching back to write shows the textarea again.
+      html =
+        lv
+        |> element("#case-description-md button[phx-value-mode=write]")
+        |> render_click()
+
+      assert html =~ "Uses `zip:unzip/1` **unsafely**."
+    end
+
     test "walks the review lifecycle", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 
