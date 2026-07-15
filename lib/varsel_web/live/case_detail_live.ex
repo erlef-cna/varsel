@@ -273,26 +273,11 @@ defmodule VarselWeb.CaseDetailLive do
 
   # Pushed by the .DragSort hook with the row ids in their new DOM order.
   def handle_event("reorder_references", %{"ids" => ids}, socket) do
-    actor = socket.assigns.current_user
-    references = socket.assigns.case_record.references
+    reorder_rows(socket, socket.assigns.case_record.references, &Cases.edit_case_reference/3, ids)
+  end
 
-    result =
-      ids
-      |> Enum.with_index()
-      |> Enum.reduce_while(:ok, fn {id, index}, :ok ->
-        case move_reference(references, id, index, actor) do
-          :ok -> {:cont, :ok}
-          {:error, error} -> {:halt, {:error, error}}
-        end
-      end)
-
-    socket =
-      case result do
-        :ok -> reload_case(socket)
-        {:error, error} -> socket |> put_flash(:error, errors_to_string(error)) |> reload_case()
-      end
-
-    {:noreply, socket}
+  def handle_event("reorder_credits", %{"ids" => ids}, socket) do
+    reorder_rows(socket, socket.assigns.case_record.credits, &Cases.edit_case_credit/3, ids)
   end
 
   ## ------------------------------------------------------------- assignments
@@ -603,6 +588,7 @@ defmodule VarselWeb.CaseDetailLive do
             add_label="Add credit"
             rows={@case_record.credits}
             can_edit={can_edit?(@case_record, @current_user)}
+            sort_event="reorder_credits"
           >
             <:row :let={credit}>
               {credit.name}{if credit.organization, do: " / #{credit.organization}"}
@@ -1490,9 +1476,7 @@ defmodule VarselWeb.CaseDetailLive do
     <.input field={@form[:credit_type]} type="select" options={enum_options(CaseCredit.CreditType)}>
       <:label>Credit type</:label>
     </.input>
-    <.input field={@form[:position]} type="number">
-      <:label>Position</:label>
-    </.input>
+    <%!-- No position field: new credits append; the list is drag-sortable. --%>
     """
   end
 
@@ -1521,8 +1505,31 @@ defmodule VarselWeb.CaseDetailLive do
     end
   end
 
-  defp move_reference(references, id, index, actor) do
-    case Enum.find(references, &(&1.id == id)) do
+  # Pushed by the DragSort hook: rewrite positions to match the new id order.
+  defp reorder_rows(socket, rows, edit_fun, ids) do
+    actor = socket.assigns.current_user
+
+    result =
+      ids
+      |> Enum.with_index()
+      |> Enum.reduce_while(:ok, fn {id, index}, :ok ->
+        case move_row(rows, id, index, edit_fun, actor) do
+          :ok -> {:cont, :ok}
+          {:error, error} -> {:halt, {:error, error}}
+        end
+      end)
+
+    socket =
+      case result do
+        :ok -> reload_case(socket)
+        {:error, error} -> socket |> put_flash(:error, errors_to_string(error)) |> reload_case()
+      end
+
+    {:noreply, socket}
+  end
+
+  defp move_row(rows, id, index, edit_fun, actor) do
+    case Enum.find(rows, &(&1.id == id)) do
       nil ->
         # Not in the loaded list (raced with a concurrent change): skip.
         :ok
@@ -1530,20 +1537,26 @@ defmodule VarselWeb.CaseDetailLive do
       %{position: ^index} ->
         :ok
 
-      reference ->
-        case Cases.edit_case_reference(reference, %{position: index}, actor: actor) do
-          {:ok, _reference} -> :ok
+      row ->
+        case edit_fun.(row, %{position: index}, actor: actor) do
+          {:ok, _row} -> :ok
           {:error, error} -> {:error, error}
         end
     end
   end
 
-  # New references append to the end; ordering is managed by drag & drop.
-  defp put_append_position(parent, "reference", case_record) do
+  # New references/credits append to the end; ordering is drag & drop.
+  defp put_append_position(parent, type, case_record) when type in ["reference", "credit"] do
+    rows =
+      case type do
+        "reference" -> case_record.references
+        "credit" -> case_record.credits
+      end
+
     next =
-      case case_record.references do
+      case rows do
         [] -> 0
-        references -> references |> Enum.map(& &1.position) |> Enum.max() |> Kernel.+(1)
+        rows -> rows |> Enum.map(& &1.position) |> Enum.max() |> Kernel.+(1)
       end
 
     Map.put(parent, "position", next)

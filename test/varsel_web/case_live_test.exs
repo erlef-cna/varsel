@@ -299,6 +299,40 @@ defmodule VarselWeb.CaseLiveTest do
       assert second_at < first_at
     end
 
+    test "credits append without a position field and reorder by drag & drop", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      for name <- ["Alice Finder", "Bob Fixer"] do
+        lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
+        refute render(lv) =~ ~s(name="child[position]")
+
+        lv
+        |> form("#child-form", %{"child" => %{"name" => name, "credit_type" => "finder"}})
+        |> render_submit()
+      end
+
+      case_record = Ash.load!(case_record, [:credits], authorize?: false)
+
+      assert [%{name: "Alice Finder", position: 0}, %{name: "Bob Fixer", position: 1}] =
+               Enum.sort_by(case_record.credits, & &1.position)
+
+      [alice, bob] = Enum.sort_by(case_record.credits, & &1.position)
+
+      lv
+      |> element("#credits-rows")
+      |> render_hook("reorder_credits", %{"ids" => [bob.id, alice.id]})
+
+      case_record = Ash.load!(case_record, [:credits], authorize?: false)
+
+      assert [%{name: "Bob Fixer", position: 0}, %{name: "Alice Finder", position: 1}] =
+               Enum.sort_by(case_record.credits, & &1.position)
+    end
+
     test "posts a comment", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 
