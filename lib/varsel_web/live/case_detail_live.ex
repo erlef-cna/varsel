@@ -1608,72 +1608,102 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
+  # Accepted proposals are redundant in the panel — their effect *is* the
+  # case content — so they collapse into a details block at the bottom.
   defp proposals_section(assigns) do
+    {accepted, active} = Enum.split_with(assigns.case_record.proposals, &(&1.state == :accepted))
+    assigns = assign(assigns, accepted: accepted, active: active)
+
     ~H"""
     <section>
       <h2 class="text-lg font-semibold mb-3">Proposals</h2>
 
-      <div :for={proposal <- @case_record.proposals} class="card bg-base-200 mb-3">
-        <div class="card-body p-3 text-sm">
-          <div class="flex items-center justify-between">
-            <span class="font-semibold">{proposal_summary(proposal)}</span>
-            <span class={["badge badge-sm", proposal_badge_class(proposal.state)]}>{proposal.state}</span>
-          </div>
-
-          <pre
-            :if={proposal.proposed_value}
-            class="bg-base-300 rounded p-2 text-xs overflow-x-auto max-h-40"
-          >{pretty_json(proposal.proposed_value["value"])}</pre>
-
-          <p :if={proposal.reasoning} class="text-base-content/80 whitespace-pre-wrap">
-            {proposal.reasoning}
-          </p>
-
-          <p class="text-xs text-base-content/60">
-            by {display_name(proposal.author)} · {format_dt(proposal.inserted_at)}
-            <span :if={proposal.resolved_by}>
-              · resolved by {display_name(proposal.resolved_by)}
-            </span>
-          </p>
-
-          <p :if={proposal.resolution_note} class="text-xs text-base-content/60 italic">
-            {proposal.resolution_note}
-          </p>
-
-          <form
-            :if={proposal.state == :open and @can_resolve}
-            phx-submit="resolve_proposal"
-            id={"resolve-#{proposal.id}"}
-            class="flex items-center gap-1 mt-1"
-          >
-            <input type="hidden" name="proposal_id" value={proposal.id} />
-            <input
-              type="text"
-              name="resolution_note"
-              placeholder="Note (optional)"
-              class="input input-bordered input-xs flex-1"
-            />
-            <button type="submit" name="decision" value="accept" class="btn btn-success btn-xs">
-              Accept
-            </button>
-            <button type="submit" name="decision" value="decline" class="btn btn-error btn-xs">
-              Decline
-            </button>
-          </form>
-
-          <button
-            :if={proposal.state == :open and proposal.author_id == @current_user.id}
-            class="btn btn-ghost btn-xs self-start"
-            phx-click="withdraw_proposal"
-            phx-value-id={proposal.id}
-          >
-            Withdraw
-          </button>
-        </div>
-      </div>
+      <.proposal_card
+        :for={proposal <- @active}
+        proposal={proposal}
+        can_resolve={@can_resolve}
+        current_user={@current_user}
+      />
 
       <p :if={@case_record.proposals == []} class="text-sm text-base-content/60">No proposals.</p>
+
+      <details :if={@accepted != []}>
+        <summary class="cursor-pointer text-sm text-base-content/60">
+          Accepted ({length(@accepted)})
+        </summary>
+        <div class="mt-2">
+          <.proposal_card
+            :for={proposal <- @accepted}
+            proposal={proposal}
+            can_resolve={@can_resolve}
+            current_user={@current_user}
+          />
+        </div>
+      </details>
     </section>
+    """
+  end
+
+  defp proposal_card(assigns) do
+    ~H"""
+    <div class="card bg-base-200 mb-3">
+      <div class="card-body p-3 text-sm">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">{proposal_summary(@proposal)}</span>
+          <span class={["badge badge-sm", proposal_badge_class(@proposal.state)]}>{@proposal.state}</span>
+        </div>
+
+        <pre
+          :if={@proposal.proposed_value}
+          class="bg-base-300 rounded p-2 text-xs overflow-x-auto max-h-40"
+        >{pretty_json(@proposal.proposed_value["value"])}</pre>
+
+        <p :if={@proposal.reasoning} class="text-base-content/80 whitespace-pre-wrap">
+          {@proposal.reasoning}
+        </p>
+
+        <p class="text-xs text-base-content/60">
+          by {display_name(@proposal.author)} · {format_dt(@proposal.inserted_at)}
+          <span :if={@proposal.resolved_by}>
+            · resolved by {display_name(@proposal.resolved_by)}
+          </span>
+        </p>
+
+        <p :if={@proposal.resolution_note} class="text-xs text-base-content/60 italic">
+          {@proposal.resolution_note}
+        </p>
+
+        <form
+          :if={@proposal.state == :open and @can_resolve}
+          phx-submit="resolve_proposal"
+          id={"resolve-#{@proposal.id}"}
+          class="flex items-center gap-1 mt-1"
+        >
+          <input type="hidden" name="proposal_id" value={@proposal.id} />
+          <input
+            type="text"
+            name="resolution_note"
+            placeholder="Note (optional)"
+            class="input input-bordered input-xs flex-1"
+          />
+          <button type="submit" name="decision" value="accept" class="btn btn-success btn-xs">
+            Accept
+          </button>
+          <button type="submit" name="decision" value="decline" class="btn btn-error btn-xs">
+            Decline
+          </button>
+        </form>
+
+        <button
+          :if={@proposal.state == :open and @proposal.author_id == @current_user.id}
+          class="btn btn-ghost btn-xs self-start"
+          phx-click="withdraw_proposal"
+          phx-value-id={@proposal.id}
+        >
+          Withdraw
+        </button>
+      </div>
+    </div>
     """
   end
 

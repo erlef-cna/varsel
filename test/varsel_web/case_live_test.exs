@@ -415,6 +415,12 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Proposed title"
       assert Ash.get!(Cases.Proposal, proposal.id, authorize?: false).state == :accepted
+
+      # Accepted proposals leave the main list for the collapsed details block.
+      html = render(lv)
+      assert html =~ "Accepted (1)"
+      assert [before_accepted, _rest] = String.split(html, "Accepted (1)", parts: 2)
+      refute before_accepted =~ "set case.title"
     end
 
     test "an unassigned supporter cannot open the case", %{
