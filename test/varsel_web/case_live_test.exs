@@ -427,6 +427,87 @@ defmodule VarselWeb.CaseLiveTest do
     end
   end
 
+  describe "proposing instead of editing" do
+    test "a frozen case offers Propose changes instead of Save", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Frozen case"})
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      case_record = Cases.approve_case!(case_record, actor: poc)
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "edits below become proposals"
+      assert html =~ "Propose changes"
+      refute html =~ ~s(name="save_mode" value="apply")
+
+      lv
+      |> form("#case-content-form", %{"form" => %{"title" => "Better frozen title"}})
+      |> render_submit(%{"save_mode" => "propose", "reasoning" => "clearer title"})
+
+      # The case itself is untouched; the change became a proposal.
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Frozen case"
+
+      assert [proposal] = Cases.list_open_case_proposals!(case_record.id, actor: poc)
+      assert proposal.field_name == "title"
+      assert proposal.proposed_value == %{"value" => "Better frozen title"}
+      assert proposal.reasoning == "clearer title"
+      assert render(lv) =~ "Created 1 proposal(s)."
+    end
+
+    test "unchanged content proposes nothing", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Unchanged"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      lv
+      |> form("#case-content-form", %{"form" => %{"title" => "Unchanged"}})
+      |> render_submit(%{"save_mode" => "propose"})
+
+      assert Cases.list_open_case_proposals!(case_record.id, actor: poc) == []
+      assert render(lv) =~ "No changes to propose."
+    end
+
+    test "the child modal can propose an insert and a field change", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      package = Fixtures.add_affected_package(poc, case_record)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # Propose adding a reference: no row is created, an :insert proposal is.
+      lv |> element("button[phx-value-type=reference]", "Add reference") |> render_click()
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{"url" => "https://example.com/advisory", "tags" => ["vendor-advisory"]}
+      })
+      |> render_submit(%{"save_mode" => "propose", "reasoning" => "found the advisory"})
+
+      assert Ash.load!(case_record, [:references], authorize?: false).references == []
+
+      assert [insert_proposal] = Cases.list_open_case_proposals!(case_record.id, actor: poc)
+      assert insert_proposal.operation == :insert
+      assert insert_proposal.target == :reference
+      assert insert_proposal.proposed_value["value"]["url"] == "https://example.com/advisory"
+
+      # Propose editing the package: only the changed field becomes a proposal.
+      lv
+      |> element(~s{button[phx-value-type=package][phx-value-id="#{package.id}"]}, "Edit")
+      |> render_click()
+
+      lv
+      |> form("#child-form", %{"child" => %{"vendor" => "someone-else", "product" => "acme_lib"}})
+      |> render_submit(%{"save_mode" => "propose"})
+
+      assert Ash.get!(Cases.AffectedPackage, package.id, authorize?: false).vendor == "acme"
+
+      proposals = Cases.list_open_case_proposals!(case_record.id, actor: poc)
+      assert [set_proposal] = Enum.filter(proposals, &(&1.operation == :set))
+      assert set_proposal.target == :affected_package
+      assert set_proposal.target_id == package.id
+      assert set_proposal.field_name == "vendor"
+      assert set_proposal.proposed_value == %{"value" => "someone-else"}
+    end
+  end
+
   describe "diff to published record" do
     test "amendments offer a diff against the published container", %{conn: conn, poc: poc} do
       year = Date.utc_today().year
