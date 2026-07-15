@@ -252,6 +252,53 @@ defmodule VarselWeb.CaseLiveTest do
       assert [%{tags: []}] = case_record.references
     end
 
+    test "references append without a position field and reorder by drag & drop", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      for url <- ["https://example.com/first", "https://example.com/second"] do
+        lv |> element("button[phx-value-type=reference]", "Add reference") |> render_click()
+        refute render(lv) =~ "Position (advisory first)"
+
+        lv
+        |> form("#child-form", %{"child" => %{"url" => url}})
+        |> render_submit()
+      end
+
+      case_record = Ash.load!(case_record, [:references], authorize?: false)
+
+      assert [
+               %{url: "https://example.com/first", position: 0},
+               %{url: "https://example.com/second", position: 1}
+             ] =
+               Enum.sort_by(case_record.references, & &1.position)
+
+      # The hook pushes the ids in their new DOM order.
+      [first, second] = Enum.sort_by(case_record.references, & &1.position)
+
+      lv
+      |> element("#references-rows")
+      |> render_hook("reorder_references", %{"ids" => [second.id, first.id]})
+
+      case_record = Ash.load!(case_record, [:references], authorize?: false)
+
+      assert [
+               %{url: "https://example.com/second", position: 0},
+               %{url: "https://example.com/first", position: 1}
+             ] =
+               Enum.sort_by(case_record.references, & &1.position)
+
+      # The rendered list follows the new order.
+      html = render(lv)
+      {second_at, _} = :binary.match(html, "https://example.com/second")
+      {first_at, _} = :binary.match(html, "https://example.com/first")
+      assert second_at < first_at
+    end
+
     test "posts a comment", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 

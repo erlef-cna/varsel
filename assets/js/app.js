@@ -28,12 +28,34 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/varsel"
 import topbar from "../vendor/topbar"
+import Sortable from "sortablejs"
+
+// Drag & drop list reordering: sorts the container's [data-drag-id] children
+// via Sortable.js and pushes the container's data-sort-event with the ids in
+// their new order once a drag finishes.
+const DragSort = {
+  mounted() {
+    this.sortable = new Sortable(this.el, {
+      animation: 150,
+      draggable: "[data-drag-id]",
+      handle: "[data-drag-handle]",
+      ghostClass: "opacity-50",
+      onEnd: () => {
+        const ids = [...this.el.querySelectorAll("[data-drag-id]")].map((el) => el.dataset.dragId)
+        this.pushEvent(this.el.dataset.sortEvent, {ids})
+      },
+    })
+  },
+  destroyed() {
+    this.sortable?.destroy()
+  },
+}
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {...colocatedHooks, DragSort},
 })
 
 // Show progress bar on live navigation and form submits

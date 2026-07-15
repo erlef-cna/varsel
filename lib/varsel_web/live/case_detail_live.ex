@@ -214,6 +214,7 @@ defmodule VarselWeb.CaseDetailLive do
       params
       |> Map.take(["affected_package_id"])
       |> Map.put("case_id", socket.assigns.case_record.id)
+      |> put_append_position(type, socket.assigns.case_record)
 
     {:noreply, assign(socket, child_form: %{form: form, type: type, title: "Add #{title}", parent: parent})}
   end
@@ -265,6 +266,30 @@ defmodule VarselWeb.CaseDetailLive do
         socket |> put_flash(:info, "Removed.") |> reload_case()
       else
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
+      end
+
+    {:noreply, socket}
+  end
+
+  # Pushed by the .DragSort hook with the row ids in their new DOM order.
+  def handle_event("reorder_references", %{"ids" => ids}, socket) do
+    actor = socket.assigns.current_user
+    references = socket.assigns.case_record.references
+
+    result =
+      ids
+      |> Enum.with_index()
+      |> Enum.reduce_while(:ok, fn {id, index}, :ok ->
+        case move_reference(references, id, index, actor) do
+          :ok -> {:cont, :ok}
+          {:error, error} -> {:halt, {:error, error}}
+        end
+      end)
+
+    socket =
+      case result do
+        :ok -> reload_case(socket)
+        {:error, error} -> socket |> put_flash(:error, errors_to_string(error)) |> reload_case()
       end
 
     {:noreply, socket}
@@ -564,6 +589,7 @@ defmodule VarselWeb.CaseDetailLive do
             add_label="Add reference"
             rows={@case_record.references}
             can_edit={can_edit?(@case_record, @current_user)}
+            sort_event="reorder_references"
           >
             <:row :let={reference}>
               <span class="font-mono text-sm break-all">{reference.url}</span>
@@ -956,9 +982,16 @@ defmodule VarselWeb.CaseDetailLive do
   attr :add_label, :string, required: true
   attr :rows, :list, required: true
   attr :can_edit, :boolean, required: true
+
+  attr :sort_event, :string,
+    default: nil,
+    doc: "enables drag & drop reordering, pushing this event with the row ids"
+
   slot :row, required: true
 
   defp rows_section(assigns) do
+    assigns = assign(assigns, :sortable, assigns.can_edit and assigns.sort_event != nil)
+
     ~H"""
     <section id={@id}>
       <div class="flex items-center justify-between mb-3">
@@ -972,12 +1005,29 @@ defmodule VarselWeb.CaseDetailLive do
           {@add_label}
         </button>
       </div>
-      <ul class="space-y-1">
+      <ul
+        id={"#{@id}-rows"}
+        class="space-y-1"
+        phx-hook={@sortable && "DragSort"}
+        data-sort-event={@sortable && @sort_event}
+      >
         <li
           :for={row <- @rows}
+          id={"#{@id}-row-#{row.id}"}
           class="flex items-center justify-between gap-2 py-1 border-b border-base-200"
+          data-drag-id={@sortable && row.id}
         >
-          <div>{render_slot(@row, row)}</div>
+          <div class="flex items-center gap-2">
+            <span
+              :if={@sortable}
+              data-drag-handle
+              class="cursor-grab text-base-content/40 select-none"
+              title="Drag to reorder"
+            >
+              ⠿
+            </span>
+            <div>{render_slot(@row, row)}</div>
+          </div>
           <div :if={@can_edit} class="flex gap-1 shrink-0">
             <button
               :if={@type in ["reference", "credit"]}
@@ -1425,10 +1475,7 @@ defmodule VarselWeb.CaseDetailLive do
     >
       <:label>Custom tags (x_ prefixed, comma separated)</:label>
     </.input>
-
-    <.input field={@form[:position]} type="number">
-      <:label>Position (advisory first)</:label>
-    </.input>
+    <%!-- No position field: new references append; the list is drag-sortable. --%>
     """
   end
 
@@ -1473,6 +1520,36 @@ defmodule VarselWeb.CaseDetailLive do
       value -> value
     end
   end
+
+  defp move_reference(references, id, index, actor) do
+    case Enum.find(references, &(&1.id == id)) do
+      nil ->
+        # Not in the loaded list (raced with a concurrent change): skip.
+        :ok
+
+      %{position: ^index} ->
+        :ok
+
+      reference ->
+        case Cases.edit_case_reference(reference, %{position: index}, actor: actor) do
+          {:ok, _reference} -> :ok
+          {:error, error} -> {:error, error}
+        end
+    end
+  end
+
+  # New references append to the end; ordering is managed by drag & drop.
+  defp put_append_position(parent, "reference", case_record) do
+    next =
+      case case_record.references do
+        [] -> 0
+        references -> references |> Enum.map(& &1.position) |> Enum.max() |> Kernel.+(1)
+      end
+
+    Map.put(parent, "position", next)
+  end
+
+  defp put_append_position(parent, _type, _case_record), do: parent
 
   defp selected_tags(form), do: List.wrap(form[:tags].value)
 
