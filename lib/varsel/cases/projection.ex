@@ -19,8 +19,10 @@ defmodule Varsel.Cases.Projection do
   alias Ash.Resource.Info
   alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.Case
+  alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Proposal
   alias Varsel.Cases.Proposal.Target
+  alias Varsel.Cases.VersionEvent
 
   @enforce_keys [:case, :phantom_ids, :deleted_ids, :set_proposals]
   defstruct [:case, :phantom_ids, :deleted_ids, :set_proposals]
@@ -85,8 +87,8 @@ defmodule Varsel.Cases.Projection do
   defp apply_set(%{target: target} = proposal, case_record) when target in [:package_channel, :version_event] do
     {resource, key} =
       case target do
-        :package_channel -> {Varsel.Cases.PackageChannel, :channels}
-        :version_event -> {Varsel.Cases.VersionEvent, :version_events}
+        :package_channel -> {PackageChannel, :channels}
+        :version_event -> {VersionEvent, :version_events}
       end
 
     update_packages(case_record, fn package ->
@@ -124,10 +126,15 @@ defmodule Varsel.Cases.Projection do
   end
 
   defp apply_insert(%{target: :affected_package} = proposal, case_record) do
+    payload = proposal.proposed_value["value"] || %{}
+
     phantom =
       proposal
       |> phantom_row(AffectedPackage, case_record.id)
-      |> Map.merge(%{channels: [], version_events: []})
+      |> Map.merge(%{
+        channels: nested_phantoms(payload["channels"], PackageChannel, proposal, "channel"),
+        version_events: nested_phantoms(payload["version_events"], VersionEvent, proposal, "event")
+      })
 
     Map.update!(case_record, :affected_packages, &(&1 ++ [phantom]))
   end
@@ -177,15 +184,38 @@ defmodule Varsel.Cases.Projection do
   defp apply_insert(_proposal, case_record), do: case_record
 
   # A phantom row impersonates the row the accepted proposal would create; it
-  # carries the proposal's id so the UI can tell it apart.
+  # carries the proposal's id so the UI can tell it apart. Nested collection
+  # keys don't cast to an attribute and fall through harmlessly.
   defp phantom_row(proposal, resource, case_id) do
-    base = struct(resource, id: proposal.id, case_id: case_id)
+    phantom_from(proposal.proposed_value["value"] || %{}, resource,
+      id: proposal.id,
+      case_id: case_id
+    )
+  end
 
-    Enum.reduce(proposal.proposed_value["value"] || %{}, base, fn {key, value}, row ->
+  defp phantom_from(payload, resource, base_fields) do
+    Enum.reduce(payload, struct(resource, base_fields), fn {key, value}, row ->
       case cast_value(resource, key, value) do
         {:ok, field, cast} -> Map.put(row, field, cast)
         :error -> row
       end
+    end)
+  end
+
+  # Children nested in an affected_package insert payload render under the
+  # phantom package. Their synthetic ids only need to be list-unique; the
+  # "proposed" badge lives on the phantom package itself.
+  defp nested_phantoms(rows, resource, proposal, suffix) do
+    rows
+    |> List.wrap()
+    |> Enum.with_index()
+    |> Enum.map(fn {row, index} ->
+      row
+      |> phantom_from(resource,
+        id: "#{proposal.id}-#{suffix}-#{index}",
+        case_id: proposal.case_id
+      )
+      |> Map.put(:affected_package_id, proposal.id)
     end)
   end
 

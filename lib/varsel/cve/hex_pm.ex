@@ -51,14 +51,14 @@ defmodule Varsel.CVE.HexPm do
   Fetches a package's public details from hex.pm: description, links,
   licenses, released versions, and retirements.
 
-  Returns `{:error, reason}` when the package does not exist or the request
-  fails.
+  Returns `{:error, :not_found}` when the package does not exist and
+  `{:error, reason}` when the request fails.
   """
-  @spec package_info(String.t()) :: {:ok, map()} | {:error, String.t()}
+  @spec package_info(String.t()) :: {:ok, map()} | {:error, :not_found | String.t()}
   def package_info(name) when is_binary(name) do
     case :hex_api_package.get(config(), name) do
       {:ok, {200, _headers, body}} -> {:ok, info(body)}
-      {:ok, {404, _headers, _body}} -> {:error, "package #{name} does not exist on hex.pm"}
+      {:ok, {404, _headers, _body}} -> {:error, :not_found}
       {:ok, {status, _headers, _body}} -> {:error, "hex.pm returned #{status} for #{name}"}
       {:error, reason} -> {:error, "hex.pm request for #{name} failed: #{inspect(reason)}"}
     end

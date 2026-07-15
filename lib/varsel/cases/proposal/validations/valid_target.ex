@@ -10,7 +10,9 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
      `:set`/`:insert`; `target_id` rules per operation; `:insert`/`:delete`
      never address the case itself.
   2. Allowlist: the field / payload keys must be in
-     `Varsel.Cases.Proposable`'s explicit lists.
+     `Varsel.Cases.Proposable`'s explicit lists; `:insert` payloads may nest
+     child collections per `Proposable.nested_fields/1` (rows validated
+     against the child's allowlist).
   3. Types: `:set` values and `:insert` payload values are cast through the
      target attribute's real Ash type, so garbage never enters the queue.
   4. Existence & membership: a referenced row must exist and belong to the
@@ -127,9 +129,10 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
   defp validate_value(target, :insert, _field_name, %{"value" => payload}) when is_map(payload) do
     resource = Target.resource(target)
     allowed = Proposable.fields(resource) ++ Proposable.insert_extra_fields(resource)
+    nested = Proposable.nested_fields(resource)
 
-    Enum.reduce_while(payload, :ok, fn entry, :ok ->
-      case validate_payload_entry(resource, allowed, entry) do
+    Enum.reduce_while(payload, :ok, fn {key, value}, :ok ->
+      case validate_insert_entry(resource, allowed, nested, key, value) do
         :ok -> {:cont, :ok}
         error -> {:halt, error}
       end
@@ -141,6 +144,50 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
   end
 
   defp validate_value(_target, :delete, _field_name, _proposed_value), do: :ok
+
+  # A payload key is either a nested child collection or a plain field.
+  defp validate_insert_entry(resource, allowed, nested, key, value) do
+    case nested_resource(nested, key) do
+      {:ok, child_resource} -> validate_nested_rows(child_resource, key, value)
+      :error -> validate_payload_entry(resource, allowed, {key, value})
+    end
+  end
+
+  defp nested_resource(nested, key) when is_atom(key), do: Map.fetch(nested, key)
+
+  defp nested_resource(nested, key) do
+    Map.fetch(nested, String.to_existing_atom(key))
+  rescue
+    ArgumentError -> :error
+  end
+
+  defp validate_nested_rows(child_resource, key, rows) when is_list(rows) do
+    allowed = Proposable.fields(child_resource)
+
+    Enum.reduce_while(rows, :ok, fn row, :ok ->
+      case validate_nested_row(child_resource, allowed, key, row) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_nested_rows(_child_resource, key, _rows) do
+    {:error, field: :proposed_value, message: "%{key} must be a list of row objects", vars: [key: key]}
+  end
+
+  defp validate_nested_row(child_resource, allowed, _key, row) when is_map(row) do
+    Enum.reduce_while(row, :ok, fn entry, :ok ->
+      case validate_payload_entry(child_resource, allowed, entry) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_nested_row(_child_resource, _allowed, key, _row) do
+    {:error, field: :proposed_value, message: "%{key} must be a list of row objects", vars: [key: key]}
+  end
 
   defp validate_payload_entry(resource, allowed, {key, value}) do
     with {:ok, field} <- existing_field(resource, key, allowed) do

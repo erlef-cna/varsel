@@ -7,7 +7,9 @@ defmodule Varsel.Cases.ProposalTest do
 
   alias Ash.Error.Forbidden
   alias Varsel.Cases
+  alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.CaseReference
+  alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposal
   alias Varsel.Cases.VersionEvent
   alias Varsel.Fixtures
@@ -240,7 +242,7 @@ defmodule Varsel.Cases.ProposalTest do
 
       Cases.accept_case_proposal!(proposal, %{}, actor: poc)
 
-      assert Ash.get!(Cases.AffectedPackage, package.id, authorize?: false).modules == ["ssh"]
+      assert Ash.get!(AffectedPackage, package.id, authorize?: false).modules == ["ssh"]
     end
 
     test "supersedes competing proposals for the same field", %{poc: poc, case: case_record} do
@@ -281,6 +283,127 @@ defmodule Varsel.Cases.ProposalTest do
 
       assert {:error, error} = Cases.accept_case_proposal(proposal, %{}, actor: poc)
       assert Exception.message(error) =~ "reopen the case"
+    end
+  end
+
+  describe "nested insert payloads" do
+    defp propose_package(actor, case_record, payload) do
+      Cases.create_case_proposal(
+        %{
+          case_id: case_record.id,
+          target: :affected_package,
+          operation: :insert,
+          proposed_value: %{"value" => payload},
+          reasoning: "one-shot intake"
+        },
+        actor: actor
+      )
+    end
+
+    defp otp_payload do
+      %{
+        "vendor" => "Erlang",
+        "product" => "OTP",
+        "repo_url" => "https://github.com/erlang/otp",
+        "program_files" => ["lib/xmerl/src/xmerl_scan.erl"],
+        "channels" => [%{"purl_type" => "otp", "name" => "xmerl"}],
+        "version_events" => [
+          %{"event" => "fixed", "version" => "27.3.4"},
+          %{"event" => "fixed", "version" => "26.2.5.12"}
+        ]
+      }
+    end
+
+    test "accept creates the package with its channels and version events", %{
+      poc: poc,
+      case: case_record
+    } do
+      {:ok, proposal} = propose_package(poc, case_record, otp_payload())
+      accepted = Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      package =
+        Ash.get!(AffectedPackage, accepted.applied_target_id,
+          load: [:channels, :version_events],
+          authorize?: false
+        )
+
+      assert package.product == "OTP"
+      assert package.program_files == ["lib/xmerl/src/xmerl_scan.erl"]
+
+      assert [channel] = package.channels
+      assert channel.purl_type == :otp
+      assert channel.name == "xmerl"
+
+      assert package.version_events |> Enum.map(& &1.version) |> Enum.sort() ==
+               ["26.2.5.12", "27.3.4"]
+
+      assert Enum.all?(package.version_events, &(&1.case_id == case_record.id))
+    end
+
+    test "nested rows validate against the child allowlist", %{poc: poc, case: case_record} do
+      payload = Map.put(otp_payload(), "channels", [%{"purl_type" => "otp", "case_id" => "x"}])
+
+      assert {:error, error} = propose_package(poc, case_record, payload)
+      assert Exception.message(error) =~ "not a proposable field"
+    end
+
+    test "nested values are cast through the child attribute types", %{
+      poc: poc,
+      case: case_record
+    } do
+      payload = Map.put(otp_payload(), "channels", [%{"purl_type" => "carrier-pigeon"}])
+
+      assert {:error, error} = propose_package(poc, case_record, payload)
+      assert Exception.message(error) =~ "does not accept the proposed value"
+    end
+
+    test "nested collections must be lists of row objects", %{poc: poc, case: case_record} do
+      payload = Map.put(otp_payload(), "version_events", %{"event" => "fixed"})
+
+      assert {:error, error} = propose_package(poc, case_record, payload)
+      assert Exception.message(error) =~ "must be a list of row objects"
+    end
+
+    test "a failing nested row rolls back the whole accept", %{poc: poc, case: case_record} do
+      # Passes creation-time casting (all keys allowed, types fine) but fails
+      # the channel's own apply-time validation: non-hosted channels need a
+      # name.
+      payload = Map.put(otp_payload(), "channels", [%{"purl_type" => "otp"}])
+
+      {:ok, proposal} = propose_package(poc, case_record, payload)
+      assert {:error, _error} = Cases.accept_case_proposal(proposal, %{}, actor: poc)
+
+      # Nothing was created and the proposal stayed open.
+      assert [] =
+               Ash.read!(AffectedPackage, authorize?: false)
+
+      assert Ash.get!(Proposal, proposal.id, authorize?: false).state == :open
+    end
+
+    test "the projection shows nested phantom children", %{poc: poc, case: case_record} do
+      {:ok, _proposal} = propose_package(poc, case_record, otp_payload())
+
+      case_record =
+        Ash.get!(Varsel.Cases.Case, case_record.id,
+          load: [
+            :proposals,
+            :references,
+            :credits,
+            weaknesses: [:weakness],
+            impacts: [:attack_pattern],
+            affected_packages: [:channels, :version_events]
+          ],
+          authorize?: false
+        )
+
+      projection = Projection.project(case_record)
+
+      assert [package] = projection.case.affected_packages
+      assert package.product == "OTP"
+      assert [channel] = package.channels
+      assert channel.purl_type == :otp
+      assert channel.name == "xmerl"
+      assert length(package.version_events) == 2
     end
   end
 
@@ -364,7 +487,7 @@ defmodule Varsel.Cases.ProposalTest do
 
       Cases.accept_case_proposal!(delete_proposal, %{}, actor: poc)
 
-      assert {:error, _} = Ash.get(Cases.AffectedPackage, package.id, authorize?: false)
+      assert {:error, _} = Ash.get(AffectedPackage, package.id, authorize?: false)
       assert Ash.get!(Proposal, pending_set.id, authorize?: false).state == :superseded
     end
 

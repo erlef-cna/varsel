@@ -67,10 +67,11 @@ defmodule Varsel.AI.Research do
        links; fetch_url advisories or repository pages named in the report
        when they settle a fact.
     3. File proposals for the basics you established:
-       - an affected_package per product (vendor, product, repo_url),
-       - its hex channel (purl_type "hex", name) when it is a hex package,
-       - version_events when the report names fixed/introduced versions or
-         commit SHAs,
+       - ONE affected_package insert per product, arriving complete: vendor,
+         product, repo_url, program_files when the advisory/report names the
+         affected source files (repo-relative paths, e.g.
+         lib/xmerl/src/xmerl_scan.erl), plus its channels and version_events
+         NESTED in the same payload (see below),
        - references for advisory/patch URLs from the report,
        - title and description_md when the case lacks them (write them from
          the report, plain and factual).
@@ -95,6 +96,17 @@ defmodule Varsel.AI.Research do
       row payload object. target_id is null, except for package_channel and
       version_event inserts where it is the parent affected_package's id.
 
+    An affected_package insert payload should arrive complete: it may nest
+    "channels" and "version_events" as lists of row objects, created together
+    with the package when the proposal is accepted. Example value:
+
+    {"vendor": "Erlang", "product": "OTP",
+     "repo_url": "https://github.com/erlang/otp",
+     "program_files": ["lib/xmerl/src/xmerl_scan.erl"],
+     "channels": [{"purl_type": "otp", "name": "xmerl"}],
+     "version_events": [{"event": "fixed", "version": "27.3.4"},
+                        {"event": "fixed", "version": "26.2.5.12"}]}
+
     Allowed targets and their fields:
 
     #{allowlists()}
@@ -102,6 +114,11 @@ defmodule Varsel.AI.Research do
     Never propose a git or github channel — the forge entry derives
     automatically from the package's repo_url. Version ranges are derived
     from version_events at render time; never propose rendered ranges.
+
+    OTP applications (e.g. ssh, stdlib, xmerl) are not hex.pm packages: the
+    affected_package is Erlang/OTP itself (vendor "Erlang", product "OTP",
+    repo_url https://github.com/erlang/otp) with a channel of purl_type
+    "otp" whose name is the application. Do not retry hex lookups for them.
 
     Reference tags must come from this vocabulary (or carry an x_ prefix):
     #{Enum.join(CaseReference.standard_tags(), ", ")}.

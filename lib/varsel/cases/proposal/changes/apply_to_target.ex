@@ -19,6 +19,7 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
 
   use Ash.Resource.Change
 
+  alias Varsel.Cases.Proposable
   alias Varsel.Cases.Proposal.Target
 
   @impl Ash.Resource.Change
@@ -66,7 +67,7 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
 
   defp apply_to_target(%{operation: :insert} = proposal, actor) do
     resource = Target.resource(proposal.target)
-    payload = proposal.proposed_value["value"]
+    {nested, payload} = split_nested(resource, proposal.proposed_value["value"])
 
     params =
       payload
@@ -74,9 +75,13 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
       |> put_parent_key(proposal)
       |> Map.put("proposal_id", proposal.id)
 
-    resource
-    |> Ash.Changeset.for_create(:apply_proposal_insert, params, actor: actor)
-    |> Ash.create()
+    with {:ok, row} <-
+           resource
+           |> Ash.Changeset.for_create(:apply_proposal_insert, params, actor: actor)
+           |> Ash.create(),
+         :ok <- create_nested(nested, row, proposal, actor) do
+      {:ok, row}
+    end
   end
 
   defp apply_to_target(%{operation: :delete} = proposal, actor) do
@@ -96,6 +101,43 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
       value: proposal.proposed_value["value"],
       proposal_id: proposal.id
     }
+  end
+
+  # Nested child collections (Proposable.nested_fields/1) are split out of
+  # the payload and created after the parent row, in the same transaction.
+  defp split_nested(resource, payload) do
+    Enum.reduce(Proposable.nested_fields(resource), {[], payload}, fn
+      {field, child_resource}, {nested, payload} ->
+        {rows, payload} = pop_field(payload, field)
+        {nested ++ Enum.map(List.wrap(rows), &{child_resource, &1}), payload}
+    end)
+  end
+
+  # Payloads come from jsonb (string keys), but tolerate atoms defensively.
+  defp pop_field(payload, field) do
+    case Map.pop(payload, to_string(field)) do
+      {nil, payload} -> Map.pop(payload, field)
+      popped -> popped
+    end
+  end
+
+  defp create_nested(nested, parent_row, proposal, actor) do
+    Enum.reduce_while(nested, :ok, fn {child_resource, row}, :ok ->
+      # Nested children only exist under affected_package (see Proposable),
+      # so the parent FK is always affected_package_id.
+      params =
+        row
+        |> Map.put("case_id", proposal.case_id)
+        |> Map.put("affected_package_id", parent_row.id)
+        |> Map.put("proposal_id", proposal.id)
+
+      case child_resource
+           |> Ash.Changeset.for_create(:apply_proposal_insert, params, actor: actor)
+           |> Ash.create() do
+        {:ok, _child} -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
   end
 
   defp put_parent_key(params, proposal) do

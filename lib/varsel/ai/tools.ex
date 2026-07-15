@@ -41,7 +41,9 @@ defmodule Varsel.AI.Tools do
       description """
       Looks a package up on hex.pm: description, repository links, licenses,
       released versions, and retirements. Use it to verify package names and
-      find the canonical repository URL.
+      find the canonical repository URL. A missing package returns
+      {"exists": false} — that is a finding (e.g. an OTP application or a
+      package from another ecosystem), not a failure.
       """
 
       argument :name, :string do
@@ -49,7 +51,27 @@ defmodule Varsel.AI.Tools do
         description "The hex.pm package name."
       end
 
-      run fn input, _context -> HexPm.package_info(input.arguments.name) end
+      run fn input, _context ->
+        name = input.arguments.name
+
+        case HexPm.package_info(name) do
+          {:ok, info} ->
+            {:ok, Map.put(info, "exists", true)}
+
+          {:error, :not_found} ->
+            {:ok,
+             %{
+               "exists" => false,
+               "name" => name,
+               "note" =>
+                 "#{name} is not a hex.pm package — it may be an OTP " <>
+                   "application or belong to another ecosystem."
+             }}
+
+          {:error, message} ->
+            {:error, message}
+        end
+      end
     end
   end
 
