@@ -83,15 +83,23 @@ defmodule Varsel.Cases.Render do
 
   ## ------------------------------------------------------------------ prose
 
+  # Every markdown-backed section ships three representations: the plain-text
+  # `value` (required by the schema), the rendered HTML, and the markdown
+  # source itself — so consumers (and future amendments) get the authored
+  # text back verbatim. Timeline entries stay plain-text only: the schema
+  # gives timeline[] no supportingMedia.
   defp put_prose(cna, _key, nil), do: cna
 
   defp put_prose(cna, key, markdown) do
+    markdown = String.trim(markdown)
+
     Map.put(cna, key, [
       %{
         "lang" => "en",
         "value" => Markdown.to_plaintext(markdown),
         "supportingMedia" => [
-          %{"base64" => false, "type" => "text/html", "value" => Markdown.to_html(markdown)}
+          %{"base64" => false, "type" => "text/html", "value" => Markdown.to_html(markdown)},
+          %{"base64" => false, "type" => "text/markdown", "value" => markdown}
         ]
       }
     ])

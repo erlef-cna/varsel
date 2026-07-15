@@ -288,17 +288,24 @@ defmodule Varsel.Cases.RenderTest do
     assert List.first(result.cna["references"])["tags"] == ["vendor-advisory", "related"]
   end
 
-  test "derives prose from markdown with both representations", %{case: case_record} do
+  test "derives prose from markdown with plaintext, HTML and markdown representations", %{
+    case: case_record
+  } do
     {result, _cve_json} = render!(case_record)
 
-    assert [%{"lang" => "en", "value" => plaintext, "supportingMedia" => [media]}] =
+    assert [%{"lang" => "en", "value" => plaintext, "supportingMedia" => [html, markdown]}] =
              result.cna["descriptions"]
 
     assert plaintext =~ "Insufficient Session Expiration vulnerability"
     assert plaintext =~ "\n\nThis issue affects"
-    assert media["type"] == "text/html"
-    assert media["base64"] == false
-    assert media["value"] =~ "<p>"
+
+    assert html["type"] == "text/html"
+    assert html["base64"] == false
+    assert html["value"] =~ "<p>"
+
+    assert markdown["type"] == "text/markdown"
+    assert markdown["base64"] == false
+    assert markdown["value"] =~ "This issue affects ash_authentication_phoenix until 2.10.0."
   end
 
   test "assembles the full record and it passes schema validation", %{case: case_record} do
