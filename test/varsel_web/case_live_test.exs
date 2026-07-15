@@ -59,7 +59,7 @@ defmodule VarselWeb.CaseLiveTest do
     test "renders content, allows editing in draft", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc, %{title: "Editable case"})
 
-      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
       assert html =~ "Editable case"
       assert html =~ "Case content"
 
@@ -76,7 +76,7 @@ defmodule VarselWeb.CaseLiveTest do
     } do
       case_record = Fixtures.open_case(poc, %{title: "Markdown case"})
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
       # Type into the description (unsaved), then switch that field to preview.
       lv
@@ -117,7 +117,7 @@ defmodule VarselWeb.CaseLiveTest do
     } do
       case_record = Fixtures.open_case(poc, %{title: "CVSS case"})
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
       # First toggle starts from the all-benign baseline (0.0 NONE), then
       # raising vulnerable-system confidentiality to High yields a real score.
@@ -177,8 +177,10 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Approve") |> render_click()
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :approved
 
+      # Approved content is frozen: no edit tab remains, propose is offered.
       html = render(lv)
-      assert html =~ "frozen"
+      refute html =~ "/cases/#{case_record.id}/edit"
+      assert html =~ "/cases/#{case_record.id}/propose"
 
       lv |> element("button", "Reopen") |> render_click()
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
@@ -187,7 +189,7 @@ defmodule VarselWeb.CaseLiveTest do
     test "adds an affected package through the modal", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
       lv |> element("button[phx-value-type=package]", "Add package") |> render_click()
       assert render(lv) =~ "Add affected package"
@@ -212,7 +214,7 @@ defmodule VarselWeb.CaseLiveTest do
     test "adds a reference with tag checkboxes and custom x_ tags", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
       lv |> element("button[phx-value-type=reference]", "Add reference") |> render_click()
       html = render(lv)
@@ -258,7 +260,7 @@ defmodule VarselWeb.CaseLiveTest do
     } do
       case_record = Fixtures.open_case(poc)
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
       for url <- ["https://example.com/first", "https://example.com/second"] do
         lv |> element("button[phx-value-type=reference]", "Add reference") |> render_click()
@@ -309,7 +311,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       case_record = Fixtures.open_case(poc)
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
       # The add modal offers the catalog as a datalist…
       lv |> element("button[phx-value-type=weakness]", "Add CWE") |> render_click()
@@ -346,7 +348,7 @@ defmodule VarselWeb.CaseLiveTest do
     } do
       case_record = Fixtures.open_case(poc)
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
       for name <- ["Alice Finder", "Bob Fixer"] do
         lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
@@ -427,21 +429,29 @@ defmodule VarselWeb.CaseLiveTest do
     end
   end
 
-  describe "proposing instead of editing" do
-    test "a frozen case offers Propose changes instead of Save", %{conn: conn, poc: poc} do
+  describe "propose mode" do
+    test "a frozen case defaults to view and offers a propose tab, no edit", %{
+      conn: conn,
+      poc: poc
+    } do
       case_record = Fixtures.open_case(poc, %{title: "Frozen case"})
       case_record = Cases.request_case_review!(case_record, actor: poc)
       case_record = Cases.approve_case!(case_record, actor: poc)
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
-      assert html =~ "edits below become proposals"
+      # View is the default; Edit is unavailable, Propose is offered.
+      refute html =~ "/cases/#{case_record.id}/edit"
+      assert html =~ "/cases/#{case_record.id}/propose"
+      refute html =~ "case-content-form"
+
+      html = lv |> element(~s{a[href="/cases/#{case_record.id}/propose"]}) |> render_click()
+      assert html =~ "your edits become new proposals"
       assert html =~ "Propose changes"
-      refute html =~ ~s(name="save_mode" value="apply")
 
       lv
       |> form("#case-content-form", %{"form" => %{"title" => "Better frozen title"}})
-      |> render_submit(%{"save_mode" => "propose", "reasoning" => "clearer title"})
+      |> render_submit(%{"reasoning" => "clearer title"})
 
       # The case itself is untouched; the change became a proposal.
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Frozen case"
@@ -453,24 +463,56 @@ defmodule VarselWeb.CaseLiveTest do
       assert render(lv) =~ "Created 1 proposal(s)."
     end
 
-    test "unchanged content proposes nothing", %{conn: conn, poc: poc} do
-      case_record = Fixtures.open_case(poc, %{title: "Unchanged"})
+    test "open proposals show as accepted; untouched values propose nothing, edits counter", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Stored title"})
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      open =
+        Cases.create_case_proposal!(
+          %{
+            case_id: case_record.id,
+            target: :case,
+            operation: :set,
+            field_name: "title",
+            proposed_value: %{"value" => "Proposed title"}
+          },
+          actor: poc
+        )
 
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/propose")
+
+      # The form carries the projected (proposed) value.
+      assert lv |> element("#case-content-form input[name=\"form[title]\"]") |> render() =~
+               "Proposed title"
+
+      # Submitting untouched proposes nothing.
       lv
-      |> form("#case-content-form", %{"form" => %{"title" => "Unchanged"}})
-      |> render_submit(%{"save_mode" => "propose"})
+      |> form("#case-content-form", %{"form" => %{"title" => "Proposed title"}})
+      |> render_submit()
 
-      assert Cases.list_open_case_proposals!(case_record.id, actor: poc) == []
       assert render(lv) =~ "No changes to propose."
+
+      # Changing the projected value files a counter-proposal.
+      lv
+      |> form("#case-content-form", %{"form" => %{"title" => "Counter title"}})
+      |> render_submit()
+
+      proposals = Cases.list_open_case_proposals!(case_record.id, actor: poc)
+      assert [counter] = Enum.reject(proposals, &(&1.id == open.id))
+      assert counter.proposed_value == %{"value" => "Counter title"}
+      assert counter.parent_proposal_id == open.id
     end
 
-    test "the child modal can propose an insert and a field change", %{conn: conn, poc: poc} do
+    test "the modal proposes inserts and edits; removals become delete proposals", %{
+      conn: conn,
+      poc: poc
+    } do
       case_record = Fixtures.open_case(poc)
       package = Fixtures.add_affected_package(poc, case_record)
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/propose")
 
       # Propose adding a reference: no row is created, an :insert proposal is.
       lv |> element("button[phx-value-type=reference]", "Add reference") |> render_click()
@@ -479,7 +521,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#child-form", %{
         "child" => %{"url" => "https://example.com/advisory", "tags" => ["vendor-advisory"]}
       })
-      |> render_submit(%{"save_mode" => "propose", "reasoning" => "found the advisory"})
+      |> render_submit(%{"reasoning" => "found the advisory"})
 
       assert Ash.load!(case_record, [:references], authorize?: false).references == []
 
@@ -488,6 +530,11 @@ defmodule VarselWeb.CaseLiveTest do
       assert insert_proposal.target == :reference
       assert insert_proposal.proposed_value["value"]["url"] == "https://example.com/advisory"
 
+      # The phantom row renders with a proposed badge.
+      html = render(lv)
+      assert html =~ "https://example.com/advisory"
+      assert html =~ "proposed"
+
       # Propose editing the package: only the changed field becomes a proposal.
       lv
       |> element(~s{button[phx-value-type=package][phx-value-id="#{package.id}"]}, "Edit")
@@ -495,16 +542,41 @@ defmodule VarselWeb.CaseLiveTest do
 
       lv
       |> form("#child-form", %{"child" => %{"vendor" => "someone-else", "product" => "acme_lib"}})
-      |> render_submit(%{"save_mode" => "propose"})
+      |> render_submit()
 
       assert Ash.get!(Cases.AffectedPackage, package.id, authorize?: false).vendor == "acme"
 
-      proposals = Cases.list_open_case_proposals!(case_record.id, actor: poc)
-      assert [set_proposal] = Enum.filter(proposals, &(&1.operation == :set))
+      set_proposals =
+        case_record.id
+        |> Cases.list_open_case_proposals!(actor: poc)
+        |> Enum.filter(&(&1.operation == :set))
+
+      assert [set_proposal] = set_proposals
       assert set_proposal.target == :affected_package
       assert set_proposal.target_id == package.id
       assert set_proposal.field_name == "vendor"
       assert set_proposal.proposed_value == %{"value" => "someone-else"}
+
+      # Propose removal files a :delete proposal instead of destroying.
+      lv
+      |> element(
+        ~s{button[phx-value-type=package][phx-value-id="#{package.id}"]},
+        "Propose removal"
+      )
+      |> render_click()
+
+      assert Cases.AffectedPackage |> Ash.get(package.id, authorize?: false) |> elem(0) == :ok
+
+      deletes =
+        case_record.id
+        |> Cases.list_open_case_proposals!(actor: poc)
+        |> Enum.filter(&(&1.operation == :delete))
+
+      assert [delete_proposal] = deletes
+      assert delete_proposal.target_id == package.id
+
+      # The package now renders as removal-proposed.
+      assert render(lv) =~ "removal proposed"
     end
   end
 

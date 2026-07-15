@@ -24,6 +24,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.PackageChannel
+  alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposable
   alias Varsel.Cases.Publication
   alias Varsel.Cases.Render.Diff
@@ -95,16 +96,16 @@ defmodule VarselWeb.CaseDetailLive do
         if connected?(socket), do: subscribe(id)
 
         {:ok,
-         socket
-         |> assign(
+         assign(socket,
            case_id: id,
+           mode: nil,
+           case_record: case_record,
            child_form: nil,
            preview: nil,
            diff: nil,
            users: nil,
            catalog_options: nil
-         )
-         |> assign_case(case_record)}
+         )}
 
       {:error, _error} ->
         {:ok,
@@ -112,6 +113,16 @@ defmodule VarselWeb.CaseDetailLive do
          |> put_flash(:error, "Case not found.")
          |> push_navigate(to: ~p"/cases")}
     end
+  end
+
+  # The mode lives in the URL (/cases/:id[/edit|/propose] as the live action);
+  # the tab links patch between them.
+  @impl Phoenix.LiveView
+  def handle_params(_params, _uri, socket) do
+    {:noreply,
+     socket
+     |> assign(mode: socket.assigns.live_action)
+     |> assign_case(socket.assigns.case_record)}
   end
 
   defp subscribe(case_id) do
@@ -132,34 +143,35 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, assign(socket, content_form: AshPhoenix.Form.validate(socket.assigns.content_form, params))}
   end
 
-  # Two submit buttons: "apply" saves directly, "propose" turns the changed
-  # fields into field-level proposals (the only path on frozen cases).
-  def handle_event("save", %{"form" => params, "save_mode" => "propose"} = raw, socket) do
+  # Edit mode saves directly; propose mode diffs against the projection (the
+  # case with all open proposals applied) and creates proposals from the
+  # changes — untouched proposed values create nothing, changed ones become
+  # counter-proposals.
+  def handle_event("save", %{"form" => params} = raw, socket) do
     case decode_override(raw["cna_override_json"]) do
       {:ok, override} ->
         params = Map.put(params, "cna_override", override)
-        {:noreply, propose_content_changes(socket, params, presence(raw["reasoning"]))}
+
+        case socket.assigns.mode do
+          :propose ->
+            {:noreply, propose_content_changes(socket, params, presence(raw["reasoning"]))}
+
+          _edit ->
+            save_content(socket, params)
+        end
 
       :error ->
         {:noreply, put_flash(socket, :error, "The CNA override must be valid JSON.")}
     end
   end
 
-  def handle_event("save", %{"form" => params} = raw, socket) do
-    case decode_override(raw["cna_override_json"]) do
-      {:ok, override} ->
-        params = Map.put(params, "cna_override", override)
+  defp save_content(socket, params) do
+    case AshPhoenix.Form.submit(socket.assigns.content_form, params: params) do
+      {:ok, _case_record} ->
+        {:noreply, socket |> put_flash(:info, "Case saved.") |> reload_case()}
 
-        case AshPhoenix.Form.submit(socket.assigns.content_form, params: params) do
-          {:ok, _case_record} ->
-            {:noreply, socket |> put_flash(:info, "Case saved.") |> reload_case()}
-
-          {:error, form} ->
-            {:noreply, assign(socket, content_form: form)}
-        end
-
-      :error ->
-        {:noreply, put_flash(socket, :error, "The CNA override must be valid JSON.")}
+      {:error, form} ->
+        {:noreply, assign(socket, content_form: form)}
     end
   end
 
@@ -284,24 +296,46 @@ defmodule VarselWeb.CaseDetailLive do
       params
       |> Map.take(["affected_package_id"])
       |> Map.put("case_id", socket.assigns.case_record.id)
-      |> put_append_position(type, socket.assigns.case_record)
+      |> put_append_position(type, socket.assigns.display_case)
 
     {:noreply,
      socket
      |> ensure_catalog_options(type)
-     |> assign(child_form: %{form: form, type: type, title: "Add #{title}", parent: parent})}
+     |> assign(
+       child_form: %{
+         form: form,
+         type: type,
+         title: modal_title("Add", title, socket),
+         parent: parent
+       }
+     )}
   end
 
+  # In propose mode the modal edits the *projected* row (open proposals
+  # applied), so untouched proposed values don't re-propose.
   def handle_event("edit_child", %{"type" => type, "id" => id}, socket) do
     %{resource: resource, title: title} = Map.fetch!(@children, type)
-    row = Ash.get!(resource, id, actor: socket.assigns.current_user)
+
+    row =
+      case socket.assigns.mode do
+        :propose -> find_projected_row(socket.assigns.display_case, type, id)
+        _edit -> Ash.get!(resource, id, actor: socket.assigns.current_user)
+      end
 
     form =
       row
       |> AshPhoenix.Form.for_update(:edit, as: "child", actor: socket.assigns.current_user)
       |> to_form()
 
-    {:noreply, assign(socket, child_form: %{form: form, type: type, title: "Edit #{title}", parent: %{}})}
+    {:noreply,
+     assign(socket,
+       child_form: %{
+         form: form,
+         type: type,
+         title: modal_title("Edit", title, socket),
+         parent: %{}
+       }
+     )}
   end
 
   def handle_event("validate_child", %{"child" => params}, socket) do
@@ -312,23 +346,22 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, assign(socket, child_form: %{socket.assigns.child_form | form: form})}
   end
 
-  def handle_event("submit_child", %{"child" => params, "save_mode" => "propose"} = raw, socket) do
-    %{type: type} = socket.assigns.child_form
-    params = normalize_child_params(type, params, socket.assigns.child_form.parent)
-
-    {:noreply, propose_child_changes(socket, params, presence(raw["reasoning"]))}
-  end
-
-  def handle_event("submit_child", %{"child" => params}, socket) do
+  def handle_event("submit_child", %{"child" => params} = raw, socket) do
     %{form: form, type: type} = socket.assigns.child_form
     params = normalize_child_params(type, params, socket.assigns.child_form.parent)
 
-    case AshPhoenix.Form.submit(form, params: params) do
-      {:ok, _row} ->
-        {:noreply, socket |> assign(child_form: nil) |> put_flash(:info, "Saved.") |> reload_case()}
+    case socket.assigns.mode do
+      :propose ->
+        {:noreply, propose_child_changes(socket, params, presence(raw["reasoning"]))}
 
-      {:error, form} ->
-        {:noreply, assign(socket, child_form: %{socket.assigns.child_form | form: form})}
+      _edit ->
+        case AshPhoenix.Form.submit(form, params: params) do
+          {:ok, _row} ->
+            {:noreply, socket |> assign(child_form: nil) |> put_flash(:info, "Saved.") |> reload_case()}
+
+          {:error, form} ->
+            {:noreply, assign(socket, child_form: %{socket.assigns.child_form | form: form})}
+        end
     end
   end
 
@@ -336,16 +369,30 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, assign(socket, child_form: nil)}
   end
 
+  # Edit mode destroys the row; propose mode files a :delete proposal.
   def handle_event("remove_child", %{"type" => type, "id" => id}, socket) do
-    %{resource: resource} = Map.fetch!(@children, type)
+    %{resource: resource, target: target} = Map.fetch!(@children, type)
     actor = socket.assigns.current_user
 
     socket =
-      with {:ok, row} <- Ash.get(resource, id, actor: actor),
-           :ok <- Ash.destroy(row, action: :remove, actor: actor) do
-        socket |> put_flash(:info, "Removed.") |> reload_case()
-      else
-        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
+      case socket.assigns.mode do
+        :propose ->
+          create_proposals(socket, [
+            %{
+              case_id: socket.assigns.case_record.id,
+              target: target,
+              operation: :delete,
+              target_id: id
+            }
+          ])
+
+        _edit ->
+          with {:ok, row} <- Ash.get(resource, id, actor: actor),
+               :ok <- Ash.destroy(row, action: :remove, actor: actor) do
+            socket |> put_flash(:info, "Removed.") |> reload_case()
+          else
+            {:error, error} -> put_flash(socket, :error, errors_to_string(error))
+          end
       end
 
     {:noreply, socket}
@@ -488,12 +535,16 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp assign_case(socket, case_record) do
     actor = socket.assigns.current_user
+    mode = normalize_mode(socket.assigns.mode, case_record, actor)
 
-    # The content form also backs "propose changes" on frozen cases, so it is
-    # built whenever the actor may at least propose.
+    # Propose mode works against the projection: the case with every open
+    # proposal applied as if accepted.
+    projection = if mode == :propose, do: Projection.project(case_record)
+    display_case = if projection, do: projection.case, else: case_record
+
     content_form =
-      if can_propose?(case_record, actor) do
-        case_record
+      if mode in [:edit, :propose] do
+        display_case
         |> AshPhoenix.Form.for_update(:edit, as: "form", actor: actor)
         |> to_form()
       end
@@ -507,10 +558,31 @@ defmodule VarselWeb.CaseDetailLive do
 
     assign(socket,
       case_record: case_record,
+      display_case: display_case,
+      projection: projection,
+      mode: mode,
       content_form: content_form,
       users: users,
       page_title: case_record.title || "Case"
     )
+  end
+
+  # Falls back to the best available mode when the requested one is not
+  # allowed (or none was chosen yet): direct editing when possible, else view.
+  defp normalize_mode(requested, case_record, actor) do
+    allowed = available_modes(case_record, actor)
+
+    if requested in allowed do
+      requested
+    else
+      if :edit in allowed, do: :edit, else: :view
+    end
+  end
+
+  defp available_modes(case_record, actor) do
+    [:view] ++
+      if(can_edit?(case_record, actor), do: [:edit], else: []) ++
+      if can_propose?(case_record, actor), do: [:propose], else: []
   end
 
   defp reload_case(socket) do
@@ -544,27 +616,39 @@ defmodule VarselWeb.CaseDetailLive do
 
   ## ------------------------------------------------------ proposal building
 
-  # "Propose changes" on the content form: one :set proposal per changed
-  # proposable field.
+  # Content saved in propose mode: one :set proposal per field changed
+  # against the *projection* — untouched proposed values create nothing,
+  # changing one counters the proposal that put it there.
   defp propose_content_changes(socket, params, reasoning) do
-    case_record = socket.assigns.case_record
+    %{display_case: display_case, projection: projection, case_record: case_record} =
+      socket.assigns
 
     proposals =
       for field <- Proposable.fields(Cases.Case),
           key = to_string(field),
           Map.has_key?(params, key),
-          changed_value?(Map.get(case_record, field), params[key]) do
+          changed_value?(Map.get(display_case, field), params[key]) do
         %{
           case_id: case_record.id,
           target: :case,
           operation: :set,
           field_name: key,
           proposed_value: %{"value" => params[key]},
-          reasoning: reasoning
+          reasoning: reasoning,
+          parent_proposal_id: countered_id(projection, :case, nil, key)
         }
       end
 
     create_proposals(socket, proposals)
+  end
+
+  defp countered_id(nil, _target, _target_id, _field), do: nil
+
+  defp countered_id(projection, target, target_id, field) do
+    case Projection.countered(projection, target, target_id, field) do
+      nil -> nil
+      proposal -> proposal.id
+    end
   end
 
   # "Propose" in the child modal: an :insert proposal for an add form, one
@@ -602,7 +686,11 @@ defmodule VarselWeb.CaseDetailLive do
           ]
 
         :update ->
+          # The form was built from the projected row, so the diff yields
+          # only genuinely new changes; counters link to the countered
+          # proposal.
           row = form.source.data
+          projection = socket.assigns.projection
 
           for field <- Proposable.set_fields(resource),
               key = to_string(field),
@@ -615,7 +703,8 @@ defmodule VarselWeb.CaseDetailLive do
               target_id: row.id,
               field_name: key,
               proposed_value: %{"value" => params[key]},
-              reasoning: reasoning
+              reasoning: reasoning,
+              parent_proposal_id: countered_id(projection, target, row.id, key)
             }
           end
       end
@@ -746,6 +835,13 @@ defmodule VarselWeb.CaseDetailLive do
   # that is the post-publish enrichment flow; only closed cases refuse them.
   defp can_propose?(case_record, user), do: case_record.state != :closed and (poc?(user) or assigned?(case_record, user))
 
+  defp marks(nil), do: %{phantom: MapSet.new(), deleted: MapSet.new()}
+  defp marks(projection), do: %{phantom: projection.phantom_ids, deleted: projection.deleted_ids}
+
+  defp mode_path(case_id, :view), do: ~p"/cases/#{case_id}"
+  defp mode_path(case_id, :edit), do: ~p"/cases/#{case_id}/edit"
+  defp mode_path(case_id, :propose), do: ~p"/cases/#{case_id}/propose"
+
   @doc "DaisyUI badge class for a case state."
   def state_badge_class(:draft), do: "badge-warning"
   def state_badge_class(:review), do: "badge-info"
@@ -812,27 +908,37 @@ defmodule VarselWeb.CaseDetailLive do
         </:actions>
       </.header>
 
+      <div
+        :if={length(available_modes(@case_record, @current_user)) > 1}
+        role="tablist"
+        class="tabs tabs-box tabs-sm w-fit mb-6"
+      >
+        <.link
+          :for={mode <- available_modes(@case_record, @current_user)}
+          patch={mode_path(@case_id, mode)}
+          role="tab"
+          class={["tab capitalize", @mode == mode && "tab-active"]}
+        >
+          {mode}
+        </.link>
+      </div>
+
+      <p :if={@mode == :propose} class="text-sm text-base-content/60 -mt-3 mb-6">
+        Propose mode: open proposals are shown as if accepted; your edits become new proposals.
+      </p>
+
       <div class="grid lg:grid-cols-3 gap-8">
         <div class="lg:col-span-2 space-y-8">
-          <.content_section
-            case_record={@case_record}
-            content_form={@content_form}
-            can_edit={can_edit?(@case_record, @current_user)}
-            can_propose={can_propose?(@case_record, @current_user)}
-          />
-          <.affected_section
-            case_record={@case_record}
-            can_edit={can_edit?(@case_record, @current_user)}
-            can_propose={can_propose?(@case_record, @current_user)}
-          />
+          <.content_section case_record={@display_case} content_form={@content_form} mode={@mode} />
+          <.affected_section case_record={@display_case} mode={@mode} marks={marks(@projection)} />
           <.rows_section
             id="references"
             heading="References"
             type="reference"
             add_label="Add reference"
-            rows={@case_record.references}
-            can_edit={can_edit?(@case_record, @current_user)}
-            can_propose={can_propose?(@case_record, @current_user)}
+            rows={@display_case.references}
+            mode={@mode}
+            marks={marks(@projection)}
             sort_event="reorder_references"
           >
             <:row :let={reference}>
@@ -845,9 +951,9 @@ defmodule VarselWeb.CaseDetailLive do
             heading="Credits"
             type="credit"
             add_label="Add credit"
-            rows={@case_record.credits}
-            can_edit={can_edit?(@case_record, @current_user)}
-            can_propose={can_propose?(@case_record, @current_user)}
+            rows={@display_case.credits}
+            mode={@mode}
+            marks={marks(@projection)}
             sort_event="reorder_credits"
           >
             <:row :let={credit}>
@@ -862,9 +968,9 @@ defmodule VarselWeb.CaseDetailLive do
             heading="Weaknesses (CWE)"
             type="weakness"
             add_label="Add CWE"
-            rows={@case_record.weaknesses}
-            can_edit={can_edit?(@case_record, @current_user)}
-            can_propose={can_propose?(@case_record, @current_user)}
+            rows={@display_case.weaknesses}
+            mode={@mode}
+            marks={marks(@projection)}
           >
             <:row :let={weakness}>
               <a
@@ -883,9 +989,9 @@ defmodule VarselWeb.CaseDetailLive do
             heading="Impacts (CAPEC)"
             type="impact"
             add_label="Add CAPEC"
-            rows={@case_record.impacts}
-            can_edit={can_edit?(@case_record, @current_user)}
-            can_propose={can_propose?(@case_record, @current_user)}
+            rows={@display_case.impacts}
+            mode={@mode}
+            marks={marks(@projection)}
           >
             <:row :let={impact}>
               <a
@@ -926,7 +1032,7 @@ defmodule VarselWeb.CaseDetailLive do
         :if={@child_form}
         child_form={@child_form}
         catalog_options={@catalog_options}
-        can_edit={can_edit?(@case_record, @current_user)}
+        mode={@mode}
       />
     </div>
     """
@@ -994,10 +1100,6 @@ defmodule VarselWeb.CaseDetailLive do
     ~H"""
     <section>
       <h2 class="text-lg font-semibold mb-3">Case content</h2>
-
-      <p :if={not is_nil(@content_form) and not @can_edit} class="text-sm text-base-content/60 mb-3">
-        Content is frozen in the {@case_record.state} state — edits below become proposals.
-      </p>
 
       <.form
         :if={@content_form}
@@ -1070,19 +1172,11 @@ defmodule VarselWeb.CaseDetailLive do
         </details>
 
         <div class="flex items-end gap-2 mt-4">
-          <button
-            :if={@can_edit}
-            type="submit"
-            name="save_mode"
-            value="apply"
-            class="btn btn-primary btn-sm"
-          >
-            Save
-          </button>
-          <button type="submit" name="save_mode" value="propose" class="btn btn-outline btn-sm">
-            Propose changes
+          <button type="submit" class="btn btn-primary btn-sm">
+            {if @mode == :propose, do: "Propose changes", else: "Save"}
           </button>
           <input
+            :if={@mode == :propose}
             type="text"
             name="reasoning"
             placeholder="Reasoning (attached to proposals, optional)"
@@ -1112,7 +1206,7 @@ defmodule VarselWeb.CaseDetailLive do
         <div class="flex gap-2">
           <button class="btn btn-ghost btn-xs" phx-click="refresh_derivation">Refresh derivation</button>
           <button
-            :if={@can_propose}
+            :if={@mode != :view}
             class="btn btn-outline btn-xs"
             phx-click="new_child"
             phx-value-type="package"
@@ -1126,7 +1220,19 @@ defmodule VarselWeb.CaseDetailLive do
         <div class="card-body p-4">
           <div class="flex items-start justify-between">
             <div>
-              <h3 class="font-semibold">{package.vendor} / {package.product}</h3>
+              <h3 class={["font-semibold", package.id in @marks.deleted && "line-through opacity-60"]}>
+                {package.vendor} / {package.product}
+                <span
+                  :if={package.id in @marks.phantom}
+                  class="badge badge-info badge-xs align-middle"
+                >proposed</span>
+                <span
+                  :if={package.id in @marks.deleted}
+                  class="badge badge-error badge-xs align-middle"
+                >
+                  removal proposed
+                </span>
+              </h3>
               <p :if={package.repo_url} class="text-sm font-mono text-base-content/70">
                 {package.repo_url}
               </p>
@@ -1135,7 +1241,13 @@ defmodule VarselWeb.CaseDetailLive do
                 <span :if={package.allow_unreleased_fix}>· allows unreleased fixes</span>
               </p>
             </div>
-            <div :if={@can_propose} class="flex gap-1">
+            <div
+              :if={
+                @mode != :view and package.id not in @marks.phantom and
+                  package.id not in @marks.deleted
+              }
+              class="flex gap-1"
+            >
               <button
                 class="btn btn-ghost btn-xs"
                 phx-click="edit_child"
@@ -1145,14 +1257,17 @@ defmodule VarselWeb.CaseDetailLive do
                 Edit
               </button>
               <button
-                :if={@can_edit}
                 class="btn btn-ghost btn-xs text-error"
                 phx-click="remove_child"
                 phx-value-type="package"
                 phx-value-id={package.id}
-                data-confirm="Remove this package with all its channels and boundary facts?"
+                data-confirm={
+                  if @mode == :propose,
+                    do: "Propose removing this package?",
+                    else: "Remove this package with all its channels and boundary facts?"
+                }
               >
-                Remove
+                {if @mode == :propose, do: "Propose removal", else: "Remove"}
               </button>
             </div>
           </div>
@@ -1161,7 +1276,7 @@ defmodule VarselWeb.CaseDetailLive do
             <div class="flex items-center justify-between">
               <h4 class="text-sm font-semibold text-base-content/70">Channels</h4>
               <button
-                :if={@can_propose}
+                :if={@mode != :view and package.id not in @marks.phantom}
                 class="btn btn-ghost btn-xs"
                 phx-click="new_child"
                 phx-value-type="channel"
@@ -1179,8 +1294,9 @@ defmodule VarselWeb.CaseDetailLive do
                     {if channel.versions_override, do: "versions overridden"}
                     {if channel.entry_override, do: "entry overridden"}
                   </td>
-                  <td :if={@can_propose} class="text-right whitespace-nowrap">
+                  <td :if={@mode != :view} class="text-right whitespace-nowrap">
                     <button
+                      :if={channel.id not in @marks.phantom and channel.id not in @marks.deleted}
                       class="btn btn-ghost btn-xs"
                       phx-click="edit_child"
                       phx-value-type="channel"
@@ -1188,15 +1304,21 @@ defmodule VarselWeb.CaseDetailLive do
                     >
                       Edit
                     </button>
+                    <span :if={channel.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
+                    <span :if={channel.id in @marks.deleted} class="badge badge-error badge-xs">removal proposed</span>
                     <button
-                      :if={@can_edit}
+                      :if={channel.id not in @marks.phantom and channel.id not in @marks.deleted}
                       class="btn btn-ghost btn-xs text-error"
                       phx-click="remove_child"
                       phx-value-type="channel"
                       phx-value-id={channel.id}
-                      data-confirm="Remove this channel?"
+                      data-confirm={
+                        if @mode == :propose,
+                          do: "Propose removing this channel?",
+                          else: "Remove this channel?"
+                      }
                     >
-                      Remove
+                      {if @mode == :propose, do: "Propose removal", else: "Remove"}
                     </button>
                   </td>
                 </tr>
@@ -1209,7 +1331,7 @@ defmodule VarselWeb.CaseDetailLive do
             <div class="flex items-center justify-between">
               <h4 class="text-sm font-semibold text-base-content/70">Version boundaries</h4>
               <button
-                :if={@can_propose}
+                :if={@mode != :view and package.id not in @marks.phantom}
                 class="btn btn-ghost btn-xs"
                 phx-click="new_child"
                 phx-value-type="event"
@@ -1231,8 +1353,9 @@ defmodule VarselWeb.CaseDetailLive do
                   </td>
                   <td class="font-mono text-xs break-all">{event.commit_sha || event.version}</td>
                   <td class="text-xs text-base-content/60">{event.note}</td>
-                  <td :if={@can_propose} class="text-right whitespace-nowrap">
+                  <td :if={@mode != :view} class="text-right whitespace-nowrap">
                     <button
+                      :if={event.id not in @marks.phantom and event.id not in @marks.deleted}
                       class="btn btn-ghost btn-xs"
                       phx-click="edit_child"
                       phx-value-type="event"
@@ -1240,15 +1363,21 @@ defmodule VarselWeb.CaseDetailLive do
                     >
                       Edit
                     </button>
+                    <span :if={event.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
+                    <span :if={event.id in @marks.deleted} class="badge badge-error badge-xs">removal proposed</span>
                     <button
-                      :if={@can_edit}
+                      :if={event.id not in @marks.phantom and event.id not in @marks.deleted}
                       class="btn btn-ghost btn-xs text-error"
                       phx-click="remove_child"
                       phx-value-type="event"
                       phx-value-id={event.id}
-                      data-confirm="Remove this boundary fact?"
+                      data-confirm={
+                        if @mode == :propose,
+                          do: "Propose removing this boundary?",
+                          else: "Remove this boundary fact?"
+                      }
                     >
-                      Remove
+                      {if @mode == :propose, do: "Propose removal", else: "Remove"}
                     </button>
                   </td>
                 </tr>
@@ -1273,8 +1402,8 @@ defmodule VarselWeb.CaseDetailLive do
   attr :type, :string, required: true
   attr :add_label, :string, required: true
   attr :rows, :list, required: true
-  attr :can_edit, :boolean, required: true
-  attr :can_propose, :boolean, required: true
+  attr :mode, :atom, required: true
+  attr :marks, :map, required: true, doc: "phantom/deleted row-id sets from the projection"
 
   attr :sort_event, :string,
     default: nil,
@@ -1283,14 +1412,14 @@ defmodule VarselWeb.CaseDetailLive do
   slot :row, required: true
 
   defp rows_section(assigns) do
-    assigns = assign(assigns, :sortable, assigns.can_edit and assigns.sort_event != nil)
+    assigns = assign(assigns, :sortable, assigns.mode == :edit and assigns.sort_event != nil)
 
     ~H"""
     <section id={@id}>
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold">{@heading}</h2>
         <button
-          :if={@can_propose}
+          :if={@mode != :view}
           class="btn btn-outline btn-xs"
           phx-click="new_child"
           phx-value-type={@type}
@@ -1310,7 +1439,10 @@ defmodule VarselWeb.CaseDetailLive do
           class="flex items-center justify-between gap-2 py-1 border-b border-base-200"
           data-drag-id={@sortable && row.id}
         >
-          <div class="flex items-center gap-2">
+          <div class={[
+            "flex items-center gap-2",
+            row.id in @marks.deleted && "line-through opacity-60"
+          ]}>
             <span
               :if={@sortable}
               data-drag-handle
@@ -1320,8 +1452,13 @@ defmodule VarselWeb.CaseDetailLive do
               ⠿
             </span>
             <div>{render_slot(@row, row)}</div>
+            <span :if={row.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
+            <span :if={row.id in @marks.deleted} class="badge badge-error badge-xs">removal proposed</span>
           </div>
-          <div :if={@can_propose} class="flex gap-1 shrink-0">
+          <div
+            :if={@mode != :view and row.id not in @marks.phantom and row.id not in @marks.deleted}
+            class="flex gap-1 shrink-0"
+          >
             <button
               :if={@type in ["reference", "credit"]}
               class="btn btn-ghost btn-xs"
@@ -1332,14 +1469,13 @@ defmodule VarselWeb.CaseDetailLive do
               Edit
             </button>
             <button
-              :if={@can_edit}
               class="btn btn-ghost btn-xs text-error"
               phx-click="remove_child"
               phx-value-type={@type}
               phx-value-id={row.id}
-              data-confirm="Remove?"
+              data-confirm={if @mode == :propose, do: "Propose removing this row?", else: "Remove?"}
             >
-              Remove
+              {if @mode == :propose, do: "Propose removal", else: "Remove"}
             </button>
           </div>
         </li>
@@ -1661,6 +1797,7 @@ defmodule VarselWeb.CaseDetailLive do
           />
 
           <input
+            :if={@mode == :propose}
             type="text"
             name="reasoning"
             placeholder="Reasoning (attached to proposals, optional)"
@@ -1669,17 +1806,8 @@ defmodule VarselWeb.CaseDetailLive do
 
           <div class="modal-action">
             <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_child">Cancel</button>
-            <button type="submit" name="save_mode" value="propose" class="btn btn-outline btn-sm">
-              Propose
-            </button>
-            <button
-              :if={@can_edit}
-              type="submit"
-              name="save_mode"
-              value="apply"
-              class="btn btn-primary btn-sm"
-            >
-              Save
+            <button type="submit" class="btn btn-primary btn-sm">
+              {if @mode == :propose, do: "Propose", else: "Save"}
             </button>
           </div>
         </.form>
@@ -1961,6 +2089,38 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   defp put_append_position(parent, _type, _case_record), do: parent
+
+  defp modal_title(verb, title, socket) do
+    case socket.assigns.mode do
+      :propose -> "#{verb} #{title} (as a proposal)"
+      _edit -> "#{verb} #{title}"
+    end
+  end
+
+  # Rows in propose mode come from the projection, keyed by the same ids the
+  # templates render (phantom rows carry their proposal's id and are never
+  # editable, so lookups only see real rows).
+  defp find_projected_row(display_case, type, id) do
+    rows =
+      case type do
+        "package" ->
+          display_case.affected_packages
+
+        "channel" ->
+          Enum.flat_map(display_case.affected_packages, & &1.channels)
+
+        "event" ->
+          Enum.flat_map(display_case.affected_packages, & &1.version_events)
+
+        "reference" ->
+          display_case.references
+
+        "credit" ->
+          display_case.credits
+      end
+
+    Enum.find(rows, &(&1.id == id)) || raise "row #{id} not found in projection"
+  end
 
   defp selected_tags(form), do: List.wrap(form[:tags].value)
 

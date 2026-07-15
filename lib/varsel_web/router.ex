@@ -96,7 +96,9 @@ defmodule VarselWeb.Router do
       live "/report", VulnerabilityReportLive, :new
       live "/settings/tokens", ApiKeySettingsLive, :index
       live "/cases", CaseManagementLive, :index
-      live "/cases/:id", CaseDetailLive, :show
+      live "/cases/:id", CaseDetailLive, :view
+      live "/cases/:id/edit", CaseDetailLive, :edit
+      live "/cases/:id/propose", CaseDetailLive, :propose
     end
   end
 
