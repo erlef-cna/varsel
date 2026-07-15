@@ -90,6 +90,29 @@ defmodule Varsel.Cases.Publication do
     Varsel.CVE.validate_cve_record!(cve_json, authorize?: false)
   end
 
+  @doc """
+  The CNA container currently published on the case's CVE record, or nil when
+  the case was never published. `providerMetadata.dateUpdated` is stripped —
+  MITRE stamps it on every push, so it would be pure diff noise.
+  """
+  @spec published_cna(Case.t()) :: map() | nil
+  def published_cna(case_record) do
+    case_record = Ash.load!(case_record, [:cve_record], authorize?: false)
+
+    with %{cve_record: %{cve_json: cve_json}} when is_map(cve_json) <- case_record,
+         %{} = cna <- get_in(cve_json, ["containers", "cna"]) do
+      case cna do
+        %{"providerMetadata" => %{} = provider} ->
+          Map.put(cna, "providerMetadata", Map.delete(provider, "dateUpdated"))
+
+        _no_provider_metadata ->
+          cna
+      end
+    else
+      _never_published -> nil
+    end
+  end
+
   @doc "Marks every package's derivation cache stale so the next preview recomputes."
   @spec invalidate_derivations(Case.t()) :: :ok
   def invalidate_derivations(case_record) do

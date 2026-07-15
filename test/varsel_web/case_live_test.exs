@@ -427,6 +427,39 @@ defmodule VarselWeb.CaseLiveTest do
     end
   end
 
+  describe "diff to published record" do
+    test "amendments offer a diff against the published container", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      cve_record = Fixtures.published_cve_record("CVE-#{year}-55555", "Old title")
+      case_record = Fixtures.open_case(poc, %{title: "New title"})
+
+      # Link the case to the already-published record (an amendment in progress).
+      Varsel.Repo.query!(
+        "UPDATE cases SET cve_record_id = $1 WHERE id = $2",
+        [Ecto.UUID.dump!(cve_record.id), Ecto.UUID.dump!(case_record.id)]
+      )
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      assert html =~ "Diff to published"
+
+      lv |> element("button", "Diff to published") |> render_click()
+      html = render_async(lv)
+
+      # The published title leaves, the case title arrives.
+      assert html =~ "Old title"
+      assert html =~ "New title"
+      assert html =~ "bg-error/10"
+      assert html =~ "bg-success/10"
+    end
+
+    test "never-published cases show no diff button", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      refute html =~ "Diff to published"
+    end
+  end
+
   describe "attached reports" do
     setup %{poc: poc} do
       reporter = Fixtures.register_user("case_report_reporter")

@@ -24,10 +24,13 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.PackageChannel
+  alias Varsel.Cases.Publication
+  alias Varsel.Cases.Render.Diff
   alias Varsel.Cases.VersionEvent
 
   @case_loads [
     :cve_id,
+    :cve_record,
     assignments: [:user],
     references: [],
     credits: [],
@@ -67,7 +70,14 @@ defmodule VarselWeb.CaseDetailLive do
 
         {:ok,
          socket
-         |> assign(case_id: id, child_form: nil, preview: nil, users: nil, catalog_options: nil)
+         |> assign(
+           case_id: id,
+           child_form: nil,
+           preview: nil,
+           diff: nil,
+           users: nil,
+           catalog_options: nil
+         )
          |> assign_case(case_record)}
 
       {:error, _error} ->
@@ -198,6 +208,27 @@ defmodule VarselWeb.CaseDetailLive do
 
   def handle_event("close_preview", _params, socket) do
     {:noreply, assign(socket, preview: nil)}
+  end
+
+  # Diff the freshly rendered container against what is published at MITRE —
+  # only meaningful while amending an already-published case.
+  def handle_event("diff", _params, socket) do
+    %{case_record: case_record, current_user: actor} = socket.assigns
+
+    {:noreply,
+     socket
+     |> assign(diff: :loading)
+     |> start_async(:diff, fn ->
+       # Re-fetch with the actor so the diff is as authorized as the page load.
+       case_record = Cases.get_case!(case_record.id, actor: actor)
+       published = Publication.published_cna(case_record) || %{}
+       {:ok, %{result: result}} = Publication.render(case_record)
+       Diff.lines(published, result.cna)
+     end)}
+  end
+
+  def handle_event("close_diff", _params, socket) do
+    {:noreply, assign(socket, diff: nil)}
   end
 
   ## -------------------------------------------------------------- child rows
@@ -383,6 +414,17 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, put_flash(socket, :error, "Publish failed: #{Exception.format_exit(reason)}")}
   end
 
+  def handle_async(:diff, {:ok, lines}, socket) do
+    {:noreply, assign(socket, diff: lines)}
+  end
+
+  def handle_async(:diff, {:exit, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(diff: nil)
+     |> put_flash(:error, "Diff failed: #{Exception.format_exit(reason)}")}
+  end
+
   ## ----------------------------------------------------------------- helpers
 
   defp resolve_proposal(socket, id, note, fun, verb) do
@@ -521,6 +563,15 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp editable?(case_record), do: case_record.state in [:draft, :review]
 
+  # An amendment: the backing CVE record already carries a published CNA
+  # container, so publishing pushes an update — a diff against it is meaningful.
+  defp amendment?(case_record) do
+    match?(
+      %{cve_record: %{cve_json: %{"containers" => %{"cna" => %{}}}}},
+      case_record
+    )
+  end
+
   defp can_edit?(case_record, user), do: editable?(case_record) and (poc?(user) or assigned?(case_record, user))
 
   @doc "DaisyUI badge class for a case state."
@@ -531,6 +582,16 @@ defmodule VarselWeb.CaseDetailLive do
   def state_badge_class(:published), do: "badge-success"
   def state_badge_class(:closed), do: "badge-neutral"
   def state_badge_class(_other), do: "badge-ghost"
+
+  defp diff_line_class({:del, _line}), do: "bg-error/10 text-error"
+  defp diff_line_class({:ins, _line}), do: "bg-success/10 text-success"
+  defp diff_line_class({:skip, _count}), do: "text-base-content/40"
+  defp diff_line_class({:eq, _line}), do: "text-base-content/70"
+
+  defp diff_line_text({:del, line}), do: "- " <> line
+  defp diff_line_text({:ins, line}), do: "+ " <> line
+  defp diff_line_text({:eq, line}), do: "  " <> line
+  defp diff_line_text({:skip, count}), do: "  ⋯ #{count} unchanged lines"
 
   defp proposal_badge_class(:open), do: "badge-warning"
   defp proposal_badge_class(:accepted), do: "badge-success"
@@ -663,7 +724,7 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
 
         <div class="space-y-8">
-          <.preview_section preview={@preview} />
+          <.preview_section preview={@preview} diff={@diff} amendment={amendment?(@case_record)} />
           <.reports_section
             :if={@case_record.vulnerability_reports != []}
             case_record={@case_record}
@@ -1141,9 +1202,33 @@ defmodule VarselWeb.CaseDetailLive do
     <section>
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold">Record preview</h2>
-        <button class="btn btn-outline btn-xs" phx-click="preview" disabled={@preview == :loading}>
-          {if @preview == :loading, do: "Rendering…", else: "Render preview"}
-        </button>
+        <div class="flex gap-2">
+          <button
+            :if={@amendment}
+            class="btn btn-outline btn-xs"
+            phx-click="diff"
+            disabled={@diff == :loading}
+          >
+            {if @diff == :loading, do: "Diffing…", else: "Diff to published"}
+          </button>
+          <button class="btn btn-outline btn-xs" phx-click="preview" disabled={@preview == :loading}>
+            {if @preview == :loading, do: "Rendering…", else: "Render preview"}
+          </button>
+        </div>
+      </div>
+
+      <div :if={is_list(@diff)} class="space-y-2 mb-3">
+        <p :if={not Diff.changed?(@diff)} class="text-sm text-base-content/60">
+          No changes against the published record.
+        </p>
+        <pre
+          :if={Diff.changed?(@diff)}
+          class="bg-base-200 rounded p-3 text-xs overflow-x-auto max-h-96 leading-5"
+        ><span
+        :for={line <- @diff}
+        class={["block whitespace-pre", diff_line_class(line)]}
+      >{diff_line_text(line)}</span></pre>
+        <button class="btn btn-ghost btn-xs" phx-click="close_diff">Close diff</button>
       </div>
 
       <div :if={is_map(@preview)} class="space-y-3">
