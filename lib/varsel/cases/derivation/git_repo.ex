@@ -7,16 +7,23 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   `Varsel.Cases.Derivation.GitBackend` implementation on `exgit` — pure
   Elixir, no git binary or libgit2 at runtime.
 
-  Repositories are cloned commits-only (`filter: {:tree, 0}`, the equivalent
-  of the cna repo's `refs-containing --filter=tree:0` cache) and held
-  in-memory by this GenServer. A cached repository is re-cloned once it is
-  older than the TTL (new release tags must be seen — they decide whether a
-  fix counts as released) or when a requested commit is missing (a fix pushed
-  after the clone).
+  Strategy (the equivalent of the cna repo's `refs-containing` cache):
 
-  "Tag contains commit" is answered with `Exgit.Walk.merge_base/2`: a tag's
-  commit contains `sha` iff their merge base *is* `sha`. Results are memoized
-  per `{repo, sha}` for the lifetime of the cached clone.
+  1. lazy clone — refs only, no objects
+  2. one filtered fetch (`tree:0`) wanting **every** ref tip: downloads the
+     complete commit graph reachable from tags and branches, no trees, no
+     blobs (a plain filtered clone only makes the default branch's history
+     resident — tag-only commits would be missing)
+  3. build a children adjacency map over the commit graph, BFS the
+     descendants of the target commit
+  4. a tag contains the commit iff its (peeled) tip *is* the commit or one
+     of its descendants
+
+  The graph is held in-memory per repository and rebuilt once it is older
+  than the TTL (new release tags must be seen — they decide whether a fix
+  counts as released) or when a requested commit is missing (a fix pushed
+  after the fetch). Answers are memoized per `{repo, sha}` for the lifetime
+  of the cached graph.
   """
 
   @behaviour Varsel.Cases.Derivation.GitBackend
@@ -27,9 +34,14 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   alias Exgit.Object.Tag
   alias Exgit.ObjectStore
   alias Exgit.RefStore
-  alias Exgit.Walk
 
   @ttl_seconds 900
+
+  defmodule Graph do
+    @moduledoc false
+    @enforce_keys [:store, :tags, :children, :fetched_at]
+    defstruct [:store, :tags, :children, :fetched_at]
+  end
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -42,7 +54,7 @@ defmodule Varsel.Cases.Derivation.GitRepo do
 
   @impl GenServer
   def init(_opts) do
-    {:ok, %{repos: %{}, answers: %{}}}
+    {:ok, %{graphs: %{}, answers: %{}}}
   end
 
   @impl GenServer
@@ -58,91 +70,180 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   end
 
   defp compute(state, repo_url, sha) do
-    with {:ok, repo, state} <- repo_for(state, repo_url, sha) do
-      {walk_tags(repo, sha), state}
+    case decode_sha(sha) do
+      {:ok, target} ->
+        with {:ok, graph, state} <- graph_for(state, repo_url, target) do
+          {{:ok, tags_with_descendant(graph, target)}, state}
+        end
+
+      :error ->
+        {{:error, :invalid_sha}, state}
     end
   end
 
-  # Returns a repo that is fresh enough and contains `sha`, re-cloning once
-  # if a cached clone is stale or misses the commit.
-  defp repo_for(state, repo_url, sha) do
+  # Returns a commit graph that is fresh enough and contains `target`,
+  # refetching once when a cached graph is stale or misses the commit.
+  defp graph_for(state, repo_url, target) do
     now = System.monotonic_time(:second)
 
-    case Map.fetch(state.repos, repo_url) do
-      {:ok, {repo, cloned_at}} when now - cloned_at < @ttl_seconds ->
-        if commit_present?(repo, sha) do
-          {:ok, repo, state}
+    case Map.fetch(state.graphs, repo_url) do
+      {:ok, %Graph{fetched_at: fetched_at} = graph} when now - fetched_at < @ttl_seconds ->
+        if Map.has_key?(graph.children, target) or commit?(graph.store, target) do
+          {:ok, graph, state}
         else
-          fresh_clone(state, repo_url, sha)
+          fresh_graph(state, repo_url, target)
         end
 
       _stale_or_missing ->
-        fresh_clone(state, repo_url, sha)
+        fresh_graph(state, repo_url, target)
     end
   end
 
-  defp fresh_clone(state, repo_url, sha) do
-    case Exgit.clone(repo_url, filter: {:tree, 0}) do
-      {:ok, repo} ->
-        now = System.monotonic_time(:second)
-
-        # A fresh clone invalidates memoized answers for this repo.
+  defp fresh_graph(state, repo_url, target) do
+    case build_graph(repo_url) do
+      {:ok, graph} ->
+        # A fresh graph invalidates memoized answers for this repo.
         answers =
           state.answers |> Enum.reject(fn {{url, _}, _} -> url == repo_url end) |> Map.new()
 
-        state = %{state | repos: Map.put(state.repos, repo_url, {repo, now}), answers: answers}
+        state = %{state | graphs: Map.put(state.graphs, repo_url, graph), answers: answers}
 
-        if commit_present?(repo, sha) do
-          {:ok, repo, state}
+        if Map.has_key?(graph.children, target) or commit?(graph.store, target) do
+          {:ok, graph, state}
         else
           {{:error, :commit_not_found}, state}
         end
 
       {:error, reason} ->
-        {{:error, {:clone_failed, reason}}, state}
+        {{:error, reason}, state}
     end
   end
 
-  defp commit_present?(repo, sha) do
-    case decode_sha(sha) do
-      {:ok, bin} -> match?({:ok, %Commit{}}, ObjectStore.get(repo.object_store, bin))
-      :error -> false
-    end
-  end
+  # Lazy clone (refs only) + one tree:0 fetch wanting every ref tip, then one
+  # BFS over parent edges recording reverse (children) edges.
+  defp build_graph(repo_url) do
+    case Exgit.clone(repo_url, lazy: true) do
+      {:ok, repo} ->
+        tags = list_refs(repo, "refs/tags/")
+        heads = list_refs(repo, "refs/heads/")
+        tips = (tags ++ heads) |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
 
-  defp walk_tags(repo, sha) do
-    {:ok, target} = decode_sha(sha)
+        case ObjectStore.Promisor.fetch_with_filter(repo.object_store, tips, filter: "tree:0") do
+          {:ok, store} ->
+            children = build_children(store, tips)
 
-    tags =
-      repo.ref_store
-      |> RefStore.list("refs/tags/")
-      |> Enum.flat_map(fn {name, value} ->
-        case peel(repo, value) do
-          {:ok, commit_sha} -> [{String.replace_prefix(name, "refs/tags/", ""), commit_sha}]
-          :error -> []
+            {:ok,
+             %Graph{
+               store: store,
+               tags: tags,
+               children: children,
+               fetched_at: System.monotonic_time(:second)
+             }}
+
+          {:error, reason} ->
+            {:error, {:fetch_failed, reason}}
         end
-      end)
-      |> Enum.filter(fn {_name, commit_sha} -> contains?(repo, commit_sha, target) end)
-      |> Enum.map(&elem(&1, 0))
 
-    {:ok, tags}
+      {:error, reason} ->
+        {:error, {:clone_failed, reason}}
+    end
   end
+
+  defp list_refs(repo, prefix) do
+    for {name, value} <- RefStore.list(repo.ref_store, prefix),
+        {:ok, sha} <- [decode_sha(value)] do
+      {String.replace_prefix(name, prefix, ""), sha}
+    end
+  end
+
+  defp tags_with_descendant(graph, target) do
+    descendants = descendants(graph.children, target)
+
+    for {name, tip} <- graph.tags,
+        {:ok, commit_sha} <- [peel(graph.store, tip)],
+        MapSet.member?(descendants, commit_sha) do
+      name
+    end
+  end
+
+  defp commit?(store, sha), do: match?({:ok, _}, peel(store, sha))
 
   # Tag refs may point at annotated tag objects; peel to the commit.
-  defp peel(repo, value) do
-    with {:ok, bin} <- decode_sha(value) do
-      case ObjectStore.get(repo.object_store, bin) do
-        {:ok, %Commit{}} -> {:ok, bin}
-        {:ok, %Tag{object: target}} -> peel(repo, target)
-        _other -> :error
-      end
+  defp peel(store, sha) do
+    case ObjectStore.get(store, sha) do
+      {:ok, %Commit{}} -> {:ok, sha}
+      {:ok, %Tag{object: target}} -> peel(store, target)
+      _other -> :error
     end
   end
 
-  defp contains?(_repo, commit_sha, target) when commit_sha == target, do: true
+  defp build_children(store, tips) do
+    start = for tip <- tips, {:ok, sha} <- [peel(store, tip)], do: sha
 
-  defp contains?(repo, commit_sha, target) do
-    match?({:ok, ^target}, Walk.merge_base(repo, [commit_sha, target]))
+    walk(store, :queue.from_list(start), MapSet.new(start), %{})
+  end
+
+  defp walk(store, queue, seen, children) do
+    case :queue.out(queue) do
+      {:empty, _queue} ->
+        children
+
+      {{:value, sha}, queue} ->
+        {queue, seen, children} = visit(store, sha, queue, seen, children)
+        walk(store, queue, seen, children)
+    end
+  end
+
+  defp visit(store, sha, queue, seen, children) do
+    case ObjectStore.get(store, sha) do
+      {:ok, %Commit{} = commit} ->
+        commit
+        |> Commit.parents()
+        |> Enum.reduce({queue, seen, children}, &visit_parent(&1, sha, &2))
+
+      _missing ->
+        # Shallow boundary or missing object: stop this line.
+        {queue, seen, children}
+    end
+  end
+
+  defp visit_parent(parent, sha, {queue, seen, children}) do
+    children = Map.update(children, parent, [sha], &[sha | &1])
+
+    if MapSet.member?(seen, parent) do
+      {queue, seen, children}
+    else
+      {:queue.in(parent, queue), MapSet.put(seen, parent), children}
+    end
+  end
+
+  # The target itself counts as its own descendant (a tag pointing exactly at
+  # the commit contains it).
+  defp descendants(children, target) do
+    bfs(children, :queue.from_list([target]), MapSet.new([target]))
+  end
+
+  defp bfs(children, queue, seen) do
+    case :queue.out(queue) do
+      {:empty, _queue} ->
+        seen
+
+      {{:value, sha}, queue} ->
+        {queue, seen} =
+          children
+          |> Map.get(sha, [])
+          |> Enum.reduce({queue, seen}, &enqueue_child/2)
+
+        bfs(children, queue, seen)
+    end
+  end
+
+  defp enqueue_child(child, {queue, seen}) do
+    if MapSet.member?(seen, child) do
+      {queue, seen}
+    else
+      {:queue.in(child, queue), MapSet.put(seen, child)}
+    end
   end
 
   # Accepts 40-char hex or raw 20-byte binary SHAs.
