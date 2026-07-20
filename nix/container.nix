@@ -9,10 +9,10 @@
 nix2container.buildImage {
   name = "ghcr.io/erlef-cna/varsel";
 
-  # The release, cvelint, and a shell (busybox provides /bin/sh + the
-  # coreutils the release's scripts call). ERTS runtime libraries come in
-  # via the release's scanned references.
-  copyToRoot = [ release cvelint pkgs.busybox ];
+  # The release, cvelint, a shell (busybox provides /bin/sh + the coreutils
+  # the release's scripts call), and the CA root store for outbound TLS.
+  # ERTS runtime libraries come in via the release's scanned references.
+  copyToRoot = [ release cvelint pkgs.busybox pkgs.cacert ];
 
   # Split the store closure across many layers so pulls cache: glibc, ERTS
   # and the dependency .beam files land in their own layers and are reused
@@ -21,6 +21,11 @@ nix2container.buildImage {
 
   config = {
     Cmd = [ "/bin/server" ];
-    Env = [ "PATH=/bin" "LANG=C.UTF-8" ];
+    Env = [
+      "PATH=/bin"
+      "LANG=C.UTF-8"
+      # OTP's os_cacerts lookup honors this before probing distro paths.
+      "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
+    ];
   };
 }

@@ -42,6 +42,8 @@ stdenv.mkDerivation {
     MIX_ENV = "prod";
     LC_ALL = "C.UTF-8";
     SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+    # git does not read SSL_CERT_FILE (needed for the heroicons dependency).
+    GIT_SSL_CAINFO = "${cacert}/etc/ssl/certs/ca-bundle.crt";
   };
 
   dontConfigure = true;
