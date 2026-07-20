@@ -156,3 +156,42 @@ jobs:
         with:
           sarif_file: zizmor.sarif
           category: zizmor
+
+  mix-deps-submission:
+    name: Mix Dependency Submission
+    runs-on: ubuntu-latest
+    # Fork PRs get a read-only token, so the submission API call would fail.
+    # Skipping keeps forks green; the graph is still submitted on push to main.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          elixir: true
+      - uses: erlef/mix-dependency-submission@c4a36104ac7614b1b66d0da6e8a1c7d6d07bc52b # v1.3.2
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    # Wait for the Mix graph to be submitted, but still run on fork PRs where
+    # that job is skipped (review then uses the base branch's existing graph).
+    # !cancelled() lets this run even when the needed job was skipped.
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    needs: mix-deps-submission
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          comment-summary-in-pr: on-failure
