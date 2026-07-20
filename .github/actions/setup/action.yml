@@ -3,8 +3,9 @@
 
 name: Setup
 description: >-
-  Install Nix + devenv, and optionally bootstrap the Elixir toolchain
-  (Hex/Rebar, cached deps, deps.get, compile). Run this right after checkout.
+  Install Nix, and optionally bootstrap the Elixir toolchain (Hex/Rebar,
+  cached deps, deps.get, compile). Run this right after checkout. Steps run
+  inside the flake dev shell via `nix develop --no-pure-eval`.
 
 inputs:
   elixir:
@@ -20,13 +21,30 @@ runs:
   using: composite
   steps:
     - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+
+    # Persist the Nix store (dev shell closure) across runs via the GitHub
+    # cache; restores before the first `nix develop`, saves post-job.
+    - uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+      with:
+        primary-key: nix-shell-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix', 'devenv.nix') }}
+        restore-prefixes-first-match: nix-shell-${{ runner.os }}-
+        gc-max-store-size-linux: 4G
+        purge: true
+        purge-prefixes: nix-shell-${{ runner.os }}-
+        purge-created: 0
+        purge-primary-key: never
+
     - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
       with:
         name: devenv
-    - name: Install devenv.sh
-      shell: bash
-      run: nix profile add nixpkgs#devenv
 
+    # Flake-mode devenv locates the project via $PWD (hence --no-pure-eval).
+    # Shells set it, but the runner invokes custom `shell:` commands directly,
+    # so export it for all subsequent `nix develop` steps. $PWD is
+    # runner-controlled, not attacker-influenced, hence the zizmor ignore.
+    - name: Export PWD for devenv
+      shell: bash
+      run: echo "PWD=$PWD" >> "$GITHUB_ENV" # zizmor: ignore[github-env]
     - name: Cache deps and _build
       if: inputs.elixir == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -38,23 +56,16 @@ runs:
         restore-keys: |
           mix-${{ runner.os }}-${{ inputs.mix-env }}-
 
-    - name: Install Hex and Rebar
-      if: inputs.elixir == 'true'
-      shell: devenv shell bash -- -e {0}
-      run: |
-        mix local.hex --force
-        mix local.rebar --force
-
     - name: Fetch dependencies
       if: inputs.elixir == 'true'
-      shell: devenv shell bash -- -e {0}
+      shell: nix develop --no-pure-eval -c bash -e {0}
       env:
         MIX_ENV: ${{ inputs.mix-env }}
       run: mix deps.get
 
     - name: Compile
       if: inputs.elixir == 'true'
-      shell: devenv shell bash -- -e {0}
+      shell: nix develop --no-pure-eval -c bash -e {0}
       env:
         MIX_ENV: ${{ inputs.mix-env }}
       run: mix compile --warnings-as-errors

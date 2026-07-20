@@ -24,64 +24,46 @@ jobs:
     permissions:
       contents: read
       packages: write
-    defaults:
-      run:
-        shell: devenv shell bash -- -e {0}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
         with:
-          elixir: true
-          mix-env: prod
+          # The mix release derivation opts out of the sandbox for network
+          # access (hex, npm, tailwind/esbuild downloads, the heroicons git
+          # dependency); see nix/release.nix.
+          extra_nix_config: sandbox = relaxed
 
-      - name: Build assets
-        env:
-          MIX_ENV: prod
-        run: |
-          mix assets.deploy
+      # Persist the Nix store across runs via the GitHub cache: the beam
+      # toolchain and the staged dependency derivations (npm, deps.get,
+      # deps.compile — see nix/release.nix) are reused until their inputs
+      # change; only the final release stage rebuilds per commit.
+      # Cache-poisoning: writes to this branch-scoped cache require push
+      # access, which matches this repo's trust boundary.
+      - uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7 # zizmor: ignore[cache-poisoning]
+        with:
+          primary-key: nix-release-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix', 'nix/*.nix', 'mix.exs', 'mix.lock', 'assets/package-lock.json', 'config/*.exs') }}
+          restore-prefixes-first-match: nix-release-${{ runner.os }}-
+          gc-max-store-size-linux: 4G
+          purge: true
+          purge-prefixes: nix-release-${{ runner.os }}-
+          purge-created: 0
+          purge-primary-key: never
 
-      - name: Assemble mix release
-        env:
-          MIX_ENV: prod
-        run: |
-          mix release --overwrite
-          rm -rf container/release
-          mkdir -p container
-          cp -r _build/prod/rel/varsel container/release
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: devenv
 
-      # Image tags: the git SHA always, plus `edge` for main / the version for
-      # a v* tag. The SHA gives an immutable reference; the other is a moving
-      # pointer.
-      - name: Determine image tags
-        id: tag
-        shell: bash
-        run: |
-          echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "moving=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "moving=edge" >> "$GITHUB_OUTPUT"
-          fi
-
-      # nix2container images expose a `copyTo` script (skopeo under the hood).
-      # `devenv build` prints a JSON map of attr -> store path on stdout (logs
-      # go to stderr), so pull the path out with jq.
-      - name: Build container push script
-        id: image
-        run: |
-          out="$(devenv build outputs.container.copyTo 2>/dev/null \
-                 | jq -r '."outputs.container.copyTo"')"
-          test -x "$out/bin/copy-to"
-          echo "copy=$out/bin/copy-to" >> "$GITHUB_OUTPUT"
-
-      - name: Push to GitHub Container Registry
+      # Two tags per push: the git SHA as an immutable reference, plus a
+      # moving pointer — `main` for the main branch, the tag name (vX.Y.Z)
+      # for version tags. github.ref_name is exactly that for both. The
+      # image builds once; the second copy-to reuses it from the store, and
+      # ghcr deduplicates the shared blobs.
+      - name: Build & push to GitHub Container Registry
         env:
           IMAGE: ghcr.io/${{ github.repository }}
-          COPY: ${{ steps.image.outputs.copy }}
-          SHA_TAG: ${{ steps.tag.outputs.sha }}
-          MOVING_TAG: ${{ steps.tag.outputs.moving }}
+          MOVING_TAG: ${{ github.ref_name }}
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -90,8 +72,8 @@ jobs:
           : > "${RUNNER_TEMP}/registries.conf"
           export CONTAINERS_REGISTRIES_CONF="${RUNNER_TEMP}/registries.conf"
 
-          # Push the same image under both tags; ghcr deduplicates shared blobs.
-          for tag in "${SHA_TAG}" "${MOVING_TAG}"; do
-            "${COPY}" "docker://${IMAGE}:${tag}" \
+          for tag in "${GITHUB_SHA}" "${MOVING_TAG}"; do
+            nix run .#copy-to -- \
+              "docker://${IMAGE}:${tag}" \
               --dest-creds="${REGISTRY_USER}:${REGISTRY_TOKEN}"
           done
