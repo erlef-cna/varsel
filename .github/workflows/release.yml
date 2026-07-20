@@ -65,13 +65,21 @@ jobs:
             echo "moving=edge" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build container image
+      # nix2container images expose a `copyTo` script (skopeo under the hood).
+      # `devenv build` prints a JSON map of attr -> store path on stdout (logs
+      # go to stderr), so pull the path out with jq.
+      - name: Build container push script
+        id: image
         run: |
-          devenv build outputs.container
+          out="$(devenv build outputs.container.copyTo 2>/dev/null \
+                 | jq -r '."outputs.container.copyTo"')"
+          test -x "$out/bin/copy-to"
+          echo "copy=$out/bin/copy-to" >> "$GITHUB_OUTPUT"
 
       - name: Push to GitHub Container Registry
         env:
           IMAGE: ghcr.io/${{ github.repository }}
+          COPY: ${{ steps.image.outputs.copy }}
           SHA_TAG: ${{ steps.tag.outputs.sha }}
           MOVING_TAG: ${{ steps.tag.outputs.moving }}
           REGISTRY_USER: ${{ github.actor }}
@@ -82,11 +90,8 @@ jobs:
           : > "${RUNNER_TEMP}/registries.conf"
           export CONTAINERS_REGISTRIES_CONF="${RUNNER_TEMP}/registries.conf"
 
-          # nix2container images expose a `copyTo` script (skopeo under the
-          # hood). Build it, then push the same image under both tags; ghcr
-          # deduplicates the shared blobs.
-          copy="$(devenv build outputs.container.copyTo | tail -1)/bin/copy-to"
+          # Push the same image under both tags; ghcr deduplicates shared blobs.
           for tag in "${SHA_TAG}" "${MOVING_TAG}"; do
-            "$copy" "docker://${IMAGE}:${tag}" \
+            "${COPY}" "docker://${IMAGE}:${tag}" \
               --dest-creds="${REGISTRY_USER}:${REGISTRY_TOKEN}"
           done

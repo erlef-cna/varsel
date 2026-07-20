@@ -48,6 +48,7 @@ in
 {
   packages = with pkgs; [
     git
+    jq
     cvelint
   ];
 
