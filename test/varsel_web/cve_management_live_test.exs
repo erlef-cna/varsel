@@ -10,6 +10,7 @@ defmodule VarselWeb.VarselLiveTest do
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Accounts.User
   alias Varsel.CVE.CveRecord
+  alias Varsel.CVE.MitreCveApi
 
   @year Date.utc_today().year
 
@@ -103,6 +104,55 @@ defmodule VarselWeb.VarselLiveTest do
     html = lv |> element("button", "Reserve a new one") |> render_click()
 
     assert html =~ "No reserved IDs in the pool."
+  end
+
+  test "'Sync with MITRE' imports new records and then syncs published ones", %{conn: conn} do
+    poc = register("poc", :poc)
+    cve_id = "CVE-#{@year}-1010"
+
+    cve_json = %{
+      "dataType" => "CVE_RECORD",
+      "dataVersion" => "5.1",
+      "cveMetadata" => %{
+        "cveId" => cve_id,
+        "state" => "PUBLISHED",
+        "dateUpdated" => "#{@year}-01-02T00:00:00.000Z"
+      },
+      "containers" => %{"cna" => %{"title" => "Imported thing"}}
+    }
+
+    Req.Test.stub(MitreCveApi, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+
+      cond do
+        conn.method == "GET" && String.ends_with?(conn.request_path, "/cve-id") ->
+          entries = if conn.query_params["page"] == "1", do: [%{"cve_id" => cve_id}], else: []
+          Req.Test.json(conn, %{"cve_ids" => entries})
+
+        conn.method == "GET" ->
+          Req.Test.json(conn, cve_json)
+
+        true ->
+          Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+      end
+    end)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves/manage")
+
+    lv |> element("button", "Sync with MITRE") |> render_click()
+    render_async(lv, 5000)
+
+    assert render(lv) =~ "MITRE import and sync finished."
+
+    record =
+      CveRecord
+      |> Ash.read!(authorize?: false, load: [:cve_id])
+      |> Enum.find(&(&1.cve_id == cve_id))
+
+    assert record.state == :published
+    # last_synced_at is only written by :sync_from_mitre, proving the sync ran
+    # after the import brought the record in.
+    assert %DateTime{} = record.last_synced_at
   end
 
   test "the list updates live when a record changes out-of-band", %{conn: conn} do

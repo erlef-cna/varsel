@@ -5,7 +5,8 @@
 defmodule VarselWeb.VarselLive do
   @moduledoc """
   POC-only CVE management: list every CVE record across its whole lifecycle,
-  reserve a new draft from the pool, and reject a record.
+  reserve a new draft from the pool, reject a record, and manually trigger a
+  MITRE import + sync ahead of the nightly schedule.
 
   Access is gated by the `:live_poc_required` on_mount hook. Editing a record's
   JSON lives on `VarselWeb.VarselEditLive`.
@@ -15,6 +16,9 @@ defmodule VarselWeb.VarselLive do
   import AshPhoenix.LiveView, only: [keep_live: 4, handle_live: 3]
 
   alias Varsel.CVE
+  alias Varsel.CVE.CveRecord
+
+  require Ash.Query
 
   # States a record may be rejected from (the :reject state-machine `from` set).
   @rejectable [:reserved, :draft, :published]
@@ -25,7 +29,7 @@ defmodule VarselWeb.VarselLive do
   def mount(_params, _session, socket) do
     socket =
       socket
-      |> assign(page_title: "CVE Management")
+      |> assign(page_title: "CVE Management", mitre_syncing?: false)
       |> keep_live(:cve_records, &list_cve_records/1, subscribe: "cve_record:all", results: :lose)
 
     {:ok, socket}
@@ -39,7 +43,36 @@ defmodule VarselWeb.VarselLive do
     {:noreply, handle_live(socket, topic, :cve_records)}
   end
 
+  # Both actions are POC-gated by the page itself; like their scheduled Oban
+  # counterparts they run with authorize?: false (see the policy comment on
+  # CveRecord), the actor only feeds paper-trail attribution.
   @impl Phoenix.LiveView
+  def handle_event("sync_with_mitre", _params, socket) do
+    actor = socket.assigns.current_user
+
+    socket =
+      socket
+      |> assign(mitre_syncing?: true)
+      |> start_async(:mitre_sync, fn ->
+        CVE.import_cves_from_mitre!(%{}, actor: actor, authorize?: false)
+
+        CveRecord
+        |> Ash.Query.filter(state == :published)
+        |> Ash.bulk_update!(:sync_from_mitre, %{},
+          actor: actor,
+          authorize?: false,
+          notify?: true,
+          return_errors?: true,
+          strategy: :stream,
+          allow_stream_with: :full_read
+        )
+
+        :ok
+      end)
+
+    {:noreply, socket}
+  end
+
   def handle_event("reserve", _params, socket) do
     actor = socket.assigns.current_user
 
@@ -78,6 +111,21 @@ defmodule VarselWeb.VarselLive do
     {:noreply, socket}
   end
 
+  @impl Phoenix.LiveView
+  def handle_async(:mitre_sync, {:ok, :ok}, socket) do
+    {:noreply,
+     socket
+     |> assign(mitre_syncing?: false)
+     |> put_flash(:info, "MITRE import and sync finished.")}
+  end
+
+  def handle_async(:mitre_sync, {:exit, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(mitre_syncing?: false)
+     |> put_flash(:error, "MITRE sync failed: #{Exception.format_exit(reason)}")}
+  end
+
   defp list_cve_records(socket) do
     CVE.list_all_cve_records!(actor: socket.assigns.current_user)
   end
@@ -113,6 +161,9 @@ defmodule VarselWeb.VarselLive do
         CVE Management
         <:subtitle>Reserve, draft, publish, and reject CVE records.</:subtitle>
         <:actions>
+          <button class="btn btn-sm" phx-click="sync_with_mitre" disabled={@mitre_syncing?}>
+            {if @mitre_syncing?, do: "Syncing…", else: "Sync with MITRE"}
+          </button>
           <button class="btn btn-primary btn-sm" phx-click="reserve">
             Reserve a new one
           </button>
