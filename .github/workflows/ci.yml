@@ -27,28 +27,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: ./.github/actions/setup
         with:
-          name: devenv
-      - name: Install devenv.sh
-        shell: bash
-        run: nix profile add nixpkgs#devenv
-      - name: Cache deps and _build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-dev-${{ hashFiles('mix.lock') }}
-          restore-keys: |
-            mix-${{ runner.os }}-dev-
-      - name: Install Hex and Rebar
-        run: |
-          mix local.hex --force
-          mix local.rebar --force
-      - name: Fetch dependencies
-        run: mix deps.get
+          elixir: true
       - name: mix format --check-formatted
         run: mix format --check-formatted
 
@@ -65,28 +46,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: ./.github/actions/setup
         with:
-          name: devenv
-      - name: Install devenv.sh
-        shell: bash
-        run: nix profile add nixpkgs#devenv
-      - name: Cache deps and _build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-dev-${{ hashFiles('mix.lock') }}
-          restore-keys: |
-            mix-${{ runner.os }}-dev-
-      - name: Install Hex and Rebar
-        run: |
-          mix local.hex --force
-          mix local.rebar --force
-      - name: Fetch dependencies
-        run: mix deps.get
+          elixir: true
       - name: mix credo (SARIF)
         # Credo must not fail the build; findings are reported to GitHub instead.
         run: mix credo --strict --all --format sarif > credo.sarif || true
@@ -120,28 +82,10 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: ./.github/actions/setup
         with:
-          name: devenv
-      - name: Install devenv.sh
-        shell: bash
-        run: nix profile add nixpkgs#devenv
-      - name: Cache deps and _build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-test-${{ hashFiles('mix.lock') }}
-          restore-keys: |
-            mix-${{ runner.os }}-test-
-      - name: Install Hex and Rebar
-        run: |
-          mix local.hex --force
-          mix local.rebar --force
-      - name: Fetch dependencies
-        run: mix deps.get
+          elixir: true
+          mix-env: test
       - name: mix test
         # `mix test` runs `ash.setup` first (see mix.exs aliases), creating and
         # migrating varsel_test against the postgres service on localhost:5432.
@@ -159,30 +103,10 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: ./.github/actions/setup
         with:
-          name: devenv
-      - name: Install devenv.sh
-        shell: bash
-        run: nix profile add nixpkgs#devenv
-      - name: Cache deps and _build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-test-${{ hashFiles('mix.lock') }}
-          restore-keys: |
-            mix-${{ runner.os }}-test-
-      - name: Install Hex and Rebar
-        run: |
-          mix local.hex --force
-          mix local.rebar --force
-      - name: Fetch dependencies
-        env:
-          MIX_ENV: test
-        run: mix deps.get
+          elixir: true
+          mix-env: test
       - name: Cache PLT
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -206,13 +130,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
-        with:
-          name: devenv
-      - name: Install devenv.sh
-        shell: bash
-        run: nix profile add nixpkgs#devenv
+      - uses: ./.github/actions/setup
       - name: reuse lint
         run: reuse lint
 
@@ -229,13 +147,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
-        with:
-          name: devenv
-      - name: Install devenv.sh
-        shell: bash
-        run: nix profile add nixpkgs#devenv
+      - uses: ./.github/actions/setup
       - name: zizmor (SARIF)
         # Report findings to GitHub rather than failing the build.
         run: zizmor --format sarif . > zizmor.sarif || true
