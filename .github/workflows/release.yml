@@ -24,6 +24,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Sigstore attestations (SBOM + provenance) via GitHub OIDC.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -61,6 +64,7 @@ jobs:
       # image builds once; the second copy-to reuses it from the store, and
       # ghcr deduplicates the shared blobs.
       - name: Build & push to GitHub Container Registry
+        id: push
         env:
           IMAGE: ghcr.io/${{ github.repository }}
           MOVING_TAG: ${{ github.ref_name }}
@@ -75,5 +79,44 @@ jobs:
           for tag in "${GITHUB_SHA}" "${MOVING_TAG}"; do
             nix run .#copy-to -- \
               "docker://${IMAGE}:${tag}" \
+              --digestfile "${RUNNER_TEMP}/digest" \
               --dest-creds="${REGISTRY_USER}:${REGISTRY_TOKEN}"
           done
+
+          # Same image, same digest for both tags; the attestation steps
+          # below need it to address the image in the registry.
+          echo "digest=$(cat "${RUNNER_TEMP}/digest")" >> "$GITHUB_OUTPUT"
+
+      # One CycloneDX SBOM covering all three dependency worlds: hex deps
+      # (mix_sbom escript) and npm deps from the nix build (see
+      # nix/release.nix), the image's nix closure via sbomnix.
+      - name: Generate SBOM
+        env:
+          VERSION: ${{ github.sha }}
+        run: |
+          nix build .#sbom-deps --out-link sbom-deps
+          image="$(nix build .#container --no-link --print-out-paths)"
+          nix run --inputs-from . sbomnix#sbomnix -- "$image" \
+            --cdx nix.cdx.json --csv /dev/null --spdx /dev/null
+          nix run --inputs-from . nixpkgs#cyclonedx-cli -- merge \
+            --input-files sbom-deps/mix.cdx.json sbom-deps/npm.cdx.json nix.cdx.json \
+            --output-file varsel.cdx.json \
+            --name varsel --version "${VERSION}"
+
+      # Sigstore attestations via GitHub's instance, pushed to ghcr as OCI
+      # referrers of the image: the merged SBOM and build provenance.
+      # Verify with `gh attestation verify oci://ghcr.io/... -o erlef-cna`.
+      - name: Attest SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: varsel.cdx.json
+          push-to-registry: true
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

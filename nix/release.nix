@@ -166,6 +166,55 @@ let
       runHook postInstall
     '';
   };
+
+  # CycloneDX SBOMs for the application dependencies: hex deps via the
+  # mix_sbom escript (installed here, NOT a project dep — it would list
+  # itself in the BOM), npm deps via `npm sbom`. The nix-level SBOM of the
+  # image closure is generated in the release workflow (sbomnix needs the
+  # store database, which is out of reach inside a build) and merged with
+  # these there.
+  depsSbom = stdenv.mkDerivation {
+    name = "varsel-deps-sbom";
+    src = srcSubset "varsel-sbom-src" [
+      "mix.exs"
+      "mix.lock"
+      "config"
+      "assets/package.json"
+      "assets/package-lock.json"
+    ];
+
+    # Network for escript.install; the SBOM generation itself is offline.
+    __noChroot = true;
+    # erlang for the escript shebang (`/usr/bin/env escript`).
+    nativeBuildInputs = [ elixir erlang nodejs git ];
+    env = commonEnv;
+    dontConfigure = true;
+    dontFixup = true;
+
+    buildPhase = ''
+      runHook preBuild
+
+      export HOME="$TMPDIR"
+      cp -r ${depsFetch}/.mix "$HOME/.mix"
+      cp -r ${depsFetch}/deps .
+      chmod -R u+w "$HOME/.mix" deps
+
+      mix escript.install hex sbom 0.10.0 --force
+      "$HOME/.mix/escripts/mix_sbom" cyclonedx \
+        --output=mix.cdx.json --format=json --only prod .
+
+      cp -r ${nodeModules} assets/node_modules
+      (cd assets && npm sbom --sbom-format cyclonedx --omit dev) > npm.cdx.json
+
+      runHook postBuild
+    '';
+
+    installPhase = ''
+      runHook preInstall
+      install -D -t "$out" mix.cdx.json npm.cdx.json
+      runHook postInstall
+    '';
+  };
 in
 stdenv.mkDerivation {
   name = "varsel-release";
@@ -268,5 +317,5 @@ stdenv.mkDerivation {
   # post-processing this release gets.
   dontFixup = true;
 
-  passthru = { inherit nodeModules depsFetch depsCompiled; };
+  passthru = { inherit nodeModules depsFetch depsCompiled depsSbom; };
 }
