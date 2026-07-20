@@ -7,8 +7,6 @@ on:
   push:
     branches:
       - main
-      # TODO: remove before merging — only here to test the workflow on the PR branch
-      - nix-flake-container
     tags:
       - "v*"
 
