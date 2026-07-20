@@ -44,6 +44,32 @@ let
       install -Dm755 cvelint $out/bin/cvelint
     '';
   };
+
+  elixir = pkgs.beam29Packages.elixir_1_20;
+
+  # The mix release is built OUTSIDE Nix (plain `mix release`), then staged at
+  # ./container/release so the container can package it. Stage it with:
+  #   mix release --overwrite
+  #   rm -rf container/release && cp -r _build/prod/rel/varsel container/release
+  # (The directory is git-ignored; the container build reads it as a path.)
+  release = pkgs.runCommandLocal "varsel-release" { } ''
+    mkdir -p $out
+    cp -r ${./container/release}/. $out/
+  '';
+
+  # Shared libraries the ERTS binaries in the release link against at runtime.
+  releaseLibs = pkgs.buildEnv {
+    name = "varsel-release-libs";
+    paths = with pkgs; [
+      bashInteractive
+      coreutils
+      glibc
+      libgcc.lib
+      ncurses
+      openssl
+      zlib
+    ];
+  };
 in
 {
   packages = with pkgs; [
@@ -53,7 +79,23 @@ in
 
   languages.elixir = {
     enable = true;
-    package = pkgs.beam29Packages.elixir_1_20;
+    package = elixir;
+  };
+
+  # Production OCI image: packages the prebuilt mix release, the runtime
+  # libraries its ERTS binaries need, and cvelint (used at runtime to validate
+  # CVE records). The release itself is built with plain `mix release` (see the
+  # release CI workflow), not by Nix.
+  #
+  # Stage:  mix release --overwrite && cp -r _build/prod/rel/varsel container/release
+  # Build:  devenv container build prod
+  # Push:   devenv container copy prod                (tag via -O …version)
+  containers.prod = {
+    name = "varsel";
+    registry = "docker://ghcr.io/erlef-cna/";
+    version = "edge";
+    copyToRoot = [ release releaseLibs cvelint ];
+    startupCommand = "/bin/server";
   };
 
   languages.javascript = {

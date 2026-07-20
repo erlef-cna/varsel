@@ -61,3 +61,6 @@ npm-debug.log
 
 # Local environment secrets
 .env
+
+# Staged mix release for container builds
+/container/release/
