@@ -22,6 +22,13 @@
 , nodejs
 , git
 , cacert
+, removeReferencesTo
+, patchelf
+, systemdLibs
+, ncurses
+, zlib
+, openssl
+, bashNonInteractive
 , src
 }:
 
@@ -29,13 +36,17 @@ let
   erlang = beam29Packages.erlang;
   elixir = beam29Packages.elixir_1_20;
 
+  # One CA bundle, three dialects: no env var covers all tools — openssl
+  # consumers (erlang, hex, curl) read SSL_CERT_FILE, git only its own
+  # variable, node ignores both without --use-openssl-ca.
+  caBundle = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+
   commonEnv = {
     MIX_ENV = "prod";
     LC_ALL = "C.UTF-8";
-    SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
-    # git and node each have their own idea of where CA roots come from.
-    GIT_SSL_CAINFO = "${cacert}/etc/ssl/certs/ca-bundle.crt";
-    NODE_EXTRA_CA_CERTS = "${cacert}/etc/ssl/certs/ca-bundle.crt";
+    SSL_CERT_FILE = caBundle;
+    GIT_SSL_CAINFO = caBundle;
+    NODE_EXTRA_CA_CERTS = caBundle;
   };
 
   # Only the files that determine what the dependencies are. Anything else
@@ -85,6 +96,13 @@ let
     installPhase = ''
       runHook preInstall
 
+      # tailwind.install/esbuild.install auto-compiled the app skeleton
+      # (this source tree has no lib/). Shipping that manifest would make
+      # the real app look up to date in the release build — store mtimes
+      # are all epoch — and it would compile to an empty app. Keep only
+      # the dependency artifacts.
+      rm -rf _build/prod/lib/varsel _build/prod/phoenix-colocated
+
       mkdir -p "$out/assets"
       cp -r deps _build "$out/"
       cp -r assets/node_modules "$out/assets/"
@@ -100,14 +118,24 @@ stdenv.mkDerivation {
 
   __noChroot = true;
 
-  nativeBuildInputs = [ elixir nodejs git ];
+  nativeBuildInputs = [ elixir nodejs git removeReferencesTo patchelf ];
 
-  # The release bundles its own ERTS, whose binaries rpath into erlang's
-  # runtime libraries (glibc, openssl, ncurses, ...) — having erlang among
-  # the inputs keeps those visible to Nix's reference scanner, so they land
-  # in the container closure. The erlang/elixir packages themselves (the
-  # whole toolchain) must never be referenced.
-  disallowedRequisites = [ erlang elixir ];
+  # The explicit contract of what the shipped release may depend on: the
+  # ERTS runtime libraries (rpaths in the bundled binaries), bash for the
+  # nix-patched script shebangs, and itself. Anything else — the
+  # erlang/elixir toolchain, the deps cache derivation, compilers pulled in
+  # via debug info — fails the build loudly, so image contents only ever
+  # change deliberately.
+  allowedReferences = [
+    "out"
+    (lib.getLib stdenv.cc.libc)
+    stdenv.cc.cc.lib
+    (lib.getLib ncurses)
+    (lib.getLib zlib)
+    (lib.getLib openssl)
+    (lib.getLib systemdLibs)
+    bashNonInteractive
+  ];
 
   env = commonEnv;
 
@@ -117,10 +145,17 @@ stdenv.mkDerivation {
     runHook preBuild
 
     export HOME="$TMPDIR"
-    cp -r --no-preserve=mode,ownership ${deps}/.mix "$HOME/.mix"
-    cp -r --no-preserve=mode,ownership ${deps}/deps ${deps}/_build .
-    cp -r --no-preserve=mode,ownership ${deps}/assets/node_modules assets/
+    # Plain cp keeps the execute bits (the tailwind/esbuild binaries live in
+    # _build); the store copies are read-only, so re-add write afterwards.
+    cp -r ${deps}/.mix "$HOME/.mix"
+    cp -r ${deps}/deps ${deps}/_build .
+    cp -r ${deps}/assets/node_modules assets/
+    chmod -R u+w "$HOME/.mix" deps _build assets/node_modules
 
+    # assets.deploy expects a compiled app (esbuild bundles the colocated
+    # hooks extracted during compilation) — compare the assets.build alias,
+    # which starts with "compile".
+    mix compile
     mix assets.deploy
 
     runHook postBuild
@@ -136,19 +171,46 @@ stdenv.mkDerivation {
     # mix releases never use them (bin/varsel drives erlexec directly).
     rm "$out"/erts-*/bin/start "$out"/erts-*/bin/*.src
 
-    # disallowedRequisites enforces the toolchain stays out of the closure,
-    # but fails without naming files — check here first so the offenders
-    # end up in the build log.
-    if grep -rl --binary-files=text -e ${erlang} -e ${elixir} "$out"; then
-      echo "error: release references the erlang/elixir toolchain (files above)" >&2
-      exit 1
-    fi
+    # NIFs compiled during the deps build (bcrypt, picosat) carry gcc and
+    # glibc-dev paths in their debug info; stripping it drops those
+    # references. The OTP-shipped .so files are already stripped but copied
+    # read-only, so make them writable for the tools first.
+    find "$out"/lib -name '*.so' -exec chmod u+w {} + -exec strip --strip-debug {} +
+
+    # epmd genuinely links libsystemd, but its rpath names the full systemd
+    # package — ~150 MiB of gnutls/curl/pam/... in the image. Point it at
+    # the ABI-identical minimal systemd libs instead.
+    chmod u+w "$out"/erts-*/bin/epmd
+    patchelf --set-rpath "${lib.getLib systemdLibs}/lib:${lib.getLib stdenv.cc.libc}/lib" \
+      "$out"/erts-*/bin/epmd
+
+    # Inert toolchain paths in dependency artifacts: yecc-generated parsers
+    # (gen_smtp, absinthe, hex_core) embed the location of erlang's
+    # yeccpre.hrl in their line-info chunks, and the NIFs an rpath to the
+    # deps derivation's never-existing lib/ (nix's ld-wrapper adds
+    # -rpath $out/lib). Functionally dead, but enough for Nix to pull the
+    # whole toolchain into the image — remove-references-to zeroes the
+    # hashes in place (length-preserving, so .beam chunks stay valid).
+    find "$out"/lib -type f \( -name '*.beam' -o -name '*.so' \) \
+      -exec remove-references-to -t ${erlang} -t ${elixir} -t ${deps} {} +
+
+    # allowedReferences enforces the closure contract, but fails without
+    # naming files — check here first so the offenders end up in the build
+    # log. Match the bare store hashes, mirroring Nix's reference scanner
+    # (which triggers on the hash alone, full path or not).
+    for pkg in ${erlang} ${elixir} ${deps}; do
+      hash=$(basename "$pkg" | cut -c1-32)
+      if grep -rl --binary-files=text "$hash" "$out"; then
+        echo "error: release references $pkg (files above)" >&2
+        exit 1
+      fi
+    done
 
     runHook postInstall
   '';
 
-  # Ship the release exactly as mix assembled it — no stripping, no shebang
-  # or rpath rewriting.
+  # No generic fixup — the targeted strip/patchelf/scrub above is all the
+  # post-processing this release gets.
   dontFixup = true;
 
   passthru = { inherit deps; };
