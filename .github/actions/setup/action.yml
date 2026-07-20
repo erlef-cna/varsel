@@ -42,9 +42,9 @@ runs:
     # Shells set it, but the runner invokes custom `shell:` commands directly,
     # so export it for all subsequent `nix develop` steps. $PWD is
     # runner-controlled, not attacker-influenced, hence the zizmor ignore.
-    - name: Export PWD for devenv # zizmor: ignore[github-env]
+    - name: Export PWD for devenv
       shell: bash
-      run: echo "PWD=$PWD" >> "$GITHUB_ENV"
+      run: echo "PWD=$PWD" >> "$GITHUB_ENV" # zizmor: ignore[github-env]
     - name: Cache deps and _build
       if: inputs.elixir == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
