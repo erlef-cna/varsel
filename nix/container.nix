@@ -6,6 +6,16 @@
 # nixpkgs pin as the dev shell.
 { pkgs, nix2container, cvelint, release }:
 
+let
+  # OTP's :pubkey_os_cacerts probes a fixed list of distro paths (and ignores
+  # SSL_CERT_FILE); nixpkgs' /etc/ssl/certs/ca-bundle.crt is not on it, so
+  # expose the bundle under the Debian name OTP checks first.
+  otpCacerts = pkgs.runCommand "otp-cacerts" { } ''
+    mkdir -p $out/etc/ssl/certs
+    ln -s ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt \
+      $out/etc/ssl/certs/ca-certificates.crt
+  '';
+in
 nix2container.buildImage {
   name = "ghcr.io/erlef-cna/varsel";
 
@@ -14,7 +24,7 @@ nix2container.buildImage {
   # ERTS runtime libraries come in via the release's scanned references.
   # fakeNss supplies /etc/passwd + /etc/group; Fly's SSH daemon resolves
   # `root` via getpwnam and rejects sessions without them.
-  copyToRoot = [ release cvelint pkgs.busybox pkgs.cacert pkgs.dockerTools.fakeNss ];
+  copyToRoot = [ release cvelint pkgs.busybox pkgs.cacert otpCacerts pkgs.dockerTools.fakeNss ];
 
   # Split the store closure across many layers so pulls cache: glibc, ERTS
   # and the dependency .beam files land in their own layers and are reused
@@ -26,8 +36,6 @@ nix2container.buildImage {
     Env = [
       "PATH=/bin"
       "LANG=C.UTF-8"
-      # OTP's os_cacerts lookup honors this before probing distro paths.
-      "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
     ];
   };
 }
