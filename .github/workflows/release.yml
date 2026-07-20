@@ -66,14 +66,12 @@ jobs:
           fi
 
       - name: Build container image
-        env:
-          TAG: ${{ steps.tag.outputs.sha }}
         run: |
-          devenv container build prod \
-            --option containers.prod.version:string "${TAG}"
+          devenv build outputs.container
 
       - name: Push to GitHub Container Registry
         env:
+          IMAGE: ghcr.io/${{ github.repository }}
           SHA_TAG: ${{ steps.tag.outputs.sha }}
           MOVING_TAG: ${{ steps.tag.outputs.moving }}
           REGISTRY_USER: ${{ github.actor }}
@@ -84,12 +82,11 @@ jobs:
           : > "${RUNNER_TEMP}/registries.conf"
           export CONTAINERS_REGISTRIES_CONF="${RUNNER_TEMP}/registries.conf"
 
-          # Push under both tags. nix2container produces identical layers, so
-          # ghcr deduplicates the blobs; the second copy only adds a manifest.
+          # nix2container images expose a `copyTo` script (skopeo under the
+          # hood). Build it, then push the same image under both tags; ghcr
+          # deduplicates the shared blobs.
+          copy="$(devenv build outputs.container.copyTo | tail -1)/bin/copy-to"
           for tag in "${SHA_TAG}" "${MOVING_TAG}"; do
-            # `--copy-args=…` (equals form) so its `--dest-creds` value isn't
-            # parsed as a separate devenv flag.
-            devenv container copy prod \
-              --option containers.prod.version:string "${tag}" \
-              --copy-args="--dest-creds=${REGISTRY_USER}:${REGISTRY_TOKEN}"
+            "$copy" "docker://${IMAGE}:${tag}" \
+              --dest-creds="${REGISTRY_USER}:${REGISTRY_TOKEN}"
           done

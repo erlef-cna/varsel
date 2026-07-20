@@ -44,53 +44,6 @@ let
       install -Dm755 cvelint $out/bin/cvelint
     '';
   };
-
-  elixir = pkgs.beam29Packages.elixir_1_20;
-
-  # The mix release is built OUTSIDE Nix (plain `mix release`), then staged at
-  # ./container/release so the container can package it. Stage it with:
-  #   mix release --overwrite
-  #   rm -rf container/release && cp -r _build/prod/rel/varsel container/release
-  # (The directory is git-ignored; the container build reads it as a path.)
-  #
-  # The release's boot scripts embed the BUILD-TIME /nix/store path of the full
-  # erlang package (an ERTS ROOTDIR fallback in erts/bin/start plus the elixir/
-  # iex shebangs). Left intact, Nix treats that as a runtime reference and drags
-  # the ENTIRE erlang closure — compiler, dialyzer, wx, docs, ~gigabytes — into
-  # the image, even though the release bundles its own ERTS. Strip it: the
-  # $0-relative ROOTDIR lookup that precedes the fallback already resolves to
-  # the bundled ERTS, and the bash shebangs become /bin/sh (busybox).
-  #
-  # The remaining store references (openssl/ncurses/zlib/glibc the ERTS links
-  # against) are small, legitimate, and pulled in automatically.
-  release = pkgs.runCommandLocal "varsel-release" { } ''
-    cp -r --no-preserve=mode,ownership ${./container/release} $out
-    chmod -R u+w "$out"
-
-    grep -rlZ '/nix/store/[a-z0-9]\{32\}-erlang-\|#!/nix/store/[^/]*/bin/sh' "$out" \
-      | while IFS= read -r -d "" f; do
-      sed -i \
-        -e 's,#!/nix/store/[^/]*/bin/sh,#!/bin/sh,g' \
-        -e 's,/nix/store/[a-z0-9]\{32\}-erlang-[^/]*/lib/erlang,${placeholder "out"}/lib/erlang,g' \
-        "$f"
-    done
-
-    # Guard against the big regression specifically: no erlang-package refs.
-    if grep -rq '/nix/store/[a-z0-9]\{32\}-erlang-' "$out"; then
-      echo "error: release still references the full erlang package:" >&2
-      grep -rl '/nix/store/[a-z0-9]\{32\}-erlang-' "$out" >&2
-      exit 1
-    fi
-  '';
-
-  # busybox supplies the POSIX utilities (sh, readlink, dirname, cut, sed, awk…)
-  # the release boot scripts call, in one small static binary. The ERTS runtime
-  # libraries come in via the release's own references, so they are not repeated
-  # here. cvelint is added separately (static Go binary).
-  releaseLibs = pkgs.buildEnv {
-    name = "varsel-release-libs";
-    paths = [ pkgs.busybox ];
-  };
 in
 {
   packages = with pkgs; [
@@ -100,23 +53,7 @@ in
 
   languages.elixir = {
     enable = true;
-    package = elixir;
-  };
-
-  # Production OCI image: packages the prebuilt mix release, the runtime
-  # libraries its ERTS binaries need, and cvelint (used at runtime to validate
-  # CVE records). The release itself is built with plain `mix release` (see the
-  # release CI workflow), not by Nix.
-  #
-  # Stage:  mix release --overwrite && cp -r _build/prod/rel/varsel container/release
-  # Build:  devenv container build prod
-  # Push:   devenv container copy prod                (tag via -O …version)
-  containers.prod = {
-    name = "varsel";
-    registry = "docker://ghcr.io/erlef-cna/";
-    version = "edge";
-    copyToRoot = [ release releaseLibs cvelint ];
-    startupCommand = "/bin/server";
+    package = pkgs.beam29Packages.elixir_1_20;
   };
 
   languages.javascript = {
@@ -176,5 +113,15 @@ in
     mix-format.enable = true;
     reuse.enable = true;
     zizmor.enable = true;
+  };
+
+  # Minimal production image, built from the SAME locked nixpkgs/cvelint as this
+  # shell. Independent of the dev environment (no postgres/languages/hooks are
+  # pulled in). Stage the release first, then build:
+  #   mix release --overwrite && cp -r _build/prod/rel/varsel container/release
+  #   devenv build outputs.container
+  outputs.container = import ./nix/container.nix {
+    inherit pkgs cvelint;
+    nix2container = inputs.nix2container.packages.${pkgs.stdenv.hostPlatform.system}.nix2container;
   };
 }
