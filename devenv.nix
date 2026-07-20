@@ -47,8 +47,6 @@ let
 in
 {
   packages = with pkgs; [
-    git
-    jq
     cvelint
   ];
 
@@ -114,15 +112,5 @@ in
     mix-format.enable = true;
     reuse.enable = true;
     zizmor.enable = true;
-  };
-
-  # Minimal production image, built from the SAME locked nixpkgs/cvelint as this
-  # shell. Independent of the dev environment (no postgres/languages/hooks are
-  # pulled in). Stage the release first, then build:
-  #   mix release --overwrite && cp -r _build/prod/rel/varsel container/release
-  #   devenv build outputs.container
-  outputs.container = import ./nix/container.nix {
-    inherit pkgs cvelint;
-    nix2container = inputs.nix2container.packages.${pkgs.stdenv.hostPlatform.system}.nix2container;
   };
 }
