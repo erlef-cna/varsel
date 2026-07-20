@@ -8,6 +8,9 @@ devenv.local.yaml
 /.mcp.json
 /.claude
 
+# Nix build result symlinks (e.g. local `nix build .#container`)
+/result
+
 # direnv
 .direnv
 

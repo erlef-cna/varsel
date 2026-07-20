@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      # TODO: remove before merging — only here to test the workflow on the PR branch
+      - nix-flake-container
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  container:
+    name: Build & Push Container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        shell: nix develop --no-pure-eval -c bash -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          elixir: true
+          mix-env: prod
+
+      - name: Build assets
+        env:
+          MIX_ENV: prod
+        run: mix assets.deploy
+
+      - name: Assemble mix release
+        env:
+          MIX_ENV: prod
+        run: mix release --overwrite
+
+      # Two tags per push: the git SHA as an immutable reference, plus a
+      # moving pointer — `main` for the main branch, the tag name (vX.Y.Z)
+      # for version tags. github.ref_name is exactly that for both.
+      - name: Push to GitHub Container Registry
+        shell: bash
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          MOVING_TAG: ${{ github.ref_name }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The runner ships a v1 /etc/containers/registries.conf that skopeo
+          # rejects. Point it at an empty (valid v2) config instead.
+          : > "${RUNNER_TEMP}/registries.conf"
+          export CONTAINERS_REGISTRIES_CONF="${RUNNER_TEMP}/registries.conf"
+
+          # The flake imports the release from here (see flake.nix, hence
+          # --impure); ghcr deduplicates the shared blobs across both tags.
+          export VARSEL_RELEASE="${PWD}/_build/prod/rel/varsel"
+          for tag in "${GITHUB_SHA}" "${MOVING_TAG}"; do
+            nix run --impure .#copy-to -- \
+              "docker://${IMAGE}:${tag}" \
+              --dest-creds="${REGISTRY_USER}:${REGISTRY_TOKEN}"
+          done
