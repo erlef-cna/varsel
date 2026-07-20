@@ -1,0 +1,182 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+name: CI
+
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  format:
+    name: Formatter
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: devenv
+      - name: Install devenv.sh
+        shell: bash
+        run: nix profile add nixpkgs#devenv
+      - name: mix format --check-formatted
+        run: mix format --check-formatted
+
+  credo:
+    name: Credo
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: devenv
+      - name: Install devenv.sh
+        shell: bash
+        run: nix profile add nixpkgs#devenv
+      - name: mix credo (SARIF)
+        # Credo must not fail the build; findings are reported to GitHub instead.
+        run: mix credo --strict --all --format sarif > credo.sarif || true
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          sarif_file: credo.sarif
+          category: credo
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: varsel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: devenv
+      - name: Install devenv.sh
+        shell: bash
+        run: nix profile add nixpkgs#devenv
+      - name: mix test
+        # `mix test` runs `ash.setup` first (see mix.exs aliases), creating and
+        # migrating varsel_test against the postgres service on localhost:5432.
+        run: mix test
+
+  dialyzer:
+    name: Dialyzer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: devenv
+      - name: Install devenv.sh
+        shell: bash
+        run: nix profile add nixpkgs#devenv
+      - name: Cache PLT
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: _build/*/*.plt*
+          key: plt-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            plt-${{ runner.os }}-
+      - name: mix dialyzer
+        # precommit runs Dialyzer in MIX_ENV=test, so PLT apps line up.
+        env:
+          MIX_ENV: test
+        run: mix dialyzer
+
+  reuse:
+    name: REUSE
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: devenv
+      - name: Install devenv.sh
+        shell: bash
+        run: nix profile add nixpkgs#devenv
+      - name: reuse lint
+        run: reuse lint
+
+  zizmor:
+    name: Zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: devenv
+      - name: Install devenv.sh
+        shell: bash
+        run: nix profile add nixpkgs#devenv
+      - name: zizmor (SARIF)
+        # Report findings to GitHub rather than failing the build.
+        run: zizmor --format sarif . > zizmor.sarif || true
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor
