@@ -36,8 +36,6 @@ in
     directory = "./assets";
   };
 
-  dotenv.enable = true;
-
   services.postgres = {
     enable = true;
     listen_addresses = "*";
