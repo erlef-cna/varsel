@@ -59,5 +59,6 @@ defmodule VarselWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+  plug VarselWeb.Plugs.SearchIndexing
   plug VarselWeb.Router
 end
