@@ -26,33 +26,26 @@ jobs:
     permissions:
       contents: read
       packages: write
-    defaults:
-      run:
-        shell: nix develop --no-pure-eval -c bash -e {0}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
         with:
-          elixir: true
-          mix-env: prod
-
-      - name: Build assets
-        env:
-          MIX_ENV: prod
-        run: mix assets.deploy
-
-      - name: Assemble mix release
-        env:
-          MIX_ENV: prod
-        run: mix release --overwrite
+          # The mix release derivation opts out of the sandbox for network
+          # access (hex, npm, tailwind/esbuild downloads, the heroicons git
+          # dependency); see nix/release.nix.
+          extra_nix_config: sandbox = relaxed
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: devenv
 
       # Two tags per push: the git SHA as an immutable reference, plus a
       # moving pointer — `main` for the main branch, the tag name (vX.Y.Z)
-      # for version tags. github.ref_name is exactly that for both.
-      - name: Push to GitHub Container Registry
-        shell: bash
+      # for version tags. github.ref_name is exactly that for both. The
+      # image builds once; the second copy-to reuses it from the store, and
+      # ghcr deduplicates the shared blobs.
+      - name: Build & push to GitHub Container Registry
         env:
           IMAGE: ghcr.io/${{ github.repository }}
           MOVING_TAG: ${{ github.ref_name }}
@@ -64,11 +57,8 @@ jobs:
           : > "${RUNNER_TEMP}/registries.conf"
           export CONTAINERS_REGISTRIES_CONF="${RUNNER_TEMP}/registries.conf"
 
-          # The flake imports the release from here (see flake.nix, hence
-          # --impure); ghcr deduplicates the shared blobs across both tags.
-          export VARSEL_RELEASE="${PWD}/_build/prod/rel/varsel"
           for tag in "${GITHUB_SHA}" "${MOVING_TAG}"; do
-            nix run --impure .#copy-to -- \
+            nix run .#copy-to -- \
               "docker://${IMAGE}:${tag}" \
               --dest-creds="${REGISTRY_USER}:${REGISTRY_TOKEN}"
           done

@@ -42,13 +42,6 @@ runs:
         restore-keys: |
           mix-${{ runner.os }}-${{ inputs.mix-env }}-
 
-    - name: Install Hex and Rebar
-      if: inputs.elixir == 'true'
-      shell: nix develop --no-pure-eval -c bash -e {0}
-      run: |
-        mix local.hex --force
-        mix local.rebar --force
-
     - name: Fetch dependencies
       if: inputs.elixir == 'true'
       shell: nix develop --no-pure-eval -c bash -e {0}

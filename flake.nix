@@ -4,11 +4,6 @@
 {
   description = "Varsel — EEF CNA CVE case management";
 
-  nixConfig = {
-    extra-trusted-public-keys = "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=";
-    extra-substituters = "https://devenv.cachix.org";
-  };
-
   inputs = {
     nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
     devenv.url = "github:cachix/devenv";
@@ -36,29 +31,20 @@
           value = f system;
         }) systems);
 
-      # The mix release is built outside Nix (`MIX_ENV=prod mix release` in the
-      # dev shell; it bundles externally downloaded NIFs, which a pure build
-      # would forbid). Point VARSEL_RELEASE at it and evaluate with --impure.
-      releaseSrc =
-        let path = builtins.getEnv "VARSEL_RELEASE";
-        in
-        if path == "" then
-          throw ''
-            Set VARSEL_RELEASE to the mix release directory
-            (usually $PWD/_build/prod/rel/varsel) and run nix with --impure.
-          ''
-        else
-          builtins.path {
-            path = /. + path;
-            name = "varsel-mix-release";
-          };
+      # The mix release, built inside Nix from the flake source. The build
+      # opts out of the sandbox for network access (see nix/release.nix), so
+      # builders need `sandbox = relaxed`.
+      release = system:
+        nixpkgs.legacyPackages.${system}.callPackage ./nix/release.nix {
+          src = self;
+        };
 
       container = system:
         import ./nix/container.nix {
           pkgs = nixpkgs.legacyPackages.${system};
           nix2container = nix2container.packages.${system}.nix2container;
           cvelint = nixpkgs.legacyPackages.${system}.callPackage ./nix/cvelint.nix { };
-          inherit releaseSrc;
+          release = release system;
         };
     in
     {
@@ -78,10 +64,12 @@
         }
         // lib.optionalAttrs (lib.elem system containerSystems) {
           container = container system;
+          release = release system;
         });
 
-      # `nix run --impure .#copy-to -- docker://<image>:<tag> [skopeo flags]`
-      # pushes the image straight from the store — no tarball, no daemon.
+      # `nix run .#copy-to -- docker://<image>:<tag> [skopeo flags]` builds
+      # release + image and pushes straight from the store — no tarball, no
+      # daemon.
       apps = eachSystem containerSystems (system: {
         copy-to = {
           type = "app";

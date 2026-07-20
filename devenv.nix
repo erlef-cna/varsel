@@ -18,6 +18,14 @@ in
     package = pkgs.beam29Packages.elixir_1_20;
   };
 
+  # Hex/Rebar for mix, installed once per $HOME on shell entry (dev machines
+  # and every CI `nix develop` alike). --force only suppresses the prompt;
+  # --if-missing makes re-entries a no-op.
+  enterShell = ''
+    mix local.hex --force --if-missing
+    mix local.rebar --force --if-missing
+  '';
+
   languages.javascript = {
     enable = true;
     npm = {
