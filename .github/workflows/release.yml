@@ -82,7 +82,9 @@ jobs:
           # Push under both tags. nix2container produces identical layers, so
           # ghcr deduplicates the blobs; the second copy only adds a manifest.
           for tag in "${SHA_TAG}" "${MOVING_TAG}"; do
+            # `--copy-args=…` (equals form) so its `--dest-creds` value isn't
+            # parsed as a separate devenv flag.
             devenv container copy prod \
               --option containers.prod.version:string "${tag}" \
-              --copy-args "--dest-creds=${REGISTRY_USER}:${REGISTRY_TOKEN}"
+              --copy-args="--dest-creds=${REGISTRY_USER}:${REGISTRY_TOKEN}"
           done
