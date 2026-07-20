@@ -43,9 +43,17 @@ varsel-*.tar
 
 # Ignore assets that are produced by build tools.
 /priv/static/assets/
+/priv/static/cache_manifest.json
 
 # Ignore digested assets cache.
 /priv/static/cache_manifest.json
+
+# Ignore `mix phx.digest` artifacts (keep the source files tracked):
+#   * hashed copies:     logo-<32 hex>.svg
+#   * gzipped versions:  logo.svg.gz / logo-<32 hex>.svg.gz
+#   * digest licenses:   logo.svg-<32 hex>.license
+/priv/static/**/*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].*
+/priv/static/**/*.gz
 
 # In case you use Node.js/npm, you want to ignore these.
 npm-debug.log
