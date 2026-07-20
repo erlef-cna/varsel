@@ -20,21 +20,71 @@ notice" — a vulnerability advisory in Norwegian is literally a
 after the Danish mathematician Agner Krarup Erlang and was created at Ericsson
 in Sweden.
 
+## What it does
+
+- **CVE records** move through a single lifecycle (reserved → draft →
+  publishing → published → pending update, or rejected), with every change
+  tracked in an audit trail.
+- **Vulnerability reports** can be submitted at `/report` (or via GraphQL and
+  MCP) and are triaged by the CNA's points of contact; accepting a report
+  opens a case.
+- **Cases** collect the structured facts about a vulnerability: affected
+  packages and their distribution channels, version events, references,
+  credits, weaknesses and impacts. Affected version ranges are derived from
+  the package's repository at render time rather than stored. Changes can be
+  suggested as field-level proposals and discussed in comments; publishing a
+  case renders it to CNA JSON and hands it to the CVE record.
+- **OSV documents** are derived automatically from published CVE records.
+- **CWE and CAPEC catalogs** are synced from MITRE into PostgreSQL on a weekly
+  schedule and searchable via full-text search.
+- **The public website** serves the CVE list and detail pages, statistics
+  charts, the common-weaknesses overview, policy and process pages, and
+  Atom/RSS feeds.
+
+## Interfaces
+
+- **HTML** — the public site, plus a management UI for authenticated users
+  (GitHub OAuth; `poc` and `supporter` roles).
+- **JSON** — `GET /cves/index.json`, `/cves/:cve_id.json`, `/osv/all.json`
+  and `/osv/:id.json`.
+- **GraphQL** — at `/gql` (playground at `/gql/playground`): public read
+  access to published data, plus lifecycle and user-management operations for
+  points of contact.
+- **MCP** — at `/mcp`: public CVE/CWE/CAPEC tools, plus lifecycle tools gated
+  by personal API keys (managed at `/settings/tokens`).
+
+## Technology
+
+Elixir and Phoenix (LiveView) with the [Ash](https://ash-hq.org/) framework on
+PostgreSQL. Background work (OSV derivation, catalog syncs, notifications)
+runs on Oban.
+
 ## Development
 
-To start your Phoenix server:
+The development environment is managed with [devenv](https://devenv.sh/) as a
+Nix flake:
 
-- Run `mix setup` to install and setup dependencies
-- Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+```shell
+nix develop --no-pure-eval
+devenv up        # starts PostgreSQL
+mix setup        # installs dependencies, creates and migrates the database
+mix phx.server
+```
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+The application is then available at [`localhost:4000`](http://localhost:4000).
+Run `mix precommit` before committing; it formats, lints and runs the test
+suite.
 
-Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
+## Deployment
 
-## Learn more
+Releases are deployed to [Fly.io](https://fly.io/) by the GitHub Actions
+release workflow: the production container image is built with Nix
+(`nix/container.nix`), pushed with an SBOM and build attestations, and rolled
+out — pushes to `main` deploy to the test environment, `v*` tags to
+production. All runtime configuration lives in GitHub environment secrets and
+variables.
 
-- Official website: [https://www.phoenixframework.org/](https://www.phoenixframework.org/)
-- Guides: [https://hexdocs.pm/phoenix/overview.html](https://hexdocs.pm/phoenix/overview.html)
-- Docs: [https://hexdocs.pm/phoenix](https://hexdocs.pm/phoenix)
-- Forum: [https://elixirforum.com/c/phoenix-forum](https://elixirforum.com/c/phoenix-forum)
-- Source: [https://github.com/phoenixframework/phoenix](https://github.com/phoenixframework/phoenix)
+## License
+
+Apache-2.0. The repository follows the [REUSE](https://reuse.software/)
+specification; see `LICENSES/` for all licenses involved.
