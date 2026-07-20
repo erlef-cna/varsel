@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+name: Setup
+description: >-
+  Install Nix + devenv, and optionally bootstrap the Elixir toolchain
+  (Hex/Rebar, cached deps, deps.get, compile). Run this right after checkout.
+
+inputs:
+  elixir:
+    description: Bootstrap the Elixir toolchain (Hex/Rebar, deps, compile).
+    required: false
+    default: "false"
+  mix-env:
+    description: MIX_ENV to fetch and compile under when elixir is enabled.
+    required: false
+    default: dev
+
+runs:
+  using: composite
+  steps:
+    - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+    - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      with:
+        name: devenv
+    - name: Install devenv.sh
+      shell: bash
+      run: nix profile add nixpkgs#devenv
+
+    - name: Cache deps and _build
+      if: inputs.elixir == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          deps
+          _build
+        key: mix-${{ runner.os }}-${{ inputs.mix-env }}-${{ hashFiles('mix.lock') }}
+        restore-keys: |
+          mix-${{ runner.os }}-${{ inputs.mix-env }}-
+
+    - name: Install Hex and Rebar
+      if: inputs.elixir == 'true'
+      shell: devenv shell bash -- -e {0}
+      run: |
+        mix local.hex --force
+        mix local.rebar --force
+
+    - name: Fetch dependencies
+      if: inputs.elixir == 'true'
+      shell: devenv shell bash -- -e {0}
+      env:
+        MIX_ENV: ${{ inputs.mix-env }}
+      run: mix deps.get
+
+    - name: Compile
+      if: inputs.elixir == 'true'
+      shell: devenv shell bash -- -e {0}
+      env:
+        MIX_ENV: ${{ inputs.mix-env }}
+      run: mix compile --warnings-as-errors

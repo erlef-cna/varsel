@@ -1,0 +1,197 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+name: CI
+
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  format:
+    name: Formatter
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          elixir: true
+      - name: mix format --check-formatted
+        run: mix format --check-formatted
+
+  credo:
+    name: Credo
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          elixir: true
+      - name: mix credo (SARIF)
+        # Credo must not fail the build; findings are reported to GitHub instead.
+        run: mix credo --strict --all --format sarif > credo.sarif || true
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          sarif_file: credo.sarif
+          category: credo
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: varsel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          elixir: true
+          mix-env: test
+      - name: mix test
+        # `mix test` runs `ash.setup` first (see mix.exs aliases), creating and
+        # migrating varsel_test against the postgres service on localhost:5432.
+        env:
+          MIX_ENV: test
+        run: mix test
+
+  dialyzer:
+    name: Dialyzer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          elixir: true
+          mix-env: test
+      - name: Cache PLT
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: _build/*/*.plt*
+          key: plt-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            plt-${{ runner.os }}-
+      - name: mix dialyzer
+        # precommit runs Dialyzer in MIX_ENV=test, so PLT apps line up.
+        env:
+          MIX_ENV: test
+        run: mix dialyzer
+
+  reuse:
+    name: REUSE
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: reuse lint
+        run: reuse lint
+
+  zizmor:
+    name: Zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: zizmor (SARIF)
+        # Report findings to GitHub rather than failing the build.
+        run: zizmor --format sarif . > zizmor.sarif || true
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor
+
+  mix-deps-submission:
+    name: Mix Dependency Submission
+    runs-on: ubuntu-latest
+    # Fork PRs get a read-only token, so the submission API call would fail.
+    # Skipping keeps forks green; the graph is still submitted on push to main.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          elixir: true
+      - uses: erlef/mix-dependency-submission@c4a36104ac7614b1b66d0da6e8a1c7d6d07bc52b # v1.3.2
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    # Wait for the Mix graph to be submitted, but still run on fork PRs where
+    # that job is skipped (review then uses the base branch's existing graph).
+    # !cancelled() lets this run even when the needed job was skipped.
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    needs: mix-deps-submission
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          comment-summary-in-pr: on-failure
