@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+# Run all pending database migrations, then exit.
+set -eu
+
+cd -P -- "$(dirname -- "$0")"
+exec ./varsel eval Varsel.Release.migrate

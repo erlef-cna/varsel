@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+# Start the release with the Phoenix endpoint serving requests.
+set -eu
+
+cd -P -- "$(dirname -- "$0")"
+PHX_SERVER=true exec ./varsel start

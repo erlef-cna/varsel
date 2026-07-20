@@ -14,6 +14,7 @@ defmodule Varsel.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      releases: releases(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader],
       consolidate_protocols: Mix.env() != :dev,
@@ -106,6 +107,17 @@ defmodule Varsel.MixProject do
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"}
+    ]
+  end
+
+  # Release configuration for `mix release`, used to build the production
+  # container. Assets are compiled ahead of the release via `assets.deploy`.
+  defp releases do
+    [
+      varsel: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent]
+      ]
     ]
   end
 
