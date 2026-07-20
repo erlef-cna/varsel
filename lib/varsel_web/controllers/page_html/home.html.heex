@@ -1,3 +1,14 @@
+<%!-- Test deployment warning: only rendered when indexing is blocked. --%>
+<div
+  :if={Application.fetch_env!(:varsel, :test_deployment?)}
+  role="alert"
+  class="bg-warning text-warning-content px-4 py-3 text-center text-sm font-medium"
+>
+  <.icon name="hero-exclamation-triangle" class="size-5 align-text-bottom mr-1" />
+  This is a <strong>test deployment</strong>. Data may be incomplete or reset at any time,
+  and this site is not indexed by search engines. Do not rely on it for production use.
+</div>
+
 <%!-- Hero band: text on the left, ecosystem logos on the right (below on mobile) --%>
 <section class="eef-band">
   <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24 max-w-5xl">

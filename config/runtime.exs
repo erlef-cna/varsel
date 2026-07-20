@@ -26,6 +26,14 @@ end
 
 config :varsel, VarselWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+# Test deployment flag: when true (the default), the instance serves a
+# disallow-everything robots.txt, sends an `X-Robots-Tag` header blocking all
+# indexing/link-following, and shows a warning banner on the home page. Set
+# `TEST_DEPLOYMENT=false` on the real production instance to disable this.
+with {:ok, value} <- System.fetch_env("TEST_DEPLOYMENT") do
+  config :varsel, :test_deployment?, value in ~w(true 1)
+end
+
 if config_env() != :test do
   config :varsel, Varsel.Vault,
     ciphers: [

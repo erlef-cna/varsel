@@ -142,6 +142,14 @@ config :varsel, VarselWeb.Endpoint,
 # report submissions sent to POCs).
 config :varsel, :cna_email_from, "cna@erlef.org"
 
+# Whether this instance is a (non-production) test deployment. When true, the
+# site serves a "disallow everything" robots.txt, sends a blanket
+# `X-Robots-Tag: noindex, nofollow, noarchive` header, and shows a banner on the
+# home page. Overridden at runtime by the `TEST_DEPLOYMENT` env var
+# (see config/runtime.exs). Defaults to true so a fresh/unconfigured deployment
+# never accidentally gets indexed.
+config :varsel, :test_deployment?, true
+
 # CNA identity constants rendered into every CVE record's providerMetadata /
 # cveMetadata, and the public website self-links appended to references.
 config :varsel,
