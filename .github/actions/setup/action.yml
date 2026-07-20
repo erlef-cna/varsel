@@ -24,6 +24,13 @@ runs:
     - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
       with:
         name: devenv
+
+    # Flake-mode devenv locates the project via $PWD (hence --no-pure-eval).
+    # Shells set it, but the runner invokes custom `shell:` commands directly,
+    # so export it for all subsequent `nix develop` steps.
+    - name: Export PWD for devenv
+      shell: bash
+      run: echo "PWD=$PWD" >> "$GITHUB_ENV"
     - name: Cache deps and _build
       if: inputs.elixir == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
