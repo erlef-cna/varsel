@@ -48,6 +48,11 @@ nix2container.buildImage {
   # references.
   copyToRoot = [ release cvelint pkgs.busybox ];
 
+  # Split the store closure across many layers so pulls cache: glibc, ERTS and
+  # the dependency .beam files land in their own layers and are reused across
+  # deploys — only the layer(s) with changed code get re-pulled.
+  maxLayers = 100;
+
   config = {
     Cmd = [ "/bin/server" ];
     Env = [ "PATH=/bin" "LANG=C.UTF-8" ];
