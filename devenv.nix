@@ -52,23 +52,44 @@ let
   #   mix release --overwrite
   #   rm -rf container/release && cp -r _build/prod/rel/varsel container/release
   # (The directory is git-ignored; the container build reads it as a path.)
+  #
+  # The release's boot scripts embed the BUILD-TIME /nix/store path of the full
+  # erlang package (an ERTS ROOTDIR fallback in erts/bin/start plus the elixir/
+  # iex shebangs). Left intact, Nix treats that as a runtime reference and drags
+  # the ENTIRE erlang closure — compiler, dialyzer, wx, docs, ~gigabytes — into
+  # the image, even though the release bundles its own ERTS. Strip it: the
+  # $0-relative ROOTDIR lookup that precedes the fallback already resolves to
+  # the bundled ERTS, and the bash shebangs become /bin/sh (busybox).
+  #
+  # The remaining store references (openssl/ncurses/zlib/glibc the ERTS links
+  # against) are small, legitimate, and pulled in automatically.
   release = pkgs.runCommandLocal "varsel-release" { } ''
-    mkdir -p $out
-    cp -r ${./container/release}/. $out/
+    cp -r --no-preserve=mode,ownership ${./container/release} $out
+    chmod -R u+w "$out"
+
+    grep -rlZ '/nix/store/[a-z0-9]\{32\}-erlang-\|#!/nix/store/[^/]*/bin/sh' "$out" \
+      | while IFS= read -r -d "" f; do
+      sed -i \
+        -e 's,#!/nix/store/[^/]*/bin/sh,#!/bin/sh,g' \
+        -e 's,/nix/store/[a-z0-9]\{32\}-erlang-[^/]*/lib/erlang,${placeholder "out"}/lib/erlang,g' \
+        "$f"
+    done
+
+    # Guard against the big regression specifically: no erlang-package refs.
+    if grep -rq '/nix/store/[a-z0-9]\{32\}-erlang-' "$out"; then
+      echo "error: release still references the full erlang package:" >&2
+      grep -rl '/nix/store/[a-z0-9]\{32\}-erlang-' "$out" >&2
+      exit 1
+    fi
   '';
 
-  # Shared libraries the ERTS binaries in the release link against at runtime.
+  # busybox supplies the POSIX utilities (sh, readlink, dirname, cut, sed, awk…)
+  # the release boot scripts call, in one small static binary. The ERTS runtime
+  # libraries come in via the release's own references, so they are not repeated
+  # here. cvelint is added separately (static Go binary).
   releaseLibs = pkgs.buildEnv {
     name = "varsel-release-libs";
-    paths = with pkgs; [
-      bashInteractive
-      coreutils
-      glibc
-      libgcc.lib
-      ncurses
-      openssl
-      zlib
-    ];
+    paths = [ pkgs.busybox ];
   };
 in
 {
