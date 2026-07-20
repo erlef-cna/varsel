@@ -4,13 +4,38 @@
 { pkgs, lib, config, inputs, ... }:
 
 let
+  cvelintVersion = "0.6.0";
+
+  cvelintAssets = {
+    "aarch64-darwin" = {
+      asset = "cvelint_Darwin_arm64.tar.gz";
+      sha256 = "f5b1ad176543424197de890397d4fb139b56f23b3ca0be0b44cbcaedad579efc";
+    };
+    "x86_64-darwin" = {
+      asset = "cvelint_Darwin_x86_64.tar.gz";
+      sha256 = "7fe439fcf4d05f643276edcfc207fc5bded7a587cd4a7765268de4e30a4128e2";
+    };
+    "aarch64-linux" = {
+      asset = "cvelint_Linux_arm64.tar.gz";
+      sha256 = "c69d173d04343f8392a1eb8c9b41e4af622bbc83caf08d78de01cd2149ddae48";
+    };
+    "x86_64-linux" = {
+      asset = "cvelint_Linux_x86_64.tar.gz";
+      sha256 = "88078c84238ae13053328fc28c4ab9c63482d3b4d4ac3b1366a168be7d3e65cf";
+    };
+  };
+
+  cvelintAsset =
+    cvelintAssets.${pkgs.stdenv.hostPlatform.system}
+      or (throw "cvelint: unsupported system ${pkgs.stdenv.hostPlatform.system}");
+
   cvelint = pkgs.stdenvNoCC.mkDerivation {
     pname = "cvelint";
-    version = "0.4.0";
+    version = cvelintVersion;
 
     src = pkgs.fetchurl {
-      url = "https://github.com/mprpic/cvelint/releases/download/v0.4.0/cvelint_Darwin_arm64.tar.gz";
-      sha256 = "sha256-F4IFQ9SVZN9IuRgacitWYeKw7MaavBJ1vbPWzdg20dk=";
+      url = "https://github.com/mprpic/cvelint/releases/download/v${cvelintVersion}/${cvelintAsset.asset}";
+      inherit (cvelintAsset) sha256;
     };
 
     sourceRoot = ".";
