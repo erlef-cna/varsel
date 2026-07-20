@@ -79,6 +79,11 @@ jobs:
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # The runner ships a v1 /etc/containers/registries.conf that skopeo
+          # rejects. Point it at an empty (valid v2) config instead.
+          : > "${RUNNER_TEMP}/registries.conf"
+          export CONTAINERS_REGISTRIES_CONF="${RUNNER_TEMP}/registries.conf"
+
           # Push under both tags. nix2container produces identical layers, so
           # ghcr deduplicates the blobs; the second copy only adds a manifest.
           for tag in "${SHA_TAG}" "${MOVING_TAG}"; do
