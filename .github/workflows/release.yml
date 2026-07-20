@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  container:
+    name: Build & Push Container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        shell: devenv shell bash -- -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          elixir: true
+          mix-env: prod
+
+      - name: Build assets
+        env:
+          MIX_ENV: prod
+        run: |
+          mix assets.deploy
+
+      - name: Assemble mix release
+        env:
+          MIX_ENV: prod
+        run: |
+          mix release --overwrite
+          rm -rf container/release
+          mkdir -p container
+          cp -r _build/prod/rel/varsel container/release
+
+      # Image tags: the git SHA always, plus `edge` for main / the version for
+      # a v* tag. The SHA gives an immutable reference; the other is a moving
+      # pointer.
+      - name: Determine image tags
+        id: tag
+        shell: bash
+        run: |
+          echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "moving=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "moving=edge" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build container image
+        env:
+          TAG: ${{ steps.tag.outputs.sha }}
+        run: |
+          devenv container build prod \
+            --option containers.prod.version:string "${TAG}"
+
+      - name: Push to GitHub Container Registry
+        env:
+          SHA_TAG: ${{ steps.tag.outputs.sha }}
+          MOVING_TAG: ${{ steps.tag.outputs.moving }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Push under both tags. nix2container produces identical layers, so
+          # ghcr deduplicates the blobs; the second copy only adds a manifest.
+          for tag in "${SHA_TAG}" "${MOVING_TAG}"; do
+            devenv container copy prod \
+              --option containers.prod.version:string "${tag}" \
+              --copy-args "--dest-creds=${REGISTRY_USER}:${REGISTRY_TOKEN}"
+          done
