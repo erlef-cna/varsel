@@ -12,7 +12,9 @@ nix2container.buildImage {
   # The release, cvelint, a shell (busybox provides /bin/sh + the coreutils
   # the release's scripts call), and the CA root store for outbound TLS.
   # ERTS runtime libraries come in via the release's scanned references.
-  copyToRoot = [ release cvelint pkgs.busybox pkgs.cacert ];
+  # fakeNss supplies /etc/passwd + /etc/group; Fly's SSH daemon resolves
+  # `root` via getpwnam and rejects sessions without them.
+  copyToRoot = [ release cvelint pkgs.busybox pkgs.cacert pkgs.dockerTools.fakeNss ];
 
   # Split the store closure across many layers so pulls cache: glibc, ERTS
   # and the dependency .beam files land in their own layers and are reused
