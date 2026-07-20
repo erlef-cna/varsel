@@ -15,6 +15,13 @@
       url = "github:nlewo/nix2container";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # SBOM of the image's nix closure (used via `nix run --inputs-from .
+    # sbomnix#sbomnix` in the release workflow; nixpkgs' sbomnix is too old
+    # for current nix derivation JSON).
+    sbomnix = {
+      url = "github:tiiuae/sbomnix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = { self, nixpkgs, devenv, nix2container, ... } @ inputs:
@@ -80,6 +87,7 @@
         // lib.optionalAttrs (lib.elem system containerSystems) {
           container = container system;
           release = release system;
+          sbom-deps = (release system).depsSbom;
         });
 
       # `nix run .#copy-to -- docker://<image>:<tag> [skopeo flags]` builds
