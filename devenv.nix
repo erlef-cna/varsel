@@ -11,6 +11,8 @@ in
 {
   packages = with pkgs; [
     cvelint
+    flyctl
+    skopeo
   ];
 
   # The elixir package comes from flake.nix (`beam`), shared with the

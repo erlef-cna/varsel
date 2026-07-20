@@ -7,6 +7,8 @@ on:
   push:
     branches:
       - main
+      # TODO: remove before merging — only here to test the workflow on the PR branch
+      - test-deployment
     tags:
       - "v*"
 
@@ -21,6 +23,8 @@ jobs:
   container:
     name: Build & Push Container
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -129,3 +133,106 @@ jobs:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+  # main deploys to the `test` environment (varsel-test), v* tags to
+  # `production` (varsel-prod); the environment key ties the run to GitHub
+  # deployments and scopes the secrets/variables. All non-derived app
+  # configuration lives in the GitHub environment (secrets pushed to Fly as
+  # staged secrets, variables passed as --env); DATABASE_URL is Fly-managed
+  # via the attached Managed Postgres.
+  deploy:
+    name: Deploy
+    needs: container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: ${{ github.ref_type == 'tag' && 'production' || 'test' }}
+      url: https://${{ vars.PHX_HOST }}
+    defaults:
+      run:
+        shell: nix develop --no-pure-eval -c bash -e {0}
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_APP: ${{ vars.FLY_APP }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+
+      # Fly machines cannot pull from private registries, so mirror the
+      # digest-pinned image into the app's Fly registry slot.
+      - name: Push image to the Fly registry
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          DIGEST: ${{ needs.container.outputs.digest }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          : > "${RUNNER_TEMP}/registries.conf"
+          export CONTAINERS_REGISTRIES_CONF="${RUNNER_TEMP}/registries.conf"
+
+          skopeo copy \
+            --src-creds "${REGISTRY_USER}:${REGISTRY_TOKEN}" \
+            --dest-creds "x:${FLY_API_TOKEN}" \
+            "docker://${IMAGE}@${DIGEST}" \
+            "docker://registry.fly.io/${FLY_APP}:${GITHUB_SHA}"
+
+      # Empty values are skipped so an unset GitHub secret/variable surfaces
+      # as the app's own missing-variable error instead of an empty string.
+      - name: Stage app secrets
+        env:
+          CLOAK_KEY: ${{ secrets.CLOAK_KEY }}
+          SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
+          MITRE_CVE_API_KEY: ${{ secrets.MITRE_CVE_API_KEY }}
+          OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          TOKEN_SIGNING_SECRET: ${{ secrets.TOKEN_SIGNING_SECRET }}
+        run: |
+          pairs=()
+          add() { if [ -n "$2" ]; then pairs+=("$1=$2"); fi; }
+          add CLOAK_KEY "${CLOAK_KEY}"
+          add SECRET_KEY_BASE "${SECRET_KEY_BASE}"
+          add TOKEN_SIGNING_SECRET "${TOKEN_SIGNING_SECRET}"
+          add MITRE_CVE_API_KEY "${MITRE_CVE_API_KEY}"
+          add GITHUB_CLIENT_SECRET "${OAUTH_GITHUB_CLIENT_SECRET}"
+          add SMTP_USER "${SMTP_USER}"
+          add SMTP_PASSWORD "${SMTP_PASSWORD}"
+          if [ "${#pairs[@]}" -gt 0 ]; then
+            flyctl secrets set --stage --app "${FLY_APP}" "${pairs[@]}"
+          fi
+
+      - name: Deploy
+        env:
+          PHX_HOST: ${{ vars.PHX_HOST }}
+          MITRE_CVE_API_BASE_URL: ${{ vars.MITRE_CVE_API_BASE_URL }}
+          MITRE_CVE_API_ORG: ${{ vars.MITRE_CVE_API_ORG }}
+          MITRE_CVE_API_USER: ${{ vars.MITRE_CVE_API_USER }}
+          OAUTH_GITHUB_CLIENT_ID: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}
+          OAUTH_GITHUB_REDIRECT_URI: ${{ vars.OAUTH_GITHUB_REDIRECT_URI }}
+          TEST_DEPLOYMENT: ${{ vars.TEST_DEPLOYMENT }}
+          CNA_EMAIL_FROM: ${{ vars.CNA_EMAIL_FROM }}
+          SMTP_RELAY_HOST: ${{ vars.SMTP_RELAY_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          POOL_SIZE: ${{ vars.POOL_SIZE }}
+        run: |
+          args=()
+          add() { if [ -n "$2" ]; then args+=(--env "$1=$2"); fi; }
+          add PHX_HOST "${PHX_HOST}"
+          add MITRE_CVE_API_BASE_URL "${MITRE_CVE_API_BASE_URL}"
+          add MITRE_CVE_API_ORG "${MITRE_CVE_API_ORG}"
+          add MITRE_CVE_API_USER "${MITRE_CVE_API_USER}"
+          add GITHUB_CLIENT_ID "${OAUTH_GITHUB_CLIENT_ID}"
+          add GITHUB_REDIRECT_URI "${OAUTH_GITHUB_REDIRECT_URI}"
+          add TEST_DEPLOYMENT "${TEST_DEPLOYMENT}"
+          add CNA_EMAIL_FROM "${CNA_EMAIL_FROM}"
+          add SMTP_RELAY_HOST "${SMTP_RELAY_HOST}"
+          add SMTP_PORT "${SMTP_PORT}"
+          add POOL_SIZE "${POOL_SIZE}"
+
+          flyctl deploy --app "${FLY_APP}" \
+            --image "registry.fly.io/${FLY_APP}:${GITHUB_SHA}" \
+            "${args[@]}"
