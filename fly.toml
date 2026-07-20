@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+# App name intentionally omitted — the deploy workflow passes --app per
+# environment (varsel-test / varsel-prod).
+primary_region = "fra"
+
+[env]
+  # Managed Postgres is reached over Fly's IPv6 private network.
+  ECTO_IPV6 = "true"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[deploy]
+  release_command = "/bin/migrate"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "1024mb"

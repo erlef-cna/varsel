@@ -203,25 +203,23 @@ defmodule Varsel.CVE.MitreCveApi do
     end
   end
 
-  @extra_req_opts Keyword.take(
-                    Application.compile_env(:varsel, :mitre_cve_api, []),
-                    [:plug]
-                  )
-
   defp build_req do
-    cfg = Application.get_env(:varsel, :mitre_cve_api, [])
+    config = Application.get_env(:varsel, :mitre_cve_api, [])
 
-    base_opts = [
-      base_url: Keyword.fetch!(cfg, :base_url),
-      retry: false,
-      headers: [
-        {"CVE-API-ORG", Keyword.fetch!(cfg, :org)},
-        {"CVE-API-USER", Keyword.fetch!(cfg, :user)},
-        {"CVE-API-KEY", Keyword.fetch!(cfg, :api_key)}
-      ]
-    ]
+    {org, config} = Keyword.pop!(config, :org)
+    {user, config} = Keyword.pop!(config, :user)
+    {api_key, req_opts} = Keyword.pop!(config, :api_key)
 
-    Req.new(base_opts ++ @extra_req_opts)
+    Req.new(
+      [
+        retry: false,
+        headers: [
+          {"CVE-API-ORG", org},
+          {"CVE-API-USER", user},
+          {"CVE-API-KEY", api_key}
+        ]
+      ] ++ req_opts
+    )
   end
 
   defp format_error(status, body) when is_map(body) do

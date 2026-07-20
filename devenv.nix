@@ -11,6 +11,8 @@ in
 {
   packages = with pkgs; [
     cvelint
+    flyctl
+    skopeo
   ];
 
   # The elixir package comes from flake.nix (`beam`), shared with the
@@ -33,8 +35,6 @@ in
     };
     directory = "./assets";
   };
-
-  dotenv.enable = true;
 
   services.postgres = {
     enable = true;
