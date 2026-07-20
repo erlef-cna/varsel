@@ -629,10 +629,19 @@ defmodule Varsel.CVE.CveRecord do
     end
 
     # POC-only admin lifecycle actions, used by the CVE-management LiveView.
-    # The Oban worker actions (:publish, :push_update, :sync_from_mitre,
+    # The three MITRE sync actions also run on the nightly schedule through the
+    # AshOban bypass. The Oban worker actions (:publish, :push_update,
     # :mark_rejected) and the create actions (:reserve, :import) are not listed
     # here; they keep running only via the AshOban bypass / authorize?: false.
-    policy action([:assign, :request_publish, :update, :reject]) do
+    policy action([
+             :assign,
+             :request_publish,
+             :update,
+             :reject,
+             :import_from_mitre,
+             :sync_from_mitre,
+             :sync_reserved_from_mitre
+           ]) do
       authorize_if actor_attribute_equals(:role, :poc)
     end
   end

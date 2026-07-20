@@ -43,9 +43,6 @@ defmodule VarselWeb.VarselLive do
     {:noreply, handle_live(socket, topic, :cve_records)}
   end
 
-  # Both actions are POC-gated by the page itself; like their scheduled Oban
-  # counterparts they run with authorize?: false (see the policy comment on
-  # CveRecord), the actor only feeds paper-trail attribution.
   @impl Phoenix.LiveView
   def handle_event("sync_with_mitre", _params, socket) do
     actor = socket.assigns.current_user
@@ -54,13 +51,13 @@ defmodule VarselWeb.VarselLive do
       socket
       |> assign(mitre_syncing?: true)
       |> start_async(:mitre_sync, fn ->
-        CVE.import_cves_from_mitre!(%{}, actor: actor, authorize?: false)
+        CVE.import_cves_from_mitre!(%{}, actor: actor)
+        CVE.sync_reserved_cves_from_mitre!(%{}, actor: actor)
 
         CveRecord
         |> Ash.Query.filter(state == :published)
         |> Ash.bulk_update!(:sync_from_mitre, %{},
           actor: actor,
-          authorize?: false,
           notify?: true,
           return_errors?: true,
           strategy: :stream,

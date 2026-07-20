@@ -108,6 +108,7 @@ defmodule Varsel.CVE do
   resources do
     resource CveRecord do
       define :import_cves_from_mitre, action: :import_from_mitre
+      define :sync_reserved_cves_from_mitre, action: :sync_reserved_from_mitre
       define :list_published_cve_records, action: :list_published
       define :get_published_cve_record, action: :get_published, args: [:cve_id]
       define :search_cve_records, action: :search, args: [:query]

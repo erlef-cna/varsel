@@ -106,9 +106,10 @@ defmodule VarselWeb.VarselLiveTest do
     assert html =~ "No reserved IDs in the pool."
   end
 
-  test "'Sync with MITRE' imports new records and then syncs published ones", %{conn: conn} do
+  test "'Sync with MITRE' imports, syncs published records, and syncs the pool", %{conn: conn} do
     poc = register("poc", :poc)
     cve_id = "CVE-#{@year}-1010"
+    reserved_cve_id = "CVE-#{@year}-1011"
 
     cve_json = %{
       "dataType" => "CVE_RECORD",
@@ -121,12 +122,26 @@ defmodule VarselWeb.VarselLiveTest do
       "containers" => %{"cna" => %{"title" => "Imported thing"}}
     }
 
+    reservation_json = %{
+      "cve_id" => reserved_cve_id,
+      "cve_year" => to_string(@year),
+      "owning_cna" => "EEF",
+      "reserved" => "#{@year}-01-01T00:00:00.000Z",
+      "state" => "RESERVED"
+    }
+
     Req.Test.stub(MitreCveApi, fn conn ->
       conn = Plug.Conn.fetch_query_params(conn)
 
       cond do
         conn.method == "GET" && String.ends_with?(conn.request_path, "/cve-id") ->
-          entries = if conn.query_params["page"] == "1", do: [%{"cve_id" => cve_id}], else: []
+          entries =
+            case {conn.query_params["state"], conn.query_params["page"]} do
+              {"PUBLISHED", "1"} -> [%{"cve_id" => cve_id}]
+              {"RESERVED", "1"} -> [reservation_json]
+              _other -> []
+            end
+
           Req.Test.json(conn, %{"cve_ids" => entries})
 
         conn.method == "GET" ->
@@ -144,15 +159,17 @@ defmodule VarselWeb.VarselLiveTest do
 
     assert render(lv) =~ "MITRE import and sync finished."
 
-    record =
+    by_id =
       CveRecord
       |> Ash.read!(authorize?: false, load: [:cve_id])
-      |> Enum.find(&(&1.cve_id == cve_id))
+      |> Map.new(&{&1.cve_id, &1})
 
-    assert record.state == :published
+    assert by_id[cve_id].state == :published
     # last_synced_at is only written by :sync_from_mitre, proving the sync ran
     # after the import brought the record in.
-    assert %DateTime{} = record.last_synced_at
+    assert %DateTime{} = by_id[cve_id].last_synced_at
+
+    assert by_id[reserved_cve_id].state == :reserved
   end
 
   test "the list updates live when a record changes out-of-band", %{conn: conn} do
