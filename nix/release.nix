@@ -2,23 +2,22 @@
 # SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
 
 # Builds the production mix release with the same toolchain the dev shell
-# uses, via the project's own mix aliases. Split in two:
+# uses, as a pipeline of derivations each keyed on exactly the files that
+# affect it — Nix reuses every stage whose inputs didn't change:
 #
-#  * `deps` fetches and compiles everything external (hex deps, npm deps,
-#    the tailwind/esbuild binaries, hex/rebar themselves). Its source is
-#    only the files that determine dependencies, so Nix reuses the result
-#    until mix.exs/mix.lock/config/package(-lock).json change.
-#  * the release itself compiles the app and assets on top of that.
+#   assets/package(-lock).json  →  nodeModules   (npm ci)
+#   mix.exs + mix.lock          →  depsFetch     (mix deps.get)
+#   ... + config/               →  depsCompiled  (mix deps.compile
+#                                                 + bundler binaries)
+#   everything                  →  the release   (compile, assets, release)
 #
-# Both need network (hex, npm, binary downloads, the heroicons git dep), so
-# they opt out of the Nix sandbox instead of maintaining fixed-output
-# hashes — a deliberate trade-off: Nix-controlled toolchain,
-# network-dependent content. Builders must be configured with
-# `sandbox = relaxed` (CI sets this; on dev machines only the linux
-# builder needs it).
+# The network-touching stages opt out of the Nix sandbox (__noChroot)
+# instead of maintaining fixed-output hashes — a deliberate trade-off:
+# Nix-controlled toolchain, network-dependent content. Builders must be
+# configured with `sandbox = relaxed` (CI sets this; on dev machines only
+# the linux builder needs it).
 { lib
 , stdenv
-, beam29Packages
 , nodejs
 , git
 , cacert
@@ -30,12 +29,12 @@
 , openssl
 , bashNonInteractive
 , src
+  # Passed explicitly from flake.nix (`beam`) — shared with the dev shell.
+, erlang
+, elixir
 }:
 
 let
-  erlang = beam29Packages.erlang;
-  elixir = beam29Packages.elixir_1_20;
-
   # One CA bundle, three dialects: no env var covers all tools — openssl
   # consumers (erlang, hex, curl) read SSL_CERT_FILE, git only its own
   # variable, node ignores both without --use-openssl-ca.
@@ -49,34 +48,90 @@ let
     NODE_EXTRA_CA_CERTS = caBundle;
   };
 
-  # Only the files that determine what the dependencies are. Anything else
-  # changing (app code, assets, ...) leaves the deps derivation untouched.
-  depsSrc = lib.cleanSourceWith {
-    name = "varsel-deps-src";
-    inherit src;
-    filter = path: _type:
-      let rel = lib.removePrefix (toString src + "/") (toString path);
-      in
-      builtins.elem rel [
-        "mix.exs"
-        "mix.lock"
-        "config"
-        "assets"
-        "assets/package.json"
-        "assets/package-lock.json"
-      ] || lib.hasPrefix "config/" rel;
-  };
+  # A source containing only the given repo-relative files/directories, so
+  # unrelated changes don't invalidate the stage built from it.
+  srcSubset = name: paths:
+    lib.cleanSourceWith {
+      inherit name src;
+      filter = path: type:
+        let rel = lib.removePrefix (toString src + "/") (toString path);
+        in
+        lib.any
+          (p:
+            rel == p
+            # inside a listed directory
+            || lib.hasPrefix "${p}/" rel
+            # ancestor directory of a listed path (needed for traversal)
+            || (type == "directory" && lib.hasPrefix "${rel}/" p))
+          paths;
+    };
 
-  deps = stdenv.mkDerivation {
-    name = "varsel-deps";
-    src = depsSrc;
+  # npm dependencies, keyed on the npm manifests alone.
+  nodeModules = stdenv.mkDerivation {
+    name = "varsel-node-modules";
+    src = srcSubset "varsel-npm-src" [ "assets/package.json" "assets/package-lock.json" ];
 
     __noChroot = true;
-
-    nativeBuildInputs = [ elixir nodejs git ];
-
+    nativeBuildInputs = [ nodejs ];
     env = commonEnv;
+    dontConfigure = true;
+    dontFixup = true;
 
+    buildPhase = ''
+      runHook preBuild
+      export HOME="$TMPDIR"
+      npm ci --prefix assets
+      runHook postBuild
+    '';
+
+    installPhase = ''
+      runHook preInstall
+      mv assets/node_modules "$out"
+      runHook postInstall
+    '';
+  };
+
+  # Fetched (not compiled) mix dependencies plus hex/rebar themselves,
+  # keyed on mix.exs + mix.lock alone.
+  depsFetch = stdenv.mkDerivation {
+    name = "varsel-deps";
+    src = srcSubset "varsel-deps-src" [ "mix.exs" "mix.lock" ];
+
+    __noChroot = true;
+    nativeBuildInputs = [ elixir git ];
+    env = commonEnv;
+    dontConfigure = true;
+    dontFixup = true;
+
+    buildPhase = ''
+      runHook preBuild
+      export HOME="$TMPDIR"
+      mix local.hex --force
+      mix local.rebar --force
+      mix deps.get --only prod
+      runHook postBuild
+    '';
+
+    installPhase = ''
+      runHook preInstall
+      mkdir -p "$out"
+      cp -r deps "$out/"
+      cp -r "$HOME/.mix" "$out/.mix"
+      runHook postInstall
+    '';
+  };
+
+  # Compiled dependencies and the tailwind/esbuild binaries (their version
+  # pins live in config/), keyed on mix.exs + mix.lock + config/. Outputs
+  # deps/ too: port compilers (bcrypt, picosat) write their artifacts into
+  # the dep source trees, which _build links to relatively.
+  depsCompiled = stdenv.mkDerivation {
+    name = "varsel-deps-compiled";
+    src = srcSubset "varsel-deps-compile-src" [ "mix.exs" "mix.lock" "config" ];
+
+    __noChroot = true;
+    nativeBuildInputs = [ elixir git ];
+    env = commonEnv;
     dontConfigure = true;
     dontFixup = true;
 
@@ -84,11 +139,13 @@ let
       runHook preBuild
 
       export HOME="$TMPDIR"
-      mix local.hex --force
-      mix local.rebar --force
-      mix deps.get --only prod
+      cp -r ${depsFetch}/.mix "$HOME/.mix"
+      cp -r ${depsFetch}/deps .
+      chmod -R u+w "$HOME/.mix" deps
+
       mix deps.compile
-      mix assets.setup
+      mix tailwind.install --if-missing
+      mix esbuild.install --if-missing
 
       runHook postBuild
     '';
@@ -103,10 +160,8 @@ let
       # the dependency artifacts.
       rm -rf _build/prod/lib/varsel _build/prod/phoenix-colocated
 
-      mkdir -p "$out/assets"
+      mkdir -p "$out"
       cp -r deps _build "$out/"
-      cp -r assets/node_modules "$out/assets/"
-      cp -r "$HOME/.mix" "$out/.mix"
 
       runHook postInstall
     '';
@@ -123,9 +178,9 @@ stdenv.mkDerivation {
   # The explicit contract of what the shipped release may depend on: the
   # ERTS runtime libraries (rpaths in the bundled binaries), bash for the
   # nix-patched script shebangs, and itself. Anything else — the
-  # erlang/elixir toolchain, the deps cache derivation, compilers pulled in
-  # via debug info — fails the build loudly, so image contents only ever
-  # change deliberately.
+  # erlang/elixir toolchain, the intermediate stage derivations, compilers
+  # pulled in via debug info — fails the build loudly, so image contents
+  # only ever change deliberately.
   allowedReferences = [
     "out"
     (lib.getLib stdenv.cc.libc)
@@ -147,9 +202,9 @@ stdenv.mkDerivation {
     export HOME="$TMPDIR"
     # Plain cp keeps the execute bits (the tailwind/esbuild binaries live in
     # _build); the store copies are read-only, so re-add write afterwards.
-    cp -r ${deps}/.mix "$HOME/.mix"
-    cp -r ${deps}/deps ${deps}/_build .
-    cp -r ${deps}/assets/node_modules assets/
+    cp -r ${depsFetch}/.mix "$HOME/.mix"
+    cp -r ${depsCompiled}/deps ${depsCompiled}/_build .
+    cp -r ${nodeModules} assets/node_modules
     chmod -R u+w "$HOME/.mix" deps _build assets/node_modules
 
     # assets.deploy expects a compiled app (esbuild bundles the colocated
@@ -187,18 +242,18 @@ stdenv.mkDerivation {
     # Inert toolchain paths in dependency artifacts: yecc-generated parsers
     # (gen_smtp, absinthe, hex_core) embed the location of erlang's
     # yeccpre.hrl in their line-info chunks, and the NIFs an rpath to the
-    # deps derivation's never-existing lib/ (nix's ld-wrapper adds
+    # deps stage's never-existing lib/ (nix's ld-wrapper adds
     # -rpath $out/lib). Functionally dead, but enough for Nix to pull the
     # whole toolchain into the image — remove-references-to zeroes the
     # hashes in place (length-preserving, so .beam chunks stay valid).
     find "$out"/lib -type f \( -name '*.beam' -o -name '*.so' \) \
-      -exec remove-references-to -t ${erlang} -t ${elixir} -t ${deps} {} +
+      -exec remove-references-to -t ${erlang} -t ${elixir} -t ${depsCompiled} {} +
 
     # allowedReferences enforces the closure contract, but fails without
     # naming files — check here first so the offenders end up in the build
     # log. Match the bare store hashes, mirroring Nix's reference scanner
     # (which triggers on the hash alone, full path or not).
-    for pkg in ${erlang} ${elixir} ${deps}; do
+    for pkg in ${erlang} ${elixir} ${nodeModules} ${depsFetch} ${depsCompiled}; do
       hash=$(basename "$pkg" | cut -c1-32)
       if grep -rl --binary-files=text "$hash" "$out"; then
         echo "error: release references $pkg (files above)" >&2
@@ -213,5 +268,5 @@ stdenv.mkDerivation {
   # post-processing this release gets.
   dontFixup = true;
 
-  passthru = { inherit deps; };
+  passthru = { inherit nodeModules depsFetch depsCompiled; };
 }

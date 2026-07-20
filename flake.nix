@@ -31,12 +31,23 @@
           value = f system;
         }) systems);
 
+      # THE erlang/elixir of this project — the dev shell and the release
+      # both get their toolchain from here, so a version bump (or build-flag
+      # override) is a single change.
+      beam = system:
+        let pkgs = nixpkgs.legacyPackages.${system};
+        in {
+          erlang = pkgs.beam29Packages.erlang;
+          elixir = pkgs.beam29Packages.elixir_1_20;
+        };
+
       # The mix release, built inside Nix from the flake source. The build
       # opts out of the sandbox for network access (see nix/release.nix), so
       # builders need `sandbox = relaxed`.
       release = system:
         nixpkgs.legacyPackages.${system}.callPackage ./nix/release.nix {
           src = self;
+          inherit (beam system) erlang elixir;
         };
 
       container = system:
@@ -52,7 +63,11 @@
         default = devenv.lib.mkShell {
           inherit inputs;
           pkgs = nixpkgs.legacyPackages.${system};
-          modules = [ ./devenv.nix ];
+          modules = [
+            ./devenv.nix
+            # Same toolchain as the release (see `beam` above).
+            { languages.elixir.package = (beam system).elixir; }
+          ];
         };
       });
 
