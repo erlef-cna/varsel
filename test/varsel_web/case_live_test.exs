@@ -813,7 +813,7 @@ defmodule VarselWeb.CaseLiveTest do
         |> render_click()
 
       assert html =~ "your edits become new suggestions"
-      assert html =~ "Propose changes"
+      assert html =~ "Suggest changes"
 
       lv
       |> form("#case-content-form", %{"form" => %{"title" => "Better frozen title"}})

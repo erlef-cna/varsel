@@ -461,6 +461,30 @@ defmodule VarselWeb.CaseComponents do
   defp format_score(score), do: to_string(score)
 
   @doc """
+  The info-outlined "✎ Suggest: on/off" status pill — the band's toggle and,
+  with `:explain`, the read-only variant shown above a card being edited in
+  suggest mode.
+  """
+  attr :on?, :boolean, required: true
+  attr :explain, :boolean, default: false
+  attr :rest, :global
+
+  def mode_pill(assigns) do
+    ~H"""
+    <span
+      class={[
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold",
+        if(@on?, do: "border-info bg-info/15 text-info", else: "border-info/40 text-info")
+      ]}
+      {@rest}
+    >
+      ✎ Suggest: {if @on?, do: "on", else: "off"}
+      <span :if={@explain and @on?} class="font-normal">— your edits become proposals</span>
+    </span>
+    """
+  end
+
+  @doc """
   Pretty-prints a JSON-shaped term (string-keyed maps, lists, scalars) with
   simple syntax tinting: keys in primary, strings in success, numbers in
   warning. Values are HTML-escaped; the result is safe to interpolate.

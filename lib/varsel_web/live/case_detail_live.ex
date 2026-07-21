@@ -1540,7 +1540,13 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp content_section(assigns) do
     ~H"""
-    <.panel title="Summary">
+    <div :if={@content_form} class="flex justify-end mb-2">
+      <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
+    </div>
+    <.panel
+      title={if @content_form, do: "Summary — editing", else: "Summary"}
+      editing?={!!@content_form}
+    >
       <:actions>
         <button
           :if={@mode != :view and !@content_form}
@@ -1549,13 +1555,6 @@ defmodule VarselWeb.CaseDetailLive do
           phx-value-section="summary"
         >
           Edit
-        </button>
-        <button
-          :if={@content_form}
-          class="link link-hover text-base-content/60"
-          phx-click="cancel_edit"
-        >
-          Cancel
         </button>
       </:actions>
       <.form
@@ -1572,28 +1571,28 @@ defmodule VarselWeb.CaseDetailLive do
           module={VarselWeb.MarkdownInput}
           id="case-description-md"
           field={@content_form[:description_md]}
-          label="Description (Markdown)"
+          label="Description"
           rows={8}
         />
         <.live_component
           module={VarselWeb.MarkdownInput}
           id="case-workarounds-md"
           field={@content_form[:workarounds_md]}
-          label="Workarounds (Markdown, optional)"
+          label="Workarounds (optional)"
           rows={3}
         />
         <.live_component
           module={VarselWeb.MarkdownInput}
           id="case-configurations-md"
           field={@content_form[:configurations_md]}
-          label="Configurations (Markdown, optional)"
+          label="Configurations (optional)"
           rows={3}
         />
         <.live_component
           module={VarselWeb.MarkdownInput}
           id="case-solutions-md"
           field={@content_form[:solutions_md]}
-          label="Solutions (Markdown, optional)"
+          label="Solutions (optional)"
           rows={3}
         />
         <.input
@@ -1623,14 +1622,17 @@ defmodule VarselWeb.CaseDetailLive do
         </details>
 
         <div class="flex items-end gap-2 mt-4">
-          <button type="submit" class="btn btn-primary btn-sm">
-            {if @mode == :propose, do: "Propose changes", else: "Save"}
+          <button type="submit" class={["btn btn-sm", save_button_class(@mode)]}>
+            {if @mode == :propose, do: "Suggest changes", else: "Save changes"}
+          </button>
+          <button type="button" class="btn btn-eef-quiet btn-sm" phx-click="cancel_edit">
+            Cancel
           </button>
           <input
             :if={@mode == :propose}
             type="text"
             name="reasoning"
-            placeholder="Reasoning (attached to proposals, optional)"
+            placeholder="Reasoning (attached to the suggestion, optional)"
             class="input input-bordered input-sm flex-1"
           />
         </div>
@@ -1666,13 +1668,22 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
+  # The editor footer's save button: primary for a direct save, info-colored
+  # (with dark text, per the mock) when the same click files a proposal
+  # instead — the ONE control the suggest toggle changes about the form.
+  defp save_button_class(:propose), do: "btn-info text-info-content"
+  defp save_button_class(_edit), do: "btn-primary"
+
   # The Severity card: at rest one severity chip (rating + score) beside the
   # truncated CVSS vector; "Open calculator" swaps the body for the CVSS
   # calculator as this card's own editor, with the same save-vs-suggest
   # semantics as the summary editor.
   defp severity_section(assigns) do
     ~H"""
-    <.panel title="Severity">
+    <div :if={@form} class="flex justify-end mb-2">
+      <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
+    </div>
+    <.panel title={if @form, do: "Severity — editing", else: "Severity"} editing?={!!@form}>
       <:actions>
         <button
           :if={@mode != :view and !@form}
@@ -1681,9 +1692,6 @@ defmodule VarselWeb.CaseDetailLive do
           phx-value-section="severity"
         >
           Open calculator
-        </button>
-        <button :if={@form} class="link link-hover text-base-content/60" phx-click="cancel_edit">
-          Cancel
         </button>
       </:actions>
 
@@ -1695,14 +1703,17 @@ defmodule VarselWeb.CaseDetailLive do
           label="CVSS v4.0"
         />
         <div class="flex items-end gap-2 mt-4">
-          <button type="submit" class="btn btn-primary btn-sm">
-            {if @mode == :propose, do: "Propose changes", else: "Save"}
+          <button type="submit" class={["btn btn-sm", save_button_class(@mode)]}>
+            {if @mode == :propose, do: "Suggest changes", else: "Save changes"}
+          </button>
+          <button type="button" class="btn btn-eef-quiet btn-sm" phx-click="cancel_edit">
+            Cancel
           </button>
           <input
             :if={@mode == :propose}
             type="text"
             name="reasoning"
-            placeholder="Reasoning (attached to proposals, optional)"
+            placeholder="Reasoning (attached to the suggestion, optional)"
             class="input input-bordered input-sm flex-1"
           />
         </div>

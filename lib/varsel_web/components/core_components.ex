@@ -193,17 +193,26 @@ defmodule VarselWeb.CoreComponents do
   @doc """
   Renders a console panel: a bordered card with a small-caps title row and
   optional actions on its right. The workspace rails and cards are built
-  from these.
+  from these. `editing?` shifts the border to a primary tint — the "you are
+  editing this card" signal used while a section's editor is open in place.
   """
   attr :id, :string, default: nil
   attr :title, :string, required: true
   attr :class, :any, default: nil
+  attr :editing?, :boolean, default: false
   slot :actions
   slot :inner_block, required: true
 
   def panel(assigns) do
     ~H"""
-    <section id={@id} class={["rounded-box border border-base-300 bg-base-200 p-4", @class]}>
+    <section
+      id={@id}
+      class={[
+        "rounded-box border bg-base-200 p-4",
+        if(@editing?, do: "border-primary/50", else: "border-base-300"),
+        @class
+      ]}
+    >
       <h3 class="flex items-center gap-3 text-[0.68rem] font-bold uppercase tracking-wider text-base-content/60 mb-2.5">
         {@title}
         <span

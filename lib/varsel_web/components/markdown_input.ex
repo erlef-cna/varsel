@@ -11,11 +11,16 @@ defmodule VarselWeb.MarkdownInput do
   textarea stays in the DOM while previewing (only visually hidden): a form
   submitted mid-preview still carries the field's value.
 
+  The Write/Preview switch is a hairline text-tab row (not boxed daisyUI
+  tabs) matching the preview slide-over's tabs, with a faint "markdown"
+  format hint at the row's right edge. Each field instance keeps its own
+  write/preview state, since a form can hold several of these at once.
+
       <.live_component
         module={VarselWeb.MarkdownInput}
         id="case-description"
         field={@form[:description_md]}
-        label="Description (Markdown)"
+        label="Description"
         rows={8}
       />
   """
@@ -45,31 +50,28 @@ defmodule VarselWeb.MarkdownInput do
   @impl Phoenix.LiveComponent
   def render(assigns) do
     ~H"""
-    <div id={@id} class="mb-2">
-      <div class="flex items-center justify-between mb-1">
-        <label class="label text-sm" for={@field.id}>{@label}</label>
-        <div role="tablist" class="tabs tabs-box tabs-xs">
-          <button
-            type="button"
-            role="tab"
-            class={["tab", @mode == :write && "tab-active"]}
-            phx-click="mode"
-            phx-value-mode="write"
-            phx-target={@myself}
-          >
-            Write
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class={["tab", @mode == :preview && "tab-active"]}
-            phx-click="mode"
-            phx-value-mode="preview"
-            phx-target={@myself}
-          >
-            Preview
-          </button>
-        </div>
+    <div id={@id} class="mb-3">
+      <label class="label text-sm mb-1" for={@field.id}>{@label}</label>
+      <div class="flex items-center gap-4 border-b border-base-300 text-xs mb-2">
+        <button
+          type="button"
+          class={["pb-1.5", tab_class(@mode == :write)]}
+          phx-click="mode"
+          phx-value-mode="write"
+          phx-target={@myself}
+        >
+          Write
+        </button>
+        <button
+          type="button"
+          class={["pb-1.5", tab_class(@mode == :preview)]}
+          phx-click="mode"
+          phx-value-mode="preview"
+          phx-target={@myself}
+        >
+          Preview
+        </button>
+        <span class="ml-auto pb-1.5 text-base-content/40">markdown</span>
       </div>
 
       <div class={@mode == :preview && "hidden"}>
@@ -85,6 +87,10 @@ defmodule VarselWeb.MarkdownInput do
     </div>
     """
   end
+
+  defp tab_class(true), do: "font-bold text-base-content [box-shadow:inset_0_-2px_0_var(--color-primary)]"
+
+  defp tab_class(false), do: "text-base-content/50 hover:text-base-content"
 
   defp preview(value) do
     case value do
