@@ -12,6 +12,7 @@ defmodule Varsel.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      {AshAuthentication.Oauth2Server.Supervisor, [otp_app: :varsel]},
       VarselWeb.Telemetry,
       Varsel.Vault,
       Varsel.Repo,

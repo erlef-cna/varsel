@@ -176,6 +176,16 @@ if config_env() == :prod do
   config :varsel, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :varsel,
+    oauth2_issuer_url: "https://#{host}",
+    # Audience of minted access tokens and the protected-resource identity
+    # (RFC 8707): the bare host, covering every token-consuming surface
+    # (/mcp, /gql); scopes, not audiences, separate the surfaces.
+    oauth2_resource_url: "https://#{host}",
+    oauth2_signing_secret:
+      System.get_env("OAUTH2_SIGNING_SECRET") ||
+        raise("Missing environment variable `OAUTH2_SIGNING_SECRET`!")
+
+  config :varsel,
     token_signing_secret:
       System.get_env("TOKEN_SIGNING_SECRET") ||
         raise("Missing environment variable `TOKEN_SIGNING_SECRET`!")

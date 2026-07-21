@@ -36,12 +36,15 @@ defmodule VarselWeb.ApiKeyAuthTest do
     assert conn.assigns.current_user.id == user.id
   end
 
-  test "non-API-key bearer tokens fall through untouched", %{conn: conn} do
+  # Non-API-key bearer tokens fall through this plug to OauthBearerAuth,
+  # which hard-401s anything it can't resolve instead of downgrading the
+  # request to anonymous.
+  test "non-API-key bearer tokens fall through to OAuth validation", %{conn: conn} do
     conn =
       conn
       |> put_req_header("authorization", "Bearer not-an-api-key")
       |> post("/gql", @query)
 
-    assert %{"data" => _data} = json_response(conn, 200)
+    assert conn.status == 401
   end
 end
