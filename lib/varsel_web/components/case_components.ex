@@ -165,6 +165,33 @@ defmodule VarselWeb.CaseComponents do
   defp feed_dot_class(:proposal), do: "bg-info"
   defp feed_dot_class(_event), do: "bg-success"
 
+  @doc """
+  Renders a suggestion's change as an old → new diff: the current value
+  struck through on a red tint, the suggested value on a green tint. Either
+  side may be absent (pure additions/removals).
+  """
+  attr :old, :string, default: nil
+  attr :new, :string, default: nil
+
+  def suggestion_diff(assigns) do
+    ~H"""
+    <div class="rounded-md border border-base-300 overflow-hidden text-sm">
+      <div
+        :if={@old not in [nil, ""]}
+        class="px-2.5 py-1 bg-error/10 text-error/80 line-through decoration-error/40 whitespace-pre-wrap break-words"
+      >
+        {@old}
+      </div>
+      <div
+        :if={@new not in [nil, ""]}
+        class="px-2.5 py-1 bg-success/10 text-success whitespace-pre-wrap break-words"
+      >
+        {@new}
+      </div>
+    </div>
+    """
+  end
+
   @doc "Renders case markdown (mdex, raw HTML escaped) with prose styling."
   attr :content, :string, required: true
   attr :class, :any, default: nil

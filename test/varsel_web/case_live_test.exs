@@ -700,7 +700,12 @@ defmodule VarselWeb.CaseLiveTest do
       assert proposal.field_name == "title"
       assert proposal.proposed_value == %{"value" => "Better frozen title"}
       assert proposal.reasoning == "clearer title"
-      assert render(lv) =~ "Created 1 proposal(s)."
+
+      # The suggestion card renders as an old → new diff, not a JSON blob.
+      html = render(lv)
+      assert html =~ "Created 1 proposal(s)."
+      assert html =~ "line-through decoration-error/40"
+      assert html =~ "Better frozen title"
     end
 
     test "open proposals show as accepted; untouched values propose nothing, edits counter", %{

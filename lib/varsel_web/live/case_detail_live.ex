@@ -35,6 +35,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Render.Channel
   alias Varsel.Cases.Render.Diff
   alias Varsel.Cases.VersionEvent
+  alias Varsel.Types.CVSS
 
   @case_loads [
     :cve_id,
@@ -883,7 +884,7 @@ defmodule VarselWeb.CaseDetailLive do
   # vs empty input).
   defp changed_value?(current, param), do: comparable(current) != comparable(param)
 
-  defp comparable(%Varsel.Types.CVSS{vector: vector}), do: vector
+  defp comparable(%CVSS{vector: vector}), do: vector
 
   defp comparable(%Varsel.Cases.AffectedPackage.ProgramFile{} = file) do
     %{"path" => file.path, "modules" => file.modules, "routines" => file.routines}
@@ -1014,6 +1015,51 @@ defmodule VarselWeb.CaseDetailLive do
   defp pretty_json(value), do: Jason.encode!(value, pretty: true)
 
   defp enum_options(enum), do: Enum.map(enum.values(), &{&1 |> to_string() |> String.replace("_", " "), &1})
+
+  # The value a :set suggestion would replace, read from the raw (unprojected)
+  # case so the diff shows what acceptance actually changes.
+  defp proposal_old_value(case_record, %{operation: :set} = proposal) do
+    target = proposal_target_row(case_record, proposal)
+    field = String.to_existing_atom(proposal.field_name)
+    if target, do: Map.get(target, field)
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp proposal_old_value(_case_record, _proposal), do: nil
+
+  defp proposal_target_row(case_record, %{target: :case}), do: case_record
+
+  defp proposal_target_row(case_record, proposal) do
+    rows =
+      case proposal.target do
+        :affected_package -> case_record.affected_packages
+        :package_channel -> Enum.flat_map(case_record.affected_packages, & &1.channels)
+        :version_event -> Enum.flat_map(case_record.affected_packages, & &1.version_events)
+        :reference -> case_record.references
+        :credit -> case_record.credits
+        :weakness -> case_record.weaknesses
+        :impact -> case_record.impacts
+      end
+
+    Enum.find(rows, &(&1.id == proposal.target_id))
+  end
+
+  defp format_proposal_value(nil), do: nil
+  defp format_proposal_value(value) when is_binary(value), do: value
+  defp format_proposal_value(%CVSS{vector: vector}), do: vector
+
+  defp format_proposal_value(value) when is_list(value) do
+    Enum.map_join(value, "\n", &format_proposal_value/1)
+  end
+
+  defp format_proposal_value(value) when is_atom(value), do: to_string(value)
+
+  defp format_proposal_value(%_{} = struct) do
+    struct |> Map.from_struct() |> Map.delete(:__meta__) |> pretty_json()
+  end
+
+  defp format_proposal_value(value), do: pretty_json(value)
 
   defp proposal_summary(proposal) do
     target = proposal.target |> to_string() |> String.replace("_", " ")
@@ -1941,6 +1987,7 @@ defmodule VarselWeb.CaseDetailLive do
       <.proposal_card
         :for={proposal <- @open}
         proposal={proposal}
+        case_record={@case_record}
         can_resolve={@can_resolve}
         current_user={@current_user}
       />
@@ -1958,6 +2005,7 @@ defmodule VarselWeb.CaseDetailLive do
           <.proposal_card
             :for={proposal <- @resolved}
             proposal={proposal}
+            case_record={@case_record}
             can_resolve={@can_resolve}
             current_user={@current_user}
           />
@@ -1968,16 +2016,33 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   defp proposal_card(assigns) do
+    assigns =
+      assign(assigns, :old_value, proposal_old_value(assigns.case_record, assigns.proposal))
+
     ~H"""
-    <div class="rounded-lg border border-base-300 bg-base-300/30 mb-3">
+    <div class={[
+      "rounded-lg border mb-3",
+      if(@proposal.state == :open,
+        do: "border-info/40 bg-info/5",
+        else: "border-base-300 bg-base-300/30"
+      )
+    ]}>
       <div class="card-body p-3 text-sm">
-        <div class="flex items-center justify-between">
-          <span class="font-semibold">{proposal_summary(@proposal)}</span>
-          <span class={["badge badge-sm", proposal_badge_class(@proposal.state)]}>{@proposal.state}</span>
+        <div class="flex items-center justify-between gap-2">
+          <span class="font-semibold truncate">{proposal_summary(@proposal)}</span>
+          <span class={["badge badge-sm shrink-0", proposal_badge_class(@proposal.state)]}>
+            {@proposal.state}
+          </span>
         </div>
 
+        <.suggestion_diff
+          :if={@proposal.operation == :set}
+          old={format_proposal_value(@old_value)}
+          new={format_proposal_value(@proposal.proposed_value["value"])}
+        />
+
         <pre
-          :if={@proposal.proposed_value}
+          :if={@proposal.operation != :set and @proposal.proposed_value}
           class="bg-base-300 rounded p-2 text-xs overflow-x-auto max-h-40"
         >{pretty_json(@proposal.proposed_value["value"])}</pre>
 
