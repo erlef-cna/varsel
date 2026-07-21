@@ -669,7 +669,7 @@ defmodule VarselWeb.CaseLiveTest do
         )
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
-      assert html =~ "set case.title"
+      assert html =~ "case.title"
       assert html =~ "Proposed title"
 
       lv
@@ -679,11 +679,12 @@ defmodule VarselWeb.CaseLiveTest do
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Proposed title"
       assert Ash.get!(Cases.Proposal, proposal.id, authorize?: false).state == :accepted
 
-      # Resolved proposals leave the main list for the collapsed details block.
+      # Resolved proposals leave the inline card and the rail queue for the
+      # collapsed disclosure at the bottom of the center column.
       html = render(lv)
       assert html =~ "No open suggestions."
-      assert html =~ "Resolved (1)"
-      assert [before_resolved, _rest] = String.split(html, "Resolved (1)", parts: 2)
+      assert html =~ "Resolved suggestions (1)"
+      assert [before_resolved, _rest] = String.split(html, "Resolved suggestions (1)", parts: 2)
       refute before_resolved =~ "set case.title"
     end
 
@@ -696,6 +697,98 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert {:error, {:live_redirect, %{to: "/cases"}}} =
                conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+    end
+
+    test "an open suggestion renders inline in its owning section card, and the rail Jump link anchors to it",
+         %{conn: conn, poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc, %{title: "Old title"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      proposal =
+        Cases.create_case_proposal!(
+          %{
+            case_id: case_record.id,
+            target: :case,
+            operation: :set,
+            field_name: "title",
+            proposed_value: %{"value" => "Proposed title"},
+            reasoning: "clearer"
+          },
+          actor: supporter
+        )
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # The card sits inside the Summary section, carries a stable id, and
+      # shows the mono field chip + author + diff — not a bottom aggregate.
+      [_before, after_summary_heading] = String.split(html, ">Summary<", parts: 2)
+      assert after_summary_heading =~ ~s(id="suggestion-#{proposal.id}")
+      assert after_summary_heading =~ "case.title"
+      assert after_summary_heading =~ supporter.name
+      assert after_summary_heading =~ "Old title"
+      assert after_summary_heading =~ "Proposed title"
+
+      # The rail's compact queue row jumps straight to the inline card.
+      assert html =~ ~s(href="#suggestion-#{proposal.id}")
+      assert html =~ "Jump"
+
+      # Decline's note input stays hidden until the Decline button is
+      # clicked (a client-side JS.show/hide toggle) — it is not a
+      # permanently visible input.
+      assert lv
+             |> element(~s{#resolve-#{proposal.id} input[name="resolution_note"]})
+             |> render() =~ "hidden"
+    end
+
+    test "a suggestion's reply thread is collapsed behind its reply count", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Old title"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      proposal =
+        Cases.create_case_proposal!(
+          %{
+            case_id: case_record.id,
+            target: :case,
+            operation: :set,
+            field_name: "title",
+            proposed_value: %{"value" => "Proposed title"}
+          },
+          actor: supporter
+        )
+
+      Cases.post_case_comment!(
+        %{case_id: case_record.id, proposal_id: proposal.id, body: "sounds reasonable"},
+        actor: poc
+      )
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # The thread renders collapsed (a client-side toggle, not a server
+      # round trip) behind the reply count.
+      assert html =~ "1 reply"
+      assert lv |> element("#suggestion-#{proposal.id}-thread.hidden") |> has_element?()
+      assert lv |> element("#suggestion-#{proposal.id}-thread") |> render() =~ "sounds reasonable"
+    end
+
+    test "People lists real assignment rows with a role word, avatar first", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: poc.id}, actor: poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "POC"
+      assert html =~ "supporter"
+      assert html =~ poc.name
+      assert html =~ supporter.name
     end
   end
 

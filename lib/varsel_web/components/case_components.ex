@@ -13,6 +13,7 @@ defmodule VarselWeb.CaseComponents do
 
   import Phoenix.HTML, only: [raw: 1]
 
+  alias Phoenix.LiveView.JS
   alias Varsel.Cases.Markdown
 
   @lifecycle [draft: "Draft", review: "Review", approved: "Approved", published: "Published"]
@@ -107,7 +108,10 @@ defmodule VarselWeb.CaseComponents do
       <a
         :for={section <- @sections}
         href={"##{section.id}"}
-        class="rail-link flex items-center gap-2 rounded-[var(--radius-field)] px-2.5 py-1.5 text-base-content/70 hover:bg-base-200 hover:text-base-content"
+        class={[
+          "rail-link flex items-center gap-2 rounded-[var(--radius-field)] px-2.5 py-1.5 text-base-content/70 hover:bg-base-200 hover:text-base-content",
+          section.id == "suggestions" && "mt-2 border-t border-base-300 pt-2.5"
+        ]}
       >
         <span class="truncate">{section.label}</span>
         <span
@@ -156,19 +160,56 @@ defmodule VarselWeb.CaseComponents do
         ]}></span>
         <p class="text-xs text-base-content/60">
           <span class="font-semibold text-base-content/90">{entry.who}</span>
-          · {Calendar.strftime(entry.at, "%Y-%m-%d %H:%M")}
+          <span class="text-base-content/50">· {relative_time(entry.at)}</span>
         </p>
         <.markdown :if={entry[:markdown?]} content={entry.body} class="prose-xs" />
-        <p :if={!entry[:markdown?]} class="text-base-content/70">{entry.body}</p>
+        <p :if={!entry[:markdown?]} class="text-base-content/70">
+          {entry.body}<span
+            :if={entry[:chip]}
+            class="font-mono text-[11px] bg-base-300 rounded px-1 py-px mx-1"
+          >{entry.chip}</span>{entry[:suffix]}
+        </p>
       </li>
     </ol>
     <p :if={@entries == []} class="text-sm text-base-content/60">Nothing yet.</p>
     """
   end
 
-  defp feed_dot_class(:comment), do: "bg-primary"
+  # Comments are the warm hue; the palette's only non-status warm is amber.
+  defp feed_dot_class(:comment), do: "bg-warning"
   defp feed_dot_class(:proposal), do: "bg-info"
-  defp feed_dot_class(_event), do: "bg-success"
+  defp feed_dot_class(:state), do: "bg-success"
+  defp feed_dot_class(_system_or_other), do: "bg-base-content/30"
+
+  @doc """
+  Renders a relative timestamp ("just now" / "5m ago" / "2h ago" / "3d ago"),
+  falling back to an absolute date past 7 days; the full datetime always sits
+  in the `title` attribute.
+  """
+  attr :at, :any, required: true
+  attr :class, :any, default: nil
+
+  def relative_timestamp(assigns) do
+    ~H"""
+    <span class={@class} title={Calendar.strftime(@at, "%Y-%m-%d %H:%M UTC")}>
+      {relative_time(@at)}
+    </span>
+    """
+  end
+
+  @doc "The text used by `relative_timestamp/1`; exposed for inline composition."
+  @spec relative_time(DateTime.t()) :: String.t()
+  def relative_time(%DateTime{} = at) do
+    seconds = DateTime.diff(DateTime.utc_now(), at, :second)
+
+    cond do
+      seconds < 60 -> "just now"
+      seconds < 3600 -> "#{div(seconds, 60)}m ago"
+      seconds < 86_400 -> "#{div(seconds, 3600)}h ago"
+      seconds < 7 * 86_400 -> "#{div(seconds, 86_400)}d ago"
+      true -> Calendar.strftime(at, "%b %-d, %Y")
+    end
+  end
 
   @doc """
   Renders a suggestion's change as an old → new diff: the current value
@@ -193,6 +234,190 @@ defmodule VarselWeb.CaseComponents do
         phx-no-format
       >{@new}</div>
     </div>
+    """
+  end
+
+  @doc """
+  Renders a user identity as a small filled circle: their GitHub avatar when
+  a handle is on record, otherwise a 2-letter initials disc. Users
+  authenticate via GitHub, so the handle is the only avatar source we have.
+  """
+  attr :user, :any, required: true
+  attr :variant, :atom, default: :a, values: [:a, :b], doc: "the mock's two avatar color variants"
+  attr :class, :any, default: nil
+
+  def avatar_disc(assigns) do
+    ~H"""
+    <img
+      :if={Map.get(@user, :github_handle)}
+      src={"https://github.com/#{@user.github_handle}.png"}
+      alt=""
+      class={["size-5 shrink-0 rounded-full object-cover", @class]}
+    />
+    <span
+      :if={!Map.get(@user, :github_handle)}
+      class={[
+        "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[0.6rem] font-bold",
+        avatar_variant_class(@variant),
+        @class
+      ]}
+    >
+      {initials(@user)}
+    </span>
+    """
+  end
+
+  defp avatar_variant_class(:a), do: "bg-primary text-primary-content"
+  defp avatar_variant_class(:b), do: "bg-secondary text-secondary-content"
+
+  @doc """
+  Renders an open (or resolved) suggestion inline, inside the section card it
+  targets: author identity + field chip + timestamp, the old→new diff,
+  reasoning, and an action row (Accept/Decline/Withdraw + a reply count that
+  expands the proposal's comment thread). `id` anchors the rail's "Jump" link.
+  """
+  attr :id, :string, required: true
+  attr :proposal, :any, required: true
+  attr :old, :string, default: nil
+  attr :new, :string, default: nil
+  attr :can_resolve, :boolean, default: false
+  attr :own, :boolean, default: false
+  attr :comments, :list, default: []
+  slot :inner_block, doc: "raw payload for non-:set operations (insert/delete)"
+
+  def suggestion_card(assigns) do
+    ~H"""
+    <div id={@id} class="rounded-lg border border-info/40 bg-info/5 p-3 text-sm scroll-mt-4">
+      <div class="flex items-center gap-2">
+        <.avatar_disc user={@proposal.author} variant={:b} />
+        <span class="font-bold">{display_name(@proposal.author)}</span>
+        <span class="text-base-content/70">suggests</span>
+        <span class="badge badge-sm badge-info badge-outline font-mono">
+          {suggestion_target_field(@proposal)}
+        </span>
+        <.relative_timestamp
+          at={@proposal.inserted_at}
+          class="ml-auto shrink-0 text-xs text-base-content/50"
+        />
+      </div>
+
+      <.suggestion_diff :if={@proposal.operation == :set} old={@old} new={@new} />
+      {render_slot(@inner_block)}
+
+      <div :if={@proposal.reasoning} class="mt-2 text-base-content/80">
+        <.markdown content={@proposal.reasoning} class="prose-xs" />
+      </div>
+
+      <div class="mt-2 flex items-center gap-2">
+        <form
+          :if={@proposal.state == :open and @can_resolve}
+          phx-submit="resolve_proposal"
+          id={"resolve-#{@proposal.id}"}
+          class="flex items-center gap-1.5"
+        >
+          <input type="hidden" name="proposal_id" value={@proposal.id} />
+          <button type="submit" name="decision" value="accept" class="btn btn-primary btn-xs">
+            Accept
+          </button>
+          <.decline_control proposal_id={@proposal.id} />
+        </form>
+        <button
+          :if={@proposal.state == :open and @own}
+          class="link link-hover text-xs text-base-content/60"
+          phx-click="withdraw_proposal"
+          phx-value-id={@proposal.id}
+        >
+          Withdraw
+        </button>
+        <button
+          :if={@comments != []}
+          class="link link-hover ml-auto shrink-0 text-xs text-base-content/50"
+          phx-click={JS.toggle(to: "#suggestion-#{@proposal.id}-thread")}
+        >
+          {length(@comments)} {if length(@comments) == 1, do: "reply", else: "replies"}
+        </button>
+      </div>
+
+      <div id={"suggestion-#{@proposal.id}-thread"} class="hidden mt-2 border-t border-info/20 pt-2">
+        <.activity_feed entries={
+          Enum.map(@comments, fn comment ->
+            %{
+              kind: :comment,
+              who: display_name(comment.author),
+              at: comment.inserted_at,
+              body: comment.body,
+              markdown?: true
+            }
+          end)
+        } />
+      </div>
+    </div>
+    """
+  end
+
+  # A small filled-circle initials disc; the "b" variant (violet) distinguishes
+  # a second collaborator per the mock, applied by whichever caller decides.
+  defp initials(%{name: name}) when is_binary(name) and name != "" do
+    name
+    |> String.split(~r/\s+/, trim: true)
+    |> Enum.map(&String.first/1)
+    |> Enum.take(2)
+    |> Enum.join()
+    |> String.upcase()
+  end
+
+  defp initials(_user), do: "?"
+
+  defp suggestion_target_field(%{operation: :set, target: :case, field_name: field}), do: "case.#{field}"
+
+  defp suggestion_target_field(%{operation: :set, target: target, field_name: field}) do
+    "#{target}.#{field}"
+  end
+
+  defp suggestion_target_field(%{operation: :insert, target: target}), do: "+ #{target}"
+  defp suggestion_target_field(%{operation: :delete, target: target}), do: "− #{target}"
+
+  defp display_name(%{name: name}) when is_binary(name) and name != "", do: name
+  defp display_name(%{email: email}) when is_binary(email), do: email
+  defp display_name(_user), do: "(hidden)"
+
+  # Decline requires a click before it offers the note input/confirm button —
+  # not a permanently visible input. Plain JS show/hide; no server round trip
+  # is needed to reveal a text field.
+  attr :proposal_id, :string, required: true
+
+  defp decline_control(assigns) do
+    ~H"""
+    <span id={"decline-#{@proposal_id}"} class="inline-flex items-center gap-1.5">
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        phx-click={
+          JS.hide(to: "#decline-#{@proposal_id} [data-decline-toggle]")
+          |> JS.show(to: "#decline-#{@proposal_id} [data-decline-note]", display: "inline-block")
+          |> JS.show(to: "#decline-#{@proposal_id} [data-decline-submit]", display: "inline-flex")
+        }
+        data-decline-toggle
+      >
+        Decline
+      </button>
+      <input
+        type="text"
+        name="resolution_note"
+        placeholder="Note (optional)"
+        class="input input-bordered input-xs hidden w-40"
+        data-decline-note
+      />
+      <button
+        type="submit"
+        name="decision"
+        value="decline"
+        class="btn btn-ghost btn-xs hidden"
+        data-decline-submit
+      >
+        Confirm decline
+      </button>
+    </span>
     """
   end
 

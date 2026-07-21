@@ -1034,7 +1034,6 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp humanize_action(action), do: String.replace(action, "_", " ")
 
-  defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M")
 
   defp pretty_json(nil), do: ""
@@ -1168,19 +1167,32 @@ defmodule VarselWeb.CaseDetailLive do
             <div id="summary">
               <.content_section
                 case_record={@display_case}
+                raw_case_record={@case_record}
                 content_form={@editing_section == "summary" && @content_form}
                 mode={@mode}
+                current_user={@current_user}
+                can_resolve={can_edit?(@case_record, @current_user)}
               />
             </div>
             <div id="severity">
               <.severity_section
                 case_record={@display_case}
+                raw_case_record={@case_record}
                 form={@editing_section == "severity" && @content_form}
                 mode={@mode}
+                current_user={@current_user}
+                can_resolve={can_edit?(@case_record, @current_user)}
               />
             </div>
             <div id="affected">
-              <.affected_section case_record={@display_case} mode={@mode} marks={marks(@projection)} />
+              <.affected_section
+                case_record={@display_case}
+                raw_case_record={@case_record}
+                mode={@mode}
+                marks={marks(@projection)}
+                current_user={@current_user}
+                can_resolve={can_edit?(@case_record, @current_user)}
+              />
             </div>
             <.rows_section
               id="references"
@@ -1191,6 +1203,9 @@ defmodule VarselWeb.CaseDetailLive do
               mode={@mode}
               marks={marks(@projection)}
               sort_event="reorder_references"
+              raw_case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
             >
               <:row :let={reference}>
                 <span class="font-mono text-sm break-all">{reference.url}</span>
@@ -1206,6 +1221,9 @@ defmodule VarselWeb.CaseDetailLive do
               mode={@mode}
               marks={marks(@projection)}
               sort_event="reorder_credits"
+              raw_case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
             >
               <:row :let={credit}>
                 {credit.name}{if credit.organization, do: " / #{credit.organization}"}
@@ -1222,6 +1240,9 @@ defmodule VarselWeb.CaseDetailLive do
               rows={@display_case.weaknesses}
               mode={@mode}
               marks={marks(@projection)}
+              raw_case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
             >
               <:row :let={weakness}>
                 <a
@@ -1243,6 +1264,9 @@ defmodule VarselWeb.CaseDetailLive do
               rows={@display_case.impacts}
               mode={@mode}
               marks={marks(@projection)}
+              raw_case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
             >
               <:row :let={impact}>
                 <a
@@ -1256,27 +1280,28 @@ defmodule VarselWeb.CaseDetailLive do
                 {impact.attack_pattern.name}
               </:row>
             </.rows_section>
-            <div id="suggestions">
-              <.proposals_section
-                case_record={@case_record}
-                current_user={@current_user}
-                can_resolve={can_edit?(@case_record, @current_user)}
-              />
-            </div>
+
+            <.resolved_suggestions_disclosure
+              :if={resolved_proposals(@case_record) != []}
+              case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
+            />
           </div>
 
           <div class="space-y-4">
-            <.reports_section
-              :if={@case_record.vulnerability_reports != []}
-              case_record={@case_record}
-              poc={poc?(@current_user)}
-            />
-            <.panel title="Suggestions">
+            <.panel id="suggestions" title="Suggestions">
               <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
                 <li :for={proposal <- open_proposals(@case_record)} class="flex items-center gap-2">
                   <span class="text-info font-bold shrink-0">◆</span>
-                  <span class="truncate text-base-content/80">{proposal_summary(proposal)}</span>
-                  <a href="#suggestions" class="link link-hover text-primary text-xs ml-auto shrink-0">
+                  <span class="truncate text-base-content/80">
+                    {proposal_field_ref(proposal)}
+                    <span class="text-base-content/50">— {display_name(proposal.author)}</span>
+                  </span>
+                  <a
+                    href={"#suggestion-#{proposal.id}"}
+                    class="link link-hover text-primary text-xs ml-auto shrink-0"
+                  >
                     Jump
                   </a>
                 </li>
@@ -1299,7 +1324,12 @@ defmodule VarselWeb.CaseDetailLive do
               <.activity_feed entries={activity_entries(@case_record)} />
             </.panel>
             <.assignments_section :if={poc?(@current_user)} case_record={@case_record} users={@users} />
-            <.close_section
+            <.reports_section
+              :if={@case_record.vulnerability_reports != []}
+              case_record={@case_record}
+              poc={poc?(@current_user)}
+            />
+            <.close_link
               :if={poc?(@current_user) and editable?(@case_record)}
               case_record={@case_record}
             />
@@ -1356,6 +1386,25 @@ defmodule VarselWeb.CaseDetailLive do
     Enum.filter(case_record.proposals, &(&1.state == :open))
   end
 
+  # Open suggestions targeting one workspace section, oldest first — rendered
+  # inline inside that section's own card rather than a separate aggregate.
+  defp section_suggestions(case_record, section_id) do
+    case_record
+    |> open_proposals()
+    |> Enum.filter(&(section_for_proposal(&1) == section_id))
+    |> Enum.sort_by(& &1.inserted_at, DateTime)
+  end
+
+  defp comments_by_proposal(case_record) do
+    Enum.group_by(case_record.comments, & &1.proposal_id)
+  end
+
+  defp resolved_proposals(case_record) do
+    case_record.proposals
+    |> Enum.reject(&(&1.state == :open))
+    |> Enum.sort_by(& &1.resolved_at, {:desc, DateTime})
+  end
+
   # Comments and suggestion events interleaved, newest first.
   defp activity_entries(case_record) do
     comments =
@@ -1375,7 +1424,9 @@ defmodule VarselWeb.CaseDetailLive do
           kind: :proposal,
           who: display_name(proposal.author),
           at: proposal.inserted_at,
-          body: feed_proposal_text(proposal)
+          body: "suggested a change to",
+          chip: proposal_field_ref(proposal),
+          suffix: if(proposal.state != :open, do: " (#{proposal.state})")
         }
       end)
 
@@ -1384,13 +1435,11 @@ defmodule VarselWeb.CaseDetailLive do
     |> Enum.take(25)
   end
 
-  defp feed_proposal_text(%{state: :open} = proposal) do
-    "suggested: #{proposal_summary(proposal)}"
-  end
+  defp proposal_field_ref(%{operation: :set, target: :case, field_name: field}), do: "case.#{field}"
 
-  defp feed_proposal_text(proposal) do
-    "suggested: #{proposal_summary(proposal)} (#{proposal.state})"
-  end
+  defp proposal_field_ref(%{operation: :set, target: target, field_name: field}), do: "#{target}.#{field}"
+
+  defp proposal_field_ref(%{target: target}), do: to_string(target)
 
   # Publish lives in the preview slide-over only (`include_publish`), where it
   # is gated visually while render blockers exist.
@@ -1449,6 +1498,42 @@ defmodule VarselWeb.CaseDetailLive do
       >
         Reopen
       </button>
+    </div>
+    """
+  end
+
+  # Renders every open suggestion targeting one section, inline inside that
+  # section's own card — the aggregate "Suggestions" section is gone; this is
+  # its only rendering now, plus the rail's compact queue and the bottom
+  # "Resolved suggestions" disclosure.
+  attr :case_record, :map, required: true
+  attr :section_id, :string, required: true
+  attr :current_user, :map, required: true
+  attr :can_resolve, :boolean, required: true
+
+  defp inline_suggestions(assigns) do
+    assigns =
+      assign(assigns,
+        suggestions: section_suggestions(assigns.case_record, assigns.section_id),
+        comments: comments_by_proposal(assigns.case_record)
+      )
+
+    ~H"""
+    <div :for={proposal <- @suggestions} class="mt-3">
+      <.suggestion_card
+        id={"suggestion-#{proposal.id}"}
+        proposal={proposal}
+        old={format_proposal_value(proposal_old_value(@case_record, proposal))}
+        new={format_proposal_value(proposal.proposed_value["value"])}
+        can_resolve={@can_resolve}
+        own={proposal.author_id == @current_user.id}
+        comments={Map.get(@comments, proposal.id, [])}
+      >
+        <pre
+          :if={proposal.operation != :set and proposal.proposed_value}
+          class="mt-1 max-h-40 overflow-x-auto rounded bg-base-300 p-2 text-xs"
+        >{pretty_json(proposal.proposed_value["value"])}</pre>
+      </.suggestion_card>
     </div>
     """
   end
@@ -1570,6 +1655,13 @@ defmodule VarselWeb.CaseDetailLive do
           </div>
         </div>
       </div>
+
+      <.inline_suggestions
+        case_record={@raw_case_record}
+        section_id="summary"
+        current_user={@current_user}
+        can_resolve={@can_resolve}
+      />
     </.panel>
     """
   end
@@ -1630,6 +1722,13 @@ defmodule VarselWeb.CaseDetailLive do
           No CVSS score yet.
         </p>
       </div>
+
+      <.inline_suggestions
+        case_record={@raw_case_record}
+        section_id="severity"
+        current_user={@current_user}
+        can_resolve={@can_resolve}
+      />
     </.panel>
     """
   end
@@ -1874,6 +1973,13 @@ defmodule VarselWeb.CaseDetailLive do
       <p :if={@case_record.affected_packages == []} class="text-sm text-base-content/60">
         No affected packages yet.
       </p>
+
+      <.inline_suggestions
+        case_record={@raw_case_record}
+        section_id="affected"
+        current_user={@current_user}
+        can_resolve={@can_resolve}
+      />
     </.panel>
     """
   end
@@ -1889,6 +1995,10 @@ defmodule VarselWeb.CaseDetailLive do
   attr :sort_event, :string,
     default: nil,
     doc: "enables drag & drop reordering, pushing this event with the row ids"
+
+  attr :raw_case_record, :map, required: true
+  attr :current_user, :map, required: true
+  attr :can_resolve, :boolean, required: true
 
   slot :row, required: true
 
@@ -1961,50 +2071,51 @@ defmodule VarselWeb.CaseDetailLive do
         </li>
       </ul>
       <p :if={@rows == []} class="text-sm text-base-content/60">None yet.</p>
+
+      <.inline_suggestions
+        case_record={@raw_case_record}
+        section_id={@id}
+        current_user={@current_user}
+        can_resolve={@can_resolve}
+      />
     </.panel>
     """
   end
 
   defp reports_section(assigns) do
     ~H"""
-    <section>
-      <details>
-        <summary class="cursor-pointer text-lg font-semibold mb-3">
-          Reports ({length(@case_record.vulnerability_reports)})
-        </summary>
+    <.panel title={"Reports (#{length(@case_record.vulnerability_reports)})"}>
+      <:actions>
+        <.link :if={@poc} navigate={~p"/reports"} class="link link-hover text-primary">
+          Report triage
+        </.link>
+      </:actions>
 
-        <div
-          :for={
-            report <- Enum.sort_by(@case_record.vulnerability_reports, & &1.inserted_at, DateTime)
-          }
-          class="card bg-base-200 mb-3"
-        >
-          <div class="card-body p-3 text-sm">
-            <div class="flex items-start justify-between gap-2">
-              <span class="font-semibold">{report.summary}</span>
-              <span class={["badge badge-sm shrink-0", report_badge_class(report.state)]}>
-                {report.state}
-              </span>
-            </div>
-
-            <p class="text-xs text-base-content/60">
-              by {display_name(report.reporter)} · {format_dt(report.inserted_at)}
-            </p>
-
-            <p :if={report.triage_notes} class="text-xs text-base-content/70 italic">
-              {report.triage_notes}
-            </p>
-
-            <details>
-              <summary class="cursor-pointer text-xs text-base-content/60">Report payload</summary>
-              <pre class="bg-base-300 rounded p-2 text-xs overflow-x-auto max-h-60 mt-1">{pretty_json(report.report_json)}</pre>
-            </details>
-          </div>
+      <div
+        :for={report <- Enum.sort_by(@case_record.vulnerability_reports, & &1.inserted_at, DateTime)}
+        class="rounded-lg border border-base-300 bg-base-300/30 p-3 text-sm mb-2 last:mb-0"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <span class="font-semibold">{report.summary}</span>
+          <span class={["badge badge-sm shrink-0", report_badge_class(report.state)]}>
+            {report.state}
+          </span>
         </div>
 
-        <.link :if={@poc} navigate={~p"/reports"} class="link text-sm">Report triage</.link>
-      </details>
-    </section>
+        <p class="text-xs text-base-content/60">
+          by {display_name(report.reporter)} · {relative_time(report.inserted_at)}
+        </p>
+
+        <p :if={report.triage_notes} class="text-xs text-base-content/70 italic">
+          {report.triage_notes}
+        </p>
+
+        <details>
+          <summary class="cursor-pointer text-xs text-base-content/60">Report payload</summary>
+          <pre class="bg-base-300 rounded p-2 text-xs overflow-x-auto max-h-60 mt-1">{pretty_json(report.report_json)}</pre>
+        </details>
+      </div>
+    </.panel>
     """
   end
 
@@ -2204,122 +2315,59 @@ defmodule VarselWeb.CaseDetailLive do
     end
   end
 
-  # Only open proposals need attention; everything resolved (accepted,
-  # declined, superseded, withdrawn) collapses into a details block — an
-  # accepted proposal's effect *is* the case content, and the rest is history.
-  defp proposals_section(assigns) do
-    {open, resolved} = Enum.split_with(assigns.case_record.proposals, &(&1.state == :open))
-    assigns = assign(assigns, open: open, resolved: resolved)
+  # Resolved suggestions (accepted, declined, superseded, withdrawn) are not
+  # in the mock; kept reachable via one collapsed, quiet disclosure at the
+  # bottom of the center column, out of the way — an interim placement
+  # pending a dedicated Suggestions surface (see the design note).
+  attr :case_record, :map, required: true
+  attr :current_user, :map, required: true
+  attr :can_resolve, :boolean, required: true
 
+  defp resolved_suggestions_disclosure(assigns) do
     ~H"""
-    <.panel title="Suggestions">
-      <.proposal_card
-        :for={proposal <- @open}
-        proposal={proposal}
-        case_record={@case_record}
-        can_resolve={@can_resolve}
-        current_user={@current_user}
-      />
-
-      <p :if={@case_record.proposals == []} class="text-sm text-base-content/60">No suggestions.</p>
-      <p :if={@open == [] and @resolved != []} class="text-sm text-base-content/60">
-        No open suggestions.
-      </p>
-
-      <details :if={@resolved != []}>
-        <summary class="cursor-pointer text-sm text-base-content/60">
-          Resolved ({length(@resolved)})
-        </summary>
-        <div class="mt-2">
-          <.proposal_card
-            :for={proposal <- @resolved}
-            proposal={proposal}
-            case_record={@case_record}
-            can_resolve={@can_resolve}
-            current_user={@current_user}
-          />
-        </div>
-      </details>
-    </.panel>
+    <details id="resolved-suggestions">
+      <summary class="cursor-pointer text-sm text-base-content/60">
+        Resolved suggestions ({length(resolved_proposals(@case_record))})
+      </summary>
+      <div class="mt-2 space-y-3">
+        <.resolved_proposal_card
+          :for={proposal <- resolved_proposals(@case_record)}
+          proposal={proposal}
+        />
+      </div>
+    </details>
     """
   end
 
-  defp proposal_card(assigns) do
-    assigns =
-      assign(assigns, :old_value, proposal_old_value(assigns.case_record, assigns.proposal))
-
+  defp resolved_proposal_card(assigns) do
     ~H"""
-    <div class={[
-      "rounded-lg border mb-3",
-      if(@proposal.state == :open,
-        do: "border-info/40 bg-info/5",
-        else: "border-base-300 bg-base-300/30"
-      )
-    ]}>
-      <div class="card-body p-3 text-sm">
-        <div class="flex items-center justify-between gap-2">
-          <span class="font-semibold truncate">{proposal_summary(@proposal)}</span>
-          <span class={["badge badge-sm shrink-0", proposal_badge_class(@proposal.state)]}>
-            {@proposal.state}
-          </span>
-        </div>
-
-        <.suggestion_diff
-          :if={@proposal.operation == :set}
-          old={format_proposal_value(@old_value)}
-          new={format_proposal_value(@proposal.proposed_value["value"])}
-        />
-
-        <pre
-          :if={@proposal.operation != :set and @proposal.proposed_value}
-          class="bg-base-300 rounded p-2 text-xs overflow-x-auto max-h-40"
-        >{pretty_json(@proposal.proposed_value["value"])}</pre>
-
-        <div :if={@proposal.reasoning} class="text-base-content/80">
-          <.markdown content={@proposal.reasoning} />
-        </div>
-
-        <p class="text-xs text-base-content/60">
-          by {display_name(@proposal.author)} · {format_dt(@proposal.inserted_at)}
-          <span :if={@proposal.resolved_by}>
-            · resolved by {display_name(@proposal.resolved_by)}
-          </span>
-        </p>
-
-        <p :if={@proposal.resolution_note} class="text-xs text-base-content/60 italic">
-          {@proposal.resolution_note}
-        </p>
-
-        <form
-          :if={@proposal.state == :open and @can_resolve}
-          phx-submit="resolve_proposal"
-          id={"resolve-#{@proposal.id}"}
-          class="flex items-center gap-1 mt-1"
-        >
-          <input type="hidden" name="proposal_id" value={@proposal.id} />
-          <input
-            type="text"
-            name="resolution_note"
-            placeholder="Note (optional)"
-            class="input input-bordered input-xs flex-1"
-          />
-          <button type="submit" name="decision" value="accept" class="btn btn-success btn-xs">
-            Accept
-          </button>
-          <button type="submit" name="decision" value="decline" class="btn btn-error btn-xs">
-            Decline
-          </button>
-        </form>
-
-        <button
-          :if={@proposal.state == :open and @proposal.author_id == @current_user.id}
-          class="btn btn-ghost btn-xs self-start"
-          phx-click="withdraw_proposal"
-          phx-value-id={@proposal.id}
-        >
-          Withdraw
-        </button>
+    <div class="rounded-lg border border-base-300 bg-base-300/30 p-3 text-sm">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-semibold truncate">{proposal_summary(@proposal)}</span>
+        <span class={["badge badge-sm shrink-0", proposal_badge_class(@proposal.state)]}>
+          {@proposal.state}
+        </span>
       </div>
+
+      <pre
+        :if={@proposal.operation != :set and @proposal.proposed_value}
+        class="mt-1 max-h-40 overflow-x-auto rounded bg-base-300 p-2 text-xs"
+      >{pretty_json(@proposal.proposed_value["value"])}</pre>
+
+      <div :if={@proposal.reasoning} class="mt-1 text-base-content/80">
+        <.markdown content={@proposal.reasoning} class="prose-xs" />
+      </div>
+
+      <p class="mt-1 text-xs text-base-content/60">
+        by {display_name(@proposal.author)} · {relative_time(@proposal.inserted_at)}
+        <span :if={@proposal.resolved_by}>
+          · resolved by {display_name(@proposal.resolved_by)}
+        </span>
+      </p>
+
+      <p :if={@proposal.resolution_note} class="mt-1 text-xs text-base-content/60 italic">
+        {@proposal.resolution_note}
+      </p>
     </div>
     """
   end
@@ -2327,9 +2375,16 @@ defmodule VarselWeb.CaseDetailLive do
   defp assignments_section(assigns) do
     ~H"""
     <.panel title="People">
-      <ul class="space-y-1 text-sm">
-        <li :for={assignment <- @case_record.assignments} class="flex items-center justify-between">
-          <span>{display_name(assignment.user)}</span>
+      <ul class="space-y-2 text-sm">
+        <li
+          :for={assignment <- @case_record.assignments}
+          class="flex items-center justify-between gap-2"
+        >
+          <span class="flex min-w-0 items-center gap-2">
+            <.avatar_disc user={assignment.user} variant={person_variant(@case_record, assignment)} />
+            <span class="truncate">{display_name(assignment.user)}</span>
+            <span class="shrink-0 text-base-content/50">{person_role(assignment.user)}</span>
+          </span>
           <button
             class="btn btn-ghost btn-xs text-error"
             phx-click="unassign_user"
@@ -2340,6 +2395,9 @@ defmodule VarselWeb.CaseDetailLive do
           </button>
         </li>
       </ul>
+      <p :if={@case_record.assignments == []} class="text-sm text-base-content/60">
+        No one assigned yet.
+      </p>
 
       <form phx-submit="assign_user" class="flex items-center gap-2 mt-2">
         <select name="user_id" required class="select select-bordered select-sm flex-1">
@@ -2358,12 +2416,24 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
-  defp close_section(assigns) do
+  # The mock's two avatar color variants, applied by assignment order (only
+  # cosmetic — nothing tracks a "primary" assignee).
+  defp person_variant(case_record, assignment) do
+    if Enum.at(case_record.assignments, 0) == assignment, do: :a, else: :b
+  end
+
+  defp person_role(%{role: :poc}), do: "POC"
+  defp person_role(%{role: :supporter}), do: "supporter"
+  defp person_role(_user), do: nil
+
+  defp close_link(assigns) do
     ~H"""
-    <section>
-      <details>
-        <summary class="cursor-pointer text-sm font-semibold text-error">Close case</summary>
-        <form phx-submit="close_case" class="mt-2 space-y-2">
+    <details>
+      <summary class="cursor-pointer text-xs text-base-content/50 hover:text-base-content/70">
+        Close case
+      </summary>
+      <div class="mt-2 rounded-lg border border-base-300 bg-base-200 p-3">
+        <form phx-submit="close_case" class="space-y-2">
           <input
             type="text"
             name="closed_reason"
@@ -2389,8 +2459,8 @@ defmodule VarselWeb.CaseDetailLive do
             Close case
           </button>
         </form>
-      </details>
-    </section>
+      </div>
+    </details>
     """
   end
 
