@@ -1515,7 +1515,9 @@ defmodule VarselWeb.CaseDetailLive do
         </summary>
 
         <div
-          :for={report <- Enum.sort_by(@case_record.vulnerability_reports, & &1.inserted_at)}
+          :for={
+            report <- Enum.sort_by(@case_record.vulnerability_reports, & &1.inserted_at, DateTime)
+          }
           class="card bg-base-200 mb-3"
         >
           <div class="card-body p-3 text-sm">

@@ -154,7 +154,7 @@ defmodule Varsel.CVE.CveRecordTest do
       record
       |> Ash.load!([:paper_trail_versions], authorize?: false)
       |> Map.fetch!(:paper_trail_versions)
-      |> Enum.sort_by(& &1.version_inserted_at)
+      |> Enum.sort_by(& &1.version_inserted_at, DateTime)
     end
 
     test "reserve creates a version" do
