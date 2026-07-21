@@ -116,7 +116,12 @@ config :varsel, Oban,
     osv_sync: 1
   ],
   repo: Varsel.Repo,
-  plugins: [{Oban.Plugins.Cron, []}]
+  plugins: [
+    {Oban.Plugins.Cron, []},
+    # Rescue jobs orphaned in `executing` (e.g. after an OOM kill) — without
+    # this they also block re-inserts of the unique @reboot sync jobs forever.
+    {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 30)}
+  ]
 
 # Configure the mailer
 #
