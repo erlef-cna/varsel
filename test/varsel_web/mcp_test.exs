@@ -65,7 +65,10 @@ defmodule VarselWeb.McpTest do
     refute body =~ "set_user_role"
   end
 
-  test "a POC's tools/list includes the lifecycle and user tools", %{conn: conn} do
+  # Presence in tools/list doubles as a regression test for the empty-input
+  # permission probe: when an action's validation crashes on it, AshAi
+  # swallows the error and silently hides the tool.
+  test "a POC's tools/list includes every registered tool", %{conn: conn} do
     poc = register_user("poc", :poc)
     {_api_key, plaintext} = create_api_key(poc)
 
@@ -76,7 +79,11 @@ defmodule VarselWeb.McpTest do
       |> response(200)
 
     for tool <- ~w(list_all_cves available_cve_ids assign_cve update_cve
-                   request_publish_cve reject_cve list_users update_user set_user_role) do
+                   request_publish_cve reject_cve list_users update_user set_user_role
+                   submit_vulnerability_report list_cases get_case render_case_preview
+                   refresh_case_derivation list_case_proposals list_open_case_proposals
+                   create_case_proposal withdraw_case_proposal list_case_comments
+                   create_case_comment) do
       assert body =~ tool
     end
   end

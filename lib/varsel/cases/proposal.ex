@@ -128,7 +128,9 @@ defmodule Varsel.Cases.Proposal do
                 states: [:draft, :review, :approved, :publishing, :published],
                 message: "proposals cannot be created on a closed case"}
 
-      validate ValidTarget
+      # The validation needs target/operation present (the MCP permission
+      # check probes the action with empty input).
+      validate ValidTarget, only_when_valid?: true
     end
 
     update :accept do
