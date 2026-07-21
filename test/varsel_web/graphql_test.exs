@@ -8,6 +8,7 @@ defmodule VarselWeb.GraphqlTest do
   import Varsel.Fixtures
 
   alias AshAuthentication.Oauth2Server.Jwt
+  alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.CVE.CveRecord
 
   @year Date.utc_today().year
@@ -30,38 +31,53 @@ defmodule VarselWeb.GraphqlTest do
     put_req_header(conn, "authorization", "Bearer " <> token)
   end
 
-  describe "anonymous queries" do
-    test "listPublishedCves returns published records only", %{conn: conn} do
-      published_cve_record("CVE-#{@year}-3001", "Published thing")
-      reserved_cve_record("CVE-#{@year}-3002")
+  describe "anonymous requests" do
+    test "are rejected with the OAuth discovery challenge", %{conn: conn} do
+      conn = post(conn, "/gql", %{"query" => "{ listPublishedCves { cveId } }"})
 
-      body = gql(conn, "{ listPublishedCves { cveId title } }")
+      assert response(conn, 401)
+      assert [challenge] = get_resp_header(conn, "www-authenticate")
+      assert challenge =~ "resource_metadata"
+    end
+
+    test "cannot execute mutations", %{conn: conn} do
+      record = reserved_cve_record("CVE-#{@year}-3002")
+
+      conn =
+        post(conn, "/gql", %{
+          "query" => "mutation($id: ID!) { assignCve(id: $id) { result { id } }}",
+          "variables" => %{"id" => record.id}
+        })
+
+      assert response(conn, 401)
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :reserved
+    end
+  end
+
+  describe "API-key authenticated POC" do
+    test "listPublishedCves returns published records only", %{conn: conn} do
+      poc = register_user("poc", :poc)
+      published_cve_record("CVE-#{@year}-3001", "Published thing")
+
+      body =
+        conn
+        |> with_api_key(poc)
+        |> gql("{ listPublishedCves { cveId title } }")
 
       assert body["data"]["listPublishedCves"] == [
                %{"cveId" => "CVE-#{@year}-3001", "title" => "Published thing"}
              ]
     end
 
-    test "getPublishedCve looks up by cveId argument", %{conn: conn} do
-      published_cve_record("CVE-#{@year}-3001", "Published thing")
+    test "validateCveSchema validates the Json scalar input", %{conn: conn} do
+      poc = register_user("poc", :poc)
 
       body =
-        gql(conn, "query($cveId: String!) { getPublishedCve(cveId: $cveId) { title } }", %{
-          "cveId" => "CVE-#{@year}-3001"
-        })
-
-      assert body["data"]["getPublishedCve"]["title"] == "Published thing"
-    end
-
-    test "validateCveSchema runs without authentication", %{conn: conn} do
-      # The Json scalar takes JSON-encoded strings as input.
-      body =
-        gql(
-          conn,
+        conn
+        |> with_api_key(poc)
+        |> gql(
           "query($json: Json!) { validateCveSchema(cveJson: $json) { valid errors { message } } }",
-          %{
-            "json" => "{}"
-          }
+          %{"json" => "{}"}
         )
 
       result = body["data"]["validateCveSchema"]
@@ -69,24 +85,6 @@ defmodule VarselWeb.GraphqlTest do
       assert result["errors"] != []
     end
 
-    test "assignCve is rejected without an actor", %{conn: conn} do
-      record = reserved_cve_record("CVE-#{@year}-3002")
-
-      body =
-        gql(
-          conn,
-          "mutation($id: ID!) { assignCve(id: $id) { result { id } errors { message } } }",
-          %{
-            "id" => record.id
-          }
-        )
-
-      refute get_in(body, ["data", "assignCve", "result", "id"])
-      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :reserved
-    end
-  end
-
-  describe "API-key authenticated POC" do
     test "listAllCves includes unpublished records", %{conn: conn} do
       poc = register_user("poc", :poc)
       reserved_cve_record("CVE-#{@year}-3002")
@@ -178,13 +176,52 @@ defmodule VarselWeb.GraphqlTest do
       assert challenge =~ ~s|scope="gql"|
     end
 
-    test "an invalid bearer token is rejected rather than treated as anonymous", %{conn: conn} do
+    test "an invalid bearer token is rejected", %{conn: conn} do
       conn =
         conn
         |> put_req_header("authorization", "Bearer not-a-valid-token")
         |> post("/gql", %{"query" => "{ listPublishedCves { cveId } }"})
 
       assert response(conn, 401)
+    end
+  end
+
+  describe "playground" do
+    defp log_in(conn, user) do
+      conn
+      |> init_test_session(%{})
+      |> AuthPlug.store_in_session(user)
+    end
+
+    test "anonymous visitors are redirected to sign in", %{conn: conn} do
+      conn = get(conn, "/gql/playground")
+      assert redirected_to(conn) == "/sign-in"
+    end
+
+    test "renders for a logged-in user", %{conn: conn} do
+      user = register_user("alice")
+
+      conn =
+        conn
+        |> log_in(user)
+        |> put_req_header("accept", "text/html")
+        |> get("/gql/playground")
+
+      assert html_response(conn, 200) =~ ~r/graphiql/i
+    end
+
+    test "executes queries with the session actor", %{conn: conn} do
+      user = register_user("alice")
+      published_cve_record("CVE-#{@year}-3001", "Published thing")
+
+      body =
+        conn
+        |> log_in(user)
+        |> put_req_header("accept", "application/json")
+        |> post("/gql/playground", %{"query" => "{ listPublishedCves { cveId } }"})
+        |> json_response(200)
+
+      assert body["data"]["listPublishedCves"] == [%{"cveId" => "CVE-#{@year}-3001"}]
     end
   end
 end

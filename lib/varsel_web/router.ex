@@ -13,17 +13,23 @@ defmodule VarselWeb.Router do
   alias VarselWeb.Plugs.OauthBearerAuth
 
   # Accepts an `eefcna_` API key, an AshAuthentication session JWT, or an
-  # OAuth 2.1 access token; anonymous requests pass through (public reads).
+  # OAuth 2.1 access token; anonymous requests get the 401 challenge.
   pipeline :graphql do
     plug ApiKeyAuth
     plug :load_from_bearer
     plug :set_actor, :user
+    plug OauthBearerAuth, oauth2_server: Varsel.Oauth2Server, scope: "gql"
+    plug AshGraphql.Plug
+  end
 
-    plug OauthBearerAuth,
-      oauth2_server: Varsel.Oauth2Server,
-      scope: "gql",
-      allow_anonymous?: true
-
+  # The GraphiQL playground authenticates through the browser session
+  # instead of a bearer token. No CSRF protection (GraphiQL posts carry no
+  # token); cross-site POSTs are covered by the SameSite=Lax session cookie.
+  pipeline :graphql_playground do
+    plug :fetch_session
+    plug :load_from_session
+    plug :set_actor, :user
+    plug :require_login
     plug AshGraphql.Plug
   end
 
@@ -74,12 +80,16 @@ defmodule VarselWeb.Router do
   end
 
   scope "/gql" do
-    pipe_through [:graphql]
+    pipe_through [:graphql_playground]
 
     forward "/playground", Absinthe.Plug.GraphiQL,
       schema: Module.concat(["VarselWeb.GraphqlSchema"]),
       socket: Module.concat(["VarselWeb.GraphqlSocket"]),
       interface: :simple
+  end
+
+  scope "/gql" do
+    pipe_through [:graphql]
 
     forward "/", Absinthe.Plug, schema: Module.concat(["VarselWeb.GraphqlSchema"])
   end
@@ -258,6 +268,16 @@ defmodule VarselWeb.Router do
 
     get "/all.json", OsvController, :index
     get "/*path", OsvController, :show
+  end
+
+  defp require_login(conn, _opts) do
+    if conn.assigns[:current_user] do
+      conn
+    else
+      conn
+      |> redirect(to: "/sign-in")
+      |> halt()
+    end
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

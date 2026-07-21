@@ -18,11 +18,6 @@ defmodule VarselWeb.Plugs.OauthBearerAuth do
   token without it gets a 403 `insufficient_scope` response (RFC 6750
   §3.1). API keys and session JWTs are the user's own credentials, not
   delegated grants, so they are exempt from scope checks.
-
-  With `allow_anonymous?: true`, requests carrying no `Authorization`
-  header at all pass through unauthenticated (for pipelines with a public
-  surface, like GraphQL). A present-but-unresolvable bearer token is still
-  a hard 401 rather than a silent downgrade to anonymous.
   """
   @behaviour Plug
 
@@ -32,24 +27,18 @@ defmodule VarselWeb.Plugs.OauthBearerAuth do
 
   @impl Plug
   def init(opts) do
-    {allow_anonymous?, opts} = Keyword.pop(opts, :allow_anonymous?, false)
     {scope, opts} = Keyword.pop!(opts, :scope)
-    %{allow_anonymous?: allow_anonymous?, scope: scope, bearer: BearerPlug.init(opts)}
+    %{scope: scope, bearer: BearerPlug.init(opts)}
   end
 
   @impl Plug
-  def call(conn, %{allow_anonymous?: allow_anonymous?, scope: scope, bearer: bearer}) do
-    cond do
-      Ash.PlugHelpers.get_actor(conn) ->
-        conn
-
-      allow_anonymous? and get_req_header(conn, "authorization") == [] ->
-        conn
-
-      true ->
-        conn
-        |> BearerPlug.call(bearer)
-        |> enforce_scope(scope)
+  def call(conn, %{scope: scope, bearer: bearer}) do
+    if Ash.PlugHelpers.get_actor(conn) do
+      conn
+    else
+      conn
+      |> BearerPlug.call(bearer)
+      |> enforce_scope(scope)
     end
   end
 

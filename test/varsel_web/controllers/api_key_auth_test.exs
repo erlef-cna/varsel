@@ -9,9 +9,9 @@ defmodule VarselWeb.ApiKeyAuthTest do
 
   @query %{"query" => "{ listPublishedCves { cveId } }"}
 
-  test "public queries work without a key", %{conn: conn} do
+  test "requests without a key are rejected", %{conn: conn} do
     conn = post(conn, "/gql", @query)
-    assert %{"data" => _data} = json_response(conn, 200)
+    assert conn.status == 401
   end
 
   test "a present-but-invalid API key is a hard 401", %{conn: conn} do
