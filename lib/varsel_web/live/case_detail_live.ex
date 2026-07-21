@@ -16,6 +16,8 @@ defmodule VarselWeb.CaseDetailLive do
   """
   use VarselWeb, :live_view
 
+  import AshPhoenix.LiveView, only: [keep_live: 4]
+
   alias Varsel.Accounts
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
@@ -91,29 +93,41 @@ defmodule VarselWeb.CaseDetailLive do
 
   @impl Phoenix.LiveView
   def mount(%{"id" => id}, _session, socket) do
-    case Cases.get_case(id, actor: socket.assigns.current_user, load: @case_loads) do
-      {:ok, case_record} ->
-        if connected?(socket), do: subscribe(id)
+    socket =
+      socket
+      |> assign(
+        case_id: id,
+        mode: socket.assigns.live_action,
+        child_form: nil,
+        preview: nil,
+        diff: nil,
+        users: nil,
+        catalog_options: nil
+      )
+      |> keep_live(:case_record, &load_case/1,
+        subscribe: ["case:#{id}", "case_proposal:#{id}", "case_comment:#{id}"],
+        after_fetch: &after_case_fetch/2
+      )
 
-        {:ok,
-         assign(socket,
-           case_id: id,
-           mode: nil,
-           case_record: case_record,
-           child_form: nil,
-           preview: nil,
-           diff: nil,
-           users: nil,
-           catalog_options: nil
-         )}
+    {:ok, socket}
+  end
 
-      {:error, _error} ->
-        {:ok,
-         socket
-         |> put_flash(:error, "Case not found.")
-         |> push_navigate(to: ~p"/cases")}
+  defp load_case(socket) do
+    case Cases.get_case(socket.assigns.case_id,
+           actor: socket.assigns.current_user,
+           load: @case_loads
+         ) do
+      {:ok, case_record} -> case_record
+      {:error, _error} -> nil
     end
   end
+
+  # nil: the case vanished or became inaccessible (on mount and refetch alike).
+  defp after_case_fetch(nil, socket) do
+    socket |> put_flash(:error, "Case not found.") |> push_navigate(to: ~p"/cases")
+  end
+
+  defp after_case_fetch(case_record, socket), do: assign_case(socket, case_record)
 
   # The mode lives in the URL (/cases/:id[/edit|/propose] as the live action);
   # the tab links patch between them.
@@ -123,17 +137,6 @@ defmodule VarselWeb.CaseDetailLive do
      socket
      |> assign(mode: socket.assigns.live_action)
      |> assign_case(socket.assigns.case_record)}
-  end
-
-  defp subscribe(case_id) do
-    for topic <- ["case:#{case_id}", "case_proposal:#{case_id}", "case_comment:#{case_id}"] do
-      Phoenix.PubSub.subscribe(Varsel.PubSub, topic)
-    end
-  end
-
-  @impl Phoenix.LiveView
-  def handle_info(%Phoenix.Socket.Broadcast{payload: %Ash.Notifier.Notification{}}, socket) do
-    {:noreply, reload_case(socket)}
   end
 
   ## ------------------------------------------------------------ case content
@@ -189,7 +192,7 @@ defmodule VarselWeb.CaseDetailLive do
     socket =
       case fun.(socket.assigns.case_record, actor: socket.assigns.current_user) do
         {:ok, _case_record} ->
-          socket |> put_flash(:info, "Case #{humanize_action(action)}.") |> reload_case()
+          put_flash(socket, :info, "Case #{humanize_action(action)}.")
 
         {:error, error} ->
           put_flash(socket, :error, errors_to_string(error))
@@ -201,7 +204,7 @@ defmodule VarselWeb.CaseDetailLive do
   def handle_event("assign_cve_id", _params, socket) do
     socket =
       case Cases.assign_case_cve_id(socket.assigns.case_record, %{}, actor: socket.assigns.current_user) do
-        {:ok, _case_record} -> socket |> put_flash(:info, "CVE ID assigned.") |> reload_case()
+        {:ok, _case_record} -> put_flash(socket, :info, "CVE ID assigned.")
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
@@ -217,7 +220,7 @@ defmodule VarselWeb.CaseDetailLive do
 
     socket =
       case Cases.close_case(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
-        {:ok, _case_record} -> socket |> put_flash(:info, "Case closed.") |> reload_case()
+        {:ok, _case_record} -> put_flash(socket, :info, "Case closed.")
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
@@ -347,7 +350,7 @@ defmodule VarselWeb.CaseDetailLive do
       _edit ->
         case AshPhoenix.Form.submit(form, params: params) do
           {:ok, _row} ->
-            {:noreply, socket |> assign(child_form: nil) |> put_flash(:info, "Saved.") |> reload_case()}
+            {:noreply, socket |> assign(child_form: nil) |> put_flash(:info, "Saved.")}
 
           {:error, form} ->
             {:noreply, assign(socket, child_form: %{socket.assigns.child_form | form: form})}
@@ -379,7 +382,7 @@ defmodule VarselWeb.CaseDetailLive do
         _edit ->
           with {:ok, row} <- Ash.get(resource, id, actor: actor),
                :ok <- Ash.destroy(row, action: :remove, actor: actor) do
-            socket |> put_flash(:info, "Removed.") |> reload_case()
+            put_flash(socket, :info, "Removed.")
           else
             {:error, error} -> put_flash(socket, :error, errors_to_string(error))
           end
@@ -405,7 +408,7 @@ defmodule VarselWeb.CaseDetailLive do
              %{case_id: socket.assigns.case_record.id, user_id: user_id},
              actor: socket.assigns.current_user
            ) do
-        {:ok, _assignment} -> socket |> put_flash(:info, "User assigned.") |> reload_case()
+        {:ok, _assignment} -> put_flash(socket, :info, "User assigned.")
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
@@ -417,7 +420,7 @@ defmodule VarselWeb.CaseDetailLive do
 
     socket =
       case Cases.unassign_case_user(assignment, actor: socket.assigns.current_user) do
-        :ok -> socket |> put_flash(:info, "User unassigned.") |> reload_case()
+        :ok -> put_flash(socket, :info, "User unassigned.")
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
@@ -443,7 +446,7 @@ defmodule VarselWeb.CaseDetailLive do
 
     socket =
       case Cases.withdraw_case_proposal(proposal, actor: socket.assigns.current_user) do
-        {:ok, _proposal} -> socket |> put_flash(:info, "Proposal withdrawn.") |> reload_case()
+        {:ok, _proposal} -> put_flash(socket, :info, "Proposal withdrawn.")
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
@@ -461,7 +464,7 @@ defmodule VarselWeb.CaseDetailLive do
 
     socket =
       case Cases.post_case_comment(attrs, actor: socket.assigns.current_user) do
-        {:ok, _comment} -> reload_case(socket)
+        {:ok, _comment} -> socket
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
@@ -470,7 +473,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   @impl Phoenix.LiveView
   def handle_async(:preview, {:ok, preview}, socket) do
-    {:noreply, socket |> assign(preview: preview) |> reload_case()}
+    {:noreply, assign(socket, preview: preview)}
   end
 
   def handle_async(:preview, {:exit, reason}, socket) do
@@ -484,7 +487,7 @@ defmodule VarselWeb.CaseDetailLive do
     socket =
       case result do
         {:ok, _case_record} ->
-          socket |> put_flash(:info, "Publish handed to MITRE.") |> reload_case()
+          put_flash(socket, :info, "Publish handed to MITRE.")
 
         {:error, error} ->
           put_flash(socket, :error, errors_to_string(error))
@@ -513,7 +516,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp save_content(socket, params) do
     case AshPhoenix.Form.submit(socket.assigns.content_form, params: params) do
       {:ok, _case_record} ->
-        {:noreply, socket |> put_flash(:info, "Case saved.") |> reload_case()}
+        {:noreply, put_flash(socket, :info, "Case saved.")}
 
       {:error, form} ->
         {:noreply, assign(socket, content_form: form)}
@@ -526,7 +529,7 @@ defmodule VarselWeb.CaseDetailLive do
 
     socket =
       case fun.(proposal, args, actor: socket.assigns.current_user) do
-        {:ok, _proposal} -> socket |> put_flash(:info, "Proposal #{verb}.") |> reload_case()
+        {:ok, _proposal} -> put_flash(socket, :info, "Proposal #{verb}.")
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
@@ -583,16 +586,6 @@ defmodule VarselWeb.CaseDetailLive do
     [:view] ++
       if(can_edit?(case_record, actor), do: [:edit], else: []) ++
       if can_propose?(case_record, actor), do: [:propose], else: []
-  end
-
-  defp reload_case(socket) do
-    case Cases.get_case(socket.assigns.case_id,
-           actor: socket.assigns.current_user,
-           load: @case_loads
-         ) do
-      {:ok, case_record} -> assign_case(socket, case_record)
-      {:error, _error} -> push_navigate(socket, to: ~p"/cases")
-    end
   end
 
   # Splits comma/newline separated list inputs and merges the parent ids.
@@ -747,15 +740,14 @@ defmodule VarselWeb.CaseDetailLive do
 
     case result do
       {:error, error, count} ->
-        socket
-        |> put_flash(
+        put_flash(
+          socket,
           :error,
           "Created #{count} proposal(s), then failed: #{errors_to_string(error)}"
         )
-        |> reload_case()
 
       count ->
-        socket |> put_flash(:info, "Created #{count} proposal(s).") |> reload_case()
+        put_flash(socket, :info, "Created #{count} proposal(s).")
     end
   end
 
@@ -2119,8 +2111,8 @@ defmodule VarselWeb.CaseDetailLive do
 
     socket =
       case result do
-        :ok -> reload_case(socket)
-        {:error, error} -> socket |> put_flash(:error, errors_to_string(error)) |> reload_case()
+        :ok -> socket
+        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
     {:noreply, socket}

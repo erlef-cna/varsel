@@ -12,7 +12,7 @@ defmodule VarselWeb.CaseManagementLive do
   """
   use VarselWeb, :live_view
 
-  import AshPhoenix.LiveView, only: [keep_live: 4, handle_live: 3]
+  import AshPhoenix.LiveView, only: [keep_live: 4]
 
   alias Varsel.Cases
 
@@ -24,11 +24,6 @@ defmodule VarselWeb.CaseManagementLive do
       |> keep_live(:cases, &list_cases/1, subscribe: "case:all", results: :lose)
 
     {:ok, socket}
-  end
-
-  @impl Phoenix.LiveView
-  def handle_info(%Phoenix.Socket.Broadcast{topic: topic, payload: %Ash.Notifier.Notification{}}, socket) do
-    {:noreply, handle_live(socket, topic, :cases)}
   end
 
   @impl Phoenix.LiveView

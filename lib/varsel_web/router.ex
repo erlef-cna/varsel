@@ -82,7 +82,10 @@ defmodule VarselWeb.Router do
     # Registered before the public `/cves` scope so `/cves/manage` wins over
     # `/cves/:cve_id`.
     ash_authentication_live_session :poc_required,
-      on_mount: [{VarselWeb.LiveUserAuth, :live_poc_required}] do
+      on_mount: [
+        {VarselWeb.LiveUserAuth, :live_poc_required},
+        {VarselWeb.LiveNotifications, :default}
+      ] do
       live "/users", UserManagementLive, :index
       live "/cves/manage", VarselLive, :index
       live "/cves/manage/:id", VarselEditLive, :edit
@@ -92,7 +95,10 @@ defmodule VarselWeb.Router do
     # Any logged-in user may report a vulnerability and manage their own tokens.
     # Cases are visible to POCs and assigned supporters (policies scope reads).
     ash_authentication_live_session :authenticated,
-      on_mount: [{VarselWeb.LiveUserAuth, :live_user_required}] do
+      on_mount: [
+        {VarselWeb.LiveUserAuth, :live_user_required},
+        {VarselWeb.LiveNotifications, :default}
+      ] do
       live "/report", VulnerabilityReportLive, :new
       live "/settings/tokens", ApiKeySettingsLive, :index
       live "/cases", CaseManagementLive, :index

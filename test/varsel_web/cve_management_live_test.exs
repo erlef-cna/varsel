@@ -93,6 +93,7 @@ defmodule VarselWeb.VarselLiveTest do
     lv |> element("button", "Reserve a new one") |> render_click()
 
     assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
+    assert render(lv) =~ "draft"
   end
 
   test "'Reserve a new one' with an empty pool flashes an error", %{conn: conn} do

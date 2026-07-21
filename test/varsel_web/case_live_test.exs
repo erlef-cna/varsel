@@ -68,6 +68,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> render_submit()
 
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Renamed case"
+      assert render(lv) =~ "Renamed case"
     end
 
     test "markdown fields preview the rendered HTML and keep unsaved edits", %{
@@ -184,6 +185,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       lv |> element("button", "Reopen") |> render_click()
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
+      assert render(lv) =~ "/cases/#{case_record.id}/edit"
     end
 
     test "adds an affected package through the modal", %{conn: conn, poc: poc} do
@@ -252,6 +254,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       case_record = Ash.load!(case_record, [:references], authorize?: false)
       assert [%{tags: []}] = case_record.references
+      refute render(lv) =~ ~s(value="vendor-advisory" checked)
     end
 
     test "references append without a position field and reorder by drag & drop", %{
@@ -374,6 +377,12 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert [%{name: "Bob Fixer", position: 0}, %{name: "Alice Finder", position: 1}] =
                Enum.sort_by(case_record.credits, & &1.position)
+
+      # The rendered list follows the new order.
+      html = render(lv)
+      {bob_at, _} = :binary.match(html, "Bob Fixer")
+      {alice_at, _} = :binary.match(html, "Alice Finder")
+      assert bob_at < alice_at
     end
 
     test "posts a comment", %{conn: conn, poc: poc} do
@@ -510,6 +519,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert [counter] = Enum.reject(proposals, &(&1.id == open.id))
       assert counter.proposed_value == %{"value" => "Counter title"}
       assert counter.parent_proposal_id == open.id
+      assert render(lv) =~ "Created 1 proposal(s)."
     end
 
     test "the modal proposes inserts and edits; removals become delete proposals", %{

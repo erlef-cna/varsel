@@ -11,7 +11,7 @@ defmodule VarselWeb.UserManagementLive do
   """
   use VarselWeb, :live_view
 
-  import AshPhoenix.LiveView, only: [keep_live: 4, handle_live: 3]
+  import AshPhoenix.LiveView, only: [keep_live: 4]
 
   alias Varsel.Accounts
 
@@ -29,14 +29,6 @@ defmodule VarselWeb.UserManagementLive do
       |> keep_live(:users, &list_users/1, subscribe: "user:all", results: :lose)
 
     {:ok, socket}
-  end
-
-  # Any change to any user (registration, role change) broadcasts on "user:all"
-  # (see the pub_sub block on Varsel.Accounts.User), which re-runs the
-  # list query so every connected POC sees the update without a reload.
-  @impl Phoenix.LiveView
-  def handle_info(%Phoenix.Socket.Broadcast{topic: topic, payload: %Ash.Notifier.Notification{}}, socket) do
-    {:noreply, handle_live(socket, topic, :users)}
   end
 
   @impl Phoenix.LiveView

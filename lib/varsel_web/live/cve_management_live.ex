@@ -13,7 +13,7 @@ defmodule VarselWeb.VarselLive do
   """
   use VarselWeb, :live_view
 
-  import AshPhoenix.LiveView, only: [keep_live: 4, handle_live: 3]
+  import AshPhoenix.LiveView, only: [keep_live: 4]
 
   alias Varsel.CVE
   alias Varsel.CVE.CveRecord
@@ -33,14 +33,6 @@ defmodule VarselWeb.VarselLive do
       |> keep_live(:cve_records, &list_cve_records/1, subscribe: "cve_record:all", results: :lose)
 
     {:ok, socket}
-  end
-
-  # Any change to any record broadcasts on "cve_record:all" (see the pub_sub
-  # block on Varsel.CVE.CveRecord), which re-runs the list query so every
-  # connected POC sees the update without a reload.
-  @impl Phoenix.LiveView
-  def handle_info(%Phoenix.Socket.Broadcast{topic: topic, payload: %Ash.Notifier.Notification{}}, socket) do
-    {:noreply, handle_live(socket, topic, :cve_records)}
   end
 
   @impl Phoenix.LiveView

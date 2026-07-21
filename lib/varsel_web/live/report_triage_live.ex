@@ -12,7 +12,7 @@ defmodule VarselWeb.ReportTriageLive do
   """
   use VarselWeb, :live_view
 
-  import AshPhoenix.LiveView, only: [keep_live: 4, handle_live: 3]
+  import AshPhoenix.LiveView, only: [keep_live: 4]
 
   alias Varsel.Cases
   alias Varsel.CVE
@@ -29,11 +29,6 @@ defmodule VarselWeb.ReportTriageLive do
       |> assign_open_cases()
 
     {:ok, socket}
-  end
-
-  @impl Phoenix.LiveView
-  def handle_info(%Phoenix.Socket.Broadcast{topic: topic, payload: %Ash.Notifier.Notification{}}, socket) do
-    {:noreply, handle_live(socket, topic, :reports)}
   end
 
   @impl Phoenix.LiveView
