@@ -20,7 +20,8 @@ defmodule Varsel.Cases.CaseReference do
     domain: Varsel.Cases,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshPaperTrail.Resource, AshGraphql.Resource]
+    extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
+    notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
@@ -128,6 +129,15 @@ defmodule Varsel.Cases.CaseReference do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if ActorAssignedToCase
     end
+  end
+
+  pub_sub do
+    module VarselWeb.Endpoint
+    prefix "case"
+
+    publish_all :create, [[:case_id]]
+    publish_all :update, [[:case_id]]
+    publish_all :destroy, [[:case_id]]
   end
 
   validations do
