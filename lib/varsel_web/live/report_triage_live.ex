@@ -21,7 +21,7 @@ defmodule VarselWeb.ReportTriageLive do
   def mount(_params, _session, socket) do
     socket =
       socket
-      |> assign(page_title: "Report Triage")
+      |> assign(page_title: "Report Triage", filter: "open")
       |> keep_live(:reports, &list_reports/1,
         subscribe: "vulnerability_report:all",
         results: :lose
@@ -32,6 +32,10 @@ defmodule VarselWeb.ReportTriageLive do
   end
 
   @impl Phoenix.LiveView
+  def handle_event("filter", %{"filter" => filter}, socket) do
+    {:noreply, assign(socket, filter: filter)}
+  end
+
   def handle_event("triage", %{"report_id" => report_id, "triage_notes" => notes}, socket) do
     act(socket, report_id, "marked under triage", fn report, actor ->
       CVE.triage_vulnerability_report(report, %{triage_notes: presence(notes)}, actor: actor)
@@ -108,6 +112,29 @@ defmodule VarselWeb.ReportTriageLive do
 
   defp actionable?(state), do: state in [:submitted, :triaged]
 
+  # The triage queue defaults to the reports still needing action; resolved
+  # reports stay reachable behind their own tabs.
+  defp visible_reports(reports, "open"), do: Enum.filter(reports, &actionable?(&1.state))
+  defp visible_reports(reports, "accepted"), do: Enum.filter(reports, &(&1.state == :accepted))
+  defp visible_reports(reports, "rejected"), do: Enum.filter(reports, &(&1.state == :rejected))
+  defp visible_reports(reports, _all), do: reports
+
+  defp tile_options(reports) do
+    for {filter, dot} <- [
+          {"open", "bg-warning"},
+          {"accepted", "bg-success"},
+          {"rejected", "bg-error"},
+          {"all", nil}
+        ] do
+      %{
+        value: filter,
+        label: if(filter == "all", do: "All reports", else: Phoenix.Naming.humanize(filter)),
+        count: length(visible_reports(reports, filter)),
+        dot: dot
+      }
+    end
+  end
+
   defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M")
 
@@ -122,15 +149,23 @@ defmodule VarselWeb.ReportTriageLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl py-10">
-      <Layouts.flash_group flash={@flash} />
+    <Layouts.flash_group flash={@flash} />
 
-      <.header class="mb-6">
-        Report Triage
-        <:subtitle>Inbound vulnerability reports: triage, accept into a case, or reject.</:subtitle>
-      </.header>
+    <.console_header
+      title="Report Triage"
+      subtitle="Inbound vulnerability reports: triage, accept into a case, or reject."
+    >
+      <:actions>
+        <.link navigate={~p"/report"} class="btn btn-sm btn-eef">Submit a report</.link>
+      </:actions>
+    </.console_header>
 
-      <div :for={report <- @reports} class="card bg-base-200 mb-4">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+      <div class="mb-4">
+        <.stat_tiles active={@filter} options={tile_options(@reports)} />
+      </div>
+
+      <div :for={report <- visible_reports(@reports, @filter)} class="card bg-base-200 mb-4">
         <div class="card-body p-4">
           <div class="flex items-start justify-between gap-4">
             <div>
@@ -220,8 +255,11 @@ defmodule VarselWeb.ReportTriageLive do
         </div>
       </div>
 
-      <p :if={@reports == []} class="text-center text-base-content/60 py-8">
-        No reports submitted yet.
+      <p
+        :if={visible_reports(@reports, @filter) == []}
+        class="text-center text-base-content/60 py-8"
+      >
+        {if @filter == "open", do: "No reports waiting for triage.", else: "No reports here."}
       </p>
     </div>
     """

@@ -92,9 +92,9 @@ defmodule VarselWeb.GraphqlTest do
       body =
         conn
         |> with_api_key(poc)
-        |> gql("{ listAllCves { cveId state } }")
+        |> gql("{ listAllCves { results { cveId state } } }")
 
-      assert [%{"state" => "reserved"}] = body["data"]["listAllCves"]
+      assert [%{"state" => "reserved"}] = body["data"]["listAllCves"]["results"]
     end
 
     test "assignCve transitions reserved to draft", %{conn: conn} do
@@ -139,9 +139,9 @@ defmodule VarselWeb.GraphqlTest do
       body =
         conn
         |> with_oauth_token(poc)
-        |> gql("{ listAllCves { cveId state } }")
+        |> gql("{ listAllCves { results { cveId state } } }")
 
-      assert [%{"state" => "reserved"}] = body["data"]["listAllCves"]
+      assert [%{"state" => "reserved"}] = body["data"]["listAllCves"]["results"]
     end
 
     test "assignCve transitions reserved to draft", %{conn: conn} do
@@ -168,7 +168,7 @@ defmodule VarselWeb.GraphqlTest do
       conn =
         conn
         |> with_oauth_token(poc, "mcp")
-        |> post("/gql", %{"query" => "{ listAllCves { cveId } }"})
+        |> post("/gql", %{"query" => "{ listAllCves { results { cveId } } }"})
 
       assert response(conn, 403)
       assert [challenge] = get_resp_header(conn, "www-authenticate")

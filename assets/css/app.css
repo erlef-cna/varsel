@@ -149,6 +149,18 @@
   color: inherit;
 }
 
+/* Console buttons: solid EEF brand blue, and a quiet outline variant. */
+.btn-eef {
+  --btn-color: var(--eef-blue);
+  --btn-fg: #fff;
+}
+
+.btn-eef-quiet {
+  --btn-color: transparent;
+  --btn-fg: currentColor;
+  border-color: var(--color-base-300);
+}
+
 /* Small uppercase letter-spaced eyebrow label above section titles. */
 .eef-eyebrow {
   color: var(--eef-blue);

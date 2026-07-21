@@ -41,6 +41,31 @@ defmodule VarselWeb.ReportTriageLiveTest do
     assert {:error, {:redirect, %{to: "/"}}} = conn |> log_in(reporter) |> live(~p"/reports")
   end
 
+  test "resolved reports leave the default queue but stay reachable", %{
+    conn: conn,
+    poc: poc,
+    reporter: reporter
+  } do
+    submit_report(reporter, "Waiting report")
+    accepted = submit_report(reporter, "Consolidated report")
+    CVE.accept_vulnerability_report!(accepted, %{}, actor: poc)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/reports")
+
+    # The accepted report's case title shows up in the accept-into-case
+    # select, so assert on the card headings.
+    assert has_element?(lv, "h3", "Waiting report")
+    refute has_element?(lv, "h3", "Consolidated report")
+
+    lv |> element("button[phx-value-filter=accepted]") |> render_click()
+    assert has_element?(lv, "h3", "Consolidated report")
+    refute has_element?(lv, "h3", "Waiting report")
+
+    lv |> element("button[phx-value-filter=all]") |> render_click()
+    assert has_element?(lv, "h3", "Consolidated report")
+    assert has_element?(lv, "h3", "Waiting report")
+  end
+
   test "lists reports with their payload", %{conn: conn, poc: poc, reporter: reporter} do
     submit_report(reporter, "acme_lib leaks secrets")
 

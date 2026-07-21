@@ -53,9 +53,113 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Assigned case"
       refute html =~ "Hidden case"
     end
+
+    test "filters by state, searches, and shows assignees", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      draft = Fixtures.open_case(poc, %{title: "Draft case"})
+      Cases.assign_case_user!(%{case_id: draft.id, user_id: supporter.id}, actor: poc)
+
+      closed = Fixtures.open_case(poc, %{title: "Closed case"})
+      Cases.close_case!(closed, %{closed_reason: "duplicate"}, actor: poc)
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      # The assignee shows up next to the case.
+      assert html =~ "Draft case"
+      assert html =~ supporter.name
+
+      html = lv |> element("button[phx-value-filter=closed]") |> render_click()
+      assert html =~ "Closed case"
+      refute html =~ "Draft case"
+
+      lv |> element("button[phx-value-filter=all]") |> render_click()
+
+      html =
+        lv
+        |> form("#case-search", %{"query" => "draft C"})
+        |> render_change()
+
+      assert html =~ "Draft case"
+      refute html =~ "Closed case"
+    end
   end
 
   describe "case detail" do
+    test "view mode renders markdown content and cached derived ranges", %{conn: conn, poc: poc} do
+      case_record =
+        Fixtures.open_case(poc, %{
+          title: "Markdown case",
+          description_md: "Some **bold** claim",
+          workarounds_md: "disable the acme integration"
+        })
+
+      package = Fixtures.add_affected_package(poc, case_record)
+
+      channel =
+        Cases.add_package_channel!(
+          %{
+            case_id: case_record.id,
+            affected_package_id: package.id,
+            purl_type: :hex,
+            name: "acme_lib"
+          },
+          actor: poc
+        )
+
+      intro_sha = String.duplicate("a", 40)
+
+      cache = %{
+        "channels" => %{
+          channel.id => %{
+            "versions" => [
+              %{
+                "version" => "1.0.0",
+                "lessThan" => "2.0.0",
+                "status" => "affected",
+                "versionType" => "semver"
+              }
+            ],
+            "pending" => [],
+            "issues" => []
+          }
+        },
+        "git" => %{
+          "versions" => [
+            %{
+              "version" => intro_sha,
+              "lessThan" => "*",
+              "status" => "affected",
+              "versionType" => "git"
+            }
+          ],
+          "pending" => [],
+          "issues" => []
+        },
+        "issues" => ["no introduced boundary fact recorded"]
+      }
+
+      package
+      |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: cache}, authorize?: false)
+      |> Ash.update!()
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # Markdown renders as HTML, including the sections beyond the description.
+      assert html =~ "<strong>bold</strong>"
+      assert html =~ "Workarounds"
+      assert html =~ "disable the acme integration"
+
+      # Cached derived ranges show per channel, plus the implicit git entry.
+      assert html =~ "≥ 1.0.0 &lt; 2.0.0"
+      assert html =~ "(implicit)"
+      assert html =~ "≥ aaaaaaaaaaaa…"
+      assert html =~ "no introduced boundary fact recorded"
+      assert html =~ "Ranges derived"
+    end
+
     test "renders content, allows editing in draft", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc, %{title: "Editable case"})
 

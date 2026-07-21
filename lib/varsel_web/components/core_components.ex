@@ -33,6 +33,7 @@ defmodule VarselWeb.CoreComponents do
   use Phoenix.Component
   use Gettext, backend: VarselWeb.Gettext
 
+  alias AshPhoenix.LiveView, as: AshLiveView
   alias Phoenix.HTML.Form
   alias Phoenix.HTML.FormField
   alias Phoenix.LiveView.JS
@@ -120,6 +121,158 @@ defmodule VarselWeb.CoreComponents do
       </button>
       """
     end
+  end
+
+  @doc """
+  Renders the full-width console page header: a tinted band under the navbar
+  with eyebrow, title and subtitle on the left and the page's actions on the
+  right. Content below it lays out its own container.
+  """
+  attr :title, :string, required: true
+  attr :subtitle, :string, default: nil
+  attr :eyebrow, :string, default: "CNA Console"
+  slot :actions
+
+  def console_header(assigns) do
+    ~H"""
+    <div class="bg-base-200 border-b border-base-300">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+        <div>
+          <p class="eef-eyebrow mb-1">{@eyebrow}</p>
+          <h1 class="text-2xl font-bold leading-tight">{@title}</h1>
+          <p :if={@subtitle} class="text-sm text-base-content/60 mt-0.5">{@subtitle}</p>
+        </div>
+        <div :if={@actions != []} class="flex flex-wrap items-center gap-2 pb-0.5">
+          {render_slot(@actions)}
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders the console's stat-tile row: one clickable tile per queue state,
+  count on top, dot + label below — the overview and the filter are the same
+  control. Clicking pushes `event` with the tile's value as the `filter`
+  param. Options are maps with `:value`, `:label`, `:count` and an optional
+  `:dot` (a background color class).
+  """
+  attr :active, :string, required: true
+  attr :event, :string, default: "filter"
+  attr :options, :list, required: true
+
+  def stat_tiles(assigns) do
+    ~H"""
+    <div class="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2">
+      <button
+        :for={option <- @options}
+        type="button"
+        class={[
+          "rounded-lg border p-3 text-left transition-colors cursor-pointer",
+          if(@active == option.value,
+            do: "border-primary bg-primary/10",
+            else: "border-base-300 bg-base-200 hover:bg-base-300/60"
+          )
+        ]}
+        phx-click={@event}
+        phx-value-filter={option.value}
+      >
+        <div class="text-2xl font-bold leading-tight tabular-nums">{option.count}</div>
+        <div class={[
+          "flex items-center gap-1.5 mt-0.5 text-[0.68rem] font-semibold uppercase tracking-wider",
+          if(@active == option.value, do: "text-primary", else: "text-base-content/60")
+        ]}>
+          <span :if={option[:dot]} class={["size-1.5 rounded-full shrink-0", option.dot]}></span>
+          <span class="truncate">{option.label}</span>
+        </div>
+      </button>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a lifecycle state as dot + word — color never carries the meaning
+  alone. `dot` is a background color class (e.g. "bg-warning").
+  """
+  attr :dot, :string, required: true
+  slot :inner_block, required: true
+
+  def state(assigns) do
+    ~H"""
+    <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span class={["size-1.5 rounded-full shrink-0", @dot]}></span>
+      {render_slot(@inner_block)}
+    </span>
+    """
+  end
+
+  @doc """
+  Renders prev/next pagination for an `Ash.Page.Offset` (loaded with a
+  count). Clicking pushes `event` with "prev"/"next" as the `page` param —
+  feed that to `VarselWeb.LivePagination.change_page/3`. Renders nothing for
+  a single page.
+  """
+  attr :page, :any, required: true, doc: "an Ash.Page.Offset with count loaded"
+  attr :event, :string, default: "paginate"
+
+  def pagination(assigns) do
+    assigns =
+      assign(assigns,
+        # AshPhoenix's page_number/1 is zero-based for exact-multiple offsets.
+        page_number: div(assigns.page.offset || 0, max(assigns.page.limit, 1)) + 1,
+        last_page: AshLiveView.last_page(assigns.page)
+      )
+
+    ~H"""
+    <div :if={is_integer(@last_page) and @last_page > 1} class="flex items-center gap-1">
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs border border-base-300"
+        disabled={not AshLiveView.prev_page?(@page)}
+        phx-click={@event}
+        phx-value-page="prev"
+      >
+        «
+      </button>
+      <span class="text-xs text-base-content/60 tabular-nums px-2">
+        Page {@page_number} of {@last_page}
+      </span>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs border border-base-300"
+        disabled={not AshLiveView.next_page?(@page)}
+        phx-click={@event}
+        phx-value-page="next"
+      >
+        »
+      </button>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders the console list card's search input: a magnifier icon inside a
+  rounded field. Wrap it in the page's own `phx-change` form — the input's
+  name is `query`.
+  """
+  attr :value, :string, required: true
+  attr :placeholder, :string, required: true
+
+  def console_search(assigns) do
+    ~H"""
+    <label class="input input-sm flex items-center gap-2 w-64 rounded-lg">
+      <.icon name="hero-magnifying-glass-mini" class="size-4 text-base-content/40 shrink-0" />
+      <input
+        type="search"
+        name="query"
+        value={@value}
+        placeholder={@placeholder}
+        autocomplete="off"
+        phx-debounce="200"
+        class="grow min-w-0 bg-transparent focus:outline-none"
+      />
+    </label>
+    """
   end
 
   @doc """

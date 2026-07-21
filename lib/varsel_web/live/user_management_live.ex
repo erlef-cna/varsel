@@ -63,62 +63,68 @@ defmodule VarselWeb.UserManagementLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl py-10">
-      <Layouts.flash_group flash={@flash} />
+    <Layouts.flash_group flash={@flash} />
 
-      <.header class="mb-6">
-        User Management
-        <:subtitle>Manage who can access the CNA tooling and their role.</:subtitle>
-      </.header>
+    <.console_header
+      title="Users"
+      subtitle="Manage who can access the CNA tooling and their role."
+    />
 
-      <div class="overflow-x-auto">
-        <table class="table table-zebra">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>GitHub</th>
-              <th>Role</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :for={user <- @users}>
-              <td class="font-medium">
-                {user.name || "—"}
-                <span :if={user.id == @current_user.id} class="badge badge-ghost badge-sm ml-1">
-                  you
-                </span>
-              </td>
-              <td>{user.email || "—"}</td>
-              <td>
-                <a
-                  :if={user.github_handle}
-                  href={"https://github.com/#{user.github_handle}"}
-                  class="link link-primary"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  @{user.github_handle}
-                </a>
-                <span :if={is_nil(user.github_handle)}>—</span>
-              </td>
-              <td>
-                <form id={"role-#{user.id}"} phx-change="set_role">
-                  <input type="hidden" name="user_id" value={user.id} />
-                  <select name="role" class="select select-bordered select-sm">
-                    <option
-                      :for={{label, value} <- @roles}
-                      value={role_value(value)}
-                      selected={user.role == value}
-                    >
-                      {label}
-                    </option>
-                  </select>
-                </form>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+      <div class="rounded-box border border-base-300 overflow-hidden">
+        <div class="px-4 py-2.5 border-b border-base-300 text-sm text-base-content/70 tabular-nums">
+          {if length(@users) == 1, do: "1 user", else: "#{length(@users)} users"}
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>GitHub</th>
+                <th class="text-right">Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={user <- @users} class="hover:bg-base-200">
+                <td class="font-medium">
+                  {user.name || "—"}
+                  <span :if={user.id == @current_user.id} class="badge badge-ghost badge-sm ml-1">
+                    you
+                  </span>
+                </td>
+                <td class="text-base-content/70">{user.email || "—"}</td>
+                <td>
+                  <a
+                    :if={user.github_handle}
+                    href={"https://github.com/#{user.github_handle}"}
+                    class="link link-hover text-primary"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    @{user.github_handle}
+                  </a>
+                  <span :if={is_nil(user.github_handle)} class="text-base-content/50">—</span>
+                </td>
+                <td class="text-right">
+                  <form id={"role-#{user.id}"} phx-change="set_role" class="inline-block">
+                    <input type="hidden" name="user_id" value={user.id} />
+                    <select name="role" class="select select-bordered select-sm w-32">
+                      <option
+                        :for={{label, value} <- @roles}
+                        value={role_value(value)}
+                        selected={user.role == value}
+                      >
+                        {label}
+                      </option>
+                    </select>
+                  </form>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
     """

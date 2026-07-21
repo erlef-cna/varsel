@@ -109,17 +109,31 @@ defmodule VarselWeb.Router do
     live "/common-weaknesses", CommonWeaknessesLive, :index
 
     # POC-only admin tooling (loads current_user + gates on the POC role).
-    # Registered before the public `/cves` scope so `/cves/manage` wins over
-    # `/cves/:cve_id`.
+    # Registered before the public `/cves` scope so `/cves/manage/:id` wins
+    # over `/cves/:cve_id`.
     ash_authentication_live_session :poc_required,
       on_mount: [
         {VarselWeb.LiveUserAuth, :live_poc_required},
         {VarselWeb.LiveNotifications, :default}
       ] do
       live "/users", UserManagementLive, :index
-      live "/cves/manage", VarselLive, :index
       live "/cves/manage/:id", VarselEditLive, :edit
       live "/reports", ReportTriageLive, :index
+    end
+
+    # Public pages that adapt to a signed-in user: the CVE list doubles as
+    # the POC's management console.
+    # The management list merged into /cves; keep old bookmarks working.
+    get "/cves/manage", PageController, :manage_redirect
+
+    # Public pages that adapt to a signed-in user: the CVE list doubles as
+    # the POC's management console.
+    ash_authentication_live_session :user_optional,
+      on_mount: [
+        {VarselWeb.LiveUserAuth, :live_user_optional},
+        {VarselWeb.LiveNotifications, :default}
+      ] do
+      live "/cves", CveListLive, :index
     end
 
     # Any logged-in user may report a vulnerability and manage their own tokens.
@@ -243,7 +257,6 @@ defmodule VarselWeb.Router do
   scope "/", VarselWeb do
     pipe_through :browser
 
-    live "/cves", CveListLive, :index
     # HTML detail. `.json` requests fall through to the JSON scope below since
     # this matches a single non-".json" segment.
     get "/cves/:cve_id", CveController, :show_html

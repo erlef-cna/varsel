@@ -108,12 +108,9 @@ defmodule VarselWeb.CommonWeaknessesLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl py-10">
-      <header class="mb-8 pb-6 border-b border-base-300">
-        <p class="eef-eyebrow mb-2">Analysis</p>
-        <h1 class="text-3xl sm:text-4xl font-bold">{@page.title}</h1>
-      </header>
+    <.console_header eyebrow="Analysis" title={@page.title} />
 
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
       <div class="prose prose-base max-w-none mb-6">{raw(@page.body)}</div>
 
       <%!-- Breadcrumb / drill-down controls --%>

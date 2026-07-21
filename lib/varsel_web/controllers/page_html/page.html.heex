@@ -2,13 +2,9 @@
 SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
 SPDX-License-Identifier: Apache-2.0
 --%>
-<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-6xl">
-  <header class="mb-8 pb-6 border-b border-base-300">
-    <p class="eef-eyebrow mb-2">Documentation</p>
-    <h1 class="text-3xl sm:text-4xl font-bold">{@page.title}</h1>
-    <p :if={@page.description} class="text-base-content/60 mt-2 max-w-2xl">{@page.description}</p>
-  </header>
+<.console_header eyebrow="Documentation" title={@page.title} subtitle={@page.description} />
 
+<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-6xl">
   <div class={[@page.toc != [] && "lg:grid lg:grid-cols-[1fr_15rem] lg:gap-12"]}>
     <article class="prose prose-base max-w-none min-w-0">
       {raw(@page.body)}

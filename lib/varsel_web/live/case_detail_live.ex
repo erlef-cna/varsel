@@ -26,6 +26,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
+  alias Varsel.Cases.Markdown
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposable
@@ -1310,16 +1311,36 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
       </.form>
 
-      <div :if={is_nil(@content_form)} class="prose max-w-none">
-        <p :if={@case_record.description_md} class="whitespace-pre-wrap">
-          {@case_record.description_md}
-        </p>
+      <div :if={is_nil(@content_form)} class="space-y-4">
+        <.markdown :if={@case_record.description_md} content={@case_record.description_md} />
         <p :if={is_nil(@case_record.description_md)} class="text-base-content/60">
           No description yet.
         </p>
+
+        <div :for={
+          {label, content} <- [
+            {"Configurations", @case_record.configurations_md},
+            {"Workarounds", @case_record.workarounds_md},
+            {"Solutions", @case_record.solutions_md}
+          ]
+        }>
+          <div :if={content}>
+            <h3 class="text-sm font-semibold text-base-content/70 mb-1">{label}</h3>
+            <.markdown content={content} />
+          </div>
+        </div>
+
         <p :if={@case_record.cvss_v4} class="font-mono text-sm">{@case_record.cvss_v4.vector}</p>
       </div>
     </section>
+    """
+  end
+
+  attr :content, :string, required: true
+
+  defp markdown(assigns) do
+    ~H"""
+    <div class="prose prose-sm max-w-none">{raw(Markdown.to_html(@content))}</div>
     """
   end
 
@@ -1424,6 +1445,9 @@ defmodule VarselWeb.CaseDetailLive do
                   >
                     {channel_label(package, channel) || "—"}
                   </td>
+                  <td class="text-xs text-base-content/70 font-mono">
+                    {derived_versions_label(package, channel.id)}
+                  </td>
                   <td class="text-xs text-base-content/60">
                     {if channel.versions_override, do: "versions overridden"}
                     {if channel.entry_override, do: "entry overridden"}
@@ -1456,9 +1480,27 @@ defmodule VarselWeb.CaseDetailLive do
                     </button>
                   </td>
                 </tr>
+                <tr :if={package.repo_url}>
+                  <td><span class="badge badge-ghost badge-sm">git</span></td>
+                  <td class="font-mono text-base-content/60">
+                    {String.replace_prefix(package.repo_url, "https://", "")} (implicit)
+                  </td>
+                  <td class="text-xs text-base-content/70 font-mono">
+                    {derived_versions_label(package, "git")}
+                  </td>
+                  <td class="text-xs text-base-content/60"></td>
+                  <td :if={@mode != :view}></td>
+                </tr>
               </tbody>
             </table>
             <p :if={package.channels == []} class="text-sm text-base-content/60">No channels yet.</p>
+            <p :if={derivation_issues(package) != []} class="text-xs text-warning mt-1">
+              ⚠ {Enum.join(derivation_issues(package), " · ")}
+            </p>
+            <p :if={package.derivation_cached_at} class="text-xs text-base-content/50 mt-1">
+              Ranges derived {format_dt(package.derivation_cached_at)} — refresh derivation for
+              current data.
+            </p>
           </div>
 
           <div class="mt-2">
@@ -1485,7 +1527,9 @@ defmodule VarselWeb.CaseDetailLive do
                       {event.event}
                     </span>
                   </td>
-                  <td class="font-mono text-xs break-all">{event.commit_sha || event.version}</td>
+                  <td class="font-mono text-xs" title={event.commit_sha}>
+                    {boundary_label(event)}
+                  </td>
                   <td class="text-xs">
                     <span
                       :if={event.package_channel_id}
@@ -1807,9 +1851,9 @@ defmodule VarselWeb.CaseDetailLive do
           class="bg-base-300 rounded p-2 text-xs overflow-x-auto max-h-40"
         >{pretty_json(@proposal.proposed_value["value"])}</pre>
 
-        <p :if={@proposal.reasoning} class="text-base-content/80 whitespace-pre-wrap">
-          {@proposal.reasoning}
-        </p>
+        <div :if={@proposal.reasoning} class="text-base-content/80">
+          <.markdown content={@proposal.reasoning} />
+        </div>
 
         <p class="text-xs text-base-content/60">
           by {display_name(@proposal.author)} · {format_dt(@proposal.inserted_at)}
@@ -1866,7 +1910,7 @@ defmodule VarselWeb.CaseDetailLive do
           {display_name(comment.author)} · {format_dt(comment.inserted_at)}
           <span :if={comment.proposal_id} class="badge badge-ghost badge-xs">on proposal</span>
         </p>
-        <p class="whitespace-pre-wrap">{comment.body}</p>
+        <.markdown content={comment.body} />
       </div>
 
       <p :if={@case_record.comments == []} class="text-sm text-base-content/60">No comments yet.</p>
@@ -2342,6 +2386,66 @@ defmodule VarselWeb.CaseDetailLive do
         end
     end
   end
+
+  # Compact per-channel summary of the cached derivation result ("git" is the
+  # implicit forge entry). Never authoritative — publish recomputes.
+  defp derived_versions_label(package, key) do
+    case channel_derivation(package.derivation_cache, key) do
+      nil ->
+        nil
+
+      derivation ->
+        ranges = Enum.map(derivation["versions"] || [], &range_label/1)
+        pending = if (derivation["pending"] || []) == [], do: [], else: ["fix unreleased"]
+
+        case ranges ++ pending do
+          [] -> "no derived range"
+          parts -> Enum.join(parts, " · ")
+        end
+    end
+  end
+
+  defp channel_derivation(nil, _key), do: nil
+  defp channel_derivation(cache, "git"), do: cache["git"]
+  defp channel_derivation(cache, channel_id), do: get_in(cache, ["channels", channel_id])
+
+  defp range_label(%{"version" => from, "changes" => changes}) when is_list(changes) do
+    "≥ #{from}; fixed: #{Enum.map_join(changes, ", ", &shorten(&1["at"]))}"
+  end
+
+  defp range_label(%{"version" => from, "lessThan" => "*"}), do: "≥ #{shorten(from)}"
+
+  defp range_label(%{"version" => from, "lessThan" => to}) do
+    "≥ #{shorten(from)} < #{shorten(to)}"
+  end
+
+  defp range_label(_other), do: "custom"
+
+  defp derivation_issues(%{derivation_cache: nil}), do: []
+
+  defp derivation_issues(%{derivation_cache: cache}) do
+    channel_issues =
+      cache
+      |> Map.get("channels", %{})
+      |> Map.values()
+      |> Enum.flat_map(&(&1["issues"] || []))
+
+    Enum.uniq((cache["issues"] || []) ++ channel_issues)
+  end
+
+  defp boundary_label(%{commit_sha: sha}) when is_binary(sha), do: shorten(sha)
+  defp boundary_label(%{version: version}), do: version
+
+  # Full commit SHAs drown the tables; 12 characters identify them fine.
+  defp shorten(value) when is_binary(value) do
+    if String.match?(value, ~r/^[0-9a-f]{40}$/) do
+      String.slice(value, 0, 12) <> "…"
+    else
+      value
+    end
+  end
+
+  defp shorten(value), do: value
 
   # Renders an {:array, :string} form value back into its comma-separated
   # text-input representation.

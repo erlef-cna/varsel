@@ -75,7 +75,7 @@ defmodule VarselWeb.VarselLiveTest do
     reserved_record("CVE-#{@year}-1001")
     published_record("CVE-#{@year}-1002", "Published thing")
 
-    {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cves/manage")
+    {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cves")
 
     assert html =~ "CVE Management"
     assert html =~ "CVE-#{@year}-1001"
@@ -84,11 +84,72 @@ defmodule VarselWeb.VarselLiveTest do
     assert html =~ "Published thing"
   end
 
+  test "filters by state and searches by CVE ID or title", %{conn: conn} do
+    poc = register("poc", :poc)
+    reserved_record("CVE-#{@year}-1001")
+    published_record("CVE-#{@year}-1002", "Published thing")
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    html = lv |> element("button[phx-value-filter=published]") |> render_click()
+    assert html =~ "Published thing"
+    refute html =~ "CVE-#{@year}-1001"
+
+    html = lv |> element("button[phx-value-filter=all]") |> render_click()
+    assert html =~ "CVE-#{@year}-1001"
+
+    html =
+      lv
+      |> form("#cve-record-search", %{"query" => "published TH"})
+      |> render_change()
+
+    assert html =~ "Published thing"
+    refute html =~ "CVE-#{@year}-1001"
+  end
+
+  test "paginates past 25 records", %{conn: conn} do
+    poc = register("poc", :poc)
+    for n <- 1001..1030, do: reserved_record("CVE-#{@year}-#{n}")
+
+    {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    assert html =~ "30 records"
+    assert html =~ "Page 1 of 2"
+
+    html = lv |> element("button[phx-value-page=next]") |> render_click()
+    assert html =~ "Page 2 of 2"
+  end
+
+  test "rejecting a record goes through the confirmation modal", %{conn: conn} do
+    poc = register("poc", :poc)
+    record = reserved_record("CVE-#{@year}-1005")
+
+    Req.Test.stub(MitreCveApi, fn conn ->
+      if conn.method == "PUT" do
+        Req.Test.json(conn, %{"message" => "CVE ID rejected"})
+      else
+        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+      end
+    end)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    lv |> element(~s{button[phx-value-id="#{record.id}"]}, "Reject…") |> render_click()
+    assert render(lv) =~ "Reject CVE-#{@year}-1005"
+
+    lv
+    |> form("#reject-modal form", %{"rejection_reason" => "duplicate assignment"})
+    |> render_submit()
+
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :rejected
+    refute render(lv) =~ "Reject CVE-#{@year}-1005"
+  end
+
   test "'Reserve a new one' moves a reserved row to draft", %{conn: conn} do
     poc = register("poc", :poc)
     record = reserved_record("CVE-#{@year}-1003")
 
-    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves/manage")
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
 
     lv |> element("button", "Reserve a new one") |> render_click()
 
@@ -100,7 +161,7 @@ defmodule VarselWeb.VarselLiveTest do
     poc = register("poc", :poc)
     published_record("CVE-#{@year}-1004", "Only published")
 
-    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves/manage")
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
 
     html = lv |> element("button", "Reserve a new one") |> render_click()
 
@@ -153,7 +214,7 @@ defmodule VarselWeb.VarselLiveTest do
       end
     end)
 
-    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves/manage")
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
 
     lv |> element("button", "Sync with MITRE") |> render_click()
     render_async(lv, 5000)
@@ -177,7 +238,7 @@ defmodule VarselWeb.VarselLiveTest do
     poc = register("poc", :poc)
     record = reserved_record("CVE-#{@year}-1005")
 
-    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves/manage")
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
 
     refute has_element?(lv, ~s(span.badge), "draft")
 
@@ -186,16 +247,37 @@ defmodule VarselWeb.VarselLiveTest do
     assert render(lv) =~ "draft"
   end
 
-  test "a non-POC is redirected away", %{conn: conn} do
+  test "a non-POC sees only published records and no management controls", %{conn: conn} do
     register("first", :poc)
     supporter = register("supporter", :supporter)
+    reserved_record("CVE-#{@year}-1001")
+    published_record("CVE-#{@year}-1002", "Published thing")
 
-    assert {:error, {:redirect, %{to: "/"}}} =
-             conn |> log_in(supporter) |> live(~p"/cves/manage")
+    {:ok, _lv, html} = conn |> log_in(supporter) |> live(~p"/cves")
+
+    assert html =~ "Issued CVEs"
+    assert html =~ "Published thing"
+    refute html =~ "CVE-#{@year}-1001"
+    refute html =~ "Reserve a new one"
+    refute html =~ "Reject…"
   end
 
-  test "an anonymous visitor is redirected to sign in", %{conn: conn} do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/cves/manage")
+  test "an anonymous visitor sees the public list", %{conn: conn} do
+    reserved_record("CVE-#{@year}-1001")
+    published_record("CVE-#{@year}-1002", "Published thing")
+
+    {:ok, _lv, html} = live(conn, ~p"/cves")
+
+    assert html =~ "Issued CVEs"
+    assert html =~ "Published thing"
+    refute html =~ "CVE-#{@year}-1001"
+  end
+
+  test "the old management path redirects to the merged list", %{conn: conn} do
+    poc = register("poc", :poc)
+
+    conn = conn |> log_in(poc) |> get(~p"/cves/manage")
+    assert redirected_to(conn) == ~p"/cves"
   end
 
   describe "edit page" do

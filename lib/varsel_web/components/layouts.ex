@@ -135,6 +135,7 @@ defmodule VarselWeb.Layouts do
 
   @doc "Primary site navigation bar."
   attr :current_user, :any, default: nil
+  attr :current_path, :string, default: nil
 
   def site_nav(assigns) do
     ~H"""
@@ -153,20 +154,12 @@ defmodule VarselWeb.Layouts do
         <%!-- Desktop menu --%>
         <ul class="hidden md:flex items-center gap-1 ml-2 text-sm text-white">
           <li>
-            <a
-              href={~p"/cves"}
-              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
-            >
-              CVEs
-            </a>
+            <.nav_link href={~p"/cves"} current_path={@current_path}>CVEs</.nav_link>
           </li>
           <li>
-            <a
-              href={~p"/common-weaknesses"}
-              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
-            >
+            <.nav_link href={~p"/common-weaknesses"} current_path={@current_path}>
               Weaknesses
-            </a>
+            </.nav_link>
           </li>
           <li class="group relative">
             <button class="px-3 py-2 rounded hover:bg-white/10 transition-colors flex items-center gap-1">
@@ -183,64 +176,47 @@ defmodule VarselWeb.Layouts do
             </div>
           </li>
           <li :if={@current_user}>
-            <a
-              href={~p"/cases"}
-              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
-            >
-              Cases
-            </a>
+            <.nav_link href={~p"/cases"} current_path={@current_path}>Cases</.nav_link>
           </li>
           <li :if={poc?(@current_user)}>
-            <a
-              href={~p"/reports"}
-              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
-            >
-              Reports
-            </a>
+            <.nav_link href={~p"/reports"} current_path={@current_path}>Reports</.nav_link>
           </li>
           <li :if={poc?(@current_user)}>
-            <a
-              href={~p"/cves/manage"}
-              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
-            >
-              Manage CVEs
-            </a>
-          </li>
-          <li :if={poc?(@current_user)}>
-            <a
-              href={~p"/users"}
-              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
-            >
-              Users
-            </a>
-          </li>
-          <li :if={@current_user}>
-            <a
-              href={~p"/settings/tokens"}
-              class="eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block"
-            >
-              API Tokens
-            </a>
+            <.nav_link href={~p"/users"} current_path={@current_path}>Users</.nav_link>
           </li>
         </ul>
 
         <div class="ml-auto flex items-center gap-2">
           <.theme_toggle />
-          <span
-            :if={@current_user}
-            class="text-sm text-white/70 hidden lg:block max-w-[12rem] truncate"
-          >
-            {@current_user.name || @current_user.email}
-          </span>
+          <div :if={@current_user} class="dropdown dropdown-end">
+            <div
+              tabindex="0"
+              role="button"
+              aria-label="Account menu"
+              class="btn btn-ghost btn-sm btn-circle text-white hover:bg-white/10"
+            >
+              <.icon name="hero-user-circle" class="size-6" />
+            </div>
+            <ul
+              tabindex="0"
+              class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-56 p-2 z-50"
+            >
+              <li class="menu-title truncate">
+                {@current_user.name || @current_user.email}
+              </li>
+              <li><a href={~p"/settings/tokens"}>API Tokens</a></li>
+              <li><a href="/sign-out" data-method="delete">Sign out</a></li>
+            </ul>
+          </div>
           <a
-            :if={@current_user}
-            href="/sign-out"
-            data-method="delete"
-            class="btn btn-ghost btn-sm text-white hover:bg-white/10"
+            :if={is_nil(@current_user)}
+            href="/sign-in"
+            aria-label="Sign in"
+            data-tip="Sign in"
+            class="btn btn-ghost btn-sm btn-circle text-white hover:bg-white/10 tooltip tooltip-bottom"
           >
-            Sign out
+            <.icon name="hero-arrow-right-end-on-rectangle" class="size-5" />
           </a>
-          <a :if={is_nil(@current_user)} href="/sign-in" class="btn btn-primary btn-sm">Login</a>
 
           <%!-- Mobile menu --%>
           <div class="dropdown dropdown-end md:hidden">
@@ -256,13 +232,53 @@ defmodule VarselWeb.Layouts do
               <li class="menu-title mt-1">Documentation</li>
               <li :for={{label, path} <- doc_links()}><a href={path}>{label}</a></li>
               <li :if={@current_user}><a href={~p"/cases"}>Cases</a></li>
-              <li :if={@current_user}><a href={~p"/settings/tokens"}>API Tokens</a></li>
             </ul>
           </div>
         </div>
       </nav>
     </header>
     """
+  end
+
+  # The nav sections owning path prefixes; a link is active when it is the
+  # most specific owner of the current path (so /settings/tokens lights up
+  # "API Tokens").
+  @nav_prefixes [
+    "/cves",
+    "/common-weaknesses",
+    "/cases",
+    "/reports",
+    "/users",
+    "/settings/tokens"
+  ]
+
+  attr :href, :string, required: true
+  attr :current_path, :string, default: nil
+  slot :inner_block, required: true
+
+  defp nav_link(assigns) do
+    ~H"""
+    <a
+      href={@href}
+      class={[
+        "eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block",
+        nav_active?(@current_path, @href) && "bg-white/10 font-semibold"
+      ]}
+    >
+      {render_slot(@inner_block)}
+    </a>
+    """
+  end
+
+  defp nav_active?(nil, _href), do: false
+
+  defp nav_active?(current_path, href) do
+    owner =
+      @nav_prefixes
+      |> Enum.filter(&(current_path == &1 or String.starts_with?(current_path, &1 <> "/")))
+      |> Enum.max_by(&String.length/1, fn -> nil end)
+
+    owner == href
   end
 
   @doc "Site footer with EEF navy band."

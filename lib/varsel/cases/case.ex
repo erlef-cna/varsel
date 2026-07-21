@@ -138,6 +138,12 @@ defmodule Varsel.Cases.Case do
     read :list_cases do
       description "Lists cases in every state, most recently updated first."
       prepare build(sort: [updated_at: :desc])
+
+      pagination offset?: true,
+                 keyset?: true,
+                 countable: :by_default,
+                 default_limit: 25,
+                 required?: false
     end
 
     create :open do

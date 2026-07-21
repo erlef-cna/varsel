@@ -59,7 +59,10 @@ defmodule VarselWeb.ApiKeySettingsLive do
          |> put_flash(:info, "Token #{api_key.name} created.")}
 
       {:error, form} ->
-        {:noreply, assign(socket, form: form)}
+        {:noreply,
+         socket
+         |> assign(form: form)
+         |> put_flash(:error, "Could not create the token: #{form_errors(form)}")}
     end
   end
 
@@ -99,6 +102,12 @@ defmodule VarselWeb.ApiKeySettingsLive do
     assign(socket, api_keys: api_keys)
   end
 
+  defp form_errors(form) do
+    form.source
+    |> AshPhoenix.Form.errors()
+    |> Enum.map_join("; ", fn {field, message} -> "#{field} #{message}" end)
+  end
+
   defp expires_at("never"), do: nil
 
   defp expires_at(days) do
@@ -111,19 +120,46 @@ defmodule VarselWeb.ApiKeySettingsLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl py-10">
-      <Layouts.flash_group flash={@flash} />
+    <Layouts.flash_group flash={@flash} />
 
-      <.header class="mb-6">
-        API Tokens
-        <:subtitle>
-          Personal access tokens for the JSON:API, GraphQL and MCP endpoints. Pass them as
-          <code class="text-xs">Authorization: Bearer &lt;token&gt;</code>
-          headers.
-        </:subtitle>
-      </.header>
+    <.console_header
+      title="API Tokens"
+      subtitle="Personal access tokens for the GraphQL and MCP endpoints."
+    />
 
-      <div :if={@created_key} class="alert alert-warning mb-6" role="alert">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6 space-y-4">
+      <div class="rounded-box border border-base-300 p-4">
+        <h2 class="font-semibold">Create a token</h2>
+        <p class="text-sm text-base-content/60 mt-0.5 mb-3">
+          The token authenticates API requests as you — send it as an
+          <code class="font-mono text-xs">Authorization: Bearer</code>
+          header. It is shown exactly once, right after creation.
+        </p>
+        <.form
+          for={@form}
+          id="api-key-form"
+          phx-submit="create"
+          phx-change="validate"
+          class="flex flex-wrap items-center gap-2"
+        >
+          <input
+            type="text"
+            name={@form[:name].name}
+            value={@form[:name].value}
+            required
+            placeholder="Token name, e.g. CI pipeline"
+            class="input input-bordered input-sm w-64"
+          />
+          <select name="expiry" class="select select-bordered select-sm w-32">
+            <option :for={{label, value} <- @expiry_presets} value={value} selected={value == @expiry}>
+              {label}
+            </option>
+          </select>
+          <button type="submit" class="btn btn-sm btn-eef">Create token</button>
+        </.form>
+      </div>
+
+      <div :if={@created_key} class="alert alert-warning" role="alert">
         <.icon name="hero-key" class="size-5 shrink-0" />
         <div>
           <p class="font-medium">
@@ -133,69 +169,53 @@ defmodule VarselWeb.ApiKeySettingsLive do
         </div>
       </div>
 
-      <.form
-        for={@form}
-        id="api-key-form"
-        phx-submit="create"
-        phx-change="validate"
-        class="flex flex-wrap items-end gap-3 mb-8"
-      >
-        <.input
-          field={@form[:name]}
-          type="text"
-          required
-          placeholder="e.g. CI pipeline"
-          class="input input-bordered input-sm w-56"
-        >
-          <:label>Name</:label>
-        </.input>
-        <label class="fieldset">
-          <span class="label mb-1">Expires</span>
-          <select name="expiry" class="select select-bordered select-sm">
-            <option :for={{label, value} <- @expiry_presets} value={value} selected={value == @expiry}>
-              {label}
-            </option>
-          </select>
-        </label>
-        <button type="submit" class="btn btn-primary btn-sm">Create token</button>
-      </.form>
+      <div class="rounded-box border border-base-300 overflow-hidden">
+        <div class="px-4 py-2.5 border-b border-base-300 text-sm text-base-content/70 tabular-nums">
+          {if length(@api_keys) == 1, do: "1 token", else: "#{length(@api_keys)} tokens"}
+        </div>
 
-      <div class="overflow-x-auto">
-        <table class="table table-zebra">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Created</th>
-              <th>Expires</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :for={api_key <- @api_keys}>
-              <td class="font-medium">{api_key.name}</td>
-              <td>{format_date(api_key.inserted_at)}</td>
-              <td>{format_date(api_key.expires_at)}</td>
-              <td>
-                <span :if={api_key.valid} class="badge badge-success badge-sm">active</span>
-                <span :if={!api_key.valid} class="badge badge-ghost badge-sm">expired</span>
-              </td>
-              <td class="text-right">
-                <button
-                  phx-click="revoke"
-                  phx-value-id={api_key.id}
-                  data-confirm="Revoke this token? Applications using it will stop working."
-                  class="btn btn-error btn-outline btn-xs"
-                >
-                  Revoke
-                </button>
-              </td>
-            </tr>
-            <tr :if={@api_keys == []}>
-              <td colspan="5" class="text-center text-base-content/60">No tokens yet.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div :if={@api_keys != []} class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Expires</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={api_key <- @api_keys} class="hover:bg-base-200">
+                <td class="font-medium">{api_key.name}</td>
+                <td>
+                  <.state :if={api_key.valid} dot="bg-success">Active</.state>
+                  <.state :if={!api_key.valid} dot="bg-base-content/30">Expired</.state>
+                </td>
+                <td class="whitespace-nowrap tabular-nums text-base-content/70">
+                  {format_date(api_key.inserted_at)}
+                </td>
+                <td class="whitespace-nowrap tabular-nums text-base-content/70">
+                  {format_date(api_key.expires_at)}
+                </td>
+                <td class="text-right">
+                  <button
+                    phx-click="revoke"
+                    phx-value-id={api_key.id}
+                    data-confirm="Revoke this token? Applications using it will stop working."
+                    class="link link-hover text-error/80 text-sm"
+                  >
+                    Revoke
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p :if={@api_keys == []} class="text-center text-base-content/60 py-8">
+          No tokens yet — create one above.
+        </p>
       </div>
     </div>
     """

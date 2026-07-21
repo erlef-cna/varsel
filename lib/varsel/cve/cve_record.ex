@@ -277,6 +277,12 @@ defmodule Varsel.CVE.CveRecord do
                 load: [:cve_id, :title, :date_published, :date_updated],
                 sort: [state: :asc, date_published: :desc]
               )
+
+      pagination offset?: true,
+                 keyset?: true,
+                 countable: :by_default,
+                 default_limit: 25,
+                 required?: false
     end
 
     read :get_published do
