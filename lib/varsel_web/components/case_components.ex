@@ -176,18 +176,17 @@ defmodule VarselWeb.CaseComponents do
   def suggestion_diff(assigns) do
     ~H"""
     <div class="rounded-md border border-base-300 overflow-hidden text-sm">
+      <%!-- phx-no-format: pre-wrap would render the formatter's indentation --%>
       <div
         :if={@old not in [nil, ""]}
         class="px-2.5 py-1 bg-error/10 text-error/80 line-through decoration-error/40 whitespace-pre-wrap break-words"
-      >
-        {@old}
-      </div>
+        phx-no-format
+      >{@old}</div>
       <div
         :if={@new not in [nil, ""]}
         class="px-2.5 py-1 bg-success/10 text-success whitespace-pre-wrap break-words"
-      >
-        {@new}
-      </div>
+        phx-no-format
+      >{@new}</div>
     </div>
     """
   end

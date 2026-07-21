@@ -889,7 +889,11 @@ defmodule VarselWeb.CaseLiveTest do
       )
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
-      assert html =~ "Diff to published"
+
+      # The diff lives in the preview slide-over.
+      refute html =~ "Diff to published"
+      lv |> element("button", "Preview") |> render_click()
+      assert render_async(lv) =~ "Diff to published"
 
       lv |> element("button", "Diff to published") |> render_click()
       html = render_async(lv)
@@ -901,11 +905,12 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "bg-success/10"
     end
 
-    test "never-published cases show no diff button", %{conn: conn, poc: poc} do
+    test "never-published cases show no diff button in the preview", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 
-      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
-      refute html =~ "Diff to published"
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      lv |> element("button", "Preview") |> render_click()
+      refute render_async(lv) =~ "Diff to published"
     end
   end
 

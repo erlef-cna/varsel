@@ -140,6 +140,7 @@ defmodule VarselWeb.CaseDetailLive do
         mode: :view,
         child_form: nil,
         preview: nil,
+        preview_open?: false,
         diff: nil,
         users: nil,
         catalog_options: nil
@@ -294,14 +295,14 @@ defmodule VarselWeb.CaseDetailLive do
 
     {:noreply,
      socket
-     |> assign(preview: :loading)
+     |> assign(preview: :loading, preview_open?: true)
      |> start_async(:preview, fn ->
        Cases.render_case_preview!(%{id: case_record.id}, actor: actor)
      end)}
   end
 
   def handle_event("close_preview", _params, socket) do
-    {:noreply, assign(socket, preview: nil)}
+    {:noreply, assign(socket, preview_open?: false, preview: nil, diff: nil)}
   end
 
   # Diff the freshly rendered container against what is published at MITRE —
@@ -1017,8 +1018,10 @@ defmodule VarselWeb.CaseDetailLive do
   defp enum_options(enum), do: Enum.map(enum.values(), &{&1 |> to_string() |> String.replace("_", " "), &1})
 
   # The value a :set suggestion would replace, read from the raw (unprojected)
-  # case so the diff shows what acceptance actually changes.
-  defp proposal_old_value(case_record, %{operation: :set} = proposal) do
+  # case so the diff shows what acceptance actually changes. Only open
+  # proposals diff against the live case — once resolved, the current value
+  # no longer reflects what the suggestion was made against.
+  defp proposal_old_value(case_record, %{operation: :set, state: :open} = proposal) do
     target = proposal_target_row(case_record, proposal)
     field = String.to_existing_atom(proposal.field_name)
     if target, do: Map.get(target, field)
@@ -1091,6 +1094,7 @@ defmodule VarselWeb.CaseDetailLive do
           <.lifecycle_stepper state={@case_record.state} />
         </div>
         <div class="flex flex-wrap items-center justify-end gap-2 pt-1.5">
+          <button class="btn btn-sm btn-eef-quiet" phx-click="preview">Preview</button>
           <button
             :if={@mode != :view and can_propose?(@case_record, @current_user)}
             phx-click="toggle_suggest"
@@ -1217,7 +1221,6 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
 
         <div class="space-y-4">
-          <.preview_section preview={@preview} diff={@diff} amendment={amendment?(@case_record)} />
           <.reports_section
             :if={@case_record.vulnerability_reports != []}
             case_record={@case_record}
@@ -1265,6 +1268,15 @@ defmodule VarselWeb.CaseDetailLive do
         mode={@mode}
       />
     </div>
+
+    <.preview_overlay
+      :if={@preview_open?}
+      case_record={@case_record}
+      current_user={@current_user}
+      preview={@preview}
+      diff={@diff}
+      amendment={amendment?(@case_record)}
+    />
     """
   end
 
@@ -1907,72 +1919,106 @@ defmodule VarselWeb.CaseDetailLive do
   defp display_name(%{email: email}) when is_binary(email), do: email
   defp display_name(_user), do: "(hidden)"
 
-  defp preview_section(assigns) do
+  defp preview_overlay(assigns) do
     ~H"""
-    <.panel title="Record preview">
-      <:actions>
-        <button
-          :if={@amendment}
-          class="link link-hover text-primary"
-          phx-click="diff"
-          disabled={@diff == :loading}
-        >
-          {if @diff == :loading, do: "Diffing…", else: "Diff to published"}
-        </button>
-        <button
-          class="link link-hover text-primary"
-          phx-click="preview"
-          disabled={@preview == :loading}
-        >
-          {if @preview == :loading, do: "Rendering…", else: "Render preview"}
-        </button>
-      </:actions>
+    <div class="fixed inset-0 z-40" phx-window-keydown="close_preview" phx-key="escape">
+      <div class="absolute inset-0 bg-black/50" phx-click="close_preview"></div>
+      <div class="absolute inset-y-0 right-0 w-full max-w-xl overflow-y-auto border-l border-base-300 bg-base-200 p-5">
+        <div class="flex items-center justify-between mb-1">
+          <h3 class="font-bold">
+            Record preview{if @case_record.cve_id, do: " — #{@case_record.cve_id}"}
+          </h3>
+          <button class="btn btn-ghost btn-xs" phx-click="close_preview">✕</button>
+        </div>
+        <div class="flex items-center gap-4 mb-4 text-sm">
+          <button
+            class="link link-hover text-primary"
+            phx-click="preview"
+            disabled={@preview == :loading}
+          >
+            {if @preview == :loading, do: "Rendering…", else: "Re-render"}
+          </button>
+          <button
+            :if={@amendment}
+            class="link link-hover text-primary"
+            phx-click="diff"
+            disabled={@diff == :loading}
+          >
+            {if @diff == :loading, do: "Diffing…", else: "Diff to published"}
+          </button>
+        </div>
 
-      <div :if={is_list(@diff)} class="space-y-2 mb-3">
-        <p :if={not Diff.changed?(@diff)} class="text-sm text-base-content/60">
-          No changes against the published record.
-        </p>
-        <pre
-          :if={Diff.changed?(@diff)}
-          class="bg-base-200 rounded p-3 text-xs overflow-x-auto max-h-96 leading-5"
-        ><span
+        <div :if={is_list(@diff)} class="space-y-2 mb-3">
+          <p :if={not Diff.changed?(@diff)} class="text-sm text-base-content/60">
+            No changes against the published record.
+          </p>
+          <pre
+            :if={Diff.changed?(@diff)}
+            class="bg-base-200 rounded p-3 text-xs overflow-x-auto max-h-96 leading-5"
+          ><span
         :for={line <- @diff}
         class={["block whitespace-pre", diff_line_class(line)]}
       >{diff_line_text(line)}</span></pre>
-        <button class="btn btn-ghost btn-xs" phx-click="close_diff">Close diff</button>
-      </div>
-
-      <div :if={is_map(@preview)} class="space-y-3">
-        <div :if={@preview["blockers"] != []} class="alert alert-warning text-sm block">
-          <p class="font-semibold">Publish blockers</p>
-          <ul class="list-disc list-inside">
-            <li :for={blocker <- @preview["blockers"]}>{blocker}</li>
-          </ul>
+          <button class="btn btn-ghost btn-xs" phx-click="close_diff">Close diff</button>
         </div>
 
-        <div :if={@preview["validation"]} class="text-sm">
-          <span :if={@preview["validation"][:valid]} class="badge badge-success badge-sm">record valid</span>
-          <div :if={@preview["validation"][:valid] == false} class="alert alert-error text-sm block">
-            <p class="font-semibold">Validation errors</p>
+        <div :if={is_map(@preview)} class="space-y-3">
+          <div :if={@preview["blockers"] != []} class="alert alert-warning text-sm block">
+            <p class="font-semibold">Publish blockers</p>
             <ul class="list-disc list-inside">
-              <li :for={error <- @preview["validation"][:errors]}>{error.source}: {error.message}</li>
+              <li :for={blocker <- @preview["blockers"]}>
+                <a
+                  :if={blocker_section(blocker)}
+                  href={"##{blocker_section(blocker)}"}
+                  phx-click="close_preview"
+                  class="link link-hover"
+                >
+                  {blocker}
+                </a>
+                <span :if={!blocker_section(blocker)}>{blocker}</span>
+              </li>
             </ul>
           </div>
+
+          <div :if={@preview["validation"]} class="text-sm">
+            <span :if={@preview["validation"][:valid]} class="badge badge-success badge-sm">record valid</span>
+            <div :if={@preview["validation"][:valid] == false} class="alert alert-error text-sm block">
+              <p class="font-semibold">Validation errors</p>
+              <ul class="list-disc list-inside">
+                <li :for={error <- @preview["validation"][:errors]}>
+                  {error.source}: {error.message}
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div :if={@preview["overrides_applied"] != []} class="text-xs text-base-content/60">
+            Overrides applied: {Enum.join(@preview["overrides_applied"], ", ")}
+          </div>
+
+          <details>
+            <summary class="cursor-pointer text-sm">CNA container JSON</summary>
+            <pre class="bg-base-300/50 rounded p-3 text-xs overflow-x-auto max-h-96">{pretty_json(@preview["cna"])}</pre>
+          </details>
+
+          <div class="mt-4 border-t border-base-300 pt-4">
+            <.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
+          </div>
         </div>
-
-        <div :if={@preview["overrides_applied"] != []} class="text-xs text-base-content/60">
-          Overrides applied: {Enum.join(@preview["overrides_applied"], ", ")}
-        </div>
-
-        <details>
-          <summary class="cursor-pointer text-sm">CNA container JSON</summary>
-          <pre class="bg-base-200 rounded p-3 text-xs overflow-x-auto max-h-96">{pretty_json(@preview["cna"])}</pre>
-        </details>
-
-        <button class="btn btn-ghost btn-xs" phx-click="close_preview">Close preview</button>
       </div>
-    </.panel>
+    </div>
     """
+  end
+
+  # Maps a render blocker to the workspace section that fixes it; nil when
+  # the fix is a band action (e.g. assigning a CVE ID), not a section.
+  defp blocker_section(blocker) do
+    cond do
+      blocker =~ "CVE ID" -> nil
+      blocker =~ "title" or blocker =~ "description" or blocker =~ "CVSS" -> "summary"
+      blocker =~ "reference" -> "references"
+      true -> "affected"
+    end
   end
 
   # Only open proposals need attention; everything resolved (accepted,
