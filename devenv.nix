@@ -61,6 +61,13 @@ in
       url = "http://localhost:4000/mcp";
     };
 
+    # Tidewave (dev-only runtime introspection; plugged in the endpoint
+    # under MIX_ENV=dev).
+    mcpServers.tidewave = {
+      type = "http";
+      url = "http://localhost:4000/tidewave/mcp";
+    };
+
     commands = {
       mix-format = ''
       Format all Elixir files in the project using mix format.
