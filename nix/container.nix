@@ -9,11 +9,14 @@
 let
   # OTP's :pubkey_os_cacerts probes a fixed list of distro paths (and ignores
   # SSL_CERT_FILE); nixpkgs' /etc/ssl/certs/ca-bundle.crt is not on it, so
-  # expose the bundle under the Debian name OTP checks first.
+  # expose the bundle under the Debian name OTP checks first. The symlink must
+  # be relative: copyToRoot copies package contents into the image root
+  # without shipping the packages' own store paths, so a store-path target
+  # would dangle. It resolves against cacert's bundle merged into the same
+  # directory.
   otpCacerts = pkgs.runCommand "otp-cacerts" { } ''
     mkdir -p $out/etc/ssl/certs
-    ln -s ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt \
-      $out/etc/ssl/certs/ca-certificates.crt
+    ln -s ca-bundle.crt $out/etc/ssl/certs/ca-certificates.crt
   '';
 in
 nix2container.buildImage {
