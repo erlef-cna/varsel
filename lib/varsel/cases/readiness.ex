@@ -26,6 +26,7 @@ defmodule Varsel.Cases.Readiness do
   def sections(case_record) do
     [
       %{id: "summary", label: "Summary", status: summary_status(case_record)},
+      %{id: "severity", label: "Severity", status: required(not is_nil(case_record.cvss_v4))},
       %{id: "affected", label: "Affected", status: affected_status(case_record)},
       %{id: "references", label: "References", status: required(case_record.references != [])},
       %{id: "credits", label: "Credits", status: optional(case_record.credits != [])},
@@ -35,7 +36,7 @@ defmodule Varsel.Cases.Readiness do
   end
 
   defp summary_status(case_record) do
-    required(present?(case_record.description_md) and not is_nil(case_record.cvss_v4))
+    required(present?(case_record.description_md))
   end
 
   defp affected_status(%{affected_packages: []}), do: :attention

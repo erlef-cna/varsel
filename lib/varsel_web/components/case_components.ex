@@ -92,17 +92,22 @@ defmodule VarselWeb.CaseComponents do
   (✓ ready, ● needs work) or an open-suggestion count (◆ n) on the right.
   Sections are maps with `:id`, `:label`, `:status` and optional
   `:suggestions`.
+
+  The SectionRail hook owns the interaction: it scrolls anchor clicks
+  (LiveView's history bookkeeping breaks native smooth fragment scrolling)
+  and marks the entry nearest the viewport top with `.is-active`.
   """
   attr :sections, :list, required: true
+  attr :id, :string, default: "section-rail"
   attr :class, :any, default: nil
 
   def section_nav(assigns) do
     ~H"""
-    <nav class={["text-sm", @class]}>
+    <nav id={@id} phx-hook="SectionRail" class={["text-sm", @class]}>
       <a
         :for={section <- @sections}
         href={"##{section.id}"}
-        class="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-base-content/70 hover:bg-base-200 hover:text-base-content"
+        class="rail-link flex items-center gap-2 rounded-[var(--radius-field)] px-2.5 py-1.5 text-base-content/70 hover:bg-base-200 hover:text-base-content"
       >
         <span class="truncate">{section.label}</span>
         <span
@@ -199,5 +204,86 @@ defmodule VarselWeb.CaseComponents do
     ~H"""
     <div class={["prose prose-sm max-w-none", @class]}>{raw(Markdown.to_html(@content))}</div>
     """
+  end
+
+  @doc """
+  A severity chip: rating word and score in one chip, severity-colored text
+  on a tinted (never solid) background with a small radius.
+  """
+  attr :severity, :atom, required: true
+  attr :score, :any, required: true
+
+  def severity_chip(assigns) do
+    ~H"""
+    <span class={[
+      "inline-flex items-center gap-1.5 rounded-[var(--radius-selector)] px-2.5 py-0.5",
+      "text-[0.8rem] font-bold uppercase tabular-nums whitespace-nowrap",
+      severity_chip_class(@severity)
+    ]}>
+      {@severity} {format_score(@score)}
+    </span>
+    """
+  end
+
+  defp severity_chip_class(:low), do: "text-success bg-success/15"
+  defp severity_chip_class(:medium), do: "text-warning bg-warning/15"
+  defp severity_chip_class(:high), do: "text-error bg-error/15"
+  defp severity_chip_class(:critical), do: "text-error bg-error/15"
+  defp severity_chip_class(_none_or_unknown), do: "text-base-content/60 bg-base-300/60"
+
+  defp format_score(score) when is_number(score), do: :erlang.float_to_binary(score / 1, decimals: 1)
+
+  defp format_score(score), do: to_string(score)
+
+  @doc """
+  Pretty-prints a JSON-shaped term (string-keyed maps, lists, scalars) with
+  simple syntax tinting: keys in primary, strings in success, numbers in
+  warning. Values are HTML-escaped; the result is safe to interpolate.
+  """
+  @spec json_highlight(term()) :: Phoenix.HTML.safe()
+  def json_highlight(value), do: {:safe, json_frag(value, "")}
+
+  defp json_frag(map, _indent) when map == %{}, do: "{}"
+
+  defp json_frag(map, indent) when is_map(map) do
+    inner = indent <> "  "
+
+    entries =
+      map
+      |> Enum.sort_by(fn {key, _value} -> to_string(key) end)
+      |> Enum.map_intersperse(",\n", fn {key, value} ->
+        [
+          inner,
+          ~s(<span class="text-primary">),
+          escape(Jason.encode!(to_string(key))),
+          "</span>: ",
+          json_frag(value, inner)
+        ]
+      end)
+
+    ["{\n", entries, "\n", indent, "}"]
+  end
+
+  defp json_frag([], _indent), do: "[]"
+
+  defp json_frag(list, indent) when is_list(list) do
+    inner = indent <> "  "
+    entries = Enum.map_intersperse(list, ",\n", &[inner, json_frag(&1, inner)])
+    ["[\n", entries, "\n", indent, "]"]
+  end
+
+  defp json_frag(value, _indent) when is_binary(value) do
+    [~s(<span class="text-success">), escape(Jason.encode!(value)), "</span>"]
+  end
+
+  defp json_frag(value, _indent) when is_number(value) do
+    [~s(<span class="text-warning">), Jason.encode!(value), "</span>"]
+  end
+
+  defp json_frag(value, _indent), do: escape(Jason.encode!(value))
+
+  defp escape(binary) do
+    {:safe, iodata} = Phoenix.HTML.html_escape(binary)
+    iodata
   end
 end

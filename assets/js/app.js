@@ -51,11 +51,71 @@ const DragSort = {
   },
 }
 
+// Workspace section rail. Two jobs:
+//
+// 1. Anchor navigation: on LiveView pages Chromium cancels the smooth
+//    fragment-scroll animation (html { scroll-behavior: smooth }) as soon as
+//    LiveView's scroll bookkeeping calls history.replaceState, so a native
+//    hash click updates the URL without moving the page. Same-page anchor
+//    clicks are therefore handled here with an instant scrollIntoView (which
+//    honors scroll-margin) — document-wide, so "Jump" links and the preview
+//    slide-over's "Go to <section>" blocker links get the same treatment.
+// 2. Scroll spy: the rail entry whose section sits nearest above the viewport
+//    top gets the .is-active class (styled in app.css).
+const SectionRail = {
+  mounted() {
+    this.onClick = (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      const link = e.target.closest && e.target.closest('a[href^="#"]')
+      if (!link) return
+      const target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)))
+      if (!target) return
+      e.preventDefault()
+      target.scrollIntoView({behavior: "instant", block: "start"})
+      history.pushState(history.state, "", link.getAttribute("href"))
+    }
+    document.addEventListener("click", this.onClick)
+    this.onScroll = () => {
+      if (this.raf) return
+      this.raf = requestAnimationFrame(() => {
+        this.raf = null
+        this.spy()
+      })
+    }
+    window.addEventListener("scroll", this.onScroll, {passive: true})
+    this.spy()
+  },
+  // LiveView patches rewrite the class attribute; re-mark after each patch.
+  updated() {
+    this.spy()
+  },
+  destroyed() {
+    document.removeEventListener("click", this.onClick)
+    window.removeEventListener("scroll", this.onScroll)
+    if (this.raf) cancelAnimationFrame(this.raf)
+  },
+  links() {
+    return [...this.el.querySelectorAll('a[href^="#"]')]
+  },
+  spy() {
+    // Sticky navbar (4rem) + the 5.5rem scroll-margin headroom.
+    const offset = 96
+    const links = this.links()
+    let active = null
+    for (const link of links) {
+      const target = document.getElementById(link.getAttribute("href").slice(1))
+      if (target && target.getBoundingClientRect().top <= offset) active = link
+    }
+    active = active || links[0]
+    links.forEach((link) => link.classList.toggle("is-active", link === active))
+  },
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, DragSort},
+  hooks: {...colocatedHooks, DragSort, SectionRail},
 })
 
 // Show progress bar on live navigation and form submits

@@ -180,6 +180,20 @@
   border-color: var(--color-base-300);
 }
 
+/* Workspace section rail: the active entry (marked client-side by the
+   SectionRail hook) gets a raised pill with a 2px inset primary bar. */
+.rail-link.is-active {
+  background-color: color-mix(in oklab, var(--color-base-300) 60%, transparent);
+  color: var(--color-base-content);
+  box-shadow: inset 2px 0 0 var(--color-primary);
+}
+
+/* Slide-over scrim (board D): darker than black/50 so it registers on the
+   already-dark theme too. */
+.overlay-scrim {
+  background-color: rgba(6, 10, 14, 0.55);
+}
+
 /* Small uppercase letter-spaced eyebrow label above section titles. */
 .eef-eyebrow {
   color: var(--eef-blue);

@@ -141,6 +141,7 @@ defmodule VarselWeb.CaseDetailLive do
         child_form: nil,
         preview: nil,
         preview_open?: false,
+        preview_tab: "validation",
         diff: nil,
         users: nil,
         catalog_options: nil
@@ -183,12 +184,12 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, assign_case(socket, socket.assigns.case_record)}
   end
 
-  def handle_event("edit_summary", _params, socket) do
-    socket = assign(socket, editing_section: "summary")
+  def handle_event("edit_section", %{"section" => section}, socket) when section in ["summary", "severity"] do
+    socket = assign(socket, editing_section: section)
     {:noreply, assign_case(socket, socket.assigns.case_record)}
   end
 
-  def handle_event("cancel_summary", _params, socket) do
+  def handle_event("cancel_edit", _params, socket) do
     socket = assign(socket, editing_section: nil)
     {:noreply, assign_case(socket, socket.assigns.case_record)}
   end
@@ -202,10 +203,8 @@ defmodule VarselWeb.CaseDetailLive do
   # changes — untouched proposed values create nothing, changed ones become
   # counter-proposals.
   def handle_event("save", %{"form" => params} = raw, socket) do
-    case decode_override(raw["cna_override_json"]) do
-      {:ok, override} ->
-        params = Map.put(params, "cna_override", override)
-
+    case put_override(params, raw) do
+      {:ok, params} ->
         case socket.assigns.mode do
           :propose ->
             {:noreply, propose_content_changes(socket, params, presence(raw["reasoning"]))}
@@ -293,6 +292,13 @@ defmodule VarselWeb.CaseDetailLive do
   def handle_event("preview", _params, socket) do
     %{case_record: case_record, current_user: actor} = socket.assigns
 
+    socket =
+      if socket.assigns.preview_open? do
+        socket
+      else
+        assign(socket, preview_tab: "validation", diff: nil)
+      end
+
     {:noreply,
      socket
      |> assign(preview: :loading, preview_open?: true)
@@ -305,25 +311,19 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, assign(socket, preview_open?: false, preview: nil, diff: nil)}
   end
 
-  # Diff the freshly rendered container against what is published at MITRE —
-  # only meaningful while amending an already-published case.
-  def handle_event("diff", _params, socket) do
-    %{case_record: case_record, current_user: actor} = socket.assigns
+  def handle_event("preview_tab", %{"tab" => tab}, socket) when tab in ["validation", "json", "diff"] do
+    socket = assign(socket, preview_tab: tab)
 
-    {:noreply,
-     socket
-     |> assign(diff: :loading)
-     |> start_async(:diff, fn ->
-       # Re-fetch with the actor so the diff is as authorized as the page load.
-       case_record = Cases.get_case!(case_record.id, actor: actor)
-       published = Publication.published_cna(case_record) || %{}
-       {:ok, %{result: result}} = Publication.render(case_record)
-       Diff.lines(published, result.cna)
-     end)}
-  end
+    # The diff (against the record published at MITRE) is computed lazily the
+    # first time its tab opens.
+    socket =
+      if tab == "diff" and is_nil(socket.assigns.diff) do
+        start_diff(socket)
+      else
+        socket
+      end
 
-  def handle_event("close_diff", _params, socket) do
-    {:noreply, assign(socket, diff: nil)}
+    {:noreply, socket}
   end
 
   ## -------------------------------------------------------------- child rows
@@ -578,6 +578,31 @@ defmodule VarselWeb.CaseDetailLive do
 
   ## ----------------------------------------------------------------- helpers
 
+  # Only the summary editor carries the CNA-override textarea; the severity
+  # editor's partial save must not touch (and thereby clear) the override.
+  defp put_override(params, %{"cna_override_json" => json}) do
+    case decode_override(json) do
+      {:ok, override} -> {:ok, Map.put(params, "cna_override", override)}
+      :error -> :error
+    end
+  end
+
+  defp put_override(params, _raw), do: {:ok, params}
+
+  defp start_diff(socket) do
+    %{case_record: case_record, current_user: actor} = socket.assigns
+
+    socket
+    |> assign(diff: :loading)
+    |> start_async(:diff, fn ->
+      # Re-fetch with the actor so the diff is as authorized as the page load.
+      case_record = Cases.get_case!(case_record.id, actor: actor)
+      published = Publication.published_cna(case_record) || %{}
+      {:ok, %{result: result}} = Publication.render(case_record)
+      Diff.lines(published, result.cna)
+    end)
+  end
+
   defp save_content(socket, params) do
     case AshPhoenix.Form.submit(socket.assigns.content_form, params: params) do
       {:ok, _case_record} ->
@@ -614,7 +639,7 @@ defmodule VarselWeb.CaseDetailLive do
     display_case = if projection, do: projection.case, else: case_record
 
     content_form =
-      if mode in [:edit, :propose] and socket.assigns.editing_section == "summary" do
+      if mode in [:edit, :propose] and socket.assigns.editing_section in ["summary", "severity"] do
         display_case
         |> AshPhoenix.Form.for_update(:edit, as: "form", actor: actor)
         |> to_form()
@@ -1081,192 +1106,213 @@ defmodule VarselWeb.CaseDetailLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <div class="console-band">
-      <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-5 flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
-        <div class="min-w-0">
-          <p class="eef-eyebrow mb-1">
-            Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
-            <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
-          </p>
-          <h1 class="text-xl sm:text-2xl font-bold leading-tight">
-            {@case_record.title || "Untitled case"}
-          </h1>
-          <.lifecycle_stepper state={@case_record.state} />
-        </div>
-        <div class="flex flex-wrap items-center justify-end gap-2 pt-1.5">
-          <button class="btn btn-sm btn-eef-quiet" phx-click="preview">Preview</button>
-          <button
-            :if={@mode != :view and can_propose?(@case_record, @current_user)}
-            phx-click="toggle_suggest"
-            disabled={suggest_forced?(@case_record, @current_user)}
-            title={
-              if suggest_forced?(@case_record, @current_user),
-                do: "The case is frozen — edits become suggestions",
-                else: "Route your edits through suggestions instead of applying them"
-            }
-            class={[
-              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold mr-1",
-              if(@mode == :propose,
-                do: "border-info/50 text-info",
-                else: "border-base-300 text-base-content/50"
-              )
-            ]}
-          >
-            ✎ Suggest: {if @mode == :propose, do: "on", else: "off"}
-          </button>
-          <.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
-        </div>
-      </div>
-    </div>
-
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
-      <p :if={@mode == :propose} class="text-sm text-base-content/60 mb-4">
-        Suggesting: open suggestions are shown as if accepted; your edits become new suggestions.
-      </p>
-
-      <div class="grid lg:grid-cols-[9.5rem_minmax(0,1fr)_18.5rem] gap-6 items-start">
-        <.section_nav
-          sections={workspace_sections(@display_case, @case_record.proposals)}
-          class="hidden lg:block lg:sticky lg:top-4"
-        />
-
-        <div class="space-y-8 min-w-0">
-          <div id="summary">
-            <.content_section case_record={@display_case} content_form={@content_form} mode={@mode} />
-          </div>
-          <div id="affected">
-            <.affected_section case_record={@display_case} mode={@mode} marks={marks(@projection)} />
-          </div>
-          <.rows_section
-            id="references"
-            heading="References"
-            type="reference"
-            add_label="Add reference"
-            rows={@display_case.references}
-            mode={@mode}
-            marks={marks(@projection)}
-            sort_event="reorder_references"
-          >
-            <:row :let={reference}>
-              <span class="font-mono text-sm break-all">{reference.url}</span>
-              <span :for={tag <- reference.tags} class="badge badge-ghost badge-xs ml-1">{tag}</span>
-            </:row>
-          </.rows_section>
-          <.rows_section
-            id="credits"
-            heading="Credits"
-            type="credit"
-            add_label="Add credit"
-            rows={@display_case.credits}
-            mode={@mode}
-            marks={marks(@projection)}
-            sort_event="reorder_credits"
-          >
-            <:row :let={credit}>
-              {credit.name}{if credit.organization, do: " / #{credit.organization}"}
-              <span class="badge badge-ghost badge-xs ml-1">
-                {credit.credit_type |> to_string() |> String.replace("_", " ")}
+    <div class={@preview_open? && "opacity-45"}>
+      <div class="console-band">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-5 flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
+          <div class="min-w-0">
+            <p class="eef-eyebrow mb-1">
+              Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
+              <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
+              <span class="text-base-content/50">
+                · draft opened {Calendar.strftime(@case_record.inserted_at, "%b %-d, %Y")}
               </span>
-            </:row>
-          </.rows_section>
-          <.rows_section
-            id="weaknesses"
-            heading="Weaknesses (CWE)"
-            type="weakness"
-            add_label="Add CWE"
-            rows={@display_case.weaknesses}
-            mode={@mode}
-            marks={marks(@projection)}
-          >
-            <:row :let={weakness}>
-              <a
-                href={"https://cwe.mitre.org/data/definitions/#{weakness.cwe_id}.html"}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="link font-mono"
-              >
-                CWE-{weakness.cwe_id}
-              </a>
-              {weakness.weakness.name}
-            </:row>
-          </.rows_section>
-          <.rows_section
-            id="impacts"
-            heading="Impacts (CAPEC)"
-            type="impact"
-            add_label="Add CAPEC"
-            rows={@display_case.impacts}
-            mode={@mode}
-            marks={marks(@projection)}
-          >
-            <:row :let={impact}>
-              <a
-                href={"https://capec.mitre.org/data/definitions/#{impact.capec_id}.html"}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="link font-mono"
-              >
-                CAPEC-{impact.capec_id}
-              </a>
-              {impact.attack_pattern.name}
-            </:row>
-          </.rows_section>
-          <div id="suggestions">
-            <.proposals_section
+            </p>
+            <h1 class="text-xl sm:text-2xl font-bold leading-tight">
+              {@case_record.title || "Untitled case"}
+            </h1>
+            <.lifecycle_stepper state={@case_record.state} />
+          </div>
+          <div class="flex flex-wrap items-center justify-end gap-2 pt-1.5">
+            <button
+              :if={@mode != :view and can_propose?(@case_record, @current_user)}
+              phx-click="toggle_suggest"
+              disabled={suggest_forced?(@case_record, @current_user)}
+              title={
+                if suggest_forced?(@case_record, @current_user),
+                  do: "The case is frozen — edits become suggestions",
+                  else: "Route your edits through suggestions instead of applying them"
+              }
+              class={[
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold",
+                if(@mode == :propose,
+                  do: "border-info bg-info/15 text-info",
+                  else: "border-info/40 text-info"
+                )
+              ]}
+            >
+              ✎ Suggest: {if @mode == :propose, do: "on", else: "off"}
+            </button>
+            <button class="btn btn-sm btn-eef-quiet" phx-click="preview">Preview</button>
+            <.lifecycle_buttons
               case_record={@case_record}
               current_user={@current_user}
-              can_resolve={can_edit?(@case_record, @current_user)}
+              include_publish={false}
+              publish_blocked={false}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+        <p :if={@mode == :propose} class="text-sm text-base-content/60 mb-4">
+          Suggesting: open suggestions are shown as if accepted; your edits become new suggestions.
+        </p>
+
+        <div class="grid lg:grid-cols-[9.5rem_minmax(0,1fr)_18.5rem] gap-6 items-start">
+          <.section_nav
+            sections={workspace_sections(@display_case, @case_record.proposals)}
+            class="hidden lg:block lg:sticky lg:top-4"
+          />
+
+          <div class="space-y-8 min-w-0">
+            <div id="summary">
+              <.content_section
+                case_record={@display_case}
+                content_form={@editing_section == "summary" && @content_form}
+                mode={@mode}
+              />
+            </div>
+            <div id="severity">
+              <.severity_section
+                case_record={@display_case}
+                form={@editing_section == "severity" && @content_form}
+                mode={@mode}
+              />
+            </div>
+            <div id="affected">
+              <.affected_section case_record={@display_case} mode={@mode} marks={marks(@projection)} />
+            </div>
+            <.rows_section
+              id="references"
+              heading="References"
+              type="reference"
+              add_label="Add reference"
+              rows={@display_case.references}
+              mode={@mode}
+              marks={marks(@projection)}
+              sort_event="reorder_references"
+            >
+              <:row :let={reference}>
+                <span class="font-mono text-sm break-all">{reference.url}</span>
+                <span :for={tag <- reference.tags} class="badge badge-ghost badge-xs ml-1">{tag}</span>
+              </:row>
+            </.rows_section>
+            <.rows_section
+              id="credits"
+              heading="Credits"
+              type="credit"
+              add_label="Add credit"
+              rows={@display_case.credits}
+              mode={@mode}
+              marks={marks(@projection)}
+              sort_event="reorder_credits"
+            >
+              <:row :let={credit}>
+                {credit.name}{if credit.organization, do: " / #{credit.organization}"}
+                <span class="badge badge-ghost badge-xs ml-1">
+                  {credit.credit_type |> to_string() |> String.replace("_", " ")}
+                </span>
+              </:row>
+            </.rows_section>
+            <.rows_section
+              id="weaknesses"
+              heading="Weaknesses (CWE)"
+              type="weakness"
+              add_label="Add CWE"
+              rows={@display_case.weaknesses}
+              mode={@mode}
+              marks={marks(@projection)}
+            >
+              <:row :let={weakness}>
+                <a
+                  href={"https://cwe.mitre.org/data/definitions/#{weakness.cwe_id}.html"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="link font-mono"
+                >
+                  CWE-{weakness.cwe_id}
+                </a>
+                {weakness.weakness.name}
+              </:row>
+            </.rows_section>
+            <.rows_section
+              id="impacts"
+              heading="Impacts (CAPEC)"
+              type="impact"
+              add_label="Add CAPEC"
+              rows={@display_case.impacts}
+              mode={@mode}
+              marks={marks(@projection)}
+            >
+              <:row :let={impact}>
+                <a
+                  href={"https://capec.mitre.org/data/definitions/#{impact.capec_id}.html"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="link font-mono"
+                >
+                  CAPEC-{impact.capec_id}
+                </a>
+                {impact.attack_pattern.name}
+              </:row>
+            </.rows_section>
+            <div id="suggestions">
+              <.proposals_section
+                case_record={@case_record}
+                current_user={@current_user}
+                can_resolve={can_edit?(@case_record, @current_user)}
+              />
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <.reports_section
+              :if={@case_record.vulnerability_reports != []}
+              case_record={@case_record}
+              poc={poc?(@current_user)}
+            />
+            <.panel title="Suggestions">
+              <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
+                <li :for={proposal <- open_proposals(@case_record)} class="flex items-center gap-2">
+                  <span class="text-info font-bold shrink-0">◆</span>
+                  <span class="truncate text-base-content/80">{proposal_summary(proposal)}</span>
+                  <a href="#suggestions" class="link link-hover text-primary text-xs ml-auto shrink-0">
+                    Jump
+                  </a>
+                </li>
+              </ul>
+              <p :if={open_proposals(@case_record) == []} class="text-sm text-base-content/60">
+                No open suggestions.
+              </p>
+            </.panel>
+            <.panel title="Activity">
+              <form phx-submit="post_comment" class="mb-4">
+                <textarea
+                  name="body"
+                  rows="2"
+                  required
+                  placeholder="Write a comment…"
+                  class="w-full textarea text-sm"
+                ></textarea>
+                <button type="submit" class="btn btn-outline btn-xs mt-1">Comment</button>
+              </form>
+              <.activity_feed entries={activity_entries(@case_record)} />
+            </.panel>
+            <.assignments_section :if={poc?(@current_user)} case_record={@case_record} users={@users} />
+            <.close_section
+              :if={poc?(@current_user) and editable?(@case_record)}
+              case_record={@case_record}
             />
           </div>
         </div>
 
-        <div class="space-y-4">
-          <.reports_section
-            :if={@case_record.vulnerability_reports != []}
-            case_record={@case_record}
-            poc={poc?(@current_user)}
-          />
-          <.panel title="Suggestions">
-            <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
-              <li :for={proposal <- open_proposals(@case_record)} class="flex items-center gap-2">
-                <span class="text-info font-bold shrink-0">◆</span>
-                <span class="truncate text-base-content/80">{proposal_summary(proposal)}</span>
-                <a href="#suggestions" class="link link-hover text-primary text-xs ml-auto shrink-0">
-                  Jump
-                </a>
-              </li>
-            </ul>
-            <p :if={open_proposals(@case_record) == []} class="text-sm text-base-content/60">
-              No open suggestions.
-            </p>
-          </.panel>
-          <.panel title="Activity">
-            <form phx-submit="post_comment" class="mb-4">
-              <textarea
-                name="body"
-                rows="2"
-                required
-                placeholder="Write a comment…"
-                class="w-full textarea text-sm"
-              ></textarea>
-              <button type="submit" class="btn btn-outline btn-xs mt-1">Comment</button>
-            </form>
-            <.activity_feed entries={activity_entries(@case_record)} />
-          </.panel>
-          <.assignments_section :if={poc?(@current_user)} case_record={@case_record} users={@users} />
-          <.close_section
-            :if={poc?(@current_user) and editable?(@case_record)}
-            case_record={@case_record}
-          />
-        </div>
+        <.child_modal
+          :if={@child_form}
+          child_form={@child_form}
+          catalog_options={@catalog_options}
+          mode={@mode}
+        />
       </div>
-
-      <.child_modal
-        :if={@child_form}
-        child_form={@child_form}
-        catalog_options={@catalog_options}
-        mode={@mode}
-      />
     </div>
 
     <.preview_overlay
@@ -1274,6 +1320,7 @@ defmodule VarselWeb.CaseDetailLive do
       case_record={@case_record}
       current_user={@current_user}
       preview={@preview}
+      preview_tab={@preview_tab}
       diff={@diff}
       amendment={amendment?(@case_record)}
     />
@@ -1298,6 +1345,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp section_for_proposal(%{target: target}) when target in [:affected_package, :package_channel, :version_event],
     do: "affected"
 
+  defp section_for_proposal(%{target: :case, field_name: "cvss_v4"}), do: "severity"
   defp section_for_proposal(%{target: :reference}), do: "references"
   defp section_for_proposal(%{target: :credit}), do: "credits"
   defp section_for_proposal(%{target: :weakness}), do: "weaknesses"
@@ -1344,6 +1392,8 @@ defmodule VarselWeb.CaseDetailLive do
     "suggested: #{proposal_summary(proposal)} (#{proposal.state})"
   end
 
+  # Publish lives in the preview slide-over only (`include_publish`), where it
+  # is gated visually while render blockers exist.
   defp lifecycle_buttons(assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-2">
@@ -1382,13 +1432,14 @@ defmodule VarselWeb.CaseDetailLive do
         Approve
       </button>
       <button
-        :if={@case_record.state == :approved and poc?(@current_user)}
-        class="btn btn-sm btn-eef"
+        :if={@include_publish and @case_record.state == :approved and poc?(@current_user)}
+        class={["btn btn-sm btn-eef", @publish_blocked && "opacity-45"]}
+        disabled={@publish_blocked}
         phx-click="lifecycle"
         phx-value-action="publish"
         data-confirm="Publish this case to MITRE?"
       >
-        Publish
+        Publish to MITRE
       </button>
       <button
         :if={@case_record.state in [:review, :approved, :published] and poc?(@current_user)}
@@ -1407,16 +1458,17 @@ defmodule VarselWeb.CaseDetailLive do
     <.panel title="Summary">
       <:actions>
         <button
-          :if={@mode != :view and is_nil(@content_form)}
+          :if={@mode != :view and !@content_form}
           class="link link-hover text-primary"
-          phx-click="edit_summary"
+          phx-click="edit_section"
+          phx-value-section="summary"
         >
           Edit
         </button>
         <button
           :if={@content_form}
           class="link link-hover text-base-content/60"
-          phx-click="cancel_summary"
+          phx-click="cancel_edit"
         >
           Cancel
         </button>
@@ -1459,12 +1511,6 @@ defmodule VarselWeb.CaseDetailLive do
           label="Solutions (Markdown, optional)"
           rows={3}
         />
-        <.live_component
-          module={VarselWeb.CvssInput}
-          id="case-cvss-v4"
-          field={@content_form[:cvss_v4]}
-          label="CVSS v4.0"
-        />
         <.input
           field={@content_form[:discovery]}
           type="select"
@@ -1505,7 +1551,7 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
       </.form>
 
-      <div :if={is_nil(@content_form)} class="space-y-4">
+      <div :if={!@content_form} class="space-y-4">
         <.markdown :if={@case_record.description_md} content={@case_record.description_md} />
         <p :if={is_nil(@case_record.description_md)} class="text-base-content/60">
           No description yet.
@@ -1523,8 +1569,66 @@ defmodule VarselWeb.CaseDetailLive do
             <.markdown content={content} />
           </div>
         </div>
+      </div>
+    </.panel>
+    """
+  end
 
-        <p :if={@case_record.cvss_v4} class="font-mono text-sm">{@case_record.cvss_v4.vector}</p>
+  # The Severity card: at rest one severity chip (rating + score) beside the
+  # truncated CVSS vector; "Open calculator" swaps the body for the CVSS
+  # calculator as this card's own editor, with the same save-vs-suggest
+  # semantics as the summary editor.
+  defp severity_section(assigns) do
+    ~H"""
+    <.panel title="Severity">
+      <:actions>
+        <button
+          :if={@mode != :view and !@form}
+          class="link link-hover text-primary"
+          phx-click="edit_section"
+          phx-value-section="severity"
+        >
+          Open calculator
+        </button>
+        <button :if={@form} class="link link-hover text-base-content/60" phx-click="cancel_edit">
+          Cancel
+        </button>
+      </:actions>
+
+      <.form :if={@form} for={@form} id="case-severity-form" phx-change="validate" phx-submit="save">
+        <.live_component
+          module={VarselWeb.CvssInput}
+          id="case-cvss-v4"
+          field={@form[:cvss_v4]}
+          label="CVSS v4.0"
+        />
+        <div class="flex items-end gap-2 mt-4">
+          <button type="submit" class="btn btn-primary btn-sm">
+            {if @mode == :propose, do: "Propose changes", else: "Save"}
+          </button>
+          <input
+            :if={@mode == :propose}
+            type="text"
+            name="reasoning"
+            placeholder="Reasoning (attached to proposals, optional)"
+            class="input input-bordered input-sm flex-1"
+          />
+        </div>
+      </.form>
+
+      <div :if={!@form}>
+        <div :if={@case_record.cvss_v4} class="flex min-w-0 items-center gap-3">
+          <.severity_chip
+            severity={@case_record.cvss_v4.severity}
+            score={@case_record.cvss_v4.score}
+          />
+          <span class="min-w-0 truncate font-mono text-xs text-base-content/60">
+            {@case_record.cvss_v4.vector}
+          </span>
+        </div>
+        <p :if={is_nil(@case_record.cvss_v4)} class="text-sm text-base-content/60">
+          No CVSS score yet.
+        </p>
       </div>
     </.panel>
     """
@@ -1919,95 +2023,173 @@ defmodule VarselWeb.CaseDetailLive do
   defp display_name(%{email: email}) when is_binary(email), do: email
   defp display_name(_user), do: "(hidden)"
 
+  # Board D: a right-side slide-over over a scrim, with hairline text tabs
+  # (Validation / Rendered JSON / Diff to published) and the lifecycle footer.
   defp preview_overlay(assigns) do
     ~H"""
     <div class="fixed inset-0 z-40" phx-window-keydown="close_preview" phx-key="escape">
-      <div class="absolute inset-0 bg-black/50" phx-click="close_preview"></div>
-      <div class="absolute inset-y-0 right-0 w-full max-w-xl overflow-y-auto border-l border-base-300 bg-base-200 p-5">
-        <div class="flex items-center justify-between mb-1">
-          <h3 class="font-bold">
-            Record preview{if @case_record.cve_id, do: " — #{@case_record.cve_id}"}
-          </h3>
-          <button class="btn btn-ghost btn-xs" phx-click="close_preview">✕</button>
-        </div>
-        <div class="flex items-center gap-4 mb-4 text-sm">
-          <button
-            class="link link-hover text-primary"
-            phx-click="preview"
-            disabled={@preview == :loading}
-          >
-            {if @preview == :loading, do: "Rendering…", else: "Re-render"}
-          </button>
-          <button
-            :if={@amendment}
-            class="link link-hover text-primary"
-            phx-click="diff"
-            disabled={@diff == :loading}
-          >
-            {if @diff == :loading, do: "Diffing…", else: "Diff to published"}
-          </button>
-        </div>
-
-        <div :if={is_list(@diff)} class="space-y-2 mb-3">
-          <p :if={not Diff.changed?(@diff)} class="text-sm text-base-content/60">
-            No changes against the published record.
-          </p>
-          <pre
-            :if={Diff.changed?(@diff)}
-            class="bg-base-200 rounded p-3 text-xs overflow-x-auto max-h-96 leading-5"
-          ><span
-        :for={line <- @diff}
-        class={["block whitespace-pre", diff_line_class(line)]}
-      >{diff_line_text(line)}</span></pre>
-          <button class="btn btn-ghost btn-xs" phx-click="close_diff">Close diff</button>
-        </div>
-
-        <div :if={is_map(@preview)} class="space-y-3">
-          <div :if={@preview["blockers"] != []} class="alert alert-warning text-sm block">
-            <p class="font-semibold">Publish blockers</p>
-            <ul class="list-disc list-inside">
-              <li :for={blocker <- @preview["blockers"]}>
-                <a
-                  :if={blocker_section(blocker)}
-                  href={"##{blocker_section(blocker)}"}
-                  phx-click="close_preview"
-                  class="link link-hover"
-                >
-                  {blocker}
-                </a>
-                <span :if={!blocker_section(blocker)}>{blocker}</span>
-              </li>
-            </ul>
+      <div class="absolute inset-0 overlay-scrim" phx-click="close_preview"></div>
+      <aside class="absolute inset-y-0 right-0 flex w-full max-w-[35rem] flex-col border-l border-base-300 bg-base-200">
+        <div class="px-5 pt-5">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold">
+              Record preview{if @case_record.cve_id, do: " — #{@case_record.cve_id}"}
+            </h3>
+            <button class="btn btn-ghost btn-xs text-base-content/60" phx-click="close_preview">
+              ✕
+            </button>
           </div>
+          <div class="mt-2 flex items-center gap-4 border-b border-base-300 text-sm">
+            <.preview_tab_button tab="validation" active={@preview_tab}>
+              Validation
+            </.preview_tab_button>
+            <.preview_tab_button tab="json" active={@preview_tab}>
+              Rendered JSON
+            </.preview_tab_button>
+            <.preview_tab_button :if={@amendment} tab="diff" active={@preview_tab}>
+              Diff to published
+            </.preview_tab_button>
+            <button
+              class="link link-hover ml-auto pb-2 text-xs text-primary"
+              phx-click="preview"
+              disabled={@preview == :loading}
+            >
+              {if @preview == :loading, do: "Rendering…", else: "Re-render"}
+            </button>
+          </div>
+        </div>
 
-          <div :if={@preview["validation"]} class="text-sm">
-            <span :if={@preview["validation"][:valid]} class="badge badge-success badge-sm">record valid</span>
-            <div :if={@preview["validation"][:valid] == false} class="alert alert-error text-sm block">
-              <p class="font-semibold">Validation errors</p>
-              <ul class="list-disc list-inside">
-                <li :for={error <- @preview["validation"][:errors]}>
-                  {error.source}: {error.message}
+        <div class="flex-1 overflow-y-auto px-5 py-4">
+          <div :if={@preview_tab == "validation"}>
+            <p :if={@preview == :loading} class="text-sm text-base-content/60">Rendering…</p>
+            <div :if={is_map(@preview)}>
+              <ul class="text-[0.79rem]">
+                <li
+                  :for={row <- validation_rows(@preview)}
+                  class="flex items-center gap-2 py-1 text-base-content/70"
+                >
+                  <span :if={row.ok} class="shrink-0 font-bold text-success">✓</span>
+                  <span :if={!row.ok} class="shrink-0 font-bold text-warning">✗</span>
+                  <span class="min-w-0">{row.text}</span>
+                  <a
+                    :if={row.section}
+                    href={"##{row.section}"}
+                    phx-click="close_preview"
+                    class="link link-hover ml-auto shrink-0 text-xs text-primary"
+                  >
+                    Go to {row.section}
+                  </a>
                 </li>
               </ul>
+              <p :if={is_nil(@preview["validation"])} class="mt-2 text-xs text-base-content/50">
+                Record validation (schema, cvelint, hex.pm) runs once a CVE ID is assigned.
+              </p>
+              <p :if={@preview["overrides_applied"] != []} class="mt-3 text-xs text-base-content/50">
+                Overrides applied: {Enum.join(@preview["overrides_applied"], ", ")}
+              </p>
             </div>
           </div>
 
-          <div :if={@preview["overrides_applied"] != []} class="text-xs text-base-content/60">
-            Overrides applied: {Enum.join(@preview["overrides_applied"], ", ")}
+          <div :if={@preview_tab == "json"}>
+            <p :if={@preview == :loading} class="text-sm text-base-content/60">Rendering…</p>
+            <pre
+              :if={is_map(@preview)}
+              class="overflow-x-auto rounded-lg border border-base-300 bg-base-100 p-3 font-mono text-xs leading-5"
+            >{json_highlight(@preview["cna"])}</pre>
           </div>
 
-          <details>
-            <summary class="cursor-pointer text-sm">CNA container JSON</summary>
-            <pre class="bg-base-300/50 rounded p-3 text-xs overflow-x-auto max-h-96">{pretty_json(@preview["cna"])}</pre>
-          </details>
-
-          <div class="mt-4 border-t border-base-300 pt-4">
-            <.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
+          <div :if={@preview_tab == "diff"}>
+            <p :if={@diff == :loading} class="text-sm text-base-content/60">Diffing…</p>
+            <div :if={is_list(@diff)} class="space-y-2">
+              <p :if={not Diff.changed?(@diff)} class="text-sm text-base-content/60">
+                No changes against the published record.
+              </p>
+              <pre
+                :if={Diff.changed?(@diff)}
+                class="overflow-x-auto rounded-lg border border-base-300 bg-base-100 p-3 text-xs leading-5"
+              ><span
+        :for={line <- @diff}
+        class={["block whitespace-pre", diff_line_class(line)]}
+      >{diff_line_text(line)}</span></pre>
+            </div>
           </div>
         </div>
-      </div>
+
+        <div
+          :if={is_map(@preview)}
+          class="flex flex-wrap items-center gap-3 border-t border-base-300 px-5 py-4"
+        >
+          <.lifecycle_buttons
+            case_record={@case_record}
+            current_user={@current_user}
+            include_publish={true}
+            publish_blocked={blocker_count(@preview) > 0}
+          />
+          <span :if={blocker_count(@preview) > 0} class="text-xs text-base-content/50">
+            {blocker_note(blocker_count(@preview), @case_record.state)}
+          </span>
+        </div>
+      </aside>
     </div>
     """
+  end
+
+  attr :tab, :string, required: true
+  attr :active, :string, required: true
+  slot :inner_block, required: true
+
+  defp preview_tab_button(assigns) do
+    ~H"""
+    <button
+      class={[
+        "pb-2",
+        if(@active == @tab,
+          do: "font-bold text-base-content [box-shadow:inset_0_-2px_0_var(--color-primary)]",
+          else: "text-base-content/60 hover:text-base-content"
+        )
+      ]}
+      phx-click="preview_tab"
+      phx-value-tab={@tab}
+    >
+      {render_slot(@inner_block)}
+    </button>
+    """
+  end
+
+  # One row per validation check (✓ when its validator produced no errors)
+  # followed by one row per render blocker; the ✗ rows are what the footer's
+  # blocker count refers to.
+  @validators [schema: "CVE record schema", cvelint: "cvelint", hex: "Hex packages exist"]
+
+  defp validation_rows(preview) do
+    validator_rows(preview["validation"]) ++
+      Enum.map(preview["blockers"], fn blocker ->
+        %{ok: false, text: blocker, section: blocker_section(blocker)}
+      end)
+  end
+
+  defp validator_rows(nil), do: []
+
+  defp validator_rows(validation) do
+    errors = validation[:errors] || []
+
+    Enum.flat_map(@validators, fn {source, label} ->
+      case Enum.filter(errors, &(&1.source == source)) do
+        [] ->
+          [%{ok: true, text: label, section: nil}]
+
+        failures ->
+          Enum.map(failures, &%{ok: false, text: "#{label}: #{&1.message}", section: nil})
+      end
+    end)
+  end
+
+  defp blocker_count(preview), do: Enum.count(validation_rows(preview), &(not &1.ok))
+
+  defp blocker_note(count, state) do
+    noun = if count == 1, do: "blocker", else: "blockers"
+    clause = if state == :approved, do: "blocking publish", else: "resolves after approval"
+    "#{count} #{noun} · #{clause}"
   end
 
   # Maps a render blocker to the workspace section that fixes it; nil when
@@ -2015,7 +2197,8 @@ defmodule VarselWeb.CaseDetailLive do
   defp blocker_section(blocker) do
     cond do
       blocker =~ "CVE ID" -> nil
-      blocker =~ "title" or blocker =~ "description" or blocker =~ "CVSS" -> "summary"
+      blocker =~ "CVSS" -> "severity"
+      blocker =~ "title" or blocker =~ "description" -> "summary"
       blocker =~ "reference" -> "references"
       true -> "affected"
     end

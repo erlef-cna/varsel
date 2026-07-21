@@ -167,6 +167,17 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Editable case"
       assert html =~ "Summary"
 
+      # The band kicker carries the muted opened-date fragment.
+      assert html =~ "draft opened"
+
+      # The section rail is a SectionRail-hook nav and includes Severity.
+      assert html =~ ~s(phx-hook="SectionRail")
+      assert html =~ ~s(href="#severity")
+
+      # The severity card's empty state: no chip, just the invitation.
+      assert html =~ "No CVSS score yet."
+      assert html =~ "Open calculator"
+
       lv
       |> form("#case-content-form", %{"form" => %{"title" => "Renamed case"}})
       |> render_submit()
@@ -208,7 +219,11 @@ defmodule VarselWeb.CaseLiveTest do
       assert case_record.description_md == "Uses `zip:unzip/1` **unsafely**."
 
       # Saving closes the editor; reopening shows the saved markdown.
-      html = lv |> element("button[phx-click=edit_summary]") |> render_click()
+      html =
+        lv
+        |> element(~s{button[phx-click=edit_section][phx-value-section=summary]})
+        |> render_click()
+
       assert html =~ "Uses `zip:unzip/1` **unsafely**."
     end
 
@@ -218,7 +233,12 @@ defmodule VarselWeb.CaseLiveTest do
     } do
       case_record = Fixtures.open_case(poc, %{title: "CVSS case"})
 
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # The calculator is the Severity card's own editor.
+      lv
+      |> element(~s{button[phx-click=edit_section][phx-value-section=severity]})
+      |> render_click()
 
       # First toggle starts from the all-benign baseline (0.0 NONE), then
       # raising vulnerable-system confidentiality to High yields a real score.
@@ -236,7 +256,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       # Submitting the form persists the built vector through the CVSS type.
       lv
-      |> form("#case-content-form")
+      |> form("#case-severity-form")
       |> render_submit()
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
@@ -247,8 +267,17 @@ defmodule VarselWeb.CaseLiveTest do
       assert case_record.cvss_v4.score == 8.7
       assert case_record.cvss_v4.severity == :high
 
+      # At rest the card shows one tinted chip (rating + score) beside the
+      # truncated mono vector.
+      html = render(lv)
+      assert html =~ "text-error bg-error/15"
+      assert html =~ "8.7"
+      assert html =~ "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+
       # Saving closes the editor; reopen to keep working with the calculator.
-      lv |> element("button[phx-click=edit_summary]") |> render_click()
+      lv
+      |> element(~s{button[phx-click=edit_section][phx-value-section=severity]})
+      |> render_click()
 
       # A pasted vector updates the toggles: physical attack vector selected.
       lv
@@ -685,7 +714,11 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Suggest: on"
       refute html =~ "case-content-form"
 
-      html = lv |> element("button[phx-click=edit_summary]") |> render_click()
+      html =
+        lv
+        |> element(~s{button[phx-click=edit_section][phx-value-section=summary]})
+        |> render_click()
+
       assert html =~ "your edits become new suggestions"
       assert html =~ "Propose changes"
 
@@ -911,6 +944,70 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
       lv |> element("button", "Preview") |> render_click()
       refute render_async(lv) =~ "Diff to published"
+    end
+  end
+
+  describe "preview slide-over" do
+    test "validation renders per-check rows with blocker deep links, not an alert box", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Preview case", description_md: "desc"})
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # Publish does not live in the band.
+      refute html =~ "Publish to MITRE"
+
+      lv |> element("button", "Preview") |> render_click()
+      html = render_async(lv)
+
+      # Blockers are ✗ rows with per-section links — no alert/callout box.
+      refute html =~ "alert-warning"
+      assert html =~ "✗"
+      assert html =~ "no references recorded"
+      assert html =~ ~s(href="#references")
+      assert html =~ "Go to references"
+      assert html =~ "CVSS v4 vector is missing"
+      assert html =~ "Go to severity"
+
+      # Without a CVE ID the validators cannot run yet.
+      assert html =~ "runs once a CVE ID is assigned"
+
+      # The footer footnote counts the ✗ rows.
+      assert html =~ "4 blockers · resolves after approval"
+    end
+
+    test "the Rendered JSON tab shows the open, syntax-tinted CNA container", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "JSON case", description_md: "desc"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      lv |> element("button", "Preview") |> render_click()
+      render_async(lv)
+
+      html = lv |> element("button", "Rendered JSON") |> render_click()
+
+      # The JSON is open (no <details>), keys tinted primary, strings success.
+      refute html =~ "CNA container JSON"
+      assert html =~ ~s(<span class="text-primary">&quot;descriptions&quot;</span>)
+      assert html =~ ~s(<span class="text-success">)
+    end
+
+    test "publish is visually gated in the footer while blockers exist", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Gated case", description_md: "desc"})
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      Cases.approve_case!(case_record, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      lv |> element("button", "Preview") |> render_click()
+      html = render_async(lv)
+
+      assert html =~ "Publish to MITRE"
+      assert html =~ "opacity-45"
+      assert html =~ "blocking publish"
     end
   end
 
