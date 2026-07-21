@@ -36,6 +36,7 @@ defmodule Varsel.Cases.Render.Channel do
     entry =
       package
       |> base_entry()
+      |> put_program_info(program_files(package, channel))
       |> Map.merge(channel_constants(package, channel))
       |> put_versions(versions)
 
@@ -57,6 +58,7 @@ defmodule Varsel.Cases.Render.Channel do
   def render_git(package, git_derivation) do
     package
     |> base_entry()
+    |> put_program_info(Enum.map(package.program_files, &{&1, &1.path}))
     |> Map.merge(git_constants(package))
     |> put_versions((git_derivation || %{})["versions"] || [])
   end
@@ -80,15 +82,44 @@ defmodule Varsel.Cases.Render.Channel do
   ## -------------------------------------------------------- entry assembly
 
   defp base_entry(package) do
-    %{
-      "defaultStatus" => to_string(package.default_status),
-      "vendor" => package.vendor,
-      "product" => package.product
-    }
-    |> put_non_empty("modules", package.modules)
-    |> put_non_empty("programFiles", package.program_files)
-    |> put_non_empty("programRoutines", Enum.map(package.program_routines, &%{"name" => &1}))
-    |> put_non_empty("platforms", package.platforms)
+    put_non_empty(
+      %{
+        "defaultStatus" => to_string(package.default_status),
+        "vendor" => package.vendor,
+        "product" => package.product
+      },
+      "platforms",
+      package.platforms
+    )
+  end
+
+  # The program files an entry covers, as {file, rendered_path} pairs. A
+  # channel with a subpath distributes only that directory: files under it
+  # apply, paths relative to it (the per-application view of a
+  # multi-application repository, see CVE-2026-48858's inets/ftp entries).
+  # Without a subpath — and on the git entry — every file applies under its
+  # full repository path.
+  defp program_files(package, %{subpath: subpath}) when is_binary(subpath) do
+    prefix = String.trim(subpath, "/") <> "/"
+
+    for file <- package.program_files, String.starts_with?(file.path, prefix) do
+      {file, String.replace_prefix(file.path, prefix, "")}
+    end
+  end
+
+  defp program_files(package, _channel), do: Enum.map(package.program_files, &{&1, &1.path})
+
+  # Modules and routines follow the files that contribute them.
+  defp put_program_info(entry, files_with_paths) do
+    files = Enum.map(files_with_paths, &elem(&1, 0))
+
+    entry
+    |> put_non_empty("modules", files |> Enum.flat_map(& &1.modules) |> Enum.uniq())
+    |> put_non_empty("programFiles", Enum.map(files_with_paths, &elem(&1, 1)))
+    |> put_non_empty(
+      "programRoutines",
+      files |> Enum.flat_map(& &1.routines) |> Enum.uniq() |> Enum.map(&%{"name" => &1})
+    )
   end
 
   defp channel_constants(_package, %{purl_type: :hosted}) do

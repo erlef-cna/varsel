@@ -86,6 +86,9 @@ defmodule Varsel.Cases do
       destroy CaseAssignment, :unassign_case_user, :unassign
 
       create AffectedPackage, :add_affected_package, :add
+      create AffectedPackage, :add_otp_affected_package, :add_otp
+      create AffectedPackage, :add_elixir_affected_package, :add_elixir
+      create AffectedPackage, :add_gleam_affected_package, :add_gleam
       update AffectedPackage, :edit_affected_package, :edit
       destroy AffectedPackage, :remove_affected_package, :remove
 
@@ -148,6 +151,9 @@ defmodule Varsel.Cases do
 
     resource AffectedPackage do
       define :add_affected_package, action: :add
+      define :add_otp_affected_package, action: :add_otp
+      define :add_elixir_affected_package, action: :add_elixir
+      define :add_gleam_affected_package, action: :add_gleam
       define :edit_affected_package, action: :edit
       define :remove_affected_package, action: :remove
     end

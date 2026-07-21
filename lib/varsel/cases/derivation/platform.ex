@@ -29,14 +29,16 @@ defmodule Varsel.Cases.Derivation.Platform do
 
   @type classified_tag :: {kind :: :modern | :legacy, tag :: String.t(), bare :: String.t()}
 
-  @doc "Picks the platform for an affected package based on its channels."
-  @spec for_package(Varsel.Cases.AffectedPackage.t(), [Varsel.Cases.PackageChannel.t()]) :: t()
-  def for_package(package, channels) do
-    otp? =
-      Enum.any?(channels, &(&1.purl_type == :otp)) or
-        (package.repo_url || "") =~ ~r{github\.com/erlang/otp}
-
-    if otp? do
+  @doc """
+  Picks the platform for an affected package: erlang/otp's own release
+  process for packages living in the erlang/otp repository, `:semver` for
+  everything else. Deliberately keyed on the repository, not on `pkg:otp`
+  channels — those exist on foreign repos too (Elixir's or rebar3's
+  applications), whose releases are semver-tagged.
+  """
+  @spec for_package(Varsel.Cases.AffectedPackage.t()) :: t()
+  def for_package(package) do
+    if (package.repo_url || "") =~ ~r{github\.com/erlang/otp} do
       %__MODULE__{
         kind: :otp,
         tag_prefixes: [{"OTP-", :modern}, {"OTP_R", :legacy}],

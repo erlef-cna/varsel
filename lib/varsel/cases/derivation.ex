@@ -30,8 +30,11 @@ defmodule Varsel.Cases.Derivation do
   4. Events scoped to a channel (`package_channel_id` set) replace the
      repo-derived boundaries for that channel entirely and are used verbatim
      (e.g. date boundaries on a `:hosted` channel).
-  5. `:otp` channels translate OTP release tags into per-application versions
-     through `Varsel.Cases.Derivation.OtpVersionsTable`.
+  5. `:otp` channels of packages living in the erlang/otp repository
+     translate OTP release tags into per-application versions through
+     `Varsel.Cases.Derivation.OtpVersionsTable`; `pkg:otp` channels of other
+     repos (Elixir's or rebar3's applications) version with their
+     repository's semver tags.
 
   ## Result shape (JSON-safe, cached in jsonb)
 
@@ -59,7 +62,7 @@ defmodule Varsel.Cases.Derivation do
   """
   @spec derive(AffectedPackage.t()) :: {:ok, map()}
   def derive(package) do
-    platform = Platform.for_package(package, package.channels)
+    platform = Platform.for_package(package)
 
     {scoped_events, global_events} =
       Enum.split_with(package.version_events, & &1.package_channel_id)
@@ -222,7 +225,7 @@ defmodule Varsel.Cases.Derivation do
   defp derive_channel(channel, platform, intro, lines, scoped_events) do
     cond do
       scoped_events != [] ->
-        derive_scoped_channel(channel, scoped_events)
+        derive_scoped_channel(channel, platform, scoped_events)
 
       channel.purl_type == :hosted ->
         %{
@@ -240,10 +243,10 @@ defmodule Varsel.Cases.Derivation do
   end
 
   # Channel-scoped explicit events: used verbatim as one range.
-  defp derive_scoped_channel(channel, events) do
+  defp derive_scoped_channel(channel, platform, events) do
     intro = Enum.find(events, &(&1.event == :introduced))
     fixes = Enum.filter(events, &(&1.event == :fixed))
-    version_type = version_type(channel)
+    version_type = version_type(channel, platform)
 
     cond do
       intro == nil ->
@@ -274,18 +277,18 @@ defmodule Varsel.Cases.Derivation do
   defp boundary_value(%{version: version}) when not is_nil(version), do: version
   defp boundary_value(%{commit_sha: sha}), do: sha
 
-  defp version_type(%{purl_type: :otp}), do: "otp"
-  defp version_type(%{purl_type: :oci}), do: "other"
-  defp version_type(%{purl_type: :hosted}), do: "date"
-  defp version_type(_channel), do: "semver"
+  defp version_type(%{purl_type: :otp}, %{kind: :otp}), do: "otp"
+  defp version_type(%{purl_type: :oci}, _platform), do: "other"
+  defp version_type(%{purl_type: :hosted}, _platform), do: "date"
+  defp version_type(_channel, _platform), do: "semver"
 
   # Repo-derived channels: registry versions, OTP app versions, OCI tags.
-  defp derive_repo_channel(channel, _platform, intro, lines) do
+  defp derive_repo_channel(channel, platform, intro, lines) do
     released = Enum.reject(lines, & &1["pending"])
     pending = pending_shas(lines)
 
     case channel.purl_type do
-      :otp ->
+      :otp when platform.kind == :otp ->
         derive_otp_channel(channel, intro, released, pending)
 
       :oci ->

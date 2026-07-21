@@ -51,7 +51,7 @@ defmodule Varsel.Cases.RenderTest do
         product: "ash_authentication_phoenix",
         repo_url: @repo,
         cpe: @cpe,
-        program_files: ["lib/ash_authentication_phoenix/controller.ex"]
+        program_files: [%{path: "lib/ash_authentication_phoenix/controller.ex"}]
       })
 
     # One hex channel; the github entry renders implicitly from repo_url.
@@ -458,6 +458,117 @@ defmodule Varsel.Cases.RenderTest do
       assert [entry] = result.cna["affected"]
       refute Map.has_key?(entry, "collectionURL")
       refute Map.has_key?(entry, "packageURL")
+    end
+  end
+
+  describe "per-channel program scoping" do
+    setup %{poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Scoping case"})
+      %{scoping_case: case_record}
+    end
+
+    defp otp_package(poc, case_record, applications, program_files) do
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{
+          vendor: "Erlang",
+          product: "OTP",
+          repo_url: "https://github.com/erlang/otp",
+          program_files: program_files
+        })
+
+      for {{application, subpath}, position} <- Enum.with_index(applications) do
+        Cases.add_package_channel!(
+          %{
+            case_id: case_record.id,
+            affected_package_id: package.id,
+            purl_type: :otp,
+            name: application,
+            subpath: subpath,
+            position: position
+          },
+          actor: poc
+        )
+      end
+
+      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      {:ok, %{result: result}} = Publication.render(case_record)
+      result.cna["affected"]
+    end
+
+    test "pkg:otp entries list only their application's files, prefix stripped", %{
+      poc: poc,
+      scoping_case: case_record
+    } do
+      # Modelled after CVE-2026-48858: ftp code moved out of inets.
+      [inets, ftp, git] =
+        otp_package(poc, case_record, [{"inets", "lib/inets"}, {"ftp", "lib/ftp"}], [
+          %{
+            path: "lib/inets/src/ftp/ftp_internal.erl",
+            modules: ["ftp_internal"],
+            routines: ["ftp_internal:handle_ctrl_result/2"]
+          },
+          %{
+            path: "lib/ftp/src/ftp_internal.erl",
+            modules: ["ftp_internal"],
+            routines: ["ftp_internal:handle_ctrl_result/2"]
+          }
+        ])
+
+      assert inets["programFiles"] == ["src/ftp/ftp_internal.erl"]
+      assert inets["modules"] == ["ftp_internal"]
+      assert ftp["programFiles"] == ["src/ftp_internal.erl"]
+
+      # The git entry keeps every file under its full path; shared
+      # modules/routines dedupe.
+      assert git["programFiles"] == [
+               "lib/inets/src/ftp/ftp_internal.erl",
+               "lib/ftp/src/ftp_internal.erl"
+             ]
+
+      assert git["modules"] == ["ftp_internal"]
+      assert git["programRoutines"] == [%{"name" => "ftp_internal:handle_ctrl_result/2"}]
+    end
+
+    test "erts files live under erts/, not lib/erts/", %{poc: poc, scoping_case: case_record} do
+      [erts, git] =
+        otp_package(poc, case_record, [{"erts", "erts"}], [
+          %{path: "erts/emulator/drivers/common/inet_drv.c", modules: ["inet_drv"]}
+        ])
+
+      assert erts["programFiles"] == ["emulator/drivers/common/inet_drv.c"]
+      assert erts["modules"] == ["inet_drv"]
+      assert git["programFiles"] == ["erts/emulator/drivers/common/inet_drv.c"]
+    end
+
+    test "pkg:otp channels of single-application repos keep every file as-is", %{
+      poc: poc,
+      scoping_case: case_record
+    } do
+      # rebar3-style: the repository root is the application, no lib/<app>/.
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{
+          vendor: "erlang",
+          product: "rebar3",
+          repo_url: "https://github.com/erlang/rebar3",
+          program_files: [%{path: "apps/rebar/src/rebar3.erl", modules: ["rebar3"]}]
+        })
+
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: :otp,
+          name: "rebar3"
+        },
+        actor: poc
+      )
+
+      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      {:ok, %{result: result}} = Publication.render(case_record)
+
+      assert [rebar3, git] = result.cna["affected"]
+      assert rebar3["programFiles"] == ["apps/rebar/src/rebar3.erl"]
+      assert git["programFiles"] == ["apps/rebar/src/rebar3.erl"]
     end
   end
 end

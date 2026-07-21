@@ -41,9 +41,7 @@ defmodule Varsel.Cases.Proposable do
     :repo_url,
     :cpe,
     :default_status,
-    :modules,
     :program_files,
-    :program_routines,
     :platforms,
     :allow_unreleased_fix,
     :position
@@ -54,6 +52,7 @@ defmodule Varsel.Cases.Proposable do
     :namespace,
     :name,
     :qualifiers,
+    :subpath,
     :tag_suffixes,
     :versions_override,
     :entry_override,

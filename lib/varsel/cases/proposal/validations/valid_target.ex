@@ -10,7 +10,10 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
      `:set`/`:insert`; `target_id` rules per operation; `:insert`/`:delete`
      never address the case itself.
   2. Allowlist: the field / payload keys must be in
-     `Varsel.Cases.Proposable`'s explicit lists.
+     `Varsel.Cases.Proposable`'s explicit lists. An `:insert` payload for an
+     affected package may instead name a well-known-product `preset`
+     (`Varsel.Cases.AffectedPackage.Preset`), whose keys are the specialized
+     action's arguments plus its content fields.
   3. Types: `:set` values and `:insert` payload values are cast through the
      target attribute's real Ash type, so garbage never enters the queue.
   4. Existence & membership: a referenced row must exist and belong to the
@@ -24,6 +27,7 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
   use Ash.Resource.Validation
 
   alias Ash.Resource.Info
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Proposable
   alias Varsel.Cases.Proposal.Target
 
@@ -114,6 +118,25 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
   end
 
   defp validate_value(target, :insert, _field_name, %{"value" => payload}) when is_map(payload) do
+    case {target, preset_of(payload)} do
+      {_target, nil} ->
+        validate_insert_payload(target, payload)
+
+      {:affected_package, preset} ->
+        validate_preset_payload(preset, payload)
+
+      {_target, _preset} ->
+        {:error, field: :proposed_value, message: "preset inserts can only target affected_package"}
+    end
+  end
+
+  defp validate_value(_target, :insert, _field_name, _proposed_value) do
+    {:error, field: :proposed_value, message: "an :insert payload must be a map of row fields"}
+  end
+
+  defp validate_value(_target, :delete, _field_name, _proposed_value), do: :ok
+
+  defp validate_insert_payload(target, payload) do
     resource = Target.resource(target)
     allowed = Proposable.fields(resource) ++ Proposable.insert_extra_fields(resource)
 
@@ -125,11 +148,86 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
     end)
   end
 
-  defp validate_value(_target, :insert, _field_name, _proposed_value) do
-    {:error, field: :proposed_value, message: "an :insert payload must be a map of row fields"}
+  ## --------------------------------------------------- preset insert payloads
+
+  # A payload naming a well-known-product preset applies through the
+  # specialized `apply_proposal_insert_<preset>` action instead of the
+  # generic one; its keys are the action's arguments plus content fields.
+  defp preset_of(payload), do: payload["preset"] || payload[:preset]
+
+  defp validate_preset_payload(preset_input, payload) do
+    with {:ok, preset} <- cast_preset(preset_input),
+         :ok <- require_applications(preset, payload) do
+      validate_preset_entries(preset, payload)
+    end
   end
 
-  defp validate_value(_target, :delete, _field_name, _proposed_value), do: :ok
+  defp validate_preset_entries(preset, payload) do
+    Enum.reduce_while(payload, :ok, fn entry, :ok ->
+      case validate_preset_entry(preset, entry) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_preset_entry(preset, {key, value}) do
+    resource = Target.resource(:affected_package)
+    arguments = Preset.arguments(preset)
+
+    with {:ok, field} <- existing_field(resource, key, [:preset | Preset.payload_fields(preset)]) do
+      cond do
+        field == :preset -> :ok
+        field in arguments -> validate_preset_argument(field, value)
+        true -> cast_field(resource, field, value)
+      end
+    end
+  end
+
+  defp cast_preset(preset_input) do
+    case Preset.cast(preset_input) do
+      {:ok, preset} ->
+        {:ok, preset}
+
+      :error ->
+        {:error,
+         field: :proposed_value,
+         message: "unknown preset %{preset}; known presets: %{known}",
+         vars: [preset: inspect(preset_input), known: Enum.join(Preset.values(), ", ")]}
+    end
+  end
+
+  defp require_applications(preset, payload) do
+    if Preset.applications?(preset) and is_nil(payload["applications"] || payload[:applications]) do
+      {:error, field: :proposed_value, message: "the %{preset} preset requires applications", vars: [preset: preset]}
+    else
+      :ok
+    end
+  end
+
+  defp validate_preset_argument(:applications, value) do
+    if is_list(value) and value != [] and Enum.all?(value, &(is_binary(&1) and &1 != "")) do
+      :ok
+    else
+      {:error, field: :proposed_value, message: "applications must be a non-empty list of application names"}
+    end
+  end
+
+  defp validate_preset_argument(:introduced_commit, value) do
+    if is_binary(value) and value =~ Preset.commit_sha_regex() do
+      :ok
+    else
+      {:error, field: :proposed_value, message: "introduced_commit must be a full 40-character commit SHA"}
+    end
+  end
+
+  defp validate_preset_argument(:fixed_commits, value) do
+    if is_list(value) and Enum.all?(value, &(is_binary(&1) and &1 =~ Preset.commit_sha_regex())) do
+      :ok
+    else
+      {:error, field: :proposed_value, message: "fixed_commits must be a list of full 40-character commit SHAs"}
+    end
+  end
 
   defp validate_payload_entry(resource, allowed, {key, value}) do
     with {:ok, field} <- existing_field(resource, key, allowed) do

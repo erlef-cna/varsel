@@ -18,6 +18,7 @@ defmodule Varsel.Cases.Projection do
 
   alias Ash.Resource.Info
   alias Varsel.Cases.AffectedPackage
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Case
   alias Varsel.Cases.Proposal
   alias Varsel.Cases.Proposal.Target
@@ -127,6 +128,7 @@ defmodule Varsel.Cases.Projection do
     phantom =
       proposal
       |> phantom_row(AffectedPackage, case_record.id)
+      |> merge_preset_constants(proposal)
       |> Map.merge(%{channels: [], version_events: []})
 
     Map.update!(case_record, :affected_packages, &(&1 ++ [phantom]))
@@ -175,6 +177,17 @@ defmodule Varsel.Cases.Projection do
   end
 
   defp apply_insert(_proposal, case_record), do: case_record
+
+  # A preset insert payload carries no vendor/product itself; show the
+  # constants the accepted proposal would stamp.
+  defp merge_preset_constants(row, proposal) do
+    payload = proposal.proposed_value["value"] || %{}
+
+    case Preset.cast(payload["preset"] || payload[:preset]) do
+      {:ok, preset} -> Map.merge(row, Preset.attributes(preset))
+      :error -> row
+    end
+  end
 
   # A phantom row impersonates the row the accepted proposal would create; it
   # carries the proposal's id so the UI can tell it apart.

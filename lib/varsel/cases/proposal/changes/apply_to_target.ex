@@ -7,7 +7,8 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
   Applies an accepted proposal to its target inside the accept transaction.
 
   Dispatches on `{operation, target}` to the target resource's internal
-  `apply_proposal` / `apply_proposal_insert` / `apply_proposal_delete` action,
+  `apply_proposal` / `apply_proposal_insert` / `apply_proposal_delete` action
+  (or `apply_proposal_insert_<preset>` for preset package inserts),
   executed with the *accepting* user as actor — the paper trail on the target
   attributes the write to the approver, while proposer provenance stays on the
   proposal row.
@@ -19,6 +20,8 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
 
   use Ash.Resource.Change
 
+  alias Ash.Error.Changes.InvalidAttribute
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Proposal.Target
 
   @impl Ash.Resource.Change
@@ -66,17 +69,18 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
 
   defp apply_to_target(%{operation: :insert} = proposal, actor) do
     resource = Target.resource(proposal.target)
-    payload = proposal.proposed_value["value"]
 
-    params =
-      payload
-      |> Map.put("case_id", proposal.case_id)
-      |> put_parent_key(proposal)
-      |> Map.put("proposal_id", proposal.id)
+    with {:ok, action, payload} <- insert_action(proposal.proposed_value["value"]) do
+      params =
+        payload
+        |> Map.put("case_id", proposal.case_id)
+        |> put_parent_key(proposal)
+        |> Map.put("proposal_id", proposal.id)
 
-    resource
-    |> Ash.Changeset.for_create(:apply_proposal_insert, params, actor: actor)
-    |> Ash.create()
+      resource
+      |> Ash.Changeset.for_create(action, params, actor: actor)
+      |> Ash.create()
+    end
   end
 
   defp apply_to_target(%{operation: :delete} = proposal, actor) do
@@ -87,6 +91,28 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
         :ok -> {:ok, nil}
         {:error, error} -> {:error, error}
       end
+    end
+  end
+
+  # A payload naming a well-known-product preset (validated at propose time)
+  # applies through the specialized creation action.
+  defp insert_action(payload) do
+    case payload["preset"] || payload[:preset] do
+      nil ->
+        {:ok, :apply_proposal_insert, payload}
+
+      preset_input ->
+        case Preset.cast(preset_input) do
+          {:ok, preset} ->
+            {:ok, :"apply_proposal_insert_#{preset}", Map.drop(payload, ["preset", :preset])}
+
+          :error ->
+            {:error,
+             InvalidAttribute.exception(
+               field: :proposed_value,
+               message: "unknown preset #{inspect(preset_input)}"
+             )}
+        end
     end
   end
 

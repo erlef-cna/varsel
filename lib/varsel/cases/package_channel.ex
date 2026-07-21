@@ -181,6 +181,18 @@ defmodule Varsel.Cases.PackageChannel do
       public? true
     end
 
+    attribute :subpath, :string do
+      description """
+      Repository-root-relative directory this channel distributes, e.g.
+      "lib/ssh" for pkg:otp/ssh or "erts" for pkg:otp/erts. The rendered
+      entry's programFiles (and the modules/routines they contribute) are
+      scoped to files under it, paths relative to it. Nil distributes the
+      whole repository.
+      """
+
+      public? true
+    end
+
     attribute :tag_suffixes, {:array, :string} do
       description """
       OCI image-tag flavor suffixes (e.g. ["elixir", "erlang", "node"]); the

@@ -21,6 +21,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Accounts
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseReference
@@ -29,6 +30,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposable
   alias Varsel.Cases.Publication
+  alias Varsel.Cases.Render.Channel
   alias Varsel.Cases.Render.Diff
   alias Varsel.Cases.VersionEvent
 
@@ -48,12 +50,37 @@ defmodule VarselWeb.CaseDetailLive do
   ]
 
   # Modal child-form registry: UI type -> resource + labels. Every resource
-  # has an :add create action; those with `edit?` also have an :edit update.
+  # has an :add create action (overridable via `create_action` for the
+  # well-known-product presets); those with `edit?` also have an :edit update.
   @children %{
     "package" => %{
       resource: AffectedPackage,
       title: "affected package",
       edit?: true,
+      target: :affected_package
+    },
+    "package_otp" => %{
+      resource: AffectedPackage,
+      create_action: :add_otp,
+      preset: :otp,
+      title: "Erlang/OTP package",
+      edit?: false,
+      target: :affected_package
+    },
+    "package_elixir" => %{
+      resource: AffectedPackage,
+      create_action: :add_elixir,
+      preset: :elixir,
+      title: "Elixir package",
+      edit?: false,
+      target: :affected_package
+    },
+    "package_gleam" => %{
+      resource: AffectedPackage,
+      create_action: :add_gleam,
+      preset: :gleam,
+      title: "Gleam package",
+      edit?: false,
       target: :affected_package
     },
     "channel" => %{
@@ -86,10 +113,16 @@ defmodule VarselWeb.CaseDetailLive do
 
   # Comma/newline separated text inputs that become {:array, :string} attributes.
   @list_params %{
-    "package" => ~w(modules program_files program_routines platforms),
+    "package" => ~w(platforms),
+    "package_otp" => ~w(applications fixed_commits),
+    "package_elixir" => ~w(applications fixed_commits),
+    "package_gleam" => ~w(fixed_commits),
     "channel" => ~w(tag_suffixes),
     "reference" => ~w(tags)
   }
+
+  # The package modal types sharing the program-files textarea.
+  @package_types ~w(package package_otp package_elixir package_gleam)
 
   @impl Phoenix.LiveView
   def mount(%{"id" => id}, _session, socket) do
@@ -278,11 +311,14 @@ defmodule VarselWeb.CaseDetailLive do
   ## -------------------------------------------------------------- child rows
 
   def handle_event("new_child", %{"type" => type} = params, socket) do
-    %{resource: resource, title: title} = Map.fetch!(@children, type)
+    %{resource: resource, title: title} = config = Map.fetch!(@children, type)
 
     form =
       resource
-      |> AshPhoenix.Form.for_create(:add, as: "child", actor: socket.assigns.current_user)
+      |> AshPhoenix.Form.for_create(Map.get(config, :create_action, :add),
+        as: "child",
+        actor: socket.assigns.current_user
+      )
       |> to_form()
 
     parent =
@@ -299,7 +335,8 @@ defmodule VarselWeb.CaseDetailLive do
          form: form,
          type: type,
          title: modal_title("Add", title, socket),
-         parent: parent
+         parent: parent,
+         channel_options: channel_options(type, params, socket)
        }
      )}
   end
@@ -326,7 +363,8 @@ defmodule VarselWeb.CaseDetailLive do
          form: form,
          type: type,
          title: modal_title("Edit", title, socket),
-         parent: %{}
+         parent: %{},
+         channel_options: []
        }
      )}
   end
@@ -360,6 +398,15 @@ defmodule VarselWeb.CaseDetailLive do
 
   def handle_event("cancel_child", _params, socket) do
     {:noreply, assign(socket, child_form: nil)}
+  end
+
+  # The package modal's nested program-file rows.
+  def handle_event("add_program_file", _params, socket) do
+    {:noreply, update_child_form(socket, &AshPhoenix.Form.add_form(&1, :program_files))}
+  end
+
+  def handle_event("remove_program_file", %{"path" => path}, socket) do
+    {:noreply, update_child_form(socket, &AshPhoenix.Form.remove_form(&1, path))}
   end
 
   # Edit mode destroys the row; propose mode files a :delete proposal.
@@ -596,6 +643,7 @@ defmodule VarselWeb.CaseDetailLive do
       |> merge_reference_tags(type)
       |> parse_classification_id(type)
       |> parse_qualifiers(type)
+      |> parse_program_files(type)
 
     Enum.reduce(Map.get(@list_params, type, []), params, fn key, params ->
       case params[key] do
@@ -606,6 +654,44 @@ defmodule VarselWeb.CaseDetailLive do
           params
       end
     end)
+  end
+
+  # Program files come from nested forms as an indexed map of rows; the
+  # module/routine text inputs within each row are comma separated. The
+  # indexed-map shape stays as-is for AshPhoenix's nested-form tracking.
+  defp parse_program_files(%{"program_files" => %{} = files} = params, type) when type in @package_types do
+    files =
+      Map.new(files, fn {index, file} ->
+        {index, file |> split_file_list("modules") |> split_file_list("routines")}
+      end)
+
+    Map.put(params, "program_files", files)
+  end
+
+  defp parse_program_files(params, _type), do: params
+
+  defp split_file_list(file, key) do
+    case file[key] do
+      value when is_binary(value) -> Map.put(file, key, split_list(value))
+      _other -> file
+    end
+  end
+
+  # The nested program-file rows in their canonical stored shape: ordered by
+  # index, internal form-tracking keys and pathless (just-added, empty) rows
+  # dropped. Used where params leave the form machinery — proposal payloads
+  # and the projected-row diff.
+  defp program_files_list(%{} = files) do
+    files
+    |> Enum.sort_by(fn {index, _file} -> String.to_integer(index) end)
+    |> Enum.map(fn {_index, file} ->
+      %{
+        "path" => file["path"],
+        "modules" => file["modules"] || [],
+        "routines" => file["routines"] || []
+      }
+    end)
+    |> Enum.reject(&(&1["path"] in [nil, ""]))
   end
 
   # Channel qualifiers arrive as "key=value, key=value" text.
@@ -667,62 +753,85 @@ defmodule VarselWeb.CaseDetailLive do
   # :set proposal per changed field for an edit form.
   defp propose_child_changes(socket, params, reasoning) do
     %{form: form, type: type} = socket.assigns.child_form
-    %{resource: resource, target: target} = Map.fetch!(@children, type)
+    config = Map.fetch!(@children, type)
     case_id = socket.assigns.case_record.id
+
+    # Leaving the form machinery: nested program-file rows become the stored
+    # list shape, both for payloads and for the changed-field diff below.
+    params =
+      case params do
+        %{"program_files" => %{} = files} ->
+          Map.put(params, "program_files", program_files_list(files))
+
+        params ->
+          params
+      end
 
     proposals =
       case form.source.type do
-        :create ->
-          allowed =
-            Enum.map(
-              Proposable.fields(resource) ++
-                Proposable.insert_extra_fields(resource),
-              &to_string/1
-            )
-
-          payload =
-            params
-            |> Map.take(allowed)
-            |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
-            |> Map.new()
-
-          [
-            %{
-              case_id: case_id,
-              target: target,
-              operation: :insert,
-              target_id: params["affected_package_id"],
-              proposed_value: %{"value" => payload},
-              reasoning: reasoning
-            }
-          ]
-
-        :update ->
-          # The form was built from the projected row, so the diff yields
-          # only genuinely new changes; counters link to the countered
-          # proposal.
-          row = form.source.data
-          projection = socket.assigns.projection
-
-          for field <- Proposable.set_fields(resource),
-              key = to_string(field),
-              Map.has_key?(params, key),
-              changed_value?(Map.get(row, field), params[key]) do
-            %{
-              case_id: case_id,
-              target: target,
-              operation: :set,
-              target_id: row.id,
-              field_name: key,
-              proposed_value: %{"value" => params[key]},
-              reasoning: reasoning,
-              parent_proposal_id: countered_id(projection, target, row.id, key)
-            }
-          end
+        :create -> child_insert_proposals(config, case_id, params, reasoning)
+        :update -> child_set_proposals(socket, config, case_id, form, params, reasoning)
       end
 
     socket = assign(socket, child_form: nil)
     create_proposals(socket, proposals)
+  end
+
+  defp child_insert_proposals(config, case_id, params, reasoning) do
+    allowed =
+      case config[:preset] do
+        nil ->
+          Proposable.fields(config.resource) ++ Proposable.insert_extra_fields(config.resource)
+
+        preset ->
+          Preset.payload_fields(preset)
+      end
+
+    payload =
+      params
+      |> Map.take(Enum.map(allowed, &to_string/1))
+      |> Enum.reject(fn {_key, value} -> value in [nil, "", []] end)
+      |> Map.new()
+
+    payload =
+      case config[:preset] do
+        nil -> payload
+        preset -> Map.put(payload, "preset", to_string(preset))
+      end
+
+    [
+      %{
+        case_id: case_id,
+        target: config.target,
+        operation: :insert,
+        target_id: params["affected_package_id"],
+        proposed_value: %{"value" => payload},
+        reasoning: reasoning
+      }
+    ]
+  end
+
+  # The edit form was built from the projected row, so the diff yields only
+  # genuinely new changes; counters link to the countered proposal.
+  defp child_set_proposals(socket, config, case_id, form, params, reasoning) do
+    row = form.source.data
+    projection = socket.assigns.projection
+
+    for field <- Proposable.set_fields(config.resource),
+        key = to_string(field),
+        Map.has_key?(params, key),
+        changed_value?(Map.get(row, field), params[key]) do
+      %{
+        case_id: case_id,
+        target: config.target,
+        operation: :set,
+        target_id: row.id,
+        field_name: key,
+        proposed_value: %{"value" => params[key]},
+        reasoning: reasoning,
+        parent_proposal_id: countered_id(projection, config.target, row.id, key)
+      }
+    end
   end
 
   defp create_proposals(socket, []), do: put_flash(socket, :info, "No changes to propose.")
@@ -757,6 +866,11 @@ defmodule VarselWeb.CaseDetailLive do
   defp changed_value?(current, param), do: comparable(current) != comparable(param)
 
   defp comparable(%Varsel.Types.CVSS{vector: vector}), do: vector
+
+  defp comparable(%Varsel.Cases.AffectedPackage.ProgramFile{} = file) do
+    %{"path" => file.path, "modules" => file.modules, "routines" => file.routines}
+  end
+
   defp comparable(nil), do: ""
   defp comparable(value) when is_list(value), do: Enum.map(value, &comparable/1)
   defp comparable(value) when is_map(value), do: value
@@ -1216,14 +1330,18 @@ defmodule VarselWeb.CaseDetailLive do
         <h2 class="text-lg font-semibold">Affected packages</h2>
         <div class="flex gap-2">
           <button class="btn btn-ghost btn-xs" phx-click="refresh_derivation">Refresh derivation</button>
-          <button
-            :if={@mode != :view}
-            class="btn btn-outline btn-xs"
-            phx-click="new_child"
-            phx-value-type="package"
-          >
-            Add package
-          </button>
+          <div :if={@mode != :view} class="dropdown dropdown-end">
+            <div tabindex="0" role="button" class="btn btn-outline btn-xs">Add package</div>
+            <ul
+              tabindex="0"
+              class="dropdown-content menu menu-sm bg-base-100 rounded-box z-10 w-44 p-1 shadow"
+            >
+              <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
+              <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
+              <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
+              <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -1300,8 +1418,11 @@ defmodule VarselWeb.CaseDetailLive do
               <tbody>
                 <tr :for={channel <- package.channels}>
                   <td><span class="badge badge-ghost badge-sm">{channel.purl_type}</span></td>
-                  <td class="font-mono">
-                    {Varsel.Cases.Render.Channel.purl_string(package, channel) || channel.name || "—"}
+                  <td
+                    class="font-mono"
+                    title={Channel.purl_string(package, channel)}
+                  >
+                    {channel_label(package, channel) || "—"}
                   </td>
                   <td class="text-xs text-base-content/60">
                     {if channel.versions_override, do: "versions overridden"}
@@ -1365,6 +1486,15 @@ defmodule VarselWeb.CaseDetailLive do
                     </span>
                   </td>
                   <td class="font-mono text-xs break-all">{event.commit_sha || event.version}</td>
+                  <td class="text-xs">
+                    <span
+                      :if={event.package_channel_id}
+                      class="badge badge-ghost badge-sm font-mono"
+                      title="Applies only to this channel"
+                    >
+                      {scoped_channel_label(package, event)}
+                    </span>
+                  </td>
                   <td class="text-xs text-base-content/60">{event.note}</td>
                   <td :if={@mode != :view} class="text-right whitespace-nowrap">
                     <button
@@ -1843,6 +1973,7 @@ defmodule VarselWeb.CaseDetailLive do
             type={@child_form.type}
             form={@child_form.form}
             catalog_options={@catalog_options}
+            channel_options={@child_form.channel_options}
           />
 
           <input
@@ -1886,15 +2017,7 @@ defmodule VarselWeb.CaseDetailLive do
     >
       <:label>Default status</:label>
     </.input>
-    <.input field={@form[:modules]} type="text" value={list_value(@form[:modules])}>
-      <:label>Modules (comma separated)</:label>
-    </.input>
-    <.input field={@form[:program_files]} type="text" value={list_value(@form[:program_files])}>
-      <:label>Program files (comma separated)</:label>
-    </.input>
-    <.input field={@form[:program_routines]} type="text" value={list_value(@form[:program_routines])}>
-      <:label>Program routines, Erlang notation (comma separated)</:label>
-    </.input>
+    <.program_files_field form={@form} />
     <.input
       field={@form[:cpe]}
       type="text"
@@ -1906,6 +2029,39 @@ defmodule VarselWeb.CaseDetailLive do
     <.input field={@form[:allow_unreleased_fix]} type="checkbox">
       <:label>Allow publishing while a fix has no containing release</:label>
     </.input>
+    """
+  end
+
+  # The preset forms: vendor/product/repo/CPE and channels are prefilled;
+  # only the boundary facts and content lists remain.
+  defp child_fields(%{type: "package_" <> _preset} = assigns) do
+    ~H"""
+    <.input
+      :if={@type != "package_gleam"}
+      field={@form[:applications]}
+      type="text"
+      value={list_value(@form[:applications])}
+      placeholder={if @type == "package_elixir", do: "e.g. elixir, mix", else: "e.g. ssh, stdlib"}
+    >
+      <:label>Affected applications (comma separated)</:label>
+    </.input>
+    <.input
+      field={@form[:introduced_commit]}
+      type="text"
+      placeholder="40-char commit SHA"
+      class="w-full input font-mono"
+    >
+      <:label>Introducing commit</:label>
+    </.input>
+    <.input
+      field={@form[:fixed_commits]}
+      type="text"
+      value={list_value(@form[:fixed_commits])}
+      class="w-full input font-mono"
+    >
+      <:label>Fix commits (comma separated, one per release branch)</:label>
+    </.input>
+    <.program_files_field form={@form} />
     """
   end
 
@@ -1929,6 +2085,23 @@ defmodule VarselWeb.CaseDetailLive do
       placeholder="repository_url=ghcr.io/owner"
     >
       <:label>Qualifiers (key=value, comma separated)</:label>
+      <:description>
+        Only overrides are stored here — otp channels derive repository_url and
+        vcs_url from the package's repository automatically at render time.
+      </:description>
+    </.input>
+    <.input
+      field={@form[:subpath]}
+      type="text"
+      placeholder="e.g. lib/ssh"
+      class="w-full input font-mono"
+    >
+      <:label>Subpath (optional)</:label>
+      <:description>
+        Repository directory this channel distributes. Program files scope to
+        it, paths relative to it — e.g. lib/ssh for pkg:otp/ssh. Empty
+        distributes the whole repository.
+      </:description>
     </.input>
     <.input field={@form[:tag_suffixes]} type="text" value={list_value(@form[:tag_suffixes])}>
       <:label>OCI tag suffixes (comma separated)</:label>
@@ -1943,6 +2116,19 @@ defmodule VarselWeb.CaseDetailLive do
     ~H"""
     <.input field={@form[:event]} type="select" options={enum_options(VersionEvent.Event)}>
       <:label>Boundary</:label>
+    </.input>
+    <.input
+      :if={@form.source.type == :create and @channel_options != []}
+      field={@form[:package_channel_id]}
+      type="select"
+      options={@channel_options}
+      prompt="All channels (package-wide)"
+    >
+      <:label>Channel scope</:label>
+      <:description>
+        Scoping records an explicit boundary for that channel only — e.g. bounding
+        the former application when functionality moved between applications.
+      </:description>
     </.input>
     <.input
       field={@form[:commit_sha]}
@@ -2047,6 +2233,114 @@ defmodule VarselWeb.CaseDetailLive do
       <option :for={{id, name} <- @catalog_options.capec} value={"CAPEC-#{id} #{name}"}></option>
     </datalist>
     """
+  end
+
+  defp program_files_field(assigns) do
+    ~H"""
+    <fieldset class="fieldset mb-2">
+      <span class="label mb-1">Program files</span>
+      <p class="text-xs text-base-content/60 mb-1">
+        Repository-root-relative paths plus the modules and routines each file
+        contributes. Channels with a subpath render only the files under it,
+        paths relative to it (e.g. lib/ssh/… only on the pkg:otp/ssh channel).
+      </p>
+      <.inputs_for :let={file_form} field={@form[:program_files]}>
+        <div class="rounded-box border border-base-300 p-3 mb-2">
+          <div class="flex items-end gap-2">
+            <div class="grow">
+              <.input
+                field={file_form[:path]}
+                type="text"
+                placeholder="lib/ssh/src/ssh_sftpd.erl"
+                class="w-full input input-sm font-mono"
+              >
+                <:label>Path</:label>
+              </.input>
+            </div>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs text-error mb-2"
+              phx-click="remove_program_file"
+              phx-value-path={file_form.name}
+            >
+              Remove
+            </button>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-x-4">
+            <.input
+              field={file_form[:modules]}
+              type="text"
+              value={list_value(file_form[:modules])}
+              placeholder="ssh_sftpd"
+              class="w-full input input-sm font-mono"
+            >
+              <:label>Modules (comma separated)</:label>
+            </.input>
+            <.input
+              field={file_form[:routines]}
+              type="text"
+              value={list_value(file_form[:routines])}
+              placeholder="ssh_sftpd:handle_op/4"
+              class="w-full input input-sm font-mono"
+            >
+              <:label>Routines (comma separated)</:label>
+            </.input>
+          </div>
+        </div>
+      </.inputs_for>
+      <div>
+        <button type="button" class="btn btn-ghost btn-xs" phx-click="add_program_file">
+          Add file
+        </button>
+      </div>
+    </fieldset>
+    """
+  end
+
+  defp update_child_form(socket, fun) do
+    child_form = socket.assigns.child_form
+    form = child_form.form.source |> fun.() |> to_form()
+    assign(socket, child_form: %{child_form | form: form})
+  end
+
+  # Channels of the boundary's package, for scoping a fact to one channel at
+  # creation (the :edit action deliberately does not re-scope).
+  defp channel_options("event", %{"affected_package_id" => package_id}, socket) do
+    case Enum.find(socket.assigns.case_record.affected_packages, &(&1.id == package_id)) do
+      nil ->
+        []
+
+      package ->
+        Enum.map(
+          package.channels,
+          &{channel_label(package, &1) || to_string(&1.purl_type), &1.id}
+        )
+    end
+  end
+
+  defp channel_options(_type, _params, _socket), do: []
+
+  defp scoped_channel_label(package, event) do
+    case Enum.find(package.channels, &(&1.id == event.package_channel_id)) do
+      nil -> "(removed channel)"
+      channel -> channel_label(package, channel) || to_string(channel.purl_type)
+    end
+  end
+
+  # The purl without its qualifier tail — OTP channels carry long
+  # repository_url/vcs_url qualifiers that would drown the UI; "?…" hints at
+  # the elided rest (the channel table cell's title shows the full purl).
+  defp channel_label(package, channel) do
+    case Channel.purl_string(package, channel) do
+      nil ->
+        channel.name
+
+      purl ->
+        case String.split(purl, "?", parts: 2) do
+          [purl] -> purl
+          [base, _qualifiers] -> base <> "?…"
+        end
+    end
   end
 
   # Renders an {:array, :string} form value back into its comma-separated

@@ -185,6 +185,7 @@ defmodule VarselWeb.CoreComponents do
                 multiple pattern placeholder readonly required rows size step)
 
   slot :label, doc: "the field label; may contain rich content such as links"
+  slot :description, doc: "optional helper text rendered small and muted below the input"
 
   def input(%{field: %FormField{} = field} = assigns) do
     errors = if Phoenix.Component.used_input?(field), do: field.errors, else: []
@@ -230,6 +231,7 @@ defmodule VarselWeb.CoreComponents do
         />
         <span :if={@label != []}>{render_slot(@label)}</span>
       </label>
+      <.description description={@description} />
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
@@ -251,6 +253,7 @@ defmodule VarselWeb.CoreComponents do
           {Phoenix.HTML.Form.options_for_select(@options, @value)}
         </select>
       </label>
+      <.description description={@description} />
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
@@ -271,6 +274,7 @@ defmodule VarselWeb.CoreComponents do
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
       </label>
+      <.description description={@description} />
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
@@ -294,8 +298,17 @@ defmodule VarselWeb.CoreComponents do
           {@rest}
         />
       </label>
+      <.description description={@description} />
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
+    """
+  end
+
+  defp description(assigns) do
+    ~H"""
+    <p :if={@description != []} class="mt-1 text-xs text-base-content/60">
+      {render_slot(@description)}
+    </p>
     """
   end
 

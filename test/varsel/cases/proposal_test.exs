@@ -232,15 +232,16 @@ defmodule Varsel.Cases.ProposalTest do
             target: :affected_package,
             operation: :set,
             target_id: package.id,
-            field_name: "modules",
-            proposed_value: %{"value" => ["ssh"]}
+            field_name: "program_files",
+            proposed_value: %{"value" => [%{"path" => "src/ssh.erl", "modules" => ["ssh"]}]}
           },
           actor: poc
         )
 
       Cases.accept_case_proposal!(proposal, %{}, actor: poc)
 
-      assert Ash.get!(Cases.AffectedPackage, package.id, authorize?: false).modules == ["ssh"]
+      package = Ash.get!(Cases.AffectedPackage, package.id, authorize?: false)
+      assert [%{path: "src/ssh.erl", modules: ["ssh"], routines: []}] = package.program_files
     end
 
     test "supersedes competing proposals for the same field", %{poc: poc, case: case_record} do

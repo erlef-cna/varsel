@@ -193,8 +193,10 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
-      lv |> element("button[phx-value-type=package]", "Add package") |> render_click()
+      lv |> element("button[phx-value-type=package]", "Custom package") |> render_click()
       assert render(lv) =~ "Add affected package"
+
+      lv |> element("button[phx-click=add_program_file]") |> render_click()
 
       lv
       |> form("#child-form", %{
@@ -202,15 +204,137 @@ defmodule VarselWeb.CaseLiveTest do
           "vendor" => "acme",
           "product" => "acme_lib",
           "repo_url" => "https://github.com/acme/acme_lib",
-          "modules" => "ssh, ssl"
+          "program_files" => %{
+            "0" => %{
+              "path" => "lib/acme.ex",
+              "modules" => "ssh, ssl",
+              "routines" => "ssh:connect/2"
+            }
+          }
         }
       })
       |> render_submit()
 
       case_record = Ash.load!(case_record, [:affected_packages], authorize?: false)
       assert [package] = case_record.affected_packages
-      assert package.modules == ["ssh", "ssl"]
+
+      assert [%{path: "lib/acme.ex", modules: ["ssh", "ssl"], routines: ["ssh:connect/2"]}] =
+               package.program_files
+
       assert render(lv) =~ "acme_lib"
+
+      # Editing renders the stored rows as nested inputs and round-trips.
+      lv
+      |> element(~s{button[phx-value-type=package][phx-value-id="#{package.id}"]}, "Edit")
+      |> render_click()
+
+      assert lv |> element(~s{input[name="child[program_files][0][path]"]}) |> render() =~
+               "lib/acme.ex"
+
+      assert lv |> element(~s{input[name="child[program_files][0][modules]"]}) |> render() =~
+               "ssh, ssl"
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{
+          "program_files" => %{
+            "0" => %{"path" => "lib/acme.ex", "modules" => "ssh", "routines" => ""}
+          }
+        }
+      })
+      |> render_submit()
+
+      package = Ash.get!(Cases.AffectedPackage, package.id, authorize?: false)
+      assert [%{path: "lib/acme.ex", modules: ["ssh"], routines: []}] = package.program_files
+      assert render(lv) =~ "acme_lib"
+    end
+
+    test "adds an Erlang/OTP package through the preset modal", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+
+      lv |> element("button[phx-value-type=package_otp]", "Erlang/OTP") |> render_click()
+      assert render(lv) =~ "Add Erlang/OTP package"
+
+      intro_sha = String.duplicate("a", 40)
+      fix_sha = String.duplicate("b", 40)
+
+      lv |> element("button[phx-click=add_program_file]") |> render_click()
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{
+          "applications" => "ssh, ssl",
+          "introduced_commit" => intro_sha,
+          "fixed_commits" => fix_sha,
+          "program_files" => %{
+            "0" => %{
+              "path" => "lib/ssh/src/ssh_sftpd.erl",
+              "modules" => "ssh_sftpd",
+              "routines" => "ssh_sftpd:handle_op/4"
+            }
+          }
+        }
+      })
+      |> render_submit()
+
+      case_record =
+        Ash.load!(case_record, [affected_packages: [:channels, :version_events]], authorize?: false)
+
+      assert [package] = case_record.affected_packages
+      assert package.vendor == "Erlang"
+      assert package.product == "OTP"
+      assert [%{name: "ssh"}, %{name: "ssl"}] = package.channels
+
+      assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==
+               MapSet.new([{:introduced, intro_sha}, {:fixed, fix_sha}])
+
+      assert render(lv) =~ "Erlang / OTP"
+    end
+
+    test "adds a channel-scoped boundary fact through the modal", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      package =
+        Cases.add_otp_affected_package!(
+          %{case_id: case_record.id, applications: ["inets", "ftp"]},
+          actor: poc,
+          load: [:channels]
+        )
+
+      [inets_channel, _ftp_channel] = package.channels
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+
+      lv
+      |> element(~s{button[phx-value-affected_package_id="#{package.id}"]}, "Add boundary")
+      |> render_click()
+
+      # The modal offers the package's channels for scoping.
+      html = render(lv)
+      assert html =~ "All channels (package-wide)"
+      assert html =~ "pkg:otp/inets"
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{
+          "event" => "fixed",
+          "version" => "7.0",
+          "package_channel_id" => inets_channel.id,
+          "note" => "ftp code moved out of inets"
+        }
+      })
+      |> render_submit()
+
+      package = Ash.load!(package, [:version_events], authorize?: false)
+      assert [event] = package.version_events
+      assert event.event == :fixed
+      assert event.version == "7.0"
+      assert event.package_channel_id == inets_channel.id
+
+      # The events table shows the scope badge.
+      assert render(lv) =~ "pkg:otp/inets"
     end
 
     test "adds a reference with tag checkboxes and custom x_ tags", %{conn: conn, poc: poc} do
@@ -520,6 +644,56 @@ defmodule VarselWeb.CaseLiveTest do
       assert counter.proposed_value == %{"value" => "Counter title"}
       assert counter.parent_proposal_id == open.id
       assert render(lv) =~ "Created 1 proposal(s)."
+    end
+
+    test "the preset modal files a preset :insert proposal", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/propose")
+
+      lv |> element("button[phx-value-type=package_gleam]", "Gleam") |> render_click()
+
+      fix_sha = String.duplicate("b", 40)
+
+      lv |> element("button[phx-click=add_program_file]") |> render_click()
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{
+          "fixed_commits" => fix_sha,
+          "program_files" => %{
+            "0" => %{"path" => "compiler-core/src/docs.rs", "modules" => "compiler-core"}
+          }
+        }
+      })
+      |> render_submit(%{"reasoning" => "gleam is affected"})
+
+      # No row is created; the preset travels in the proposal payload.
+      assert Ash.load!(case_record, [:affected_packages], authorize?: false).affected_packages ==
+               []
+
+      assert [proposal] = Cases.list_open_case_proposals!(case_record.id, actor: poc)
+      assert proposal.operation == :insert
+      assert proposal.target == :affected_package
+
+      assert proposal.proposed_value == %{
+               "value" => %{
+                 "preset" => "gleam",
+                 "fixed_commits" => [fix_sha],
+                 "program_files" => [
+                   %{
+                     "path" => "compiler-core/src/docs.rs",
+                     "modules" => ["compiler-core"],
+                     "routines" => []
+                   }
+                 ]
+               }
+             }
+
+      # The phantom row shows the preset's constants.
+      html = render(lv)
+      assert html =~ "Gleam / Gleam"
+      assert html =~ "proposed"
     end
 
     test "the modal proposes inserts and edits; removals become delete proposals", %{

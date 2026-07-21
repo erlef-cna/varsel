@@ -109,6 +109,21 @@ defmodule Varsel.Cases.Proposal do
       the parent affected_package for package_channel/version_event targets),
       or remove a child row (:delete, target_id references the row).
       The proposed value travels in a {"value": ...} envelope.
+
+      An affected_package :insert payload may instead name a well-known
+      product preset: {"preset": "otp" | "elixir" | "gleam",
+      "applications": [...], "introduced_commit": sha,
+      "fixed_commits": [sha, ...], "program_files": [{"path":
+      "lib/ssh/src/ssh_sftpd.erl", "modules": ["ssh_sftpd"], "routines":
+      ["ssh_sftpd:handle_op/4"]}, ...]}. Paths are repository-root-relative;
+      each rendered entry scopes files/modules/routines to its channel's
+      subpath (prefilled per application by the presets). Accepting the
+      proposal creates the package with vendor/product/repo/CPE prefilled
+      plus one pkg:otp/<application> channel per affected application
+      (otp/elixir; gleam takes no applications and gets its sid + OCI
+      channels) and one version boundary fact per commit. When vulnerable code moved between OTP applications
+      over time, additionally propose channel-scoped explicit version events
+      bounding the former application's channel.
       """
 
       accept [

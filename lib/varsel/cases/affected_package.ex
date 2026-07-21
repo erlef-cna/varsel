@@ -15,6 +15,11 @@ defmodule Varsel.Cases.AffectedPackage do
   `Varsel.Cases.VersionEvent` rows and are expanded to version ranges at render
   time by `Varsel.Cases.Derivation`.
 
+  Well-known products are added through the specialized `add_otp` /
+  `add_elixir` / `add_gleam` actions, which prefill the package constants and
+  expand applications/commits into channels and version events from
+  `Varsel.Cases.AffectedPackage.Preset`.
+
   `derivation_cache` holds the most recent derivation result purely for fast
   previews and diffing; publishing always recomputes it.
   """
@@ -27,7 +32,10 @@ defmodule Varsel.Cases.AffectedPackage do
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
+  alias Varsel.Cases.AffectedPackage.Changes.FromPreset
   alias Varsel.Cases.AffectedPackage.DefaultStatus
+  alias Varsel.Cases.AffectedPackage.Preset
+  alias Varsel.Cases.AffectedPackage.ProgramFile
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Checks.ActorAssignedToCase
@@ -65,6 +73,95 @@ defmodule Varsel.Cases.AffectedPackage do
       validate CaseEditable
     end
 
+    create :add_otp do
+      description """
+      Adds Erlang/OTP as an affected product: prefills vendor/product/repo/CPE
+      as the published records spell them, creates one pkg:otp/<application>
+      channel per affected OTP application and version boundary facts from the
+      given commits. When vulnerable code moved between applications over time,
+      bound the former application's channel with channel-scoped explicit
+      version events afterwards.
+      """
+
+      accept [:case_id, :program_files]
+
+      argument :applications, {:array, :string} do
+        description ~s{Affected OTP applications (e.g. ["ssh"]); one pkg:otp channel each.}
+        allow_nil? false
+        constraints min_length: 1, items: [allow_empty?: false]
+      end
+
+      argument :introduced_commit, :string do
+        description "Full SHA of the commit introducing the vulnerability."
+        constraints match: Preset.commit_sha_regex()
+      end
+
+      argument :fixed_commits, {:array, :string} do
+        description "Full SHAs of the fix commits, one per patched release branch."
+        default []
+        constraints items: [match: Preset.commit_sha_regex()]
+      end
+
+      validate CaseEditable
+      change {FromPreset, preset: :otp}
+    end
+
+    create :add_elixir do
+      description """
+      Adds Elixir as an affected product: prefills vendor/product/repo as the
+      published records spell them, creates one pkg:otp/<application> channel
+      per affected Elixir application (elixir, eex, ex_unit, iex, logger, mix)
+      and version boundary facts from the given commits.
+      """
+
+      accept [:case_id, :program_files]
+
+      argument :applications, {:array, :string} do
+        description ~s{Affected Elixir applications (e.g. ["elixir"] or ["mix"]).}
+        allow_nil? false
+        constraints min_length: 1, items: [allow_empty?: false]
+      end
+
+      argument :introduced_commit, :string do
+        description "Full SHA of the commit introducing the vulnerability."
+        constraints match: Preset.commit_sha_regex()
+      end
+
+      argument :fixed_commits, {:array, :string} do
+        description "Full SHAs of the fix commits, one per patched release branch."
+        default []
+        constraints items: [match: Preset.commit_sha_regex()]
+      end
+
+      validate CaseEditable
+      change {FromPreset, preset: :elixir}
+    end
+
+    create :add_gleam do
+      description """
+      Adds Gleam as an affected product: prefills vendor/product/repo/CPE as
+      the published records spell them, creates the pkg:sid/gleam.run/gleam
+      channel plus the ghcr.io OCI image channel (with its tag flavors) and
+      version boundary facts from the given commits.
+      """
+
+      accept [:case_id, :program_files]
+
+      argument :introduced_commit, :string do
+        description "Full SHA of the commit introducing the vulnerability."
+        constraints match: Preset.commit_sha_regex()
+      end
+
+      argument :fixed_commits, {:array, :string} do
+        description "Full SHAs of the fix commits, one per patched release branch."
+        default []
+        constraints items: [match: Preset.commit_sha_regex()]
+      end
+
+      validate CaseEditable
+      change {FromPreset, preset: :gleam}
+    end
+
     update :edit do
       description "Edits a logical product. Only allowed while the case is editable."
       accept Proposable.fields(__MODULE__)
@@ -99,6 +196,73 @@ defmodule Varsel.Cases.AffectedPackage do
       argument :proposal_id, :uuid, allow_nil?: false
 
       validate CaseEditable
+    end
+
+    create :apply_proposal_insert_otp do
+      description "Internal: creates the Erlang/OTP package proposed by an accepted preset :insert proposal."
+      accept [:case_id, :program_files]
+
+      argument :applications, {:array, :string} do
+        allow_nil? false
+        constraints min_length: 1, items: [allow_empty?: false]
+      end
+
+      argument :introduced_commit, :string do
+        constraints match: Preset.commit_sha_regex()
+      end
+
+      argument :fixed_commits, {:array, :string} do
+        default []
+        constraints items: [match: Preset.commit_sha_regex()]
+      end
+
+      argument :proposal_id, :uuid, allow_nil?: false
+
+      validate CaseEditable
+      change {FromPreset, preset: :otp}
+    end
+
+    create :apply_proposal_insert_elixir do
+      description "Internal: creates the Elixir package proposed by an accepted preset :insert proposal."
+      accept [:case_id, :program_files]
+
+      argument :applications, {:array, :string} do
+        allow_nil? false
+        constraints min_length: 1, items: [allow_empty?: false]
+      end
+
+      argument :introduced_commit, :string do
+        constraints match: Preset.commit_sha_regex()
+      end
+
+      argument :fixed_commits, {:array, :string} do
+        default []
+        constraints items: [match: Preset.commit_sha_regex()]
+      end
+
+      argument :proposal_id, :uuid, allow_nil?: false
+
+      validate CaseEditable
+      change {FromPreset, preset: :elixir}
+    end
+
+    create :apply_proposal_insert_gleam do
+      description "Internal: creates the Gleam package proposed by an accepted preset :insert proposal."
+      accept [:case_id, :program_files]
+
+      argument :introduced_commit, :string do
+        constraints match: Preset.commit_sha_regex()
+      end
+
+      argument :fixed_commits, {:array, :string} do
+        default []
+        constraints items: [match: Preset.commit_sha_regex()]
+      end
+
+      argument :proposal_id, :uuid, allow_nil?: false
+
+      validate CaseEditable
+      change {FromPreset, preset: :gleam}
     end
 
     destroy :apply_proposal_delete do
@@ -180,24 +344,13 @@ defmodule Varsel.Cases.AffectedPackage do
       public? true
     end
 
-    attribute :modules, {:array, :string} do
-      description "Affected modules (affected[].modules), e.g. [\"ssh\"]."
-      allow_nil? false
-      default []
-      public? true
-    end
-
-    attribute :program_files, {:array, :string} do
-      description "Affected source files (affected[].programFiles)."
-      allow_nil? false
-      default []
-      public? true
-    end
-
-    attribute :program_routines, {:array, :string} do
+    attribute :program_files, {:array, ProgramFile} do
       description """
-      Affected functions in Erlang notation (affected[].programRoutines[].name),
-      e.g. [\"zip:unzip/1\", \"'Elixir.Plug.Conn':send_resp/3\"].
+      Affected source files with the modules/routines each contributes
+      (affected[].programFiles/modules/programRoutines). Paths are
+      repository-root-relative; channels with a subpath render only the files
+      under it (paths relative to it), the git entry renders all of them
+      under their full paths.
       """
 
       allow_nil? false

@@ -332,6 +332,66 @@ defmodule Varsel.Cases.DerivationTest do
     assert git_block["version"] == @intro_sha
   end
 
+  test "pkg:otp channels of non-OTP repos derive semver ranges from the repo tags", %{
+    poc: poc,
+    case: case_record
+  } do
+    elixir_repo = "https://github.com/elixir-lang/elixir"
+
+    StubGitBackend.stub_tags(%{
+      {elixir_repo, @intro_sha} => ["v1.5.0", "v1.6.0"],
+      {elixir_repo, @fix_sha} => ["v1.20.1"]
+    })
+
+    package =
+      Fixtures.add_affected_package(poc, case_record, %{
+        vendor: "elixir-lang",
+        product: "elixir",
+        repo_url: elixir_repo
+      })
+
+    channel =
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: :otp,
+          name: "elixir"
+        },
+        actor: poc
+      )
+
+    for attrs <- [
+          %{event: :introduced, commit_sha: @intro_sha},
+          %{event: :fixed, commit_sha: @fix_sha}
+        ] do
+      Cases.add_version_event!(
+        Map.merge(%{case_id: case_record.id, affected_package_id: package.id}, attrs),
+        actor: poc
+      )
+    end
+
+    package = Ash.load!(package, [:channels, :version_events], authorize?: false)
+    assert {:ok, derivation} = Derivation.derive(package)
+
+    # Elixir's applications version with Elixir itself: no otp_versions.table,
+    # plain semver boundaries from the repository tags.
+    assert derivation["channels"][channel.id]["versions"] == [
+             %{
+               "version" => "1.5.0",
+               "lessThan" => "1.20.1",
+               "status" => "affected",
+               "versionType" => "semver"
+             }
+           ]
+
+    # The implicit git entry stays a pure git-SHA range (no OTP release block).
+    assert [git_block] = derivation["git"]["versions"]
+    assert git_block["versionType"] == "git"
+    assert git_block["version"] == @intro_sha
+    assert git_block["lessThan"] == @fix_sha
+  end
+
   test "OCI channels repeat the range per tag flavor", %{poc: poc, case: case_record} do
     StubGitBackend.stub_tags(%{
       {@repo, @intro_sha} => ["v1.9.0-rc1"],

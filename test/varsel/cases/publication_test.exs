@@ -37,7 +37,9 @@ defmodule Varsel.Cases.PublicationTest do
       })
 
     package =
-      Fixtures.add_affected_package(poc, case_record, %{program_files: ["lib/acme_lib.ex"]})
+      Fixtures.add_affected_package(poc, case_record, %{
+        program_files: [%{path: "lib/acme_lib.ex"}]
+      })
 
     # One hex channel; the forge entry renders implicitly from repo_url.
     Cases.add_package_channel!(
