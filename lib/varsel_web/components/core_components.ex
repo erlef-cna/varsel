@@ -191,6 +191,34 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a console panel: a bordered card with a small-caps title row and
+  optional actions on its right. The workspace rails and cards are built
+  from these.
+  """
+  attr :id, :string, default: nil
+  attr :title, :string, required: true
+  attr :class, :any, default: nil
+  slot :actions
+  slot :inner_block, required: true
+
+  def panel(assigns) do
+    ~H"""
+    <section id={@id} class={["rounded-box border border-base-300 p-4", @class]}>
+      <h3 class="flex items-center gap-3 text-[0.68rem] font-bold uppercase tracking-wider text-base-content/60 mb-2.5">
+        {@title}
+        <span
+          :if={@actions != []}
+          class="ml-auto flex items-center gap-3 normal-case tracking-normal font-semibold text-xs"
+        >
+          {render_slot(@actions)}
+        </span>
+      </h3>
+      {render_slot(@inner_block)}
+    </section>
+    """
+  end
+
+  @doc """
   Renders a lifecycle state as dot + word — color never carries the meaning
   alone. `dot` is a background color class (e.g. "bg-warning").
   """

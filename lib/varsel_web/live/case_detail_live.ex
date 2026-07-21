@@ -17,6 +17,7 @@ defmodule VarselWeb.CaseDetailLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
+  import VarselWeb.CaseComponents
 
   alias Varsel.Accounts
   alias Varsel.Cases
@@ -26,11 +27,11 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
-  alias Varsel.Cases.Markdown
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposable
   alias Varsel.Cases.Publication
+  alias Varsel.Cases.Readiness
   alias Varsel.Cases.Render.Channel
   alias Varsel.Cases.Render.Diff
   alias Varsel.Cases.VersionEvent
@@ -1017,46 +1018,60 @@ defmodule VarselWeb.CaseDetailLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-10">
-      <Layouts.flash_group flash={@flash} />
+    <Layouts.flash_group flash={@flash} />
 
-      <.header class="mb-6">
-        {@case_record.title || "Untitled case"}
-        <:subtitle>
-          <span class={["badge badge-sm mr-2", state_badge_class(@case_record.state)]}>
-            {@case_record.state}
-          </span>
-          <span :if={@case_record.cve_id} class="font-mono">{@case_record.cve_id}</span>
-          <span :if={is_nil(@case_record.cve_id)} class="text-base-content/60">no CVE ID assigned</span>
-        </:subtitle>
-        <:actions>
-          <.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
-        </:actions>
-      </.header>
-
-      <div
-        :if={length(available_modes(@case_record, @current_user)) > 1}
-        role="tablist"
-        class="tabs tabs-box tabs-sm w-fit mb-6"
-      >
-        <.link
-          :for={mode <- available_modes(@case_record, @current_user)}
-          patch={mode_path(@case_id, mode)}
-          role="tab"
-          class={["tab capitalize", @mode == mode && "tab-active"]}
-        >
-          {mode}
-        </.link>
+    <div class="bg-base-200 border-b border-base-300">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-5 flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
+        <div class="min-w-0">
+          <p class="eef-eyebrow mb-1">
+            Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
+            <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
+          </p>
+          <h1 class="text-xl sm:text-2xl font-bold leading-tight">
+            {@case_record.title || "Untitled case"}
+          </h1>
+          <.lifecycle_stepper state={@case_record.state} />
+        </div>
+        <div class="flex flex-col items-end gap-2 pt-0.5">
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
+          </div>
+          <div
+            :if={length(available_modes(@case_record, @current_user)) > 1}
+            role="tablist"
+            class="tabs tabs-border tabs-sm"
+          >
+            <.link
+              :for={mode <- available_modes(@case_record, @current_user)}
+              patch={mode_path(@case_id, mode)}
+              role="tab"
+              class={["tab capitalize", @mode == mode && "tab-active"]}
+            >
+              {mode}
+            </.link>
+          </div>
+        </div>
       </div>
+    </div>
 
-      <p :if={@mode == :propose} class="text-sm text-base-content/60 -mt-3 mb-6">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+      <p :if={@mode == :propose} class="text-sm text-base-content/60 mb-4">
         Propose mode: open proposals are shown as if accepted; your edits become new proposals.
       </p>
 
-      <div class="grid lg:grid-cols-3 gap-8">
-        <div class="lg:col-span-2 space-y-8">
-          <.content_section case_record={@display_case} content_form={@content_form} mode={@mode} />
-          <.affected_section case_record={@display_case} mode={@mode} marks={marks(@projection)} />
+      <div class="grid lg:grid-cols-[9.5rem_minmax(0,1fr)_18.5rem] gap-6 items-start">
+        <.section_nav
+          sections={workspace_sections(@display_case, @case_record.proposals)}
+          class="hidden lg:block lg:sticky lg:top-4"
+        />
+
+        <div class="space-y-8 min-w-0">
+          <div id="summary">
+            <.content_section case_record={@display_case} content_form={@content_form} mode={@mode} />
+          </div>
+          <div id="affected">
+            <.affected_section case_record={@display_case} mode={@mode} marks={marks(@projection)} />
+          </div>
           <.rows_section
             id="references"
             heading="References"
@@ -1131,21 +1146,49 @@ defmodule VarselWeb.CaseDetailLive do
               {impact.attack_pattern.name}
             </:row>
           </.rows_section>
+          <div id="suggestions">
+            <.proposals_section
+              case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
+            />
+          </div>
         </div>
 
-        <div class="space-y-8">
+        <div class="space-y-4">
           <.preview_section preview={@preview} diff={@diff} amendment={amendment?(@case_record)} />
           <.reports_section
             :if={@case_record.vulnerability_reports != []}
             case_record={@case_record}
             poc={poc?(@current_user)}
           />
-          <.proposals_section
-            case_record={@case_record}
-            current_user={@current_user}
-            can_resolve={can_edit?(@case_record, @current_user)}
-          />
-          <.comments_section case_record={@case_record} />
+          <.panel title="Suggestions">
+            <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
+              <li :for={proposal <- open_proposals(@case_record)} class="flex items-center gap-2">
+                <span class="text-info font-bold shrink-0">◆</span>
+                <span class="truncate text-base-content/80">{proposal_summary(proposal)}</span>
+                <a href="#suggestions" class="link link-hover text-primary text-xs ml-auto shrink-0">
+                  Jump
+                </a>
+              </li>
+            </ul>
+            <p :if={open_proposals(@case_record) == []} class="text-sm text-base-content/60">
+              No open suggestions.
+            </p>
+          </.panel>
+          <.panel title="Activity">
+            <form phx-submit="post_comment" class="mb-4">
+              <textarea
+                name="body"
+                rows="2"
+                required
+                placeholder="Write a comment…"
+                class="w-full textarea text-sm"
+              ></textarea>
+              <button type="submit" class="btn btn-outline btn-xs mt-1">Comment</button>
+            </form>
+            <.activity_feed entries={activity_entries(@case_record)} />
+          </.panel>
           <.assignments_section :if={poc?(@current_user)} case_record={@case_record} users={@users} />
           <.close_section
             :if={poc?(@current_user) and editable?(@case_record)}
@@ -1162,6 +1205,70 @@ defmodule VarselWeb.CaseDetailLive do
       />
     </div>
     """
+  end
+
+  # The rail's per-section markers: readiness (heuristic) plus open-suggestion
+  # counts mapped onto the section a proposal targets.
+  defp workspace_sections(display_case, proposals) do
+    open = Enum.filter(proposals, &(&1.state == :open))
+    counts = Enum.frequencies_by(open, &section_for_proposal/1)
+
+    sections =
+      display_case
+      |> Readiness.sections()
+      |> Enum.map(&Map.put(&1, :suggestions, Map.get(counts, &1.id, 0)))
+
+    sections ++
+      [%{id: "suggestions", label: "Suggestions", status: nil, suggestions: length(open)}]
+  end
+
+  defp section_for_proposal(%{target: target}) when target in [:affected_package, :package_channel, :version_event],
+    do: "affected"
+
+  defp section_for_proposal(%{target: :reference}), do: "references"
+  defp section_for_proposal(%{target: :credit}), do: "credits"
+  defp section_for_proposal(%{target: :weakness}), do: "weaknesses"
+  defp section_for_proposal(%{target: :impact}), do: "impacts"
+  defp section_for_proposal(_case_field), do: "summary"
+
+  defp open_proposals(case_record) do
+    Enum.filter(case_record.proposals, &(&1.state == :open))
+  end
+
+  # Comments and suggestion events interleaved, newest first.
+  defp activity_entries(case_record) do
+    comments =
+      Enum.map(case_record.comments, fn comment ->
+        %{
+          kind: :comment,
+          who: display_name(comment.author),
+          at: comment.inserted_at,
+          body: comment.body,
+          markdown?: true
+        }
+      end)
+
+    proposals =
+      Enum.map(case_record.proposals, fn proposal ->
+        %{
+          kind: :proposal,
+          who: display_name(proposal.author),
+          at: proposal.inserted_at,
+          body: feed_proposal_text(proposal)
+        }
+      end)
+
+    (comments ++ proposals)
+    |> Enum.sort_by(& &1.at, {:desc, DateTime})
+    |> Enum.take(25)
+  end
+
+  defp feed_proposal_text(%{state: :open} = proposal) do
+    "suggested: #{proposal_summary(proposal)}"
+  end
+
+  defp feed_proposal_text(proposal) do
+    "suggested: #{proposal_summary(proposal)} (#{proposal.state})"
   end
 
   defp lifecycle_buttons(assigns) do
@@ -1333,14 +1440,6 @@ defmodule VarselWeb.CaseDetailLive do
         <p :if={@case_record.cvss_v4} class="font-mono text-sm">{@case_record.cvss_v4.vector}</p>
       </div>
     </section>
-    """
-  end
-
-  attr :content, :string, required: true
-
-  defp markdown(assigns) do
-    ~H"""
-    <div class="prose prose-sm max-w-none">{raw(Markdown.to_html(@content))}</div>
     """
   end
 
@@ -1897,35 +1996,6 @@ defmodule VarselWeb.CaseDetailLive do
         </button>
       </div>
     </div>
-    """
-  end
-
-  defp comments_section(assigns) do
-    ~H"""
-    <section>
-      <h2 class="text-lg font-semibold mb-3">Comments</h2>
-
-      <div :for={comment <- @case_record.comments} class="mb-3 text-sm">
-        <p class="text-xs text-base-content/60">
-          {display_name(comment.author)} · {format_dt(comment.inserted_at)}
-          <span :if={comment.proposal_id} class="badge badge-ghost badge-xs">on proposal</span>
-        </p>
-        <.markdown content={comment.body} />
-      </div>
-
-      <p :if={@case_record.comments == []} class="text-sm text-base-content/60">No comments yet.</p>
-
-      <form phx-submit="post_comment" class="mt-3">
-        <textarea
-          name="body"
-          rows="2"
-          required
-          placeholder="Write a comment…"
-          class="w-full textarea text-sm"
-        ></textarea>
-        <button type="submit" class="btn btn-outline btn-xs mt-1">Comment</button>
-      </form>
-    </section>
     """
   end
 
