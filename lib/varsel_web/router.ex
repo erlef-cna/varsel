@@ -5,17 +5,25 @@
 defmodule VarselWeb.Router do
   use VarselWeb, :router
   use AshAuthentication.Phoenix.Router
-
-  import AshAuthentication.Plug.Helpers
+  use AshAuthentication.Phoenix.Oauth2Server.Router
 
   alias Elixir.AshAuthentication.Phoenix.Overrides.DaisyUI
   alias Varsel.Accounts.User
   alias VarselWeb.Plugs.ApiKeyAuth
+  alias VarselWeb.Plugs.OauthBearerAuth
 
+  # Accepts an `eefcna_` API key, an AshAuthentication session JWT, or an
+  # OAuth 2.1 access token; anonymous requests pass through (public reads).
   pipeline :graphql do
     plug ApiKeyAuth
     plug :load_from_bearer
     plug :set_actor, :user
+
+    plug OauthBearerAuth,
+      oauth2_server: Varsel.Oauth2Server,
+      scope: "gql",
+      allow_anonymous?: true
+
     plug AshGraphql.Plug
   end
 
@@ -27,6 +35,9 @@ defmodule VarselWeb.Router do
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug :load_from_session
+    # The OAuth consent screen identifies the consenting user through the
+    # conn's Ash actor (Ash.PlugHelpers.get_actor/1).
+    plug :set_actor, :user
   end
 
   # Auth pages (sign in / register / reset / confirm) use a bare, centered
@@ -48,10 +59,18 @@ defmodule VarselWeb.Router do
     plug :set_actor, :user
   end
 
-  # MCP tool calls read the actor from the conn (Ash.PlugHelpers); anonymous
-  # requests keep actor nil, so public tools work without a key.
+  # MCP tool calls read the actor from the conn (Ash.PlugHelpers). Access
+  # requires a login: either an `eefcna_` API key or an OAuth 2.1 access
+  # token; anonymous requests get the 401 discovery challenge.
   pipeline :mcp do
     plug ApiKeyAuth
+    plug OauthBearerAuth, oauth2_server: Varsel.Oauth2Server, scope: "mcp"
+  end
+
+  # Client-facing OAuth 2.1 protocol endpoints (token, DCR, discovery
+  # metadata) — called by external OAuth clients, so no session/CSRF.
+  pipeline :oauth_protocol do
+    plug :accepts, ["json"]
   end
 
   scope "/gql" do
@@ -148,6 +167,20 @@ defmodule VarselWeb.Router do
         DaisyUI
       ]
     )
+  end
+
+  # OAuth 2.1 authorization server (used by MCP clients): user-facing
+  # consent screen plus client-facing protocol/discovery endpoints.
+  scope "/" do
+    pipe_through :browser
+
+    oauth2_server_consent_routes(oauth2_server: Varsel.Oauth2Server)
+  end
+
+  scope "/" do
+    pipe_through :oauth_protocol
+
+    oauth2_server_protocol_routes(oauth2_server: Varsel.Oauth2Server)
   end
 
   scope "/mcp" do

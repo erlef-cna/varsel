@@ -7,6 +7,7 @@ defmodule VarselWeb.GraphqlTest do
 
   import Varsel.Fixtures
 
+  alias AshAuthentication.Oauth2Server.Jwt
   alias Varsel.CVE.CveRecord
 
   @year Date.utc_today().year
@@ -20,6 +21,13 @@ defmodule VarselWeb.GraphqlTest do
   defp with_api_key(conn, user) do
     {_api_key, plaintext} = create_api_key(user)
     put_req_header(conn, "authorization", "Bearer " <> plaintext)
+  end
+
+  defp with_oauth_token(conn, user, scope \\ "gql") do
+    {:ok, token, _claims} =
+      Jwt.mint(Varsel.Oauth2Server, sub: user.id, client_id: "test-client", scope: scope)
+
+    put_req_header(conn, "authorization", "Bearer " <> token)
   end
 
   describe "anonymous queries" do
@@ -122,6 +130,61 @@ defmodule VarselWeb.GraphqlTest do
         )
 
       assert body["data"]["setUserRole"]["result"]["role"] == "SUPPORTER"
+    end
+  end
+
+  describe "OAuth-token authenticated POC" do
+    test "listAllCves includes unpublished records", %{conn: conn} do
+      poc = register_user("poc", :poc)
+      reserved_cve_record("CVE-#{@year}-3002")
+
+      body =
+        conn
+        |> with_oauth_token(poc)
+        |> gql("{ listAllCves { cveId state } }")
+
+      assert [%{"state" => "reserved"}] = body["data"]["listAllCves"]
+    end
+
+    test "assignCve transitions reserved to draft", %{conn: conn} do
+      poc = register_user("poc", :poc)
+      record = reserved_cve_record("CVE-#{@year}-3002")
+
+      body =
+        conn
+        |> with_oauth_token(poc)
+        |> gql(
+          "mutation($id: ID!) { assignCve(id: $id) { result { state } errors { message } } }",
+          %{
+            "id" => record.id
+          }
+        )
+
+      assert body["data"]["assignCve"]["errors"] in [nil, []]
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
+    end
+
+    test "a token without the gql scope is rejected with insufficient_scope", %{conn: conn} do
+      poc = register_user("poc", :poc)
+
+      conn =
+        conn
+        |> with_oauth_token(poc, "mcp")
+        |> post("/gql", %{"query" => "{ listAllCves { cveId } }"})
+
+      assert response(conn, 403)
+      assert [challenge] = get_resp_header(conn, "www-authenticate")
+      assert challenge =~ ~s|error="insufficient_scope"|
+      assert challenge =~ ~s|scope="gql"|
+    end
+
+    test "an invalid bearer token is rejected rather than treated as anonymous", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer not-a-valid-token")
+        |> post("/gql", %{"query" => "{ listPublishedCves { cveId } }"})
+
+      assert response(conn, 401)
     end
   end
 end

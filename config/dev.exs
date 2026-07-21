@@ -103,4 +103,10 @@ config :varsel, VarselWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :varsel,
   dev_routes: true,
-  token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F"
+  token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F",
+  oauth2_issuer_url: "http://localhost:4000",
+  # Audience of minted access tokens and the protected-resource identity
+  # (RFC 8707): the bare host, covering every token-consuming surface
+  # (/mcp, /gql); scopes, not audiences, separate the surfaces.
+  oauth2_resource_url: "http://localhost:4000",
+  oauth2_signing_secret: "3pTWxv0hnz+fyxgPVN3H4cR4+8yq+Iek0JGFdHw+64o"

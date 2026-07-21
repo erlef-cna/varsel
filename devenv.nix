@@ -53,6 +53,14 @@ in
 
   claude.code = {
     enable = true;
+
+    # The app's own MCP endpoint (dev server). Login required: Claude Code
+    # runs the OAuth 2.1 discovery/registration flow on the first 401.
+    mcpServers.varsel = {
+      type = "http";
+      url = "http://localhost:4000/mcp";
+    };
+
     commands = {
       mix-format = ''
       Format all Elixir files in the project using mix format.

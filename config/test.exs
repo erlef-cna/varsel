@@ -72,4 +72,7 @@ config :varsel,
     user: "test-user@example.com",
     api_key: "test-api-key",
     plug: {Req.Test, Varsel.CVE.MitreCveApi}
-  ]
+  ],
+  oauth2_issuer_url: "http://localhost:4002",
+  oauth2_resource_url: "http://localhost:4002",
+  oauth2_signing_secret: "test-oauth2-signing-secret"

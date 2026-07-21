@@ -4,6 +4,7 @@
 
 [
   import_deps: [
+    :ash_authentication_oauth2_server,
     :ash_admin,
     :ash_ai,
     :ash_graphql,

@@ -7,6 +7,7 @@ defmodule VarselWeb.McpTest do
 
   import Varsel.Fixtures
 
+  alias AshAuthentication.Oauth2Server.Jwt
   alias Varsel.CVE.CveRecord
 
   @year Date.utc_today().year
@@ -18,8 +19,42 @@ defmodule VarselWeb.McpTest do
     |> post("/mcp", Jason.encode!(%{jsonrpc: "2.0", id: 1, method: method, params: params}))
   end
 
-  test "anonymous tools/list shows the public tools but hides lifecycle tools", %{conn: conn} do
-    body = response(mcp(conn, "tools/list"), 200)
+  defp mint_access_token(user, scope \\ "mcp") do
+    {:ok, token, _claims} =
+      Jwt.mint(Varsel.Oauth2Server, sub: user.id, client_id: "test-client", scope: scope)
+
+    token
+  end
+
+  test "anonymous requests are rejected with the OAuth discovery challenge", %{conn: conn} do
+    conn = mcp(conn, "tools/list")
+
+    assert response(conn, 401)
+
+    assert [challenge] = get_resp_header(conn, "www-authenticate")
+
+    assert challenge =~
+             ~s|resource_metadata="http://localhost:4002/.well-known/oauth-protected-resource"|
+  end
+
+  test "an invalid bearer token is rejected", %{conn: conn} do
+    conn =
+      conn
+      |> put_req_header("authorization", "Bearer not-a-valid-token")
+      |> mcp("tools/list")
+
+    assert response(conn, 401)
+  end
+
+  test "a supporter's tools/list shows the public tools but hides lifecycle tools", %{conn: conn} do
+    supporter = register_user("supporter", :supporter)
+    {_api_key, plaintext} = create_api_key(supporter)
+
+    body =
+      conn
+      |> put_req_header("authorization", "Bearer " <> plaintext)
+      |> mcp("tools/list")
+      |> response(200)
 
     for tool <- ~w(list_cves get_cve search_cves validate_cve_record list_weaknesses
                    list_attack_patterns list_osv_records) do
@@ -46,14 +81,16 @@ defmodule VarselWeb.McpTest do
     end
   end
 
-  test "public tools work without authentication", %{conn: conn} do
+  test "public tools work with an API key", %{conn: conn} do
+    supporter = register_user("supporter", :supporter)
+    {_api_key, plaintext} = create_api_key(supporter)
     published_cve_record("CVE-#{@year}-4001", "Published thing")
 
     body =
-      response(
-        mcp(conn, "tools/call", %{name: "list_cves", arguments: %{}}),
-        200
-      )
+      conn
+      |> put_req_header("authorization", "Bearer " <> plaintext)
+      |> mcp("tools/call", %{name: "list_cves", arguments: %{}})
+      |> response(200)
 
     assert body =~ "CVE-#{@year}-4001"
   end
@@ -61,8 +98,9 @@ defmodule VarselWeb.McpTest do
   test "lifecycle tools are rejected without authentication", %{conn: conn} do
     record = reserved_cve_record("CVE-#{@year}-4002")
 
-    mcp(conn, "tools/call", %{name: "assign_cve", arguments: %{id: record.id}})
+    conn = mcp(conn, "tools/call", %{name: "assign_cve", arguments: %{id: record.id}})
 
+    assert response(conn, 401)
     assert Ash.get!(CveRecord, record.id, authorize?: false).state == :reserved
   end
 
@@ -76,5 +114,30 @@ defmodule VarselWeb.McpTest do
     |> mcp("tools/call", %{name: "assign_cve", arguments: %{id: record.id}})
 
     assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
+  end
+
+  test "lifecycle tools work with an OAuth access token", %{conn: conn} do
+    poc = register_user("poc", :poc)
+    record = reserved_cve_record("CVE-#{@year}-4003")
+
+    conn
+    |> put_req_header("authorization", "Bearer " <> mint_access_token(poc))
+    |> mcp("tools/call", %{name: "assign_cve", arguments: %{id: record.id}})
+
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
+  end
+
+  test "a token without the mcp scope is rejected with insufficient_scope", %{conn: conn} do
+    poc = register_user("poc", :poc)
+
+    conn =
+      conn
+      |> put_req_header("authorization", "Bearer " <> mint_access_token(poc, "gql"))
+      |> mcp("tools/list")
+
+    assert response(conn, 403)
+    assert [challenge] = get_resp_header(conn, "www-authenticate")
+    assert challenge =~ ~s|error="insufficient_scope"|
+    assert challenge =~ ~s|scope="mcp"|
   end
 end

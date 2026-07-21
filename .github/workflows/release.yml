@@ -191,12 +191,14 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           TOKEN_SIGNING_SECRET: ${{ secrets.TOKEN_SIGNING_SECRET }}
+          OAUTH2_SIGNING_SECRET: ${{ secrets.OAUTH2_SIGNING_SECRET }}
         run: |
           pairs=()
           add() { if [ -n "$2" ]; then pairs+=("$1=$2"); fi; }
           add CLOAK_KEY "${CLOAK_KEY}"
           add SECRET_KEY_BASE "${SECRET_KEY_BASE}"
           add TOKEN_SIGNING_SECRET "${TOKEN_SIGNING_SECRET}"
+          add OAUTH2_SIGNING_SECRET "${OAUTH2_SIGNING_SECRET}"
           add MITRE_CVE_API_KEY "${MITRE_CVE_API_KEY}"
           add GITHUB_CLIENT_SECRET "${OAUTH_GITHUB_CLIENT_SECRET}"
           add SMTP_USER "${SMTP_USER}"

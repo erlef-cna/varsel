@@ -50,5 +50,9 @@ defmodule Varsel.Accounts do
     end
 
     resource Varsel.Accounts.UserIdentity
+    resource Varsel.Accounts.OauthClient
+    resource Varsel.Accounts.OauthAuthorizationCode
+    resource Varsel.Accounts.OauthRefreshToken
+    resource Varsel.Accounts.OauthConsent
   end
 end
