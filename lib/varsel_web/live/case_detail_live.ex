@@ -132,7 +132,11 @@ defmodule VarselWeb.CaseDetailLive do
       socket
       |> assign(
         case_id: id,
-        mode: socket.assigns.live_action,
+        # /edit and /propose act as deep links into the one workspace:
+        # summary open for editing, suggest preset accordingly.
+        suggest?: socket.assigns.live_action == :propose,
+        editing_section: if(socket.assigns.live_action == :view, do: nil, else: "summary"),
+        mode: :view,
         child_form: nil,
         preview: nil,
         diff: nil,
@@ -164,19 +168,29 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp after_case_fetch(case_record, socket), do: assign_case(socket, case_record)
 
-  # The mode lives in the URL (/cases/:id[/edit|/propose] as the live action);
-  # the tab links patch between them.
   @impl Phoenix.LiveView
   def handle_params(_params, _uri, socket) do
-    {:noreply,
-     socket
-     |> assign(mode: socket.assigns.live_action)
-     |> assign_case(socket.assigns.case_record)}
+    {:noreply, assign_case(socket, socket.assigns.case_record)}
   end
 
   ## ------------------------------------------------------------ case content
 
   @impl Phoenix.LiveView
+  def handle_event("toggle_suggest", _params, socket) do
+    socket = assign(socket, suggest?: not socket.assigns.suggest?)
+    {:noreply, assign_case(socket, socket.assigns.case_record)}
+  end
+
+  def handle_event("edit_summary", _params, socket) do
+    socket = assign(socket, editing_section: "summary")
+    {:noreply, assign_case(socket, socket.assigns.case_record)}
+  end
+
+  def handle_event("cancel_summary", _params, socket) do
+    socket = assign(socket, editing_section: nil)
+    {:noreply, assign_case(socket, socket.assigns.case_record)}
+  end
+
   def handle_event("validate", %{"form" => params}, socket) do
     {:noreply, assign(socket, content_form: AshPhoenix.Form.validate(socket.assigns.content_form, params))}
   end
@@ -565,7 +579,10 @@ defmodule VarselWeb.CaseDetailLive do
   defp save_content(socket, params) do
     case AshPhoenix.Form.submit(socket.assigns.content_form, params: params) do
       {:ok, _case_record} ->
-        {:noreply, put_flash(socket, :info, "Case saved.")}
+        {:noreply,
+         socket
+         |> assign(editing_section: nil, content_form: nil)
+         |> put_flash(:info, "Case saved.")}
 
       {:error, form} ->
         {:noreply, assign(socket, content_form: form)}
@@ -587,7 +604,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp assign_case(socket, case_record) do
     actor = socket.assigns.current_user
-    mode = normalize_mode(socket.assigns.mode, case_record, actor)
+    mode = derive_mode(case_record, actor, socket.assigns.suggest?)
 
     # Propose mode works against the projection: the case with every open
     # proposal applied as if accepted.
@@ -595,7 +612,7 @@ defmodule VarselWeb.CaseDetailLive do
     display_case = if projection, do: projection.case, else: case_record
 
     content_form =
-      if mode in [:edit, :propose] do
+      if mode in [:edit, :propose] and socket.assigns.editing_section == "summary" do
         display_case
         |> AshPhoenix.Form.for_update(:edit, as: "form", actor: actor)
         |> to_form()
@@ -619,22 +636,21 @@ defmodule VarselWeb.CaseDetailLive do
     )
   end
 
-  # Falls back to the best available mode when the requested one is not
-  # allowed (or none was chosen yet): direct editing when possible, else view.
-  defp normalize_mode(requested, case_record, actor) do
-    allowed = available_modes(case_record, actor)
-
-    if requested in allowed do
-      requested
-    else
-      if :edit in allowed, do: :edit, else: :view
+  # Intent is a property of the save, not the page: who you are and the case
+  # state decide whether edits apply directly or become suggestions. The
+  # suggest toggle only matters while direct editing is possible; on frozen
+  # cases suggesting is all there is.
+  defp derive_mode(case_record, actor, suggest?) do
+    cond do
+      can_edit?(case_record, actor) and not suggest? -> :edit
+      can_propose?(case_record, actor) -> :propose
+      can_edit?(case_record, actor) -> :edit
+      true -> :view
     end
   end
 
-  defp available_modes(case_record, actor) do
-    [:view] ++
-      if(can_edit?(case_record, actor), do: [:edit], else: []) ++
-      if can_propose?(case_record, actor), do: [:propose], else: []
+  defp suggest_forced?(case_record, actor) do
+    not can_edit?(case_record, actor) and can_propose?(case_record, actor)
   end
 
   # Splits comma/newline separated list inputs and merges the parent ids.
@@ -965,10 +981,6 @@ defmodule VarselWeb.CaseDetailLive do
   defp marks(nil), do: %{phantom: MapSet.new(), deleted: MapSet.new()}
   defp marks(projection), do: %{phantom: projection.phantom_ids, deleted: projection.deleted_ids}
 
-  defp mode_path(case_id, :view), do: ~p"/cases/#{case_id}"
-  defp mode_path(case_id, :edit), do: ~p"/cases/#{case_id}/edit"
-  defp mode_path(case_id, :propose), do: ~p"/cases/#{case_id}/propose"
-
   @doc "DaisyUI badge class for a case state."
   def state_badge_class(:draft), do: "badge-warning"
   def state_badge_class(:review), do: "badge-info"
@@ -1033,20 +1045,25 @@ defmodule VarselWeb.CaseDetailLive do
           <.lifecycle_stepper state={@case_record.state} />
         </div>
         <div class="flex flex-wrap items-center justify-end gap-2 pt-1.5">
-          <div
-            :if={length(available_modes(@case_record, @current_user)) > 1}
-            role="tablist"
-            class="tabs tabs-border tabs-sm mr-1"
+          <button
+            :if={@mode != :view and can_propose?(@case_record, @current_user)}
+            phx-click="toggle_suggest"
+            disabled={suggest_forced?(@case_record, @current_user)}
+            title={
+              if suggest_forced?(@case_record, @current_user),
+                do: "The case is frozen — edits become suggestions",
+                else: "Route your edits through suggestions instead of applying them"
+            }
+            class={[
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold mr-1",
+              if(@mode == :propose,
+                do: "border-info/50 text-info",
+                else: "border-base-300 text-base-content/50"
+              )
+            ]}
           >
-            <.link
-              :for={mode <- available_modes(@case_record, @current_user)}
-              patch={mode_path(@case_id, mode)}
-              role="tab"
-              class={["tab capitalize", @mode == mode && "tab-active"]}
-            >
-              {mode}
-            </.link>
-          </div>
+            ✎ Suggest: {if @mode == :propose, do: "on", else: "off"}
+          </button>
           <.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
         </div>
       </div>
@@ -1054,7 +1071,7 @@ defmodule VarselWeb.CaseDetailLive do
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
       <p :if={@mode == :propose} class="text-sm text-base-content/60 mb-4">
-        Propose mode: open proposals are shown as if accepted; your edits become new proposals.
+        Suggesting: open suggestions are shown as if accepted; your edits become new suggestions.
       </p>
 
       <div class="grid lg:grid-cols-[9.5rem_minmax(0,1fr)_18.5rem] gap-6 items-start">
@@ -1330,6 +1347,22 @@ defmodule VarselWeb.CaseDetailLive do
   defp content_section(assigns) do
     ~H"""
     <.panel title="Summary">
+      <:actions>
+        <button
+          :if={@mode != :view and is_nil(@content_form)}
+          class="link link-hover text-primary"
+          phx-click="edit_summary"
+        >
+          Edit
+        </button>
+        <button
+          :if={@content_form}
+          class="link link-hover text-base-content/60"
+          phx-click="cancel_summary"
+        >
+          Cancel
+        </button>
+      </:actions>
       <.form
         :if={@content_form}
         for={@content_form}

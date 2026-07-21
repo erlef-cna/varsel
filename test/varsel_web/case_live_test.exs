@@ -207,12 +207,8 @@ defmodule VarselWeb.CaseLiveTest do
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
       assert case_record.description_md == "Uses `zip:unzip/1` **unsafely**."
 
-      # And switching back to write shows the textarea again.
-      html =
-        lv
-        |> element("#case-description-md button[phx-value-mode=write]")
-        |> render_click()
-
+      # Saving closes the editor; reopening shows the saved markdown.
+      html = lv |> element("button[phx-click=edit_summary]") |> render_click()
       assert html =~ "Uses `zip:unzip/1` **unsafely**."
     end
 
@@ -251,6 +247,9 @@ defmodule VarselWeb.CaseLiveTest do
       assert case_record.cvss_v4.score == 8.7
       assert case_record.cvss_v4.severity == :high
 
+      # Saving closes the editor; reopen to keep working with the calculator.
+      lv |> element("button[phx-click=edit_summary]") |> render_click()
+
       # A pasted vector updates the toggles: physical attack vector selected.
       lv
       |> element(~s{#case-cvss-v4 input[name="form[cvss_v4]"]})
@@ -282,14 +281,12 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Approve") |> render_click()
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :approved
 
-      # Approved content is frozen: no edit tab remains, propose is offered.
-      html = render(lv)
-      refute html =~ "/cases/#{case_record.id}/edit"
-      assert html =~ "/cases/#{case_record.id}/propose"
+      # Approved content is frozen: suggesting is forced on.
+      assert render(lv) =~ "Suggest: on"
 
       lv |> element("button", "Reopen") |> render_click()
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
-      assert render(lv) =~ "/cases/#{case_record.id}/edit"
+      assert render(lv) =~ "Suggest: off"
     end
 
     test "adds an affected package through the modal", %{conn: conn, poc: poc} do
@@ -674,7 +671,7 @@ defmodule VarselWeb.CaseLiveTest do
   end
 
   describe "propose mode" do
-    test "a frozen case defaults to view and offers a propose tab, no edit", %{
+    test "a frozen case forces suggest mode; edits become proposals", %{
       conn: conn,
       poc: poc
     } do
@@ -684,13 +681,12 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
-      # View is the default; Edit is unavailable, Propose is offered.
-      refute html =~ "/cases/#{case_record.id}/edit"
-      assert html =~ "/cases/#{case_record.id}/propose"
+      # Suggesting is forced on the frozen case; nothing is being edited yet.
+      assert html =~ "Suggest: on"
       refute html =~ "case-content-form"
 
-      html = lv |> element(~s{a[href="/cases/#{case_record.id}/propose"]}) |> render_click()
-      assert html =~ "your edits become new proposals"
+      html = lv |> element("button[phx-click=edit_summary]") |> render_click()
+      assert html =~ "your edits become new suggestions"
       assert html =~ "Propose changes"
 
       lv
