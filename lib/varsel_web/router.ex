@@ -93,6 +93,7 @@ defmodule VarselWeb.Router do
     get "/cve-criteria", PageController, :page, assigns: %{page_id: "cve-criteria"}
     get "/security-policy", PageController, :page, assigns: %{page_id: "security-policy"}
     get "/data-licensing", PageController, :page, assigns: %{page_id: "data-licensing"}
+    get "/api-access", PageController, :page, assigns: %{page_id: "api-access"}
     get "/coordinator-process", PageController, :page, assigns: %{page_id: "coordinator-process"}
     get "/maintainer-process", PageController, :page, assigns: %{page_id: "maintainer-process"}
     live "/common-weaknesses", CommonWeaknessesLive, :index

@@ -19,6 +19,7 @@ defmodule VarselWeb.SitePagesTest do
         {"/cve-criteria", "CVE Assignment Criteria"},
         {"/security-policy", "Security Policy"},
         {"/data-licensing", "Data Licensing"},
+        {"/api-access", "API Access"},
         {"/coordinator-process", "Coordinator Process"},
         {"/maintainer-process", "Maintainer Process"}
       ] do
@@ -26,6 +27,13 @@ defmodule VarselWeb.SitePagesTest do
       conn = get(conn, unquote(path))
       assert html_response(conn, 200) =~ unquote(needle)
     end
+  end
+
+  test "API samples reference the deployment's own URL", %{conn: conn} do
+    body = html_response(get(conn, "/api-access"), 200)
+
+    assert body =~ "#{VarselWeb.Endpoint.url()}/mcp"
+    refute body =~ "%BASE_URL%"
   end
 
   test "long pages render a table of contents with anchored headings", %{conn: conn} do

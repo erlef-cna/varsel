@@ -21,7 +21,10 @@ defmodule VarselWeb.PageController do
   end
 
   def page(conn, _params) do
+    # %BASE_URL% lets compiled page bodies (e.g. the API samples on
+    # /api-access) reference this deployment's own URL.
     page = Varsel.Content.get_page!(conn.assigns.page_id)
-    render(conn, :page, page: page, page_title: page.title)
+    body = String.replace(page.body, "%BASE_URL%", VarselWeb.Endpoint.url())
+    render(conn, :page, page: %{page | body: body}, page_title: page.title)
   end
 end

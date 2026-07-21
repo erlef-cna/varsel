@@ -330,6 +330,7 @@ defmodule VarselWeb.Layouts do
       {"Maintainer Process", "/maintainer-process"},
       {"Coordinator Process", "/coordinator-process"},
       {"Data Licensing", "/data-licensing"},
+      {"API Access", "/api-access"},
       {"Contact", "/contact"}
     ]
   end
