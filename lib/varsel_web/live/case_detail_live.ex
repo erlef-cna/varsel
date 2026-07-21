@@ -1020,7 +1020,7 @@ defmodule VarselWeb.CaseDetailLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <div class="bg-base-200 border-b border-base-300">
+    <div class="console-band">
       <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-5 flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
         <div class="min-w-0">
           <p class="eef-eyebrow mb-1">
@@ -1032,14 +1032,11 @@ defmodule VarselWeb.CaseDetailLive do
           </h1>
           <.lifecycle_stepper state={@case_record.state} />
         </div>
-        <div class="flex flex-col items-end gap-2 pt-0.5">
-          <div class="flex flex-wrap items-center justify-end gap-2">
-            <.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
-          </div>
+        <div class="flex flex-wrap items-center justify-end gap-2 pt-1.5">
           <div
             :if={length(available_modes(@case_record, @current_user)) > 1}
             role="tablist"
-            class="tabs tabs-border tabs-sm"
+            class="tabs tabs-border tabs-sm mr-1"
           >
             <.link
               :for={mode <- available_modes(@case_record, @current_user)}
@@ -1050,6 +1047,7 @@ defmodule VarselWeb.CaseDetailLive do
               {mode}
             </.link>
           </div>
+          <.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
         </div>
       </div>
     </div>
@@ -1279,14 +1277,14 @@ defmodule VarselWeb.CaseDetailLive do
           @case_record.state in [:draft, :review, :approved] and is_nil(@case_record.cve_id) and
             poc?(@current_user)
         }
-        class="btn btn-outline btn-sm"
+        class="btn btn-sm btn-eef-quiet"
         phx-click="assign_cve_id"
       >
         Assign CVE ID
       </button>
       <button
         :if={@case_record.state == :draft}
-        class="btn btn-primary btn-sm"
+        class="btn btn-sm btn-eef"
         phx-click="lifecycle"
         phx-value-action="request_review"
       >
@@ -1294,7 +1292,7 @@ defmodule VarselWeb.CaseDetailLive do
       </button>
       <button
         :if={@case_record.state == :review and poc?(@current_user)}
-        class="btn btn-outline btn-sm"
+        class="btn btn-sm btn-eef-quiet"
         phx-click="lifecycle"
         phx-value-action="request_changes"
       >
@@ -1302,7 +1300,7 @@ defmodule VarselWeb.CaseDetailLive do
       </button>
       <button
         :if={@case_record.state == :review and poc?(@current_user)}
-        class="btn btn-primary btn-sm"
+        class="btn btn-sm btn-eef"
         phx-click="lifecycle"
         phx-value-action="approve"
       >
@@ -1310,7 +1308,7 @@ defmodule VarselWeb.CaseDetailLive do
       </button>
       <button
         :if={@case_record.state == :approved and poc?(@current_user)}
-        class="btn btn-primary btn-sm"
+        class="btn btn-sm btn-eef"
         phx-click="lifecycle"
         phx-value-action="publish"
         data-confirm="Publish this case to MITRE?"
@@ -1331,9 +1329,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp content_section(assigns) do
     ~H"""
-    <section>
-      <h2 class="text-lg font-semibold mb-3">Case content</h2>
-
+    <.panel title="Summary">
       <.form
         :if={@content_form}
         for={@content_form}
@@ -1439,33 +1435,37 @@ defmodule VarselWeb.CaseDetailLive do
 
         <p :if={@case_record.cvss_v4} class="font-mono text-sm">{@case_record.cvss_v4.vector}</p>
       </div>
-    </section>
+    </.panel>
     """
   end
 
   defp affected_section(assigns) do
     ~H"""
-    <section>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold">Affected packages</h2>
-        <div class="flex gap-2">
-          <button class="btn btn-ghost btn-xs" phx-click="refresh_derivation">Refresh derivation</button>
-          <div :if={@mode != :view} class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-outline btn-xs">Add package</div>
-            <ul
-              tabindex="0"
-              class="dropdown-content menu menu-sm bg-base-100 rounded-box z-10 w-44 p-1 shadow"
-            >
-              <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
-              <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
-              <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
-              <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
-            </ul>
+    <.panel title="Affected">
+      <:actions>
+        <button class="link link-hover text-primary" phx-click="refresh_derivation">
+          Refresh derivation
+        </button>
+        <div :if={@mode != :view} class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="link link-hover text-primary cursor-pointer">
+            Add package ▾
           </div>
+          <ul
+            tabindex="0"
+            class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-10 w-44 p-1 shadow"
+          >
+            <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
+            <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
+            <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
+            <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
+          </ul>
         </div>
-      </div>
+      </:actions>
 
-      <div :for={package <- @case_record.affected_packages} class="card bg-base-200 mb-4">
+      <div
+        :for={package <- @case_record.affected_packages}
+        class="rounded-lg border border-base-300 bg-base-300/30 mb-4 last:mb-0"
+      >
         <div class="card-body p-4">
           <div class="flex items-start justify-between">
             <div>
@@ -1679,7 +1679,7 @@ defmodule VarselWeb.CaseDetailLive do
       <p :if={@case_record.affected_packages == []} class="text-sm text-base-content/60">
         No affected packages yet.
       </p>
-    </section>
+    </.panel>
     """
   end
 
@@ -1701,18 +1701,17 @@ defmodule VarselWeb.CaseDetailLive do
     assigns = assign(assigns, :sortable, assigns.mode == :edit and assigns.sort_event != nil)
 
     ~H"""
-    <section id={@id}>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold">{@heading}</h2>
+    <.panel id={@id} title={@heading}>
+      <:actions>
         <button
           :if={@mode != :view}
-          class="btn btn-outline btn-xs"
+          class="link link-hover text-primary"
           phx-click="new_child"
           phx-value-type={@type}
         >
           {@add_label}
         </button>
-      </div>
+      </:actions>
       <ul
         id={"#{@id}-rows"}
         class="space-y-1"
@@ -1767,7 +1766,7 @@ defmodule VarselWeb.CaseDetailLive do
         </li>
       </ul>
       <p :if={@rows == []} class="text-sm text-base-content/60">None yet.</p>
-    </section>
+    </.panel>
     """
   end
 
@@ -1831,23 +1830,24 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp preview_section(assigns) do
     ~H"""
-    <section>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold">Record preview</h2>
-        <div class="flex gap-2">
-          <button
-            :if={@amendment}
-            class="btn btn-outline btn-xs"
-            phx-click="diff"
-            disabled={@diff == :loading}
-          >
-            {if @diff == :loading, do: "Diffing…", else: "Diff to published"}
-          </button>
-          <button class="btn btn-outline btn-xs" phx-click="preview" disabled={@preview == :loading}>
-            {if @preview == :loading, do: "Rendering…", else: "Render preview"}
-          </button>
-        </div>
-      </div>
+    <.panel title="Record preview">
+      <:actions>
+        <button
+          :if={@amendment}
+          class="link link-hover text-primary"
+          phx-click="diff"
+          disabled={@diff == :loading}
+        >
+          {if @diff == :loading, do: "Diffing…", else: "Diff to published"}
+        </button>
+        <button
+          class="link link-hover text-primary"
+          phx-click="preview"
+          disabled={@preview == :loading}
+        >
+          {if @preview == :loading, do: "Rendering…", else: "Render preview"}
+        </button>
+      </:actions>
 
       <div :if={is_list(@diff)} class="space-y-2 mb-3">
         <p :if={not Diff.changed?(@diff)} class="text-sm text-base-content/60">
@@ -1892,7 +1892,7 @@ defmodule VarselWeb.CaseDetailLive do
 
         <button class="btn btn-ghost btn-xs" phx-click="close_preview">Close preview</button>
       </div>
-    </section>
+    </.panel>
     """
   end
 
@@ -1904,9 +1904,7 @@ defmodule VarselWeb.CaseDetailLive do
     assigns = assign(assigns, open: open, resolved: resolved)
 
     ~H"""
-    <section>
-      <h2 class="text-lg font-semibold mb-3">Proposals</h2>
-
+    <.panel title="Suggestions">
       <.proposal_card
         :for={proposal <- @open}
         proposal={proposal}
@@ -1914,9 +1912,9 @@ defmodule VarselWeb.CaseDetailLive do
         current_user={@current_user}
       />
 
-      <p :if={@case_record.proposals == []} class="text-sm text-base-content/60">No proposals.</p>
+      <p :if={@case_record.proposals == []} class="text-sm text-base-content/60">No suggestions.</p>
       <p :if={@open == [] and @resolved != []} class="text-sm text-base-content/60">
-        No open proposals.
+        No open suggestions.
       </p>
 
       <details :if={@resolved != []}>
@@ -1932,13 +1930,13 @@ defmodule VarselWeb.CaseDetailLive do
           />
         </div>
       </details>
-    </section>
+    </.panel>
     """
   end
 
   defp proposal_card(assigns) do
     ~H"""
-    <div class="card bg-base-200 mb-3">
+    <div class="rounded-lg border border-base-300 bg-base-300/30 mb-3">
       <div class="card-body p-3 text-sm">
         <div class="flex items-center justify-between">
           <span class="font-semibold">{proposal_summary(@proposal)}</span>
@@ -2001,9 +1999,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp assignments_section(assigns) do
     ~H"""
-    <section>
-      <h2 class="text-lg font-semibold mb-3">Assignments</h2>
-
+    <.panel title="People">
       <ul class="space-y-1 text-sm">
         <li :for={assignment <- @case_record.assignments} class="flex items-center justify-between">
           <span>{display_name(assignment.user)}</span>
@@ -2031,7 +2027,7 @@ defmodule VarselWeb.CaseDetailLive do
         </select>
         <button type="submit" class="btn btn-outline btn-sm">Assign</button>
       </form>
-    </section>
+    </.panel>
     """
   end
 

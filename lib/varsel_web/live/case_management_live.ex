@@ -193,7 +193,7 @@ defmodule VarselWeb.CaseManagementLive do
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
       <.stat_tiles active={@filter} options={tile_options(@state_counts)} />
 
-      <div class="rounded-box border border-base-300 overflow-hidden mt-4">
+      <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden mt-4">
         <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-base-300">
           <span class="text-sm text-base-content/70 tabular-nums">
             {count_label(@cases.count, "case")}
@@ -216,7 +216,7 @@ defmodule VarselWeb.CaseManagementLive do
               </tr>
             </thead>
             <tbody>
-              <tr :for={case_record <- @cases.results} class="hover:bg-base-200">
+              <tr :for={case_record <- @cases.results} class="hover:bg-base-300/40">
                 <td class="max-w-md truncate">
                   <.link navigate={~p"/cases/#{case_record.id}"} class="link link-hover font-semibold">
                     {case_record.title || "Untitled"}

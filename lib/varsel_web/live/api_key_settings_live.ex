@@ -169,7 +169,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
         </div>
       </div>
 
-      <div class="rounded-box border border-base-300 overflow-hidden">
+      <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">
         <div class="px-4 py-2.5 border-b border-base-300 text-sm text-base-content/70 tabular-nums">
           {if length(@api_keys) == 1, do: "1 token", else: "#{length(@api_keys)} tokens"}
         </div>
@@ -186,7 +186,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
               </tr>
             </thead>
             <tbody>
-              <tr :for={api_key <- @api_keys} class="hover:bg-base-200">
+              <tr :for={api_key <- @api_keys} class="hover:bg-base-300/40">
                 <td class="font-medium">{api_key.name}</td>
                 <td>
                   <.state :if={api_key.valid} dot="bg-success">Active</.state>

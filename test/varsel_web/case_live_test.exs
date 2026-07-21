@@ -165,7 +165,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
       assert html =~ "Editable case"
-      assert html =~ "Case content"
+      assert html =~ "Summary"
 
       lv
       |> form("#case-content-form", %{"form" => %{"title" => "Renamed case"}})
@@ -655,7 +655,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       # Resolved proposals leave the main list for the collapsed details block.
       html = render(lv)
-      assert html =~ "No open proposals."
+      assert html =~ "No open suggestions."
       assert html =~ "Resolved (1)"
       assert [before_resolved, _rest] = String.split(html, "Resolved (1)", parts: 2)
       refute before_resolved =~ "set case.title"

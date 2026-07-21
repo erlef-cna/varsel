@@ -135,7 +135,7 @@ defmodule VarselWeb.CoreComponents do
 
   def console_header(assigns) do
     ~H"""
-    <div class="bg-base-200 border-b border-base-300">
+    <div class="console-band">
       <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div>
           <p class="eef-eyebrow mb-1">{@eyebrow}</p>
@@ -203,7 +203,7 @@ defmodule VarselWeb.CoreComponents do
 
   def panel(assigns) do
     ~H"""
-    <section id={@id} class={["rounded-box border border-base-300 p-4", @class]}>
+    <section id={@id} class={["rounded-box border border-base-300 bg-base-200 p-4", @class]}>
       <h3 class="flex items-center gap-3 text-[0.68rem] font-bold uppercase tracking-wider text-base-content/60 mb-2.5">
         {@title}
         <span

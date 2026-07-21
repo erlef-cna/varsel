@@ -71,7 +71,7 @@ defmodule VarselWeb.UserManagementLive do
     />
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
-      <div class="rounded-box border border-base-300 overflow-hidden">
+      <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">
         <div class="px-4 py-2.5 border-b border-base-300 text-sm text-base-content/70 tabular-nums">
           {if length(@users) == 1, do: "1 user", else: "#{length(@users)} users"}
         </div>
@@ -87,7 +87,7 @@ defmodule VarselWeb.UserManagementLive do
               </tr>
             </thead>
             <tbody>
-              <tr :for={user <- @users} class="hover:bg-base-200">
+              <tr :for={user <- @users} class="hover:bg-base-300/40">
                 <td class="font-medium">
                   {user.name || "—"}
                   <span :if={user.id == @current_user.id} class="badge badge-ghost badge-sm ml-1">

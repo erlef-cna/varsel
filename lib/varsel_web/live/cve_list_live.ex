@@ -305,7 +305,7 @@ defmodule VarselWeb.CveListLive do
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
       <.stat_tiles :if={@poc?} active={@filter} options={tile_options(@state_counts)} />
 
-      <div class={["rounded-box border border-base-300 overflow-hidden", @poc? && "mt-4"]}>
+      <div class={["rounded-box border border-base-300 bg-base-200 overflow-hidden", @poc? && "mt-4"]}>
         <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-base-300">
           <span class="text-sm text-base-content/70 tabular-nums">
             {count_label(@cve_records.count, if(@poc?, do: "record", else: "CVE"))}
@@ -338,7 +338,7 @@ defmodule VarselWeb.CveListLive do
             <tbody>
               <tr
                 :for={record <- @cve_records.results}
-                class={["hover:bg-base-200", record.state == :reserved && "text-base-content/50"]}
+                class={["hover:bg-base-300/40", record.state == :reserved && "text-base-content/50"]}
               >
                 <td class="max-w-md">
                   <.link
