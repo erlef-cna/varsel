@@ -171,8 +171,12 @@ defmodule Varsel.CWE.Weakness do
 
           {:ok, %{status: 200, body: body, headers: resp_headers}} ->
             {:ok, xml} = extract_xml(body)
-            weaknesses = CweXmlParser.parse!(xml)
-            upsert_all(weaknesses)
+
+            xml
+            |> Varsel.Xml.chunk_binary()
+            |> CweXmlParser.stream()
+            |> upsert_all()
+
             new_last_modified = get_header(resp_headers, "last-modified")
             update_metadata(new_last_modified)
             {:ok, :ok}
@@ -296,21 +300,26 @@ defmodule Varsel.CWE.Weakness do
   defp upsert_all(weaknesses) do
     {:ok, _} =
       Ash.transact(__MODULE__, fn ->
-        # 1. Upsert the weaknesses themselves (without relationships).
-        weaknesses
-        |> Stream.chunk_every(200)
-        |> Enum.each(fn chunk ->
-          chunk
-          |> Enum.map(&Map.delete(&1, :related_weaknesses))
-          |> Ash.bulk_create!(__MODULE__, :upsert,
-            authorize?: false,
-            return_errors?: true,
-            stop_on_error?: true
-          )
-        end)
+        # 1. Upsert the weaknesses themselves (without relationships). The
+        #    weakness stream is single-pass, so keep each chunk's (small)
+        #    relationship facts for the second step.
+        relationship_facts =
+          weaknesses
+          |> Stream.chunk_every(200)
+          |> Enum.flat_map(fn chunk ->
+            chunk
+            |> Enum.map(&Map.delete(&1, :related_weaknesses))
+            |> Ash.bulk_create!(__MODULE__, :upsert,
+              authorize?: false,
+              return_errors?: true,
+              stop_on_error?: true
+            )
+
+            Enum.map(chunk, &Map.take(&1, [:cwe_id, :related_weaknesses]))
+          end)
 
         # 2. Sync relationships as a flat set, now that every target exists.
-        sync_relationships(weaknesses)
+        sync_relationships(relationship_facts)
       end)
   end
 

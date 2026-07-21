@@ -4,14 +4,14 @@
 
 defmodule Varsel.CAPEC.CapecXmlParser do
   @moduledoc """
-  Parses the MITRE CAPEC XML catalog (capec_latest.xml) using Erlang's built-in
-  `:xmerl_scan`.
+  Parses the MITRE CAPEC XML catalog (capec_latest.xml) as a SAX stream via
+  `Varsel.Xml`, one attack pattern subtree at a time.
 
-  Returns a list of attack pattern maps ready for bulk-upsert into `AttackPattern`.
+  Produces attack pattern maps ready for bulk-upsert into `AttackPattern`.
 
   Usage:
 
-      {:ok, attack_patterns} = CapecXmlParser.parse(xml_binary)
+      xml_binary |> Varsel.Xml.chunk_binary() |> CapecXmlParser.stream()
 
   Each map has the keys:
 
@@ -32,45 +32,27 @@ defmodule Varsel.CAPEC.CapecXmlParser do
       }
   """
 
-  require Record
-
-  Record.defrecord(:xmlElement, Record.extract(:xmlElement, from_lib: "xmerl/include/xmerl.hrl"))
-
-  Record.defrecord(
-    :xmlAttribute,
-    Record.extract(:xmlAttribute, from_lib: "xmerl/include/xmerl.hrl")
-  )
-
-  Record.defrecord(:xmlText, Record.extract(:xmlText, from_lib: "xmerl/include/xmerl.hrl"))
+  import Varsel.Xml
 
   @doc """
-  Parses the given XML binary and returns a list of attack pattern maps.
+  Lazily parses a stream of XML binary chunks into a stream of attack pattern maps.
 
   The XML must be the content of `capec_latest.xml` from the MITRE CAPEC catalog.
-  Raises on parse failure.
+  Raises `Saxy.ParseError` when the stream is run over malformed input.
   """
-  @spec parse!(binary()) :: [map()]
-  def parse!(xml) when is_binary(xml) do
-    {root, _rest} = :xmerl_scan.string(:erlang.binary_to_list(xml), quiet: true)
-    extract_attack_patterns(root)
+  @spec stream(Enumerable.t(binary())) :: Enumerable.t(map())
+  def stream(chunks) do
+    chunks
+    |> stream_subtrees("Attack_Patterns", "Attack_Pattern")
+    |> Stream.map(&parse_attack_pattern/1)
   end
 
   # ---------------------------------------------------------------------------
   # Private helpers
   # ---------------------------------------------------------------------------
 
-  defp extract_attack_patterns(root) do
-    root
-    |> child_elements()
-    |> Enum.find(&(element_name(&1) == "Attack_Patterns"))
-    |> case do
-      nil -> []
-      patterns_el -> patterns_el |> child_elements() |> Enum.map(&parse_attack_pattern/1)
-    end
-  end
-
   defp parse_attack_pattern(el) do
-    attrs = attributes_map(el)
+    attrs = attributes(el)
     children = child_elements(el)
 
     %{
@@ -112,7 +94,7 @@ defmodule Varsel.CAPEC.CapecXmlParser do
   end
 
   defp parse_related_attack_pattern(el) do
-    attrs = attributes_map(el)
+    attrs = attributes(el)
 
     %{
       nature: parse_nature(attrs["Nature"]),
@@ -121,7 +103,7 @@ defmodule Varsel.CAPEC.CapecXmlParser do
   end
 
   defp parse_related_weakness_id(el) do
-    attrs = attributes_map(el)
+    attrs = attributes(el)
     String.to_integer(attrs["CWE_ID"])
   end
 
@@ -197,53 +179,6 @@ defmodule Varsel.CAPEC.CapecXmlParser do
   defp parse_nature("PeerOf"), do: :peer_of
   # Fallback: :peer_of as a safe default for unknown natures
   defp parse_nature(_other), do: :peer_of
-
-  # ---------------------------------------------------------------------------
-  # xmerl record helpers
-  # ---------------------------------------------------------------------------
-
-  defp child_elements(nil), do: []
-
-  defp child_elements(el) do
-    el
-    |> xmlElement(:content)
-    |> Enum.filter(&match?(xmlElement(), &1))
-  end
-
-  defp element_name(el) do
-    el |> xmlElement(:name) |> to_string()
-  end
-
-  defp find_child(children, name) do
-    Enum.find(children, &(element_name(&1) == name))
-  end
-
-  defp attributes_map(el) do
-    el
-    |> xmlElement(:attributes)
-    |> Map.new(fn attr ->
-      name = attr |> xmlAttribute(:name) |> to_string()
-      value = attr |> xmlAttribute(:value) |> to_string()
-      {name, value}
-    end)
-  end
-
-  defp text_content(nil), do: ""
-
-  defp text_content(el) do
-    el
-    |> collect_text()
-    |> IO.iodata_to_binary()
-    |> String.trim()
-  end
-
-  defp collect_text(el) do
-    Enum.flat_map(xmlElement(el, :content), fn
-      xmlText() = t -> [:unicode.characters_to_binary(xmlText(t, :value))]
-      xmlElement() = child -> collect_text(child)
-      _ -> []
-    end)
-  end
 
   defp nil_if_blank(""), do: nil
   defp nil_if_blank(s), do: s

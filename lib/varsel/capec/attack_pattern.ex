@@ -198,8 +198,11 @@ defmodule Varsel.CAPEC.AttackPattern do
             {:ok, :ok}
 
           %{status: 200, body: body, headers: resp_headers} ->
-            attack_patterns = CapecXmlParser.parse!(body)
-            upsert_all(attack_patterns)
+            body
+            |> Varsel.Xml.chunk_binary()
+            |> CapecXmlParser.stream()
+            |> upsert_all()
+
             new_last_modified = get_header(resp_headers, "last-modified")
             update_metadata(new_last_modified)
             {:ok, :ok}

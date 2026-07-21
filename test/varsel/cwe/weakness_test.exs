@@ -92,14 +92,19 @@ defmodule Varsel.CWE.WeaknessTest do
     |> Ash.run_action!()
   end
 
-  describe "CweXmlParser.parse/1" do
+  # Small chunks exercise XML tokens split across stream chunk boundaries.
+  defp parse_weaknesses(xml) do
+    xml |> Varsel.Xml.chunk_binary(64) |> CweXmlParser.stream() |> Enum.to_list()
+  end
+
+  describe "CweXmlParser.stream/1" do
     test "parses all weaknesses from XML" do
-      weaknesses = CweXmlParser.parse!(@sample_xml)
+      weaknesses = parse_weaknesses(@sample_xml)
       assert length(weaknesses) == 3
     end
 
     test "correctly parses CWE-79 attributes" do
-      weaknesses = CweXmlParser.parse!(@sample_xml)
+      weaknesses = parse_weaknesses(@sample_xml)
       cwe79 = Enum.find(weaknesses, &(&1.cwe_id == 79))
 
       assert cwe79.name =~ "Improper Neutralization"
@@ -110,7 +115,7 @@ defmodule Varsel.CWE.WeaknessTest do
     end
 
     test "parses related weaknesses with typed nature" do
-      weaknesses = CweXmlParser.parse!(@sample_xml)
+      weaknesses = parse_weaknesses(@sample_xml)
       cwe79 = Enum.find(weaknesses, &(&1.cwe_id == 79))
 
       assert [
@@ -121,7 +126,7 @@ defmodule Varsel.CWE.WeaknessTest do
     end
 
     test "parses mitigations concatenated with phase prefix" do
-      weaknesses = CweXmlParser.parse!(@sample_xml)
+      weaknesses = parse_weaknesses(@sample_xml)
       cwe79 = Enum.find(weaknesses, &(&1.cwe_id == 79))
 
       assert cwe79.potential_mitigations =~ "Architecture and Design"
@@ -129,7 +134,7 @@ defmodule Varsel.CWE.WeaknessTest do
     end
 
     test "parses common consequences with scope prefix" do
-      weaknesses = CweXmlParser.parse!(@sample_xml)
+      weaknesses = parse_weaknesses(@sample_xml)
       cwe79 = Enum.find(weaknesses, &(&1.cwe_id == 79))
 
       assert cwe79.common_consequences =~ "Confidentiality"
@@ -137,7 +142,7 @@ defmodule Varsel.CWE.WeaknessTest do
     end
 
     test "handles missing optional fields gracefully" do
-      weaknesses = CweXmlParser.parse!(@sample_xml)
+      weaknesses = parse_weaknesses(@sample_xml)
       cwe74 = Enum.find(weaknesses, &(&1.cwe_id == 74))
 
       assert cwe74.related_weaknesses == []

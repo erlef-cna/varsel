@@ -119,14 +119,19 @@ defmodule Varsel.CAPEC.AttackPatternTest do
     end)
   end
 
-  describe "CapecXmlParser.parse/1" do
+  # Small chunks exercise XML tokens split across stream chunk boundaries.
+  defp parse_patterns(xml) do
+    xml |> Varsel.Xml.chunk_binary(64) |> CapecXmlParser.stream() |> Enum.to_list()
+  end
+
+  describe "CapecXmlParser.stream/1" do
     test "parses all attack patterns from XML" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       assert length(patterns) == 3
     end
 
     test "correctly parses CAPEC-66 attributes" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       capec66 = Enum.find(patterns, &(&1.capec_id == 66))
 
       assert capec66.name == "SQL Injection"
@@ -137,7 +142,7 @@ defmodule Varsel.CAPEC.AttackPatternTest do
     end
 
     test "parses likelihood_of_attack and typical_severity" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       capec66 = Enum.find(patterns, &(&1.capec_id == 66))
 
       assert capec66.likelihood_of_attack == :high
@@ -145,7 +150,7 @@ defmodule Varsel.CAPEC.AttackPatternTest do
     end
 
     test "parses related_attack_patterns with typed nature" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       capec66 = Enum.find(patterns, &(&1.capec_id == 66))
 
       assert [
@@ -155,14 +160,14 @@ defmodule Varsel.CAPEC.AttackPatternTest do
     end
 
     test "parses related_weaknesses as list of integers" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       capec66 = Enum.find(patterns, &(&1.capec_id == 66))
 
       assert capec66.related_weaknesses == [89, 116]
     end
 
     test "parses prerequisites text" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       capec66 = Enum.find(patterns, &(&1.capec_id == 66))
 
       assert capec66.prerequisites =~ "SQL database"
@@ -170,7 +175,7 @@ defmodule Varsel.CAPEC.AttackPatternTest do
     end
 
     test "parses mitigations concatenated" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       capec66 = Enum.find(patterns, &(&1.capec_id == 66))
 
       assert capec66.mitigations =~ "parameterized queries"
@@ -178,7 +183,7 @@ defmodule Varsel.CAPEC.AttackPatternTest do
     end
 
     test "parses consequences with scope prefix" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       capec66 = Enum.find(patterns, &(&1.capec_id == 66))
 
       assert capec66.consequences =~ "Confidentiality"
@@ -188,7 +193,7 @@ defmodule Varsel.CAPEC.AttackPatternTest do
     end
 
     test "handles missing optional fields gracefully" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       capec7 = Enum.find(patterns, &(&1.capec_id == 7))
 
       assert capec7.related_attack_patterns == []
@@ -202,7 +207,7 @@ defmodule Varsel.CAPEC.AttackPatternTest do
     end
 
     test "parses deprecated status" do
-      patterns = CapecXmlParser.parse!(@sample_xml)
+      patterns = parse_patterns(@sample_xml)
       capec100 = Enum.find(patterns, &(&1.capec_id == 100))
 
       assert capec100.status == :deprecated
