@@ -78,6 +78,8 @@ defmodule VarselWeb.CveView.AffectedChecker do
     end
   end
 
+  def parse(_version, _type), do: :error
+
   # Every dot component must be a bare integer; anything else is unparseable.
   defp dot_components_to_tuple(segments) do
     nums = Enum.map(segments, &clean_integer/1)
@@ -91,8 +93,6 @@ defmodule VarselWeb.CveView.AffectedChecker do
       _partial_or_error -> nil
     end
   end
-
-  def parse(_version, _type), do: :error
 
   defp pad4(nums) when length(nums) >= 4, do: Enum.take(nums, 4)
   defp pad4(nums), do: nums ++ List.duplicate(0, 4 - length(nums))
