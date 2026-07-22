@@ -1156,6 +1156,38 @@ defmodule VarselWeb.CaseLiveTest do
       assert fold_content =~ "Third paragraph also stays identical"
     end
 
+    test "a CVSS vector suggestion stays stacked but emphasizes the changed metric", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      old_vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N"
+      new_vector = String.replace(old_vector, "AV:N", "AV:L")
+
+      case_record = Fixtures.open_case(poc, %{cvss_v4: old_vector})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :case,
+          operation: :set,
+          field_name: "cvss_v4",
+          proposed_value: %{"value" => new_vector}
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # Still the stacked rows (whole-row tints), not a merged body...
+      assert html =~ "line-through decoration-error/40"
+
+      # ...with the one changed metric emphasized inside each row.
+      assert html =~ ~s(bg-error/25">AV:N</span>)
+      assert html =~ ~s(bg-success/25">AV:L</span>)
+    end
+
     test "a suggestion's reply thread is collapsed behind its reply count", %{
       conn: conn,
       poc: poc,

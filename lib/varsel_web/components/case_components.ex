@@ -221,13 +221,22 @@ defmodule VarselWeb.CaseComponents do
   behind a client-side toggle. Otherwise falls back to the stacked
   old-then-new blocks (pure additions/removals, dissimilar rewrites, and
   non-prose values all take this path). Either side may be absent (pure
-  additions/removals always stack).
+  additions/removals always stack). Stacked slash-delimited single tokens
+  (CVSS vectors) additionally emphasize their changed `/`-segments inside
+  the rows (`WordDiff.stacked_highlight/2`).
   """
   attr :old, :string, default: nil
   attr :new, :string, default: nil
 
   def suggestion_diff(assigns) do
-    assigns = assign(assigns, :result, word_diff_result(assigns.old, assigns.new))
+    result = word_diff_result(assigns.old, assigns.new)
+
+    highlight =
+      if result == :stacked,
+        do: WordDiff.stacked_highlight(assigns.old, assigns.new),
+        else: :plain
+
+    assigns = assign(assigns, result: result, highlight: highlight)
 
     ~H"""
     <div class="rounded-md border border-base-300 overflow-hidden text-sm">
@@ -238,12 +247,12 @@ defmodule VarselWeb.CaseComponents do
           :if={@old not in [nil, ""]}
           class="px-2.5 py-1 bg-error/10 text-error/80 line-through decoration-error/40 whitespace-pre-wrap break-words"
           phx-no-format
-        >{@old}</div>
+        ><%= if @highlight == :plain do %>{@old}<% else %><.stacked_segments segments={elem(@highlight, 1)} /><% end %></div>
         <div
           :if={@new not in [nil, ""]}
           class="px-2.5 py-1 bg-success/10 text-success whitespace-pre-wrap break-words"
           phx-no-format
-        >{@new}</div>
+        ><%= if @highlight == :plain do %>{@new}<% else %><.stacked_segments segments={elem(@highlight, 2)} /><% end %></div>
       <% end %>
     </div>
     """
@@ -252,6 +261,21 @@ defmodule VarselWeb.CaseComponents do
   defp word_diff_result(old, new) when is_binary(old) and is_binary(new), do: WordDiff.diff(old, new)
 
   defp word_diff_result(_old, _new), do: :stacked
+
+  attr :segments, :list, required: true
+
+  # Slash-value emphasis inside an already-tinted stacked row (CVSS
+  # vectors): changed segments get a stronger patch of the row's own tint
+  # so the one changed metric stands out of the near-identical pair.
+  defp stacked_segments(assigns) do
+    ~H"""
+    <span :for={{kind, text} <- @segments} class={stacked_segment_class(kind)}>{text}</span>
+    """
+  end
+
+  defp stacked_segment_class(:eq), do: nil
+  defp stacked_segment_class(:del), do: "rounded-[3px] px-0.5 box-decoration-clone bg-error/25"
+  defp stacked_segment_class(:ins), do: "rounded-[3px] px-0.5 box-decoration-clone bg-success/25"
 
   attr :paragraphs, :list, required: true
 

@@ -62,6 +62,62 @@ defmodule Varsel.Cases.WordDiff do
       merge_by_words?(old_words, new_words, total)
   end
 
+  @doc """
+  Emphasis segments for the *stacked* rendering of slash-delimited
+  single-token values — CVSS vectors are the driving case: `AV:N` → `AV:L`
+  is one changed metric drowned in two near-identical rows, and the word
+  cutoff can never merge them (one whitespace-token per side). The rows
+  stay stacked; this diffs the two values on `/` boundaries so the rows
+  can emphasize just the changed segments.
+
+  Applies only when both sides are non-empty single whitespace-token
+  binaries containing `/` and the segment diff shares at least one
+  segment; every other pair returns `:plain` (render the rows untouched).
+  Old-side segments are `:eq`/`:del`, new-side `:eq`/`:ins`.
+  """
+  @spec stacked_highlight(String.t() | nil, String.t() | nil) ::
+          {:segments, [segment()], [segment()]} | :plain
+  def stacked_highlight(old, new) when is_binary(old) and is_binary(new) do
+    if slash_value?(old) and slash_value?(new) do
+      ops = List.myers_difference(slash_tokens(old), slash_tokens(new))
+
+      if shared_segment?(ops) do
+        {:segments, side_segments(ops, :del), side_segments(ops, :ins)}
+      else
+        :plain
+      end
+    else
+      :plain
+    end
+  end
+
+  def stacked_highlight(_old, _new), do: :plain
+
+  defp slash_value?(s), do: s != "" and String.contains?(s, "/") and not String.match?(s, ~r/\s/)
+
+  # A shared bare "/" separator alone is not similarity — without a common
+  # real segment the emphasis would cover both rows entirely.
+  defp shared_segment?(ops) do
+    Enum.any?(ops, fn
+      {:eq, tokens} -> Enum.any?(tokens, &(&1 != "/"))
+      {_kind, _tokens} -> false
+    end)
+  end
+
+  defp slash_tokens(s), do: Regex.split(~r{/}, s, include_captures: true)
+
+  # One side of the stacked pair: its own changes plus the shared
+  # segments, in order — the other side's changes don't exist on this row.
+  defp side_segments(ops, kind) do
+    ops
+    |> Enum.flat_map(fn
+      {:eq, tokens} -> [{:eq, IO.iodata_to_binary(tokens)}]
+      {^kind, tokens} -> [{kind, IO.iodata_to_binary(tokens)}]
+      {_other_side, _tokens} -> []
+    end)
+    |> coalesce_segments()
+  end
+
   defp merge_by_words?(old_words, new_words, total) do
     eq = old_words |> List.myers_difference(new_words) |> eq_count()
     eq >= @merge_min_eq and 2 * eq / total >= @merge_min_similarity

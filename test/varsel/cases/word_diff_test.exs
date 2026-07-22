@@ -87,6 +87,41 @@ defmodule Varsel.Cases.WordDiffTest do
     end
   end
 
+  describe "stacked_highlight/2" do
+    test "a CVSS vector pair highlights just the changed metric on each row" do
+      old = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N"
+      new = "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N"
+
+      assert {:segments, old_segments, new_segments} = WordDiff.stacked_highlight(old, new)
+
+      assert {:del, "AV:N"} in old_segments
+      refute Enum.any?(old_segments, &match?({:ins, _}, &1))
+      assert {:ins, "AV:L"} in new_segments
+      refute Enum.any?(new_segments, &match?({:del, _}, &1))
+
+      # Each side reassembles to its own full value.
+      assert Enum.map_join(old_segments, &elem(&1, 1)) == old
+      assert Enum.map_join(new_segments, &elem(&1, 1)) == new
+    end
+
+    test "values without a slash stay plain" do
+      assert WordDiff.stacked_highlight("1.5.7", "1.5.8") == :plain
+    end
+
+    test "prose (anything with whitespace) stays plain" do
+      assert WordDiff.stacked_highlight("prose with spaces", "other prose here") == :plain
+    end
+
+    test "slash values sharing only the separator stay plain" do
+      assert WordDiff.stacked_highlight("a/b", "x/y/z") == :plain
+    end
+
+    test "a blank or missing side stays plain" do
+      assert WordDiff.stacked_highlight(nil, "CVSS:3.1/AV:N") == :plain
+      assert WordDiff.stacked_highlight("", "CVSS:3.1/AV:N") == :plain
+    end
+  end
+
   describe "diff/2 segment structure" do
     test "typo fix produces a single changed paragraph with adjacent del/ins segments" do
       old = "Bandit HTTP/1 request smugling via bare CR in chunk extensions"
