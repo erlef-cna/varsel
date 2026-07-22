@@ -6,7 +6,12 @@ defmodule VarselWeb.CveController do
   use VarselWeb, :controller
 
   alias Ash.Error.Invalid
+  alias Varsel.CAPEC
   alias Varsel.CVE
+  alias Varsel.CWE
+  alias VarselWeb.CveView
+
+  require Ash.Query
 
   # Machine-readable index of all published CVEs.
   def index(conn, _params) do
@@ -25,10 +30,16 @@ defmodule VarselWeb.CveController do
     else
       record = CVE.get_published_cve_record!(cve_id, actor: nil)
       cve = record.cve_json
+      cna = cve["containers"]["cna"] || %{}
 
       conn
       |> assign(:page_title, cve["cveMetadata"]["cveId"])
-      |> render(:show, cve: cve, cna: cve["containers"]["cna"] || %{})
+      |> render(:show,
+        cve: cve,
+        cna: cna,
+        cwe_names: cwe_names(cna),
+        capec_names: capec_names(cna)
+      )
     end
   rescue
     Invalid ->
@@ -36,6 +47,48 @@ defmodule VarselWeb.CveController do
       |> put_status(:not_found)
       |> put_view(html: VarselWeb.ErrorHTML)
       |> render(:"404")
+  end
+
+  # id -> catalog name maps, one query each regardless of how many
+  # CWE/CAPEC ids the record carries (N+1 safety).
+  defp cwe_names(cna) do
+    ids =
+      cna
+      |> CveView.cwe_descriptions()
+      |> Enum.map(&CveView.cwe_id_number(&1["cweId"]))
+      |> Enum.uniq()
+
+    case ids do
+      [] ->
+        %{}
+
+      _ids ->
+        CWE.Weakness
+        |> Ash.Query.select([:cwe_id, :name])
+        |> Ash.Query.filter(cwe_id in ^ids)
+        |> Ash.read!(actor: nil)
+        |> Map.new(&{&1.cwe_id, &1.name})
+    end
+  end
+
+  defp capec_names(cna) do
+    ids =
+      cna
+      |> CveView.capec_items()
+      |> Enum.map(&CveView.capec_id_number(&1["capecId"]))
+      |> Enum.uniq()
+
+    case ids do
+      [] ->
+        %{}
+
+      _ids ->
+        CAPEC.AttackPattern
+        |> Ash.Query.select([:capec_id, :name])
+        |> Ash.Query.filter(capec_id in ^ids)
+        |> Ash.read!(actor: nil)
+        |> Map.new(&{&1.capec_id, &1.name})
+    end
   end
 
   # JSON record (api pipeline), also handles multi-segment wildcard paths.

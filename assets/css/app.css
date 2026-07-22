@@ -283,6 +283,14 @@
   box-shadow: inset 2px 0 0 var(--color-primary);
 }
 
+/* [data-toc] scroll-spy (public/docs pages, marked by the plain-JS spy in
+   app.js — these pages are controller-rendered, no phx hook runs): active
+   entry gets the accent left-border + ink text treatment. */
+[data-toc] a.is-active {
+  border-color: var(--color-primary);
+  color: var(--color-base-content);
+}
+
 /* Slide-over scrim (board D): darker than black/50 so it registers on the
    already-dark theme too. */
 .overlay-scrim {

@@ -374,13 +374,13 @@ defmodule VarselWeb.CveListLive do
 
     <.console_header
       eyebrow={if @poc?, do: "CNA Console", else: "EEF CNA"}
-      title={if @poc?, do: "CVE records", else: "Issued CVEs"}
       subtitle={
         if @poc?,
           do: "Reserve, draft, publish, and reject CVE records.",
           else: "Vulnerabilities assigned and published by the EEF CNA."
       }
     >
+      <:title>{if @poc?, do: "CVE records", else: "Issued CVEs"}</:title>
       <:actions>
         <form id="cve-record-search" phx-change="search" phx-submit="search">
           <.console_search

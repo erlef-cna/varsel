@@ -1307,7 +1307,8 @@ defmodule VarselWeb.CaseDetailLive do
           </div>
 
           <div class="space-y-4">
-            <.panel id="suggestions" title="Suggestions">
+            <.panel id="suggestions">
+              <:title>Suggestions</:title>
               <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
                 <li :for={proposal <- open_proposals(@case_record)} class="flex items-center gap-2">
                   <span class="text-info font-bold shrink-0">◆</span>
@@ -1327,7 +1328,8 @@ defmodule VarselWeb.CaseDetailLive do
                 No open suggestions.
               </p>
             </.panel>
-            <.panel title="Activity">
+            <.panel>
+              <:title>Activity</:title>
               <form phx-submit="post_comment" class="mb-4">
                 <textarea
                   name="body"
@@ -1561,10 +1563,8 @@ defmodule VarselWeb.CaseDetailLive do
     <div :if={@content_form} class="flex justify-end mb-2">
       <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
     </div>
-    <.panel
-      title={if @content_form, do: "Summary — editing", else: "Summary"}
-      editing?={!!@content_form}
-    >
+    <.panel editing?={!!@content_form}>
+      <:title>{if @content_form, do: "Summary — editing", else: "Summary"}</:title>
       <:actions>
         <button
           :if={@mode != :view and !@content_form}
@@ -1701,7 +1701,8 @@ defmodule VarselWeb.CaseDetailLive do
     <div :if={@form} class="flex justify-end mb-2">
       <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
     </div>
-    <.panel title={if @form, do: "Severity — editing", else: "Severity"} editing?={!!@form}>
+    <.panel editing?={!!@form}>
+      <:title>{if @form, do: "Severity — editing", else: "Severity"}</:title>
       <:actions>
         <button
           :if={@mode != :view and !@form}
@@ -1821,14 +1822,12 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp affected_package_card(assigns) do
     ~H"""
-    <.panel
-      editing?={@expanded? && !!@field_form}
-      title={
-        if @field_form,
+    <.panel editing?={@expanded? && !!@field_form}>
+      <:title>
+        {if @field_form,
           do: "Affected — #{@package.vendor} / #{@package.product} — editing",
-          else: "Affected — #{@package.vendor} / #{@package.product}"
-      }
-    >
+          else: "Affected — #{@package.vendor} / #{@package.product}"}
+      </:title>
       <:actions>
         <span :if={@package.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
         <span :if={@package.id in @marks.deleted} class="badge badge-error badge-xs">
@@ -2436,7 +2435,8 @@ defmodule VarselWeb.CaseDetailLive do
     assigns = assign(assigns, :sortable, assigns.mode == :edit and assigns.sort_event != nil)
 
     ~H"""
-    <.panel id={@id} title={@heading}>
+    <.panel id={@id}>
+      <:title>{@heading}</:title>
       <:actions>
         <button
           :if={@mode != :view}
@@ -2514,7 +2514,8 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp reports_section(assigns) do
     ~H"""
-    <.panel title={"Reports (#{length(@case_record.vulnerability_reports)})"}>
+    <.panel>
+      <:title>Reports ({length(@case_record.vulnerability_reports)})</:title>
       <:actions>
         <.link :if={@poc} navigate={~p"/reports"} class="link link-hover text-primary">
           Report triage
@@ -2800,7 +2801,8 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp assignments_section(assigns) do
     ~H"""
-    <.panel title="People">
+    <.panel>
+      <:title>People</:title>
       <ul class="space-y-2 text-sm">
         <li
           :for={assignment <- @case_record.assignments}

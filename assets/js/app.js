@@ -111,6 +111,54 @@ const SectionRail = {
   },
 }
 
+// Plain-JS ToC scroll-spy for controller-rendered (dead) pages — the public
+// CVE detail page and the docs page template — where no LiveView hook runs.
+// Marks the entry whose section sits nearest above the viewport top with
+// .is-active (styled in app.css), mirroring the SectionRail hook's spy/2
+// semantics for the workspace rail without any of its LiveView lifecycle.
+function initTocScrollSpy() {
+  const navs = document.querySelectorAll("[data-toc]")
+  if (navs.length === 0) return
+
+  const offset = 96
+  let raf = null
+
+  function spyOne(nav) {
+    const links = [...nav.querySelectorAll('a[href^="#"]')]
+    let active = null
+    for (const link of links) {
+      const target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)))
+      if (target && target.getBoundingClientRect().top <= offset) active = link
+    }
+    active = active || links[0]
+    links.forEach((link) => link.classList.toggle("is-active", link === active))
+  }
+
+  function spy() {
+    navs.forEach(spyOne)
+  }
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = null
+        spy()
+      })
+    },
+    {passive: true}
+  )
+
+  spy()
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initTocScrollSpy)
+} else {
+  initTocScrollSpy()
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,

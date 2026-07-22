@@ -2,7 +2,9 @@
 SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
 SPDX-License-Identifier: Apache-2.0
 --%>
-<.console_header eyebrow="Documentation" title={@page.title} subtitle={@page.description} />
+<.console_header eyebrow="Documentation" subtitle={@page.description}>
+  <:title>{@page.title}</:title>
+</.console_header>
 
 <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-6xl">
   <div class={[@page.toc != [] && "lg:grid lg:grid-cols-[1fr_15rem] lg:gap-12"]}>
@@ -14,6 +16,7 @@ SPDX-License-Identifier: Apache-2.0
       :if={@page.toc != []}
       class="hidden lg:block order-first lg:order-last"
       aria-label="Table of contents"
+      data-toc
     >
       <div class="sticky top-24">
         <p class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-3">

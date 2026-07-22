@@ -128,9 +128,9 @@ defmodule VarselWeb.CoreComponents do
   with eyebrow, title and subtitle on the left and the page's actions on the
   right. Content below it lays out its own container.
   """
-  attr :title, :string, required: true
   attr :subtitle, :string, default: nil
   attr :eyebrow, :string, default: "CNA Console"
+  slot :title, required: true, doc: "heading content — plain text or rich"
   slot :actions
 
   def console_header(assigns) do
@@ -139,7 +139,7 @@ defmodule VarselWeb.CoreComponents do
       <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div>
           <p class="eef-eyebrow mb-1">{@eyebrow}</p>
-          <h1 class="text-2xl font-bold leading-tight">{@title}</h1>
+          <h1 class="text-2xl font-bold leading-tight">{render_slot(@title)}</h1>
           <p :if={@subtitle} class="text-sm text-base-content/60 mt-0.5">{@subtitle}</p>
         </div>
         <div :if={@actions != []} class="flex flex-wrap items-center gap-2 pb-0.5">
@@ -197,9 +197,13 @@ defmodule VarselWeb.CoreComponents do
   editing this card" signal used while a section's editor is open in place.
   """
   attr :id, :string, default: nil
-  attr :title, :string, required: true
   attr :class, :any, default: nil
   attr :editing?, :boolean, default: false
+
+  slot :title,
+    required: true,
+    doc: "heading content — plain text or rich (mixed mono/text runs, links)"
+
   slot :actions
   slot :inner_block, required: true
 
@@ -214,7 +218,7 @@ defmodule VarselWeb.CoreComponents do
       ]}
     >
       <h3 class="flex items-center gap-3 text-[0.68rem] font-bold uppercase tracking-wider text-base-content/60 mb-2.5">
-        {@title}
+        {render_slot(@title)}
         <span
           :if={@actions != []}
           class="ml-auto flex items-center gap-3 normal-case tracking-normal font-semibold text-xs"
