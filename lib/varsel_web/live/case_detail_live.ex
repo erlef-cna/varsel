@@ -1042,7 +1042,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp diff_line_class({:del, _line}), do: "bg-error/10 text-error"
   defp diff_line_class({:ins, _line}), do: "bg-success/10 text-success"
-  defp diff_line_class({:skip, _count}), do: "text-base-content/40"
+  defp diff_line_class({:skip, _count}), do: "text-base-content/50 italic"
   defp diff_line_class({:eq, _line}), do: "text-base-content/70"
 
   defp diff_line_text({:del, line}), do: "- " <> line
@@ -1174,10 +1174,6 @@ defmodule VarselWeb.CaseDetailLive do
       </div>
 
       <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
-        <p :if={@mode == :propose} class="text-sm text-base-content/60 mb-4">
-          Suggesting: open suggestions are shown as if accepted; your edits become new suggestions.
-        </p>
-
         <div class="grid lg:grid-cols-[9.5rem_minmax(0,1fr)_18.5rem] gap-6 items-start">
           <.section_nav
             sections={workspace_sections(@display_case, @case_record.proposals)}
@@ -2249,7 +2245,13 @@ defmodule VarselWeb.CaseDetailLive do
     </div>
     <div
       :if={@package.channels != [] or @package.repo_url}
-      class="grid grid-cols-[minmax(0,1fr)_minmax(0,0.5fr)_minmax(0,1.2fr)_auto] items-center gap-x-3"
+      class={[
+        "grid items-center gap-x-3",
+        if(any_channel_subpath?(@package),
+          do: "grid-cols-[minmax(0,1fr)_minmax(0,0.4fr)_minmax(0,1.6fr)_auto]",
+          else: "grid-cols-[minmax(0,1fr)_auto_minmax(0,1.6fr)_auto]"
+        )
+      ]}
     >
       <div class="contents text-[0.65rem] font-bold uppercase tracking-wider text-base-content/50">
         <div class="py-1">Channel</div>
@@ -2269,8 +2271,18 @@ defmodule VarselWeb.CaseDetailLive do
             {channel_label(@package, channel) || "—"}
           </span>
         </div>
-        <div class="min-w-0 truncate font-mono text-xs text-base-content/60">
+        <div
+          :if={any_channel_subpath?(@package)}
+          class="min-w-0 truncate font-mono text-xs text-base-content/60"
+        >
           {channel.subpath || "—"}
+        </div>
+        <div
+          :if={!any_channel_subpath?(@package)}
+          class="text-xs text-base-content/30"
+          title="No subpath"
+        >
+          —
         </div>
         <div
           class="min-w-0 truncate font-mono text-xs text-base-content/60"
@@ -2326,7 +2338,19 @@ defmodule VarselWeb.CaseDetailLive do
             github (implicit)
           </span>
         </div>
-        <div class="min-w-0 truncate font-mono text-xs text-base-content/60">—</div>
+        <div
+          :if={any_channel_subpath?(@package)}
+          class="min-w-0 truncate font-mono text-xs text-base-content/60"
+        >
+          —
+        </div>
+        <div
+          :if={!any_channel_subpath?(@package)}
+          class="text-xs text-base-content/30"
+          title="No subpath"
+        >
+          —
+        </div>
         <div
           class="min-w-0 truncate font-mono text-xs text-base-content/60"
           title={derived_versions_label(@package, "git")}
@@ -3249,6 +3273,13 @@ defmodule VarselWeb.CaseDetailLive do
       nil -> "(removed channel)"
       channel -> channel_label(package, channel) || to_string(channel.purl_type)
     end
+  end
+
+  # Most packages carry no per-channel subpath; the channel grid collapses
+  # the Subpath column to a compact indicator so Derived gets the width it
+  # actually needs instead of being squeezed by an empty column.
+  defp any_channel_subpath?(package) do
+    Enum.any?(package.channels, &(&1.subpath not in [nil, ""]))
   end
 
   # Board C's channel row annotates overridden machinery inline; these fields

@@ -812,7 +812,7 @@ defmodule VarselWeb.CaseLiveTest do
         |> element(~s{button[phx-click=edit_section][phx-value-section=summary]})
         |> render_click()
 
-      assert html =~ "your edits become new suggestions"
+      assert html =~ "your edits become proposals"
       assert html =~ "Suggest changes"
 
       lv

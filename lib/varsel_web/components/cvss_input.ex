@@ -23,6 +23,8 @@ defmodule VarselWeb.CvssInput do
   """
   use VarselWeb, :live_component
 
+  import VarselWeb.CaseComponents, only: [severity_chip: 1]
+
   alias Varsel.Types.CVSS
 
   @prefix "CVSS:4.0"
@@ -103,10 +105,7 @@ defmodule VarselWeb.CvssInput do
       <div class="flex items-center justify-between mb-1">
         <label class="label text-sm" for={@field.id}>{@label}</label>
         <div class="flex items-center gap-2">
-          <span :if={@score} class="font-mono text-sm">{format_score(@score)}</span>
-          <span :if={@severity} class={["badge badge-sm uppercase", severity_badge_class(@severity)]}>
-            {@severity}
-          </span>
+          <.severity_chip :if={@severity} severity={@severity} score={@score} />
           <span :if={@vector not in [nil, ""] and is_nil(@score)} class="badge badge-sm badge-error">
             invalid vector
           </span>
@@ -225,13 +224,4 @@ defmodule VarselWeb.CvssInput do
 
   defp presence(nil), do: nil
   defp presence(value), do: if(String.trim(value) == "", do: nil, else: value)
-
-  defp format_score(score), do: :erlang.float_to_binary(score / 1, decimals: 1)
-
-  defp severity_badge_class(:none), do: "badge-ghost"
-  defp severity_badge_class(:low), do: "badge-success"
-  defp severity_badge_class(:medium), do: "badge-warning"
-  defp severity_badge_class(:high), do: "badge-error"
-  defp severity_badge_class(:critical), do: "badge-error badge-outline font-bold"
-  defp severity_badge_class(_other), do: "badge-ghost"
 end
