@@ -9,7 +9,7 @@ defmodule VarselWeb.CveListLiveTest do
 
   alias Varsel.CVE.CveRecord
 
-  defp published(cve_id, title) do
+  defp published(cve_id, title, metrics \\ []) do
     cve_json = %{
       "dataType" => "CVE_RECORD",
       "dataVersion" => "5.2",
@@ -24,7 +24,8 @@ defmodule VarselWeb.CveListLiveTest do
           "title" => title,
           "descriptions" => [%{"lang" => "en", "value" => "#{title} description."}],
           "affected" => [%{"packageURL" => "pkg:hex/#{String.downcase(title)}"}],
-          "references" => []
+          "references" => [],
+          "metrics" => metrics
         }
       }
     }
@@ -62,5 +63,18 @@ defmodule VarselWeb.CveListLiveTest do
     html = lv |> form("form", %{query: "zzzznotfound"}) |> render_change()
 
     assert html =~ "No CVEs match"
+  end
+
+  test "renders a compact severity chip, dashed when unscored", %{conn: conn} do
+    published("CVE-2025-0001", "Alpha", [
+      %{"cvssV3_1" => %{"baseScore" => 7.5, "vectorString" => "CVSS:3.1/AV:N"}}
+    ])
+
+    published("CVE-2025-0002", "Bravo")
+
+    {:ok, _lv, html} = live(conn, ~p"/cves")
+
+    assert html =~ "H 7.5"
+    assert html =~ "no score"
   end
 end

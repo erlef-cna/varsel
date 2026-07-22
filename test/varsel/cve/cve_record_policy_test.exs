@@ -11,6 +11,11 @@ defmodule Varsel.CVE.CveRecordPolicyTest do
 
   @year Date.utc_today().year
 
+  setup do
+    Application.put_env(:varsel, :hex_stub_packages, ["test_lib"])
+    on_exit(fn -> Application.delete_env(:varsel, :hex_stub_packages) end)
+  end
+
   defp register_user(handle) do
     Ash.create!(
       User,
@@ -72,6 +77,53 @@ defmodule Varsel.CVE.CveRecordPolicyTest do
     Ash.create!(CveRecord, %{cve_json: cve_json}, action: :import, authorize?: false)
   end
 
+  # A schema-valid record: unlike :import, the :update action validates the
+  # full CVE record schema, so the minimal fixture above won't do.
+  defp valid_published_record(cve_id) do
+    org_id = "b33eab0a-aa47-4189-b7ec-b71bbfeee3e3"
+
+    cve_json = %{
+      "dataType" => "CVE_RECORD",
+      "dataVersion" => "5.1",
+      "cveMetadata" => %{
+        "cveId" => cve_id,
+        "assignerOrgId" => org_id,
+        "assignerShortName" => "EEF",
+        "state" => "PUBLISHED",
+        "datePublished" => "#{@year}-01-02T12:00:00.000Z",
+        "dateUpdated" => "#{@year}-01-02T12:00:00.000Z"
+      },
+      "containers" => %{
+        "cna" => %{
+          "providerMetadata" => %{"orgId" => org_id},
+          "title" => "Test vulnerability",
+          "descriptions" => [
+            %{"lang" => "en", "value" => "A test vulnerability allowing denial of service."}
+          ],
+          "affected" => [
+            %{
+              "vendor" => "Erlang Ecosystem Foundation",
+              "product" => "test_lib",
+              "packageURL" => "pkg:hex/test_lib",
+              "defaultStatus" => "unaffected",
+              "versions" => [
+                %{
+                  "version" => "0",
+                  "lessThan" => "1.2.3",
+                  "status" => "affected",
+                  "versionType" => "semver"
+                }
+              ]
+            }
+          ],
+          "references" => [%{"url" => "https://example.com/advisory"}]
+        }
+      }
+    }
+
+    Ash.create!(CveRecord, %{cve_json: cve_json}, action: :import, authorize?: false)
+  end
+
   describe ":list_all read policy" do
     test "a POC sees records in every state" do
       {poc, _supporter} = actors()
@@ -102,6 +154,31 @@ defmodule Varsel.CVE.CveRecordPolicyTest do
       states = [actor: nil] |> CVE.list_all_cve_records!() |> Enum.map(& &1.state)
 
       assert states == [:published]
+    end
+
+    # The merged /cves console surfaces rejected and pending_update records to
+    # POCs — this pins that the read POLICY (not template hiding) keeps them
+    # away from everyone else.
+    test "rejected and pending_update records stay POC-only" do
+      {poc, supporter} = actors()
+
+      "CVE-#{@year}-0015"
+      |> reserved_record()
+      |> Ash.update!(%{rejection_reason: "seed"}, action: :mark_rejected, authorize?: false)
+
+      published = valid_published_record("CVE-#{@year}-12345")
+
+      updated_json = put_in(published.cve_json, ["containers", "cna", "title"], "Edited title")
+      Ash.update!(published, %{cve_json: updated_json}, action: :update, authorize?: false)
+
+      for actor <- [supporter, nil] do
+        states = [actor: actor] |> CVE.list_all_cve_records!() |> Enum.map(& &1.state)
+        assert states == [], "expected no visible records for #{inspect(actor)}"
+      end
+
+      poc_states = [actor: poc] |> CVE.list_all_cve_records!() |> Enum.map(& &1.state)
+      assert :rejected in poc_states
+      assert :pending_update in poc_states
     end
   end
 

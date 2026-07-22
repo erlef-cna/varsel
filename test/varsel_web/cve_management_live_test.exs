@@ -70,33 +70,65 @@ defmodule VarselWeb.VarselLiveTest do
     Ash.create!(CveRecord, %{cve_json: cve_json}, action: :import, authorize?: false)
   end
 
-  test "a POC sees records in every state", %{conn: conn} do
+  test "a POC sees the reserved pool summary and every non-reserved record", %{conn: conn} do
     poc = register("poc", :poc)
     reserved_record("CVE-#{@year}-1001")
     published_record("CVE-#{@year}-1002", "Published thing")
 
     {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cves")
 
-    assert html =~ "CVE Management"
+    assert html =~ "CVE records"
+    assert html =~ "Reserved pool"
+    assert html =~ "1 ID"
     assert html =~ "CVE-#{@year}-1001"
-    assert html =~ "reserved"
     assert html =~ "CVE-#{@year}-1002"
     assert html =~ "Published thing"
   end
 
-  test "filters by state and searches by CVE ID or title", %{conn: conn} do
+  test "the reserved pool stays collapsed and action-free until expanded", %{conn: conn} do
     poc = register("poc", :poc)
     reserved_record("CVE-#{@year}-1001")
-    published_record("CVE-#{@year}-1002", "Published thing")
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
 
-    html = lv |> element("button[phx-value-filter=published]") |> render_click()
+    refute has_element?(lv, "button", "Reject")
+    refute has_element?(lv, "#pool-ids")
+
+    html = lv |> element("button", "Show IDs ▾") |> render_click()
+    assert html =~ "reserved #{@year}-01-01"
+    assert has_element?(lv, ~s{#pool-ids button[phx-value-id]}, "Reject")
+
+    lv |> element("button", "Hide IDs ▴") |> render_click()
+    refute has_element?(lv, "#pool-ids")
+  end
+
+  test "filters the records table by state", %{conn: conn} do
+    poc = register("poc", :poc)
+    published_record("CVE-#{@year}-1002", "Published thing")
+
+    "CVE-#{@year}-1003"
+    |> reserved_record()
+    |> Ash.update!(%{}, action: :assign, authorize?: false)
+
+    {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cves")
+
     assert html =~ "Published thing"
-    refute html =~ "CVE-#{@year}-1001"
+    assert html =~ "CVE-#{@year}-1003"
+
+    html = lv |> element("button[phx-value-filter=draft]") |> render_click()
+    refute html =~ "Published thing"
+    assert html =~ "CVE-#{@year}-1003"
 
     html = lv |> element("button[phx-value-filter=all]") |> render_click()
-    assert html =~ "CVE-#{@year}-1001"
+    assert html =~ "Published thing"
+  end
+
+  test "searches records by CVE ID or title", %{conn: conn} do
+    poc = register("poc", :poc)
+    published_record("CVE-#{@year}-1002", "Published thing")
+    published_record("CVE-#{@year}-1003", "Another record")
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
 
     html =
       lv
@@ -104,48 +136,37 @@ defmodule VarselWeb.VarselLiveTest do
       |> render_change()
 
     assert html =~ "Published thing"
-    refute html =~ "CVE-#{@year}-1001"
+    refute html =~ "Another record"
   end
 
-  test "paginates past 25 records", %{conn: conn} do
+  test "paginates past 25 non-reserved records", %{conn: conn} do
     poc = register("poc", :poc)
-    for n <- 1001..1030, do: reserved_record("CVE-#{@year}-#{n}")
+    for n <- 1001..1030, do: published_record("CVE-#{@year}-#{n}", "Bulk #{n}")
 
     {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cves")
 
     assert html =~ "30 records"
-    assert html =~ "Page 1 of 2"
+    assert has_element?(lv, ~s{input[name="page"][value="1"]})
+    assert html =~ "of 2"
 
-    html = lv |> element("button[phx-value-page=next]") |> render_click()
-    assert html =~ "Page 2 of 2"
+    lv |> element("button[phx-value-page=next]") |> render_click()
+    assert has_element?(lv, ~s{input[name="page"][value="2"]})
+
+    lv |> form("form[phx-submit=jump_page]", %{"page" => "1"}) |> render_submit()
+    assert has_element?(lv, ~s{input[name="page"][value="1"]})
   end
 
-  test "rejecting a record goes through the confirmation modal", %{conn: conn} do
+  test "reserved records never appear in the paginated records table", %{conn: conn} do
     poc = register("poc", :poc)
-    record = reserved_record("CVE-#{@year}-1005")
+    reserved_record("CVE-#{@year}-1001")
+    published_record("CVE-#{@year}-1002", "Published thing")
 
-    Req.Test.stub(MitreCveApi, fn conn ->
-      if conn.method == "PUT" do
-        Req.Test.json(conn, %{"message" => "CVE ID rejected"})
-      else
-        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
-      end
-    end)
+    {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cves")
 
-    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
-
-    lv |> element(~s{button[phx-value-id="#{record.id}"]}, "Reject…") |> render_click()
-    assert render(lv) =~ "Reject CVE-#{@year}-1005"
-
-    lv
-    |> form("#reject-modal form", %{"rejection_reason" => "duplicate assignment"})
-    |> render_submit()
-
-    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :rejected
-    refute render(lv) =~ "Reject CVE-#{@year}-1005"
+    assert html =~ "1 record"
   end
 
-  test "'Reserve a new one' moves a reserved row to draft", %{conn: conn} do
+  test "'Reserve a new one' drafts the oldest pool ID", %{conn: conn} do
     poc = register("poc", :poc)
     record = reserved_record("CVE-#{@year}-1003")
 
@@ -154,7 +175,7 @@ defmodule VarselWeb.VarselLiveTest do
     lv |> element("button", "Reserve a new one") |> render_click()
 
     assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
-    assert render(lv) =~ "draft"
+    assert render(lv) =~ "● Draft"
   end
 
   test "'Reserve a new one' with an empty pool flashes an error", %{conn: conn} do
@@ -168,7 +189,90 @@ defmodule VarselWeb.VarselLiveTest do
     assert html =~ "No reserved IDs in the pool."
   end
 
-  test "'Sync with MITRE' imports, syncs published records, and syncs the pool", %{conn: conn} do
+  test "rejecting a pool ID swaps the row to an inline confirm, no modal", %{conn: conn} do
+    poc = register("poc", :poc)
+    record = reserved_record("CVE-#{@year}-1005")
+
+    Req.Test.stub(MitreCveApi, fn conn ->
+      if conn.method == "PUT" do
+        Req.Test.json(conn, %{"message" => "CVE ID rejected"})
+      else
+        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+      end
+    end)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    lv |> element("button", "Show IDs ▾") |> render_click()
+
+    refute has_element?(lv, "#reject-modal")
+
+    lv |> element(~s{button[phx-value-id="#{record.id}"]}, "Reject") |> render_click()
+    assert render(lv) =~ "reject at MITRE? can&#39;t be reused"
+    refute has_element?(lv, "#reject-modal")
+
+    lv
+    |> element(~s{button[phx-click="reject"][phx-value-id="#{record.id}"]})
+    |> render_click()
+
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :rejected
+
+    html = render(lv)
+    refute html =~ "reject at MITRE?"
+    # The ID leaves the pool and reappears in the rejected summary panel.
+    assert html =~ "last rejected"
+    assert html =~ "CVE-#{@year}-1005"
+  end
+
+  test "a draft row is rejectable inline from the records table", %{conn: conn} do
+    poc = register("poc", :poc)
+
+    record =
+      "CVE-#{@year}-1007"
+      |> reserved_record()
+      |> Ash.update!(%{}, action: :assign, authorize?: false)
+
+    Req.Test.stub(MitreCveApi, fn conn ->
+      if conn.method == "PUT" do
+        Req.Test.json(conn, %{"message" => "CVE ID rejected"})
+      else
+        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+      end
+    end)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    lv
+    |> element(~s{button[phx-click="reject_prompt"][phx-value-id="#{record.id}"]})
+    |> render_click()
+
+    assert render(lv) =~ "reject at MITRE? can&#39;t be reused"
+
+    lv
+    |> element(~s{button[phx-click="reject"][phx-value-id="#{record.id}"]})
+    |> render_click()
+
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :rejected
+    assert render(lv) =~ "last rejected"
+  end
+
+  test "cancelling a pool reject restores the plain row", %{conn: conn} do
+    poc = register("poc", :poc)
+    record = reserved_record("CVE-#{@year}-1006")
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    lv |> element("button", "Show IDs ▾") |> render_click()
+    lv |> element(~s{button[phx-value-id="#{record.id}"]}, "Reject") |> render_click()
+    assert render(lv) =~ "reject at MITRE?"
+
+    html = lv |> element("button", "Cancel") |> render_click()
+
+    refute html =~ "reject at MITRE?"
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :reserved
+  end
+
+  test "'Sync pool' imports, syncs published records, and syncs the pool", %{conn: conn} do
     poc = register("poc", :poc)
     cve_id = "CVE-#{@year}-1010"
     reserved_cve_id = "CVE-#{@year}-1011"
@@ -216,7 +320,7 @@ defmodule VarselWeb.VarselLiveTest do
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
 
-    lv |> element("button", "Sync with MITRE") |> render_click()
+    lv |> element("button", "Sync pool") |> render_click()
     render_async(lv, 5000)
 
     assert render(lv) =~ "MITRE import and sync finished."
@@ -236,15 +340,26 @@ defmodule VarselWeb.VarselLiveTest do
 
   test "the list updates live when a record changes out-of-band", %{conn: conn} do
     poc = register("poc", :poc)
-    record = reserved_record("CVE-#{@year}-1005")
+    record = published_record("CVE-#{@year}-1005", "Live thing")
+
+    Req.Test.stub(MitreCveApi, fn conn ->
+      if conn.method == "PUT" do
+        Req.Test.json(conn, %{"message" => "CVE ID rejected"})
+      else
+        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+      end
+    end)
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
 
-    refute has_element?(lv, ~s(span.badge), "draft")
+    refute render(lv) =~ "last rejected"
 
-    Ash.update!(record, %{}, action: :assign, authorize?: false)
+    Ash.update!(record, %{rejection_reason: "out of band"}, action: :reject, authorize?: false)
 
-    assert render(lv) =~ "draft"
+    # The record leaves the table and its ID lands in the rejected panel.
+    html = render(lv)
+    refute html =~ "Live thing"
+    assert html =~ "last rejected"
   end
 
   test "a non-POC sees only published records and no management controls", %{conn: conn} do
@@ -258,8 +373,9 @@ defmodule VarselWeb.VarselLiveTest do
     assert html =~ "Issued CVEs"
     assert html =~ "Published thing"
     refute html =~ "CVE-#{@year}-1001"
+    refute html =~ "Reserved pool"
+    refute html =~ "Sync pool"
     refute html =~ "Reserve a new one"
-    refute html =~ "Reject…"
   end
 
   test "an anonymous visitor sees the public list", %{conn: conn} do
