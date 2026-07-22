@@ -76,7 +76,6 @@ defmodule VarselWeb.CveViewTest do
       cvss = CveView.best_cvss(cna)
       assert cvss["version"] == "4.0"
       assert cvss["baseScore"] == 7.1
-      assert CveView.severity_class("HIGH") == "badge-error"
       assert CveView.cvss_calculator_url(cvss) =~ "cvss-v4-calculator"
     end
 

@@ -489,6 +489,21 @@ defmodule Varsel.Cases.Case do
       description "The assigned CVE ID, if any."
       public? true
     end
+
+    calculate :cvss_score, :float, Varsel.Cases.Case.Calculations.CvssScore do
+      description "The CVSS v4.0 base score, or nil when the case has no CVSS vector yet."
+      public? true
+    end
+
+    calculate :severity_bucket, :atom, Varsel.Cases.Case.Calculations.SeverityBucket do
+      description """
+      The severity chip bucket (none/low/medium/high/critical), or nil when
+      the case has no CVSS vector yet (the chip's "no score" state).
+      """
+
+      public? true
+      constraints one_of: [:none, :low, :medium, :high, :critical]
+    end
   end
 
   identities do

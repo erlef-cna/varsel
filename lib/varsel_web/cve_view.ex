@@ -10,7 +10,7 @@ defmodule VarselWeb.CveView do
 
   Functions come in two flavours:
 
-    * plain helpers returning data (`best_cvss/1`, `severity_class/1`,
+    * plain helpers returning data (`best_cvss/1`,
       `package_link/1` → `{label, url}`) used from templates and tests, and
     * `Phoenix.Component` function components (`package_ref/1`, `version_ref/1`)
       that render the same markup the site produced.
@@ -45,14 +45,6 @@ defmodule VarselWeb.CveView do
   defp version_of("cvssV4_0"), do: "4.0"
   defp version_of("cvssV3_1"), do: "3.1"
   defp version_of("cvssV3_0"), do: "3.0"
-
-  @doc "DaisyUI badge class for a CVSS base severity."
-  @spec severity_class(String.t() | nil) :: String.t()
-  def severity_class("LOW"), do: "badge-success"
-  def severity_class("MEDIUM"), do: "badge-warning"
-  def severity_class("HIGH"), do: "badge-error"
-  def severity_class("CRITICAL"), do: "badge-neutral"
-  def severity_class(_none), do: "badge-ghost"
 
   @doc "Link to the appropriate CVSS calculator for a vector string, or nil."
   @spec cvss_calculator_url(map()) :: String.t() | nil

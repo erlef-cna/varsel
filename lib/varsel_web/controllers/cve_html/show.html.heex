@@ -58,9 +58,9 @@ SPDX-License-Identifier: Apache-2.0
     <div :if={cvss}>
       <h3 class="font-semibold mb-2">CVSS {cvss["version"]} Score</h3>
       <p class="text-4xl font-bold mb-1">{cvss["baseScore"]}</p>
-      <span class={["badge uppercase mb-2", severity_class(cvss["baseSeverity"])]}>
-        {cvss["baseSeverity"]}
-      </span>
+      <div class="mb-2">
+        <.severity_chip score={cvss["baseScore"] / 1} variant={:full} />
+      </div>
       <p class="text-sm">
         <a :if={cvss_calculator_url(cvss)} href={cvss_calculator_url(cvss)} class="link">
           <code>{cvss["vectorString"]}</code>

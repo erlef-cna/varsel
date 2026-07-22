@@ -163,6 +163,26 @@ defmodule Varsel.Cases.CaseTest do
     end
   end
 
+  describe "cvss_score / severity_bucket calculations" do
+    @vector "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+
+    test "reads the score and bucket off the already-scored CVSS struct", %{poc: poc} do
+      case_record = Fixtures.open_case(poc, %{cvss_v4: @vector})
+      case_record = Ash.load!(case_record, [:cvss_score, :severity_bucket], authorize?: false)
+
+      assert case_record.cvss_score == 8.7
+      assert case_record.severity_bucket == :high
+    end
+
+    test "both calculations are nil when the case has no CVSS vector yet", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      case_record = Ash.load!(case_record, [:cvss_score, :severity_bucket], authorize?: false)
+
+      assert case_record.cvss_score == nil
+      assert case_record.severity_bucket == nil
+    end
+  end
+
   describe ":close" do
     test "closes a case without a CVE ID", %{poc: poc} do
       case_record = Fixtures.open_case(poc)

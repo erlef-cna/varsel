@@ -1740,10 +1740,7 @@ defmodule VarselWeb.CaseDetailLive do
 
       <div :if={!@form}>
         <div :if={@case_record.cvss_v4} class="flex min-w-0 items-center gap-3">
-          <.severity_chip
-            severity={@case_record.cvss_v4.severity}
-            score={@case_record.cvss_v4.score}
-          />
+          <.severity_chip score={@case_record.cvss_v4.score} variant={:full} />
           <span class="min-w-0 truncate font-mono text-xs text-base-content/60">
             {@case_record.cvss_v4.vector}
           </span>

@@ -244,6 +244,81 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a CVSS severity chip: rating word/initial + score in one chip,
+  bucketed from `score` alone (none = exactly 0.0, low 0.1–3.9, medium
+  4.0–6.9, high 7.0–8.9, critical 9.0–10.0 — the same thresholds
+  `:cvss.rating/1` uses). Colored text on a tinted background for every
+  bucket except critical, which is the sole FILLED chip (`--sev-critical-*`
+  tokens) so the ranking survives color-blindness.
+
+  `score: nil` renders the dashed "no score" chip instead — an unscored case
+  is distinct from a real 0.0 (the grey NONE chip). `variant: :compact`
+  (default) renders the initial ("C 9.1"); `:full` renders the word
+  ("CRITICAL 9.1").
+  """
+  attr :score, :float, default: nil
+  attr :variant, :atom, default: :compact, values: [:compact, :full]
+  attr :class, :any, default: nil
+
+  def severity_chip(%{score: nil} = assigns) do
+    ~H"""
+    <span class={[
+      "inline-flex items-center rounded-[5px] border border-dashed border-base-content/25 px-[0.42rem] py-[0.07rem]",
+      "text-[0.67rem] font-semibold whitespace-nowrap text-base-content/50",
+      @class
+    ]}>
+      no score
+    </span>
+    """
+  end
+
+  def severity_chip(assigns) do
+    bucket = severity_bucket(assigns.score)
+    assigns = assign(assigns, bucket: bucket, label: severity_label(bucket, assigns.variant))
+
+    ~H"""
+    <span class={[
+      "inline-flex items-center gap-[0.35ch] rounded-[5px] px-[0.42rem] py-[0.09rem]",
+      "text-[0.67rem] font-bold tabular-nums whitespace-nowrap",
+      severity_chip_class(@bucket),
+      @class
+    ]}>
+      {@label} {format_severity_score(@score)}
+    </span>
+    """
+  end
+
+  @doc """
+  Buckets a CVSS score into a severity rating atom. `nil` is not a valid
+  input here — callers rendering an unscored case use `severity_chip`'s
+  `score: nil` path instead, which is a distinct "no score" state, not NONE.
+  """
+  @spec severity_bucket(float()) :: :none | :low | :medium | :high | :critical
+  def severity_bucket(+0.0), do: :none
+  def severity_bucket(score) when score >= 0.1 and score <= 3.9, do: :low
+  def severity_bucket(score) when score >= 4.0 and score <= 6.9, do: :medium
+  def severity_bucket(score) when score >= 7.0 and score <= 8.9, do: :high
+  def severity_bucket(score) when score >= 9.0 and score <= 10.0, do: :critical
+
+  defp severity_label(bucket, :compact), do: bucket |> to_string() |> String.first() |> String.upcase()
+
+  defp severity_label(bucket, :full), do: bucket |> to_string() |> String.upcase()
+
+  defp severity_chip_class(:critical),
+    do:
+      "text-[color:var(--sev-critical-text)] bg-[color:var(--sev-critical-fill)] border border-[color:var(--sev-critical-line)]"
+
+  defp severity_chip_class(:high), do: "text-[color:var(--sev-high)] bg-[color:var(--sev-high-tint)]"
+
+  defp severity_chip_class(:medium), do: "text-[color:var(--sev-medium)] bg-[color:var(--sev-medium-tint)]"
+
+  defp severity_chip_class(:low), do: "text-[color:var(--sev-low)] bg-[color:var(--sev-low-tint)]"
+
+  defp severity_chip_class(:none), do: "text-[color:var(--sev-none)] bg-[color:var(--sev-none-tint)]"
+
+  defp format_severity_score(score), do: :erlang.float_to_binary(score / 1, decimals: 1)
+
+  @doc """
   Renders prev/next pagination for an `Ash.Page.Offset` (loaded with a
   count). Clicking pushes `event` with "prev"/"next" as the `page` param —
   feed that to `VarselWeb.LivePagination.change_page/3`. Renders nothing for

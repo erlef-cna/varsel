@@ -252,7 +252,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert html =~ "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
       assert html =~ "8.7"
-      assert html =~ "high"
+      assert html =~ "HIGH 8.7"
 
       # Submitting the form persists the built vector through the CVSS type.
       lv
@@ -270,8 +270,8 @@ defmodule VarselWeb.CaseLiveTest do
       # At rest the card shows one tinted chip (rating + score) beside the
       # truncated mono vector.
       html = render(lv)
-      assert html =~ "text-error bg-error/15"
-      assert html =~ "8.7"
+      assert html =~ "sev-high"
+      assert html =~ "HIGH 8.7"
       assert html =~ "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
 
       # Saving closes the editor; reopen to keep working with the calculator.

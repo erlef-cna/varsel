@@ -126,6 +126,58 @@
   --eef-blue: #1b85cb;
 }
 
+/* ------------------------------------------------------ Severity chip tokens */
+/* Five-step CVSS-convention scale (none/low/medium/high/critical). Critical
+   is the ONLY filled chip — weight, not hue, sets it apart, so the ranking
+   survives color-blindness and stays legible next to the amber staleness
+   age. Light values live at :root (the app's default theme, see the
+   daisyUI theme block above); dark values override under both the explicit
+   [data-theme="dark"] and the prefers-color-scheme fallback, mirroring
+   .console-band's --eef-navy-2 override below. */
+:root {
+  --sev-high: #b3312c;
+  --sev-high-tint: color-mix(in oklab, var(--sev-high) 13%, transparent);
+  --sev-medium: #a1520d;
+  --sev-medium-tint: color-mix(in oklab, var(--sev-medium) 13%, transparent);
+  --sev-low: #715c04;
+  --sev-low-tint: color-mix(in oklab, #e8cf4e 30%, transparent);
+  --sev-none: #5b6b7a;
+  --sev-none-tint: color-mix(in oklab, var(--sev-none) 13%, transparent);
+  --sev-critical-fill: #1c2733;
+  --sev-critical-line: transparent;
+  --sev-critical-text: #ffffff;
+}
+
+[data-theme="dark"] {
+  --sev-high: #f0716e;
+  --sev-high-tint: color-mix(in oklab, var(--sev-high) 15%, transparent);
+  --sev-medium: #e2953c;
+  --sev-medium-tint: color-mix(in oklab, var(--sev-medium) 15%, transparent);
+  --sev-low: #e0c341;
+  --sev-low-tint: color-mix(in oklab, var(--sev-low) 14%, transparent);
+  --sev-none: #7d8fa1;
+  --sev-none-tint: color-mix(in oklab, var(--sev-none) 15%, transparent);
+  --sev-critical-fill: #0d1319;
+  --sev-critical-line: #3a4a5c;
+  --sev-critical-text: var(--color-base-content);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sev-high: #f0716e;
+    --sev-high-tint: color-mix(in oklab, var(--sev-high) 15%, transparent);
+    --sev-medium: #e2953c;
+    --sev-medium-tint: color-mix(in oklab, var(--sev-medium) 15%, transparent);
+    --sev-low: #e0c341;
+    --sev-low-tint: color-mix(in oklab, var(--sev-low) 14%, transparent);
+    --sev-none: #7d8fa1;
+    --sev-none-tint: color-mix(in oklab, var(--sev-none) 15%, transparent);
+    --sev-critical-fill: #0d1319;
+    --sev-critical-line: #3a4a5c;
+    --sev-critical-text: var(--color-base-content);
+  }
+}
+
 /* Inline EEF wordmark: the SVG fills the height set on its .eef-logo wrapper. */
 .eef-logo > svg {
   height: 100%;

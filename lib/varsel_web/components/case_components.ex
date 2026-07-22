@@ -432,35 +432,6 @@ defmodule VarselWeb.CaseComponents do
   end
 
   @doc """
-  A severity chip: rating word and score in one chip, severity-colored text
-  on a tinted (never solid) background with a small radius.
-  """
-  attr :severity, :atom, required: true
-  attr :score, :any, required: true
-
-  def severity_chip(assigns) do
-    ~H"""
-    <span class={[
-      "inline-flex items-center gap-1.5 rounded-[var(--radius-selector)] px-2.5 py-0.5",
-      "text-[0.8rem] font-bold uppercase tabular-nums whitespace-nowrap",
-      severity_chip_class(@severity)
-    ]}>
-      {@severity} {format_score(@score)}
-    </span>
-    """
-  end
-
-  defp severity_chip_class(:low), do: "text-success bg-success/15"
-  defp severity_chip_class(:medium), do: "text-warning bg-warning/15"
-  defp severity_chip_class(:high), do: "text-error bg-error/15"
-  defp severity_chip_class(:critical), do: "text-error bg-error/15"
-  defp severity_chip_class(_none_or_unknown), do: "text-base-content/60 bg-base-300/60"
-
-  defp format_score(score) when is_number(score), do: :erlang.float_to_binary(score / 1, decimals: 1)
-
-  defp format_score(score), do: to_string(score)
-
-  @doc """
   The info-outlined "✎ Suggest: on/off" status pill — the band's toggle and,
   with `:explain`, the read-only variant shown above a card being edited in
   suggest mode.

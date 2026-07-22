@@ -23,8 +23,6 @@ defmodule VarselWeb.CvssInput do
   """
   use VarselWeb, :live_component
 
-  import VarselWeb.CaseComponents, only: [severity_chip: 1]
-
   alias Varsel.Types.CVSS
 
   @prefix "CVSS:4.0"
@@ -105,7 +103,7 @@ defmodule VarselWeb.CvssInput do
       <div class="flex items-center justify-between mb-1">
         <label class="label text-sm" for={@field.id}>{@label}</label>
         <div class="flex items-center gap-2">
-          <.severity_chip :if={@severity} severity={@severity} score={@score} />
+          <.severity_chip :if={@score} score={@score} variant={:full} />
           <span :if={@vector not in [nil, ""] and is_nil(@score)} class="badge badge-sm badge-error">
             invalid vector
           </span>
@@ -167,8 +165,8 @@ defmodule VarselWeb.CvssInput do
 
   defp assign_scored(socket) do
     case CVSS.cast_input(presence(socket.assigns.vector), version: [:v4]) do
-      {:ok, %CVSS{} = cvss} -> assign(socket, score: cvss.score, severity: cvss.severity)
-      _invalid_or_nil -> assign(socket, score: nil, severity: nil)
+      {:ok, %CVSS{} = cvss} -> assign(socket, score: cvss.score)
+      _invalid_or_nil -> assign(socket, score: nil)
     end
   end
 
