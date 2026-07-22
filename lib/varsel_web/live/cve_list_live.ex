@@ -461,17 +461,16 @@ defmodule VarselWeb.CveListLive do
         </div>
 
         <div class="overflow-x-auto">
-          <table class="table">
+          <table class="table table-fixed">
             <thead>
               <tr>
-                <th>CVE ID</th>
+                <th class="w-32">CVE ID</th>
                 <th>Title</th>
-                <th>Packages</th>
-                <th>Severity</th>
-                <th :if={@poc?}>State</th>
-                <th>Published</th>
-                <th>Updated</th>
-                <th :if={@poc?}></th>
+                <th class="w-56">Packages</th>
+                <th class="w-20">Severity</th>
+                <th :if={@poc?} class="w-32">State</th>
+                <th class="w-24">Published</th>
+                <th :if={@poc?} class="w-16"></th>
               </tr>
             </thead>
             <tbody>
@@ -483,7 +482,7 @@ defmodule VarselWeb.CveListLive do
                 <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
                   {record.cve_id || "—"}
                 </td>
-                <td class="max-w-md">
+                <td>
                   <.link
                     :if={record.state == :published and @poc?}
                     navigate={~p"/cves/#{record.cve_id}"}
@@ -509,7 +508,7 @@ defmodule VarselWeb.CveListLive do
                       the binding closest to the click target, and inline
                       handlers are out (CSP). --%>
                 <td phx-click={%JS{}}>
-                  <div :for={purl <- record.purls || []} class="text-sm">
+                  <div :for={purl <- record.purls || []} class="text-xs">
                     <.package_ref entry={%{"packageURL" => purl}} link={true} />
                   </div>
                 </td>
@@ -519,17 +518,11 @@ defmodule VarselWeb.CveListLive do
                 <td :if={@poc?}>
                   <.record_state_cell record={record} />
                 </td>
-                <td class="whitespace-nowrap tabular-nums">
+                <td class="whitespace-nowrap tabular-nums text-xs">
                   {format_dt(record.date_published)}
                 </td>
-                <td class="whitespace-nowrap tabular-nums">
-                  {format_dt(record.date_updated)}
-                </td>
-                <td :if={@poc?}>
-                  <div
-                    :if={@confirming_reject_id != record.id}
-                    class="flex items-center gap-4 justify-end whitespace-nowrap"
-                  >
+                <td :if={@poc?} class="relative text-right">
+                  <div class="flex flex-col items-end gap-0.5">
                     <.link
                       :if={editable?(record.state)}
                       navigate={~p"/cves/manage/#{record.id}"}
@@ -538,7 +531,7 @@ defmodule VarselWeb.CveListLive do
                       Edit
                     </.link>
                     <button
-                      :if={record.state == :draft}
+                      :if={record.state == :draft and @confirming_reject_id != record.id}
                       type="button"
                       class="text-xs font-semibold text-error/85"
                       phx-click="reject_prompt"
@@ -547,10 +540,12 @@ defmodule VarselWeb.CveListLive do
                       Reject
                     </button>
                   </div>
+                  <%!-- Floating confirm: anchored to the cell so narrow
+                        action columns never clip the consequence line. --%>
                   <form
                     :if={@confirming_reject_id == record.id}
                     phx-submit="reject"
-                    class="flex flex-wrap items-center justify-end gap-2 rounded-md bg-error/10 px-2 py-1 max-w-md ml-auto"
+                    class="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex w-[26rem] flex-wrap items-center justify-end gap-2 rounded-md border border-error/30 bg-base-200 px-3 py-2 shadow-lg"
                   >
                     <input type="hidden" name="record_id" value={record.id} />
                     <span class="text-xs text-base-content/60 basis-full text-right">
@@ -651,7 +646,7 @@ defmodule VarselWeb.CveListLive do
   # instead of the state color bleeding into an appended "· case →" link.
   defp record_state_cell(assigns) do
     ~H"""
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex flex-col items-start gap-1">
       <.state dot={state_dot_class(@record.state)} class={state_text_class(@record.state)}>
         {Phoenix.Naming.humanize(@record.state)}
       </.state>
