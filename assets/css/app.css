@@ -124,6 +124,19 @@
   --eef-navy: #1f2c34;
   --eef-navy-2: #17222a;
   --eef-blue: #1b85cb;
+  /* Approved-lane accent (pipeline board): distinct from the info blue used
+     by Review/Publishing so all four lane dots read apart at a glance. */
+  --violet: #7c5cbf;
+}
+
+[data-theme="dark"] {
+  --violet: #a78bfa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --violet: #a78bfa;
+  }
 }
 
 /* ------------------------------------------------------ Severity chip tokens */
@@ -176,6 +189,29 @@
     --sev-critical-line: #3a4a5c;
     --sev-critical-text: var(--color-base-content);
   }
+}
+
+/* Pipeline lane cards sit one elevation step ABOVE the lane panel (base-200)
+   in BOTH themes. bg-base-100 only does that on light (white over grey); on
+   dark base-100 is the page — the darkest surface — so cards would sink.
+   Light keeps base-100; dark lightens the panel toward the ink color,
+   approximating the mock's raised surface (#232e3a over #1b242e). */
+:root {
+  --lane-card-bg: var(--color-base-100);
+}
+
+[data-theme="dark"] {
+  --lane-card-bg: color-mix(in oklab, var(--color-base-200), var(--color-base-content) 7%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --lane-card-bg: color-mix(in oklab, var(--color-base-200), var(--color-base-content) 7%);
+  }
+}
+
+.lane-card {
+  background-color: var(--lane-card-bg);
 }
 
 /* Inline EEF wordmark: the SVG fills the height set on its .eef-logo wrapper. */

@@ -29,11 +29,45 @@ defmodule VarselWeb.CaseLiveTest do
       assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/cases")
     end
 
-    test "a POC sees all cases and can open one", %{conn: conn, poc: poc} do
+    test "pipeline is the default face and shows lanes for the four active states", %{
+      conn: conn,
+      poc: poc
+    } do
+      Fixtures.open_case(poc, %{title: "Draft case"})
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      assert html =~ "Draft case"
+      assert html =~ "Draft"
+      assert html =~ "Review"
+      assert html =~ "Approved"
+      assert html =~ "Publishing"
+      # The band tabs, not a stat-tile filter row.
+      assert html =~ "Pipeline"
+      assert html =~ "Archive"
+    end
+
+    test "a POC opens a case through the band's on-demand title popover", %{conn: conn, poc: poc} do
       Fixtures.open_case(poc, %{title: "Existing case"})
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
       assert html =~ "Existing case"
+      # The band holds only search + the "Open case" button at rest; the
+      # title input is revealed on demand.
+      refute html =~ "Working title"
+
+      html = lv |> element("button", "Open case") |> render_click()
+      assert html =~ "Working title"
+
+      # Escape closes the popover without opening anything.
+      html =
+        lv
+        |> element("div[phx-window-keydown=close_open_case]")
+        |> render_keydown(%{"key" => "escape"})
+
+      refute html =~ "Working title"
+
+      lv |> element("button", "Open case") |> render_click()
 
       lv
       |> form("form[phx-submit=open_case]", %{"title" => "Fresh case"})
@@ -43,7 +77,21 @@ defmodule VarselWeb.CaseLiveTest do
       assert path =~ ~r{^/cases/}
     end
 
-    test "a supporter only sees assigned cases", %{conn: conn, poc: poc, supporter: supporter} do
+    test "pipeline cards show one package chip per affected package", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Chipped case"})
+      Fixtures.add_affected_package(poc, case_record)
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      [_before, card] = String.split(html, "Chipped case", parts: 2)
+      assert card =~ "acme_lib"
+    end
+
+    test "a supporter only sees assigned cases, policy-scoped same as before", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
       assigned = Fixtures.open_case(poc, %{title: "Assigned case"})
       Fixtures.open_case(poc, %{title: "Hidden case"})
       Cases.assign_case_user!(%{case_id: assigned.id, user_id: supporter.id}, actor: poc)
@@ -54,36 +102,313 @@ defmodule VarselWeb.CaseLiveTest do
       refute html =~ "Hidden case"
     end
 
-    test "filters by state, searches, and shows assignees", %{
-      conn: conn,
-      poc: poc,
-      supporter: supporter
-    } do
-      draft = Fixtures.open_case(poc, %{title: "Draft case"})
-      Cases.assign_case_user!(%{case_id: draft.id, user_id: supporter.id}, actor: poc)
+    test "faces switch via patch links and the URL carries the face", %{conn: conn, poc: poc} do
+      Fixtures.open_case(poc, %{title: "Pipeline case"})
+      Fixtures.archived_case(:published, "Archived case", DateTime.utc_now())
 
-      closed = Fixtures.open_case(poc, %{title: "Closed case"})
-      Cases.close_case!(closed, %{closed_reason: "duplicate"}, actor: poc)
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+      assert html =~ "Pipeline case"
+      refute html =~ "Archived case"
+
+      html = lv |> element("a", "Archive") |> render_click()
+      assert_patch(lv, ~p"/cases?face=archive&scope=all")
+      assert html =~ "Archived case"
+      refute html =~ "Pipeline case"
+
+      # Deep link straight to the archive face restores it on load.
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+      assert html =~ "Archived case"
+    end
+
+    test "lanes group by state, order oldest-updated-first, and show empty lanes as \"—\"", %{
+      conn: conn,
+      poc: poc
+    } do
+      old = Fixtures.open_case(poc, %{title: "Older draft"})
+      _new = Fixtures.open_case(poc, %{title: "Newer draft"})
+
+      Ash.Seed.update!(old, %{updated_at: DateTime.add(DateTime.utc_now(), -1, :day)})
+
+      review_case = Fixtures.open_case(poc, %{title: "In review"})
+      Cases.request_case_review!(review_case, actor: poc)
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      # The older draft renders before the newer one (oldest-in-state first).
+      [_before, after_older] = String.split(html, "Older draft", parts: 2)
+      assert String.contains?(after_older, "Newer draft")
+
+      assert html =~ "In review"
+      # Approved is empty: the lane stays, its body shows "—" right after its
+      # own header (not the Publishing lane's, which follows Approved's). The
+      # violet dot class is unique to the Approved lane header.
+      [_before_approved, after_approved] = String.split(html, "var(--violet)", parts: 2)
+      [approved_lane, _rest] = String.split(after_approved, "Publishing", parts: 2)
+      assert approved_lane =~ "—"
+    end
+
+    test "a lane past 8 cards clips oldest-first with a \"Show all N\" footer that expands in place",
+         %{conn: conn, poc: poc} do
+      for n <- 1..9 do
+        Fixtures.open_case(poc, %{title: "Draft #{n}"})
+        Process.sleep(1)
+      end
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
 
-      # The assignee shows up next to the case.
-      assert html =~ "Draft case"
-      assert html =~ supporter.name
+      assert html =~ "Show all 9"
+      # Oldest-first clipping hides only the freshest intake: Draft 9 (the
+      # last one opened) is clipped; Draft 1 (the oldest) always shows.
+      assert html =~ "Draft 1"
+      refute html =~ "Draft 9"
 
-      html = lv |> element("button[phx-value-filter=closed]") |> render_click()
-      assert html =~ "Closed case"
-      refute html =~ "Draft case"
+      html = lv |> element("button[phx-value-lane=draft]") |> render_click()
+      assert html =~ "Show fewer"
+      assert html =~ "Draft 9"
+    end
 
-      lv |> element("button[phx-value-filter=all]") |> render_click()
+    test "staleness: a card past its lane's threshold names the lane in its age", %{
+      conn: conn,
+      poc: poc
+    } do
+      stale_review = Fixtures.open_case(poc, %{title: "Stale review case"})
+      review_case = Cases.request_case_review!(stale_review, actor: poc)
+
+      Ash.Seed.update!(review_case, %{updated_at: DateTime.add(DateTime.utc_now(), -6, :day)})
+
+      fresh_review = Fixtures.open_case(poc, %{title: "Fresh review case"})
+      Cases.request_case_review!(fresh_review, actor: poc)
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      assert html =~ "6 d in review"
+      assert html =~ "text-warning"
+    end
+
+    test "review/approved cards without an assignee show the dashed needs-owner circle; draft doesn't",
+         %{conn: conn, poc: poc} do
+      Fixtures.open_case(poc, %{title: "Unassigned draft"})
+      unassigned_review = Fixtures.open_case(poc, %{title: "Unassigned review"})
+      Cases.request_case_review!(unassigned_review, actor: poc)
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      # Both render; only the review card carries the needs-owner glyph.
+      [_before, after_draft] = String.split(html, "Unassigned draft", parts: 2)
+      [draft_card, _rest] = String.split(after_draft, "Unassigned review", parts: 2)
+      refute draft_card =~ "Needs an owner"
+
+      [_before2, after_review] = String.split(html, "Unassigned review", parts: 2)
+      assert after_review =~ "Needs an owner"
+    end
+
+    test "search filters lanes in place and the inactive tab shows the cross-face match count", %{
+      conn: conn,
+      poc: poc
+    } do
+      Fixtures.open_case(poc, %{title: "bandit smuggling bug"})
+      Fixtures.open_case(poc, %{title: "unrelated draft"})
+      Fixtures.archived_case(:published, "bandit archived report", DateTime.utc_now())
+      # A non-matching archived row: the cross-face count must evaluate it
+      # without :cve_id loaded (regression: NotLoaded is truthy, crashed
+      # String.downcase/2).
+      Fixtures.archived_case(:published, "quiet unrelated record", DateTime.utc_now())
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
 
       html =
         lv
-        |> form("#case-search", %{"query" => "draft C"})
+        |> form("#case-search", %{"query" => "bandit"})
         |> render_change()
 
-      assert html =~ "Draft case"
-      refute html =~ "Closed case"
+      assert_patch(lv, ~p"/cases?q=bandit")
+      assert html =~ "bandit smuggling bug"
+      refute html =~ "unrelated draft"
+      # The inactive Archive tab's count becomes the cross-face match count.
+      assert html =~ "matches for &#39;bandit&#39;"
+
+      # The Draft lane header shows the match count (1) while the query is
+      # active — not the live total (2).
+      assert lv |> element("#lane-draft") |> render() =~ ~r/tabular-nums font-bold">\s*1\s*</
+
+      html = lv |> element("a", "Archive") |> render_click()
+      assert html =~ "bandit archived report"
+
+      # Clearing the query restores the live totals in the lane headers.
+      lv |> element("a", "Pipeline") |> render_click()
+      lv |> form("#case-search", %{"query" => ""}) |> render_change()
+      assert lv |> element("#lane-draft") |> render() =~ ~r/tabular-nums font-bold">\s*2\s*</
+    end
+
+    test "lanes update live when a case changes state elsewhere", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Live moving case"})
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+      assert html =~ "Live moving case"
+
+      # An out-of-band transition must reach the lanes via the case:all echo.
+      Cases.request_case_review!(case_record, actor: poc)
+
+      html = render(lv)
+      assert html =~ "Live moving case"
+      assert lv |> element("#lane-review") |> render() =~ "Live moving case"
+    end
+
+    test "zero matches on the active face points across to the archive", %{conn: conn, poc: poc} do
+      Fixtures.open_case(poc, %{title: "unrelated draft"})
+      Fixtures.archived_case(:published, "only in archive bandit", DateTime.utc_now())
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?q=bandit")
+
+      assert html =~ "No active cases match"
+      assert html =~ "1 match in"
+      refute html =~ "1 matches in"
+      assert html =~ "Archive"
+    end
+
+    test "archive collates published + closed by archived-at descending, closed rows carry their date on state",
+         %{conn: conn, poc: poc} do
+      old_published =
+        Fixtures.archived_case(:published, "Old published", ~U[2026-06-01 00:00:00Z])
+
+      closed_between =
+        Fixtures.archived_case(:closed, "Closed in between", ~U[2026-06-15 00:00:00Z])
+
+      new_published =
+        Fixtures.archived_case(:published, "New published", ~U[2026-07-01 00:00:00Z])
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+
+      assert html =~ "Old published"
+      assert html =~ "Closed in between"
+      assert html =~ "New published"
+      assert html =~ "● Closed · Jun 15"
+      assert html =~ "● Published"
+
+      # Interleaved by archived-at descending: newest published first, then
+      # the closed row (Jun 15), then the oldest published row.
+      new_at = html |> :binary.match("New published") |> elem(0)
+      closed_at = html |> :binary.match("Closed in between") |> elem(0)
+      old_at = html |> :binary.match("Old published") |> elem(0)
+      assert new_at < closed_at
+      assert closed_at < old_at
+
+      [_, closed_id] = Enum.map([old_published, new_published], & &1.id)
+      assert closed_id
+      assert closed_between.state == :closed
+    end
+
+    test "the archive scope strip filters without resorting", %{conn: conn, poc: poc} do
+      Fixtures.archived_case(:published, "A published case", DateTime.utc_now())
+      Fixtures.archived_case(:closed, "A closed case", DateTime.utc_now())
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+      assert html =~ "A published case"
+      assert html =~ "A closed case"
+
+      html = lv |> element("a", "Published") |> render_click()
+      assert_patch(lv, ~p"/cases?face=archive&scope=published")
+      assert html =~ "A published case"
+      refute html =~ "A closed case"
+
+      html = lv |> element("a", "Closed") |> render_click()
+      assert_patch(lv, ~p"/cases?face=archive&scope=closed")
+      assert html =~ "A closed case"
+      refute html =~ "A published case"
+    end
+
+    test "archive rows navigate to the case, closed cases included", %{conn: conn, poc: poc} do
+      published = Fixtures.archived_case(:published, "Nav published", DateTime.utc_now())
+      closed = Fixtures.archived_case(:closed, "Nav closed", DateTime.utc_now())
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+
+      lv |> element("tr", "Nav published") |> render_click()
+      assert_redirect(lv, ~p"/cases/#{published.id}")
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+      lv |> element("tr", "Nav closed") |> render_click()
+      assert_redirect(lv, ~p"/cases/#{closed.id}")
+    end
+
+    test "archive paginates at 25 per page with prev/next and a jump-to-page input", %{
+      conn: conn,
+      poc: poc
+    } do
+      for n <- 1..26 do
+        Fixtures.archived_case(
+          :published,
+          "Archived #{n}",
+          DateTime.add(DateTime.utc_now(), -n, :day)
+        )
+      end
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+      assert html =~ "26 cases"
+      assert html =~ "Page 1 of 2"
+      # The oldest (26th) case is on page two, not page one.
+      assert html =~ "Archived 25"
+      refute html =~ "Archived 26"
+
+      # Jump-to-page re-reads: the input's submit event must land AND swap
+      # the rows, not just relabel the pager.
+      html =
+        lv
+        |> element("#archive-pager-wide form[phx-submit=jump_page]")
+        |> render_submit(%{"page" => "2"})
+
+      assert html =~ "Page 2 of 2"
+      assert html =~ "Archived 26"
+      refute html =~ "Archived 25"
+
+      # Prev returns to page one with page one's rows.
+      html = lv |> element("#archive-pager-wide button[phx-value-page=prev]") |> render_click()
+      assert html =~ "Page 1 of 2"
+      assert html =~ "Archived 25"
+      refute html =~ "Archived 26"
+    end
+
+    test "deep-linking straight to page 2 of the archive restores that page", %{
+      conn: conn,
+      poc: poc
+    } do
+      for n <- 1..26 do
+        Fixtures.archived_case(
+          :published,
+          "Archived #{n}",
+          DateTime.add(DateTime.utc_now(), -n, :day)
+        )
+      end
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive&page=2")
+
+      assert html =~ "Page 2 of 2"
+      assert html =~ "Archived 26"
+    end
+
+    test "empty archive shows the table card with a centered message and no pager", %{
+      conn: conn,
+      poc: poc
+    } do
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+
+      assert html =~ "Nothing archived yet"
+      refute html =~ "per page"
+    end
+
+    test "an entirely empty pipeline still renders all four lanes plus the helper line", %{
+      conn: conn,
+      poc: poc
+    } do
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      assert html =~ "Draft"
+      assert html =~ "Review"
+      assert html =~ "Approved"
+      assert html =~ "Publishing"
+      assert html =~ "No active cases."
+      assert html =~ "Open a case"
+      assert html =~ "archive"
     end
   end
 

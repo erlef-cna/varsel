@@ -23,7 +23,30 @@ defmodule VarselWeb.LivePagination do
           Socket.t()
   def change_page(socket, assign_name, target) when target in ["prev", "next", "first", "last"] do
     page = Ash.page!(Map.fetch!(socket.assigns, assign_name), String.to_existing_atom(target))
+    put_page(socket, assign_name, page)
+  end
 
+  @doc """
+  Jumps the paginated assign straight to a 1-based page number (the archive
+  pager's jump-to-page input), re-reading through `Ash.page!/2` like
+  `change_page/3` — never just relabeling the offset on stale results.
+  Clamped to `1..last_page`; a non-numeric or out-of-range input is a no-op.
+  """
+  @spec jump_to_page(Socket.t(), atom(), String.t()) :: Socket.t()
+  def jump_to_page(socket, assign_name, target) do
+    page = Map.fetch!(socket.assigns, assign_name)
+
+    with {number, ""} <- Integer.parse(target),
+         true <- number >= 1,
+         last_page when is_integer(last_page) <- AshPhoenix.LiveView.last_page(page),
+         true <- number <= last_page do
+      put_page(socket, assign_name, Ash.page!(page, number))
+    else
+      _ -> socket
+    end
+  end
+
+  defp put_page(socket, assign_name, page) do
     live_config =
       Map.update!(socket.assigns.ash_live_config, assign_name, fn config ->
         page_opts = [count: true, limit: page.limit, offset: page.offset]

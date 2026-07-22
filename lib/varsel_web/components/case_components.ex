@@ -252,12 +252,12 @@ defmodule VarselWeb.CaseComponents do
       :if={Map.get(@user, :github_handle)}
       src={"https://github.com/#{@user.github_handle}.png"}
       alt=""
-      class={["size-5 shrink-0 rounded-full object-cover", @class]}
+      class={["size-[21px] shrink-0 rounded-full object-cover", @class]}
     />
     <span
       :if={!Map.get(@user, :github_handle)}
       class={[
-        "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[0.6rem] font-bold",
+        "inline-flex size-[21px] shrink-0 items-center justify-center rounded-full text-[0.6rem] font-bold",
         avatar_variant_class(@variant),
         @class
       ]}

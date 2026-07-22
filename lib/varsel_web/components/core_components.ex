@@ -363,6 +363,74 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a table card's footer pager row: "N per page · M total" on the
+  left, prev/jump-to-page/next on the right. The page number is a numeric
+  input — typing a value and pressing Enter pushes `jump_event` with that
+  value as the `page` param (feed it to
+  `VarselWeb.LivePagination.jump_to_page/3`); prev/next push `page_event`
+  same as `pagination/1`. Renders nothing at zero results (callers show an
+  empty-state message instead).
+  """
+  attr :page, :any, required: true, doc: "an Ash.Page.Offset with count loaded"
+  attr :page_event, :string, default: "paginate"
+  attr :jump_event, :string, default: "jump_page"
+  attr :noun, :string, default: "case", doc: "singular; pluralized with a trailing \"s\""
+
+  def jump_pagination(assigns) do
+    assigns =
+      assign(assigns,
+        page_number: div(assigns.page.offset || 0, max(assigns.page.limit, 1)) + 1,
+        last_page: AshLiveView.last_page(assigns.page)
+      )
+
+    ~H"""
+    <div
+      :if={is_integer(@page.count) and @page.count > 0}
+      class="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2 border-t border-base-300 text-xs text-base-content/60"
+    >
+      <span>
+        {@page.limit} per page · {@page.count} {if @page.count == 1, do: @noun, else: @noun <> "s"}
+      </span>
+      <%!-- The form wraps the whole pager cluster: a <form> inside a <span>
+            is invalid flow-in-phrasing markup that browsers may re-parent,
+            detaching the submit binding. The prev/next buttons are
+            type="button" so only Enter in the input submits. --%>
+      <form phx-submit={@jump_event} class="inline-flex items-center gap-2">
+        <button
+          type="button"
+          class={["px-1.5 rounded border", pbtn_class(AshLiveView.prev_page?(@page))]}
+          disabled={not AshLiveView.prev_page?(@page)}
+          phx-click={@page_event}
+          phx-value-page="prev"
+        >
+          «
+        </button>
+        Page
+        <input
+          type="text"
+          inputmode="numeric"
+          name="page"
+          value={@page_number}
+          class="w-9 text-center font-mono bg-base-100 border border-base-300 rounded px-1 py-0.5"
+        /> of {@last_page}
+        <button
+          type="button"
+          class={["px-1.5 rounded border", pbtn_class(AshLiveView.next_page?(@page))]}
+          disabled={not AshLiveView.next_page?(@page)}
+          phx-click={@page_event}
+          phx-value-page="next"
+        >
+          »
+        </button>
+      </form>
+    </div>
+    """
+  end
+
+  defp pbtn_class(true), do: "border-base-300"
+  defp pbtn_class(false), do: "border-base-300/50 text-base-content/40"
+
+  @doc """
   Renders the console list card's search input: a magnifier icon inside a
   rounded field. Wrap it in the page's own `phx-change` form — the input's
   name is `query`.

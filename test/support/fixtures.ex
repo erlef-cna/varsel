@@ -92,6 +92,21 @@ defmodule Varsel.Fixtures do
     )
   end
 
+  @doc """
+  Seeds a case directly into `:published` or `:closed` (bypassing the state
+  machine/publish handoff — for archive-face fixtures that only need the
+  resulting row, not a real CVE record). `at` backdates the row's
+  `updated_at` (closed collation) or `published_at` (published collation).
+  """
+  def archived_case(state, title, at, attrs \\ %{}) when state in [:published, :closed] do
+    base = %{title: title, state: state, inserted_at: at, updated_at: at}
+
+    base =
+      if state == :published, do: Map.put(base, :published_at, at), else: base
+
+    Ash.Seed.seed!(Varsel.Cases.Case, Enum.into(attrs, base))
+  end
+
   @doc "Seeds a CWE catalog row (bypasses the sync pipeline)."
   def seed_weakness(cwe_id, name) do
     Ash.Seed.seed!(Varsel.CWE.Weakness, %{
