@@ -44,6 +44,37 @@ defmodule VarselWeb.CveListLiveTest do
     assert html =~ "CVE-2025-0002"
   end
 
+  test "the card's toolbar carries the count and the feeds", %{conn: conn} do
+    published("CVE-2025-0001", "Alpha")
+    published("CVE-2025-0002", "Bravo")
+
+    {:ok, lv, html} = live(conn, ~p"/cves")
+
+    assert html =~ "2 CVEs"
+    assert has_element?(lv, ~s{p a[href="/cves/index.json"]}, "JSON")
+    assert has_element?(lv, ~s{p a[href="/osv/all.json"]}, "OSV")
+    assert has_element?(lv, ~s{p a[href="/feed.atom"]}, "Atom")
+    assert has_element?(lv, ~s{p a[href="/feed.rss"]}, "RSS")
+    # The floating feeds paragraph below the card is gone (the site footer
+    # keeps its own copy of the links).
+    refute has_element?(lv, "p.mt-6", "Machine-readable")
+  end
+
+  test "rows click through to the public detail page", %{conn: conn} do
+    published("CVE-2025-0001", "Alpha")
+
+    {:ok, lv, _html} = live(conn, ~p"/cves")
+
+    # /cves/:cve_id is a controller page, so the JS.navigate click-through
+    # surfaces as a redirect out of the LiveView.
+    {:error, {_kind, %{to: to}}} =
+      lv
+      |> element("tbody tr[phx-click]")
+      |> render_click()
+
+    assert to == "/cves/CVE-2025-0001"
+  end
+
   test "live search narrows the results", %{conn: conn} do
     published("CVE-2025-0001", "Alpha")
     published("CVE-2025-0002", "Bravo")

@@ -190,17 +190,18 @@ defmodule VarselWeb.CveListLive do
     {:noreply, assign(socket, :confirming_reject_id, nil)}
   end
 
-  def handle_event("reject", %{"id" => record_id}, socket) do
+  # The pool confirm clicks through with phx-value-id; the table confirm
+  # submits its P4 reason form, whose hidden field is "record_id" (an input
+  # named "id" would override the form element's DOM id).
+  def handle_event("reject", params, socket) do
     actor = socket.assigns.current_user
+    record_id = params["id"] || params["record_id"]
 
     record =
       Enum.find(socket.assigns.pool, &(&1.id == record_id)) ||
         Enum.find(socket.assigns.cve_records.results, &(&1.id == record_id))
 
-    reason =
-      if record.state == :reserved,
-        do: "Rejected from the reserved pool",
-        else: "Rejected before publication"
+    reason = reject_reason(record, params["reason"])
 
     socket =
       case CVE.reject_cve_record(record, %{rejection_reason: reason}, actor: actor) do
@@ -300,6 +301,22 @@ defmodule VarselWeb.CveListLive do
     |> Enum.map_join("\n", &Exception.message/1)
   end
 
+  # P4: the pool confirm sends no "reason" param and keeps its fixed copy —
+  # an unused reserved ID has no story worth prompting for. The table
+  # confirm's reason input is prefilled with (and defaults to, if blanked)
+  # the same fixed copy it replaces, so accepting it unedited behaves
+  # exactly as built.
+  defp reject_reason(record, reason) do
+    case reason && String.trim(reason) do
+      "" -> default_reject_reason(record)
+      nil -> default_reject_reason(record)
+      trimmed -> trimmed
+    end
+  end
+
+  defp default_reject_reason(%{state: :reserved}), do: "Rejected from the reserved pool"
+  defp default_reject_reason(_record), do: "Rejected before publication"
+
   defp poc?(%{role: :poc}), do: true
   defp poc?(_user), do: false
 
@@ -316,6 +333,14 @@ defmodule VarselWeb.CveListLive do
 
   defp count_label(_count, singular), do: "#{singular}s"
 
+  # P3's search feedback reads as a sentence ("14 match “ssh”"), so the
+  # verb agrees with the count rather than pluralizing a noun.
+  defp match_summary(count, query) do
+    count = if is_integer(count), do: count, else: 0
+    verb = if count == 1, do: "matches", else: "match"
+    ~s(#{count} #{verb} “#{String.trim(query)}”)
+  end
+
   # A record's CVSS score, coerced to float for `severity_chip`, or nil when
   # unscored (reserved/draft/publishing rows have no cve_json yet).
   defp record_score(%{cve_json: nil}), do: nil
@@ -329,7 +354,18 @@ defmodule VarselWeb.CveListLive do
 
   defp pool_id_range([]), do: nil
   defp pool_id_range([only]), do: only.cve_id
-  defp pool_id_range(records), do: "#{List.first(records).cve_id} … #{List.last(records).cve_id}"
+
+  # The span abbreviates its right end ("CVE-2026-20041 … 20052") when both
+  # ends share a year — the prefix would repeat verbatim.
+  defp pool_id_range(records) do
+    first = List.first(records).cve_id
+    last = List.last(records).cve_id
+
+    case {String.split(first, "-"), String.split(last, "-")} do
+      {["CVE", year, _serial], ["CVE", year, serial]} -> "#{first} … #{serial}"
+      _other -> "#{first} … #{last}"
+    end
+  end
 
   @impl Phoenix.LiveView
   def render(assigns) do
@@ -379,21 +415,35 @@ defmodule VarselWeb.CveListLive do
       <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">
         <div
           :if={@poc?}
-          class="flex flex-wrap items-center gap-3.5 px-4 py-2.5 border-b border-base-300 text-[0.76rem] text-base-content/60"
+          class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-base-300 text-[0.76rem] text-base-content/60"
         >
-          <.scope_button
-            active={@filter}
-            value="all"
-            label="All"
-            count={@record_counts |> Map.values() |> Enum.sum()}
-          />
-          <.scope_button
-            :for={state <- table_states()}
-            active={@filter}
-            value={to_string(state)}
-            label={Phoenix.Naming.humanize(state)}
-            count={Map.get(@record_counts, state, 0)}
-          />
+          <div class="flex flex-wrap items-center gap-3.5">
+            <.scope_button
+              active={@filter}
+              value="all"
+              label="All"
+              count={@record_counts |> Map.values() |> Enum.sum()}
+            />
+            <.scope_button
+              :for={state <- table_states()}
+              active={@filter}
+              value={to_string(state)}
+              label={Phoenix.Naming.humanize(state)}
+              count={Map.get(@record_counts, state, 0)}
+            />
+          </div>
+          <span
+            :if={String.trim(@query) == ""}
+            class="text-xs text-base-content/50 tabular-nums whitespace-nowrap"
+          >
+            {count_label(@record_counts |> Map.values() |> Enum.sum(), "record")}
+          </span>
+          <span
+            :if={String.trim(@query) != ""}
+            class="text-xs font-semibold text-info tabular-nums whitespace-nowrap"
+          >
+            {match_summary(@cve_records.count, @query)}
+          </span>
         </div>
         <div
           :if={not @poc?}
@@ -402,6 +452,12 @@ defmodule VarselWeb.CveListLive do
           <span class="text-sm text-base-content/70 tabular-nums">
             {count_label(@cve_records.count, "CVE")}
           </span>
+          <p class="text-xs text-base-content/50 whitespace-nowrap">
+            Machine-readable: <a href={~p"/cves/index.json"} class="link">JSON</a>
+            · <a href={~p"/osv/all.json"} class="link">OSV</a>
+            · <a href={~p"/feed.atom"} class="link">Atom</a>
+            · <a href={~p"/feed.rss"} class="link">RSS</a>
+          </p>
         </div>
 
         <div class="overflow-x-auto">
@@ -419,26 +475,40 @@ defmodule VarselWeb.CveListLive do
               </tr>
             </thead>
             <tbody>
-              <tr :for={record <- @cve_records.results} class="hover:bg-base-300/40">
+              <tr
+                :for={record <- @cve_records.results}
+                class={["group hover:bg-base-300/40", not @poc? && "cursor-pointer"]}
+                phx-click={not @poc? && JS.navigate(~p"/cves/#{record.cve_id}")}
+              >
                 <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
                   {record.cve_id || "—"}
                 </td>
                 <td class="max-w-md">
                   <.link
-                    :if={record.state == :published}
+                    :if={record.state == :published and @poc?}
                     navigate={~p"/cves/#{record.cve_id}"}
                     class="link link-hover font-semibold"
                   >
                     {record.title || record.cve_id}
                   </.link>
                   <span
-                    :if={record.state != :published}
+                    :if={not @poc? and record.state == :published}
+                    class="font-semibold group-hover:text-primary"
+                  >
+                    {record.title || record.cve_id}
+                  </span>
+                  <span
+                    :if={@poc? and record.state != :published}
                     class={record.state == :publishing && "font-semibold"}
                   >
                     {record.title || "—"}
                   </span>
                 </td>
-                <td>
+                <%!-- The empty JS command shields the nested hex.pm links
+                      from the row's click-through: LiveView only executes
+                      the binding closest to the click target, and inline
+                      handlers are out (CSP). --%>
+                <td phx-click={%JS{}}>
                   <div :for={purl <- record.purls || []} class="text-sm">
                     <.package_ref entry={%{"packageURL" => purl}} link={true} />
                   </div>
@@ -477,19 +547,23 @@ defmodule VarselWeb.CveListLive do
                       Reject
                     </button>
                   </div>
-                  <div
+                  <form
                     :if={@confirming_reject_id == record.id}
-                    class="flex items-center gap-2 justify-end whitespace-nowrap rounded-md bg-error/10 px-2 py-1"
+                    phx-submit="reject"
+                    class="flex flex-wrap items-center justify-end gap-2 rounded-md bg-error/10 px-2 py-1 max-w-md ml-auto"
                   >
-                    <span class="text-xs text-base-content/60">
-                      reject at MITRE? can't be reused
+                    <input type="hidden" name="record_id" value={record.id} />
+                    <span class="text-xs text-base-content/60 basis-full text-right">
+                      reject at MITRE? can't be reused — the reason becomes part of the record
                     </span>
-                    <button
-                      type="button"
-                      class="btn btn-error btn-xs"
-                      phx-click="reject"
-                      phx-value-id={record.id}
-                    >
+                    <input
+                      type="text"
+                      name="reason"
+                      value={default_reject_reason(record)}
+                      autofocus
+                      class="input input-xs flex-1 min-w-56 border-error/30"
+                    />
+                    <button type="submit" class="btn btn-error btn-xs">
                       Reject
                     </button>
                     <button
@@ -499,7 +573,7 @@ defmodule VarselWeb.CveListLive do
                     >
                       Cancel
                     </button>
-                  </div>
+                  </form>
                 </td>
               </tr>
             </tbody>
@@ -525,7 +599,7 @@ defmodule VarselWeb.CveListLive do
 
       <.rejected_panel :if={@poc?} rejected={@rejected} open?={@rejected_open?} />
 
-      <p class="mt-6 text-sm text-base-content/60">
+      <p :if={@poc?} class="mt-6 text-sm text-base-content/60">
         Machine-readable: <a href={~p"/cves/index.json"} class="link">CVE index (JSON)</a>
         · <a href={~p"/osv/all.json"} class="link">OSV feed (JSON)</a>
         · <a href={~p"/feed.atom"} class="link">Atom</a>
@@ -540,15 +614,23 @@ defmodule VarselWeb.CveListLive do
   attr :label, :string, required: true
   attr :count, :integer, required: true
 
-  # A table filter scope, styled like the cases archive scope strip: label +
-  # count, active = ink + accent count. A scope is a filter, not a resort.
+  # A table filter scope, styled like the cases band tabs: label + count,
+  # active = ink + accent count + the inset accent underline ("you are
+  # here" without relying on weight alone). A scope is a filter, not a
+  # resort.
   defp scope_button(assigns) do
     ~H"""
     <button
       type="button"
       phx-click="filter"
       phx-value-filter={@value}
-      class={["cursor-pointer", @active == @value && "font-bold text-base-content"]}
+      class={[
+        "cursor-pointer pb-1",
+        if(@active == @value,
+          do: "font-bold text-base-content shadow-[inset_0_-2px_0_var(--eef-blue)]",
+          else: nil
+        )
+      ]}
     >
       {@label}
       <span class={[
@@ -563,42 +645,45 @@ defmodule VarselWeb.CveListLive do
 
   attr :record, :any, required: true
 
+  # P1: state text (dot + label, state-toned, non-interactive) on the left,
+  # a quiet bordered case chip pinned to the cell's right edge when an
+  # owning case exists — one hover treatment regardless of state tone,
+  # instead of the state color bleeding into an appended "· case →" link.
   defp record_state_cell(assigns) do
     ~H"""
-    <span :if={@record.state == :draft and @record.case} class="text-warning text-sm">
-      ● Draft · <.link navigate={~p"/cases/#{@record.case.id}"} class="link link-hover">case →</.link>
-    </span>
-    <span :if={@record.state == :draft and !@record.case} class="text-warning text-sm">
-      ● Draft
-    </span>
-    <span :if={@record.state == :published and @record.case} class="text-base-content/60 text-sm">
-      ● Published ·
-      <.link navigate={~p"/cases/#{@record.case.id}"} class="link link-hover">case →</.link>
-    </span>
-    <span :if={@record.state == :published and !@record.case} class="text-base-content/60 text-sm">
-      ● Published
-    </span>
-    <span :if={@record.state == :pending_update and @record.case} class="text-warning text-sm">
-      ● Pending update ·
-      <.link navigate={~p"/cases/#{@record.case.id}"} class="link link-hover">case →</.link>
-    </span>
-    <span :if={@record.state == :pending_update and !@record.case} class="text-warning text-sm">
-      ● Pending update
-    </span>
-    <span :if={@record.state == :publishing and @record.case} class="text-info text-sm">
-      ● Publishing ·
-      <.link navigate={~p"/cases/#{@record.case.id}"} class="link link-hover">case →</.link>
-    </span>
-    <span :if={@record.state == :publishing and !@record.case} class="text-info text-sm">
-      ● Publishing
-    </span>
+    <div class="flex items-center justify-between gap-3">
+      <.state dot={state_dot_class(@record.state)} class={state_text_class(@record.state)}>
+        {Phoenix.Naming.humanize(@record.state)}
+      </.state>
+      <.link
+        :if={@record.case}
+        navigate={~p"/cases/#{@record.case.id}"}
+        class="inline-flex items-center gap-[0.32rem] text-[0.67rem] font-semibold text-base-content/60 bg-base-100 border border-base-300 rounded-[5px] px-[0.45rem] py-[0.07rem] whitespace-nowrap transition-colors hover:text-primary hover:border-primary/60 hover:bg-primary/10"
+      >
+        case <span class="text-[0.7rem] leading-none">→</span>
+      </.link>
+    </div>
     """
   end
+
+  defp state_dot_class(:draft), do: "bg-warning"
+  defp state_dot_class(:pending_update), do: "bg-warning"
+  defp state_dot_class(:publishing), do: "bg-info"
+  defp state_dot_class(:published), do: "bg-base-content/40"
+
+  defp state_text_class(:draft), do: "text-warning text-sm"
+  defp state_text_class(:pending_update), do: "text-warning text-sm"
+  defp state_text_class(:publishing), do: "text-info text-sm"
+  defp state_text_class(:published), do: "text-base-content/60 text-sm"
 
   attr :pool, :list, required: true
   attr :open?, :boolean, required: true
   attr :confirming_reject_id, :string, default: nil
 
+  # P2: count joins the label ("Reserved pool 12", no redundant "IDs"), the
+  # facts become labeled pairs behind hairline separators (span, oldest),
+  # and the oldest reservation gets the pipeline's amber staleness treatment
+  # once it crosses @pool_stale_after — the pool's one "act on this" signal.
   defp pool_panel(assigns) do
     records = assigns.pool
     oldest = List.first(records)
@@ -608,20 +693,24 @@ defmodule VarselWeb.CveListLive do
         records: records,
         count: length(records),
         id_range: pool_id_range(records),
-        oldest: oldest
+        oldest: oldest,
+        oldest_stale?: oldest && pool_stale?(oldest.reserved_at)
       )
 
     ~H"""
     <div class="rounded-box border border-base-300 bg-base-200 mb-4">
       <div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
-        <span class="flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-wider text-base-content/60">
-          <span class="size-1.5 rounded-full bg-base-content/30 shrink-0"></span> Reserved pool
-        </span>
-        <span class="text-sm font-bold tabular-nums">{count_label(@count, "ID")}</span>
-        <span :if={@id_range} class="font-mono text-xs text-base-content/60">{@id_range}</span>
-        <span :if={@oldest} class="text-xs text-base-content/50">
-          oldest reserved {format_dt(@oldest.reserved_at)}
-        </span>
+        <.panel_summary_label dot="bg-base-content/30">Reserved pool</.panel_summary_label>
+        <span class="text-[0.95rem] font-bold tabular-nums -ml-1">{@count}</span>
+        <span :if={@id_range} class="w-px h-4 bg-base-300 shrink-0"></span>
+        <.panel_fact :if={@id_range} label="span" value={@id_range} mono?={true} />
+        <span :if={@oldest} class="w-px h-4 bg-base-300 shrink-0"></span>
+        <.panel_fact
+          :if={@oldest}
+          label="oldest"
+          value={"#{format_dt(@oldest.reserved_at)} · #{pool_age_days(@oldest.reserved_at)} d"}
+          warn?={@oldest_stale?}
+        />
         <button
           type="button"
           class="btn btn-ghost btn-xs ml-auto"
@@ -647,6 +736,47 @@ defmodule VarselWeb.CveListLive do
     """
   end
 
+  attr :dot, :string, required: true
+  slot :inner_block, required: true
+
+  defp panel_summary_label(assigns) do
+    ~H"""
+    <span class="flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-wider text-base-content/60 whitespace-nowrap">
+      <span class={["size-1.5 rounded-full shrink-0", @dot]}></span> {render_slot(@inner_block)}
+    </span>
+    """
+  end
+
+  attr :label, :string, required: true
+  attr :value, :string, required: true
+  attr :mono?, :boolean, default: false
+  attr :warn?, :boolean, default: false
+
+  defp panel_fact(assigns) do
+    ~H"""
+    <span class="inline-flex items-baseline gap-[0.45rem] whitespace-nowrap">
+      <span class="text-[0.66rem] font-semibold text-base-content/50">{@label}</span>
+      <span class={[
+        if(@mono?, do: "font-mono text-xs", else: "text-[0.76rem] tabular-nums"),
+        if(@warn?, do: "font-semibold text-warning", else: "text-base-content/60")
+      ]}>
+        {@value}
+      </span>
+    </span>
+    """
+  end
+
+  # The pool's staleness threshold (~30 days) — same "act on this" language
+  # as the pipeline board's per-lane card ages, applied to the oldest
+  # reservation's wait time.
+  @pool_stale_after_days 30
+
+  defp pool_age_days(%DateTime{} = reserved_at) do
+    DateTime.diff(DateTime.utc_now(), reserved_at, :day)
+  end
+
+  defp pool_stale?(%DateTime{} = reserved_at), do: pool_age_days(reserved_at) >= @pool_stale_after_days
+
   attr :record, :any, required: true
   attr :confirming?, :boolean, required: true
 
@@ -654,13 +784,15 @@ defmodule VarselWeb.CveListLive do
     ~H"""
     <div
       :if={not @confirming?}
-      class="flex items-center gap-3 py-1 text-sm"
+      class="grid grid-cols-[10rem_1fr_auto] items-center gap-3 py-1 text-sm"
     >
       <span class="font-mono text-xs text-base-content/60">{@record.cve_id}</span>
-      <span class="text-xs text-base-content/50">reserved {format_dt(@record.reserved_at)}</span>
+      <span class="text-xs text-base-content/50 tabular-nums">
+        reserved {format_dt(@record.reserved_at)}
+      </span>
       <button
         type="button"
-        class="ml-auto text-xs font-semibold text-error/85"
+        class="text-xs font-semibold text-error/85"
         phx-click="reject_prompt"
         phx-value-id={@record.id}
       >
@@ -712,16 +844,18 @@ defmodule VarselWeb.CveListLive do
       )
 
     ~H"""
-    <div :if={@count > 0} class="rounded-box border border-base-300 bg-base-200 mt-4">
+    <div
+      :if={@count > 0}
+      id="rejected-panel"
+      class="rounded-box border border-base-300 bg-base-200 mt-4"
+    >
       <div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
-        <span class="flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-wider text-base-content/60">
-          <span class="size-1.5 rounded-full bg-error/60 shrink-0"></span> Rejected
-        </span>
-        <span class="text-sm font-bold tabular-nums">{count_label(@count, "ID")}</span>
-        <span :if={@id_range} class="font-mono text-xs text-base-content/60">{@id_range}</span>
-        <span :if={@latest} class="text-xs text-base-content/50">
-          last rejected {format_dt(@latest.rejected_at)}
-        </span>
+        <.panel_summary_label dot="bg-error/60">Rejected</.panel_summary_label>
+        <span class="text-[0.95rem] font-bold tabular-nums -ml-1">{@count}</span>
+        <span :if={@id_range} class="w-px h-4 bg-base-300 shrink-0"></span>
+        <.panel_fact :if={@id_range} label="span" value={@id_range} mono?={true} />
+        <span :if={@latest} class="w-px h-4 bg-base-300 shrink-0"></span>
+        <.panel_fact :if={@latest} label="last" value={format_dt(@latest.rejected_at)} />
         <button type="button" class="btn btn-ghost btn-xs ml-auto" phx-click="toggle_rejected">
           {if @open?, do: "Hide IDs ▴", else: "Show IDs ▾"}
         </button>
@@ -732,9 +866,14 @@ defmodule VarselWeb.CveListLive do
         id="rejected-ids"
         class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 px-4 pb-3 pt-1 border-t border-base-300"
       >
-        <div :for={record <- @records} class="flex items-center gap-3 py-1 text-sm">
+        <div
+          :for={record <- @records}
+          class="grid grid-cols-[10rem_1fr] items-center gap-3 py-1 text-sm"
+        >
           <span class="font-mono text-xs text-base-content/60">{record.cve_id}</span>
-          <span class="text-xs text-base-content/50">rejected {format_dt(record.rejected_at)}</span>
+          <span class="text-xs text-base-content/50 tabular-nums">
+            rejected {format_dt(record.rejected_at)}
+          </span>
         </div>
       </div>
     </div>

@@ -261,11 +261,12 @@ defmodule VarselWeb.CoreComponents do
   alone. `dot` is a background color class (e.g. "bg-warning").
   """
   attr :dot, :string, required: true
+  attr :class, :any, default: nil
   slot :inner_block, required: true
 
   def state(assigns) do
     ~H"""
-    <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
+    <span class={["inline-flex items-center gap-1.5 whitespace-nowrap", @class]}>
       <span class={["size-1.5 rounded-full shrink-0", @dot]}></span>
       {render_slot(@inner_block)}
     </span>
