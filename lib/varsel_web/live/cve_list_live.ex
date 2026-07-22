@@ -461,7 +461,7 @@ defmodule VarselWeb.CveListLive do
         </div>
 
         <div class="overflow-x-auto">
-          <table class="table table-fixed">
+          <table class="table table-fixed min-w-[60rem]">
             <thead>
               <tr>
                 <th class="w-32">CVE ID</th>
