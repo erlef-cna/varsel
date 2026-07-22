@@ -36,7 +36,11 @@ defmodule VarselWeb.MarkdownInput do
 
   @impl Phoenix.LiveComponent
   def update(assigns, socket) do
-    {:ok, socket |> assign(assigns) |> assign_new(:rows, fn -> 6 end)}
+    {:ok,
+     socket
+     |> assign(assigns)
+     |> assign_new(:rows, fn -> 6 end)
+     |> assign_new(:placeholder, fn -> nil end)}
   end
 
   @impl Phoenix.LiveComponent
@@ -76,7 +80,13 @@ defmodule VarselWeb.MarkdownInput do
       </div>
 
       <div class={@mode == :preview && "hidden"}>
-        <.input field={@field} type="textarea" rows={@rows} class="w-full textarea font-mono text-sm" />
+        <.input
+          field={@field}
+          type="textarea"
+          rows={@rows}
+          placeholder={@placeholder}
+          class="w-full textarea font-mono text-sm"
+        />
       </div>
 
       <div
