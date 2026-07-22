@@ -24,8 +24,9 @@ defmodule Varsel.MixProject do
         # skips (e.g. once the upstream fix lands) get cleaned up.
         list_unused_filters: true,
         # precommit runs in MIX_ENV=test, so the test-support helpers are
-        # analysed too; add ExUnit to the PLT so its callbacks resolve.
-        plt_add_apps: [:ex_unit]
+        # analysed too; add ExUnit to the PLT so its callbacks resolve, and
+        # Mix for the tasks under lib/mix/tasks.
+        plt_add_apps: [:ex_unit, :mix]
       ]
     ]
   end
@@ -90,6 +91,7 @@ defmodule Varsel.MixProject do
       {:igniter, "~> 0.6", only: [:dev, :test]},
       {:jason, "~> 1.2"},
       {:lazy_html, ">= 0.1.0", only: :test},
+      {:lumis, "~> 0.6"},
       {:mdex, "~> 0.13"},
       {:nimble_publisher, "~> 2.0"},
       {:oban, "~> 2.0"},

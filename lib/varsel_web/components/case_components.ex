@@ -552,7 +552,7 @@ defmodule VarselWeb.CaseComponents do
 
   def markdown(assigns) do
     ~H"""
-    <div class={["prose prose-sm max-w-none", @class]}>{raw(Markdown.to_html(@content))}</div>
+    <div class={["prose prose-sm max-w-none", @class]}>{raw(Markdown.to_display_html(@content))}</div>
     """
   end
 
@@ -578,57 +578,5 @@ defmodule VarselWeb.CaseComponents do
       <span :if={@explain and @on?} class="font-normal">— your edits become proposals</span>
     </span>
     """
-  end
-
-  @doc """
-  Pretty-prints a JSON-shaped term (string-keyed maps, lists, scalars) with
-  simple syntax tinting: keys in primary, strings in success, numbers in
-  warning. Values are HTML-escaped; the result is safe to interpolate.
-  """
-  @spec json_highlight(term()) :: Phoenix.HTML.safe()
-  def json_highlight(value), do: {:safe, json_frag(value, "")}
-
-  defp json_frag(map, _indent) when map == %{}, do: "{}"
-
-  defp json_frag(map, indent) when is_map(map) do
-    inner = indent <> "  "
-
-    entries =
-      map
-      |> Enum.sort_by(fn {key, _value} -> to_string(key) end)
-      |> Enum.map_intersperse(",\n", fn {key, value} ->
-        [
-          inner,
-          ~s(<span class="text-primary">),
-          escape(JSON.encode!(to_string(key))),
-          "</span>: ",
-          json_frag(value, inner)
-        ]
-      end)
-
-    ["{\n", entries, "\n", indent, "}"]
-  end
-
-  defp json_frag([], _indent), do: "[]"
-
-  defp json_frag(list, indent) when is_list(list) do
-    inner = indent <> "  "
-    entries = Enum.map_intersperse(list, ",\n", &[inner, json_frag(&1, inner)])
-    ["[\n", entries, "\n", indent, "]"]
-  end
-
-  defp json_frag(value, _indent) when is_binary(value) do
-    [~s(<span class="text-success">), escape(JSON.encode!(value)), "</span>"]
-  end
-
-  defp json_frag(value, _indent) when is_number(value) do
-    [~s(<span class="text-warning">), JSON.encode!(value), "</span>"]
-  end
-
-  defp json_frag(value, _indent), do: escape(JSON.encode!(value))
-
-  defp escape(binary) do
-    {:safe, iodata} = Phoenix.HTML.html_escape(binary)
-    iodata
   end
 end

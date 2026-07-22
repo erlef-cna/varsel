@@ -228,6 +228,35 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders read-only source code with Lumis syntax highlighting inside the
+  standard codebox treatment. The generated `assets/vendor/css/lumis.css`
+  (see `mix generate_lumis_css`) owns the box — border, base-100 background,
+  radius, padding, horizontal scrolling — and the token colors for both site
+  themes; `class` is for placement extras (margins, max-height). Display
+  only: editable JSON stays in raw textareas.
+  """
+  attr :source, :string, required: true
+  attr :language, :string, default: "json"
+  attr :class, :any, default: nil
+
+  def code_block(assigns) do
+    ~H"""
+    {Phoenix.HTML.raw(
+      Lumis.highlight!(@source,
+        formatter: {:html_linked, language: @language, pre_class: code_block_class(@class)}
+      )
+    )}
+    """
+  end
+
+  defp code_block_class(class) do
+    ["text-xs leading-5", class]
+    |> List.flatten()
+    |> Enum.filter(&is_binary/1)
+    |> Enum.join(" ")
+  end
+
+  @doc """
   Renders a lifecycle state as dot + word — color never carries the meaning
   alone. `dot` is a background color class (e.g. "bg-warning").
   """

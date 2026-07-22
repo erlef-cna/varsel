@@ -988,7 +988,7 @@ defmodule VarselWeb.CaseDetailLive do
         {:ok, nil}
 
       trimmed ->
-        case Jason.decode(trimmed) do
+        case JSON.decode(trimmed) do
           {:ok, override} when is_map(override) -> {:ok, override}
           _other -> :error
         end
@@ -1040,11 +1040,8 @@ defmodule VarselWeb.CaseDetailLive do
   def state_badge_class(:closed), do: "badge-neutral"
   def state_badge_class(_other), do: "badge-ghost"
 
-  defp diff_line_class({:del, _line}), do: "bg-error/10 text-error"
-  defp diff_line_class({:ins, _line}), do: "bg-success/10 text-success"
-  defp diff_line_class({:skip, _count}), do: "text-base-content/50 italic"
-  defp diff_line_class({:eq, _line}), do: "text-base-content/70"
-
+  # The +/- prefixes make the joined text valid diff syntax, so the
+  # code_block's Lumis "diff" grammar colors the lines.
   defp diff_line_text({:del, line}), do: "- " <> line
   defp diff_line_text({:ins, line}), do: "+ " <> line
   defp diff_line_text({:eq, line}), do: "  " <> line
@@ -1058,6 +1055,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp humanize_action(action), do: String.replace(action, "_", " ")
 
   defp pretty_json(nil), do: ""
+  # Jason, not the stdlib JSON module: only Jason has a pretty printer.
   defp pretty_json(value), do: Jason.encode!(value, pretty: true)
 
   defp enum_options(enum), do: Enum.map(enum.values(), &{&1 |> to_string() |> String.replace("_", " "), &1})
@@ -1548,10 +1546,11 @@ defmodule VarselWeb.CaseDetailLive do
         own={proposal.author_id == @current_user.id}
         comments={Map.get(@comments, proposal.id, [])}
       >
-        <pre
+        <.code_block
           :if={proposal.operation != :set and proposal.proposed_value}
-          class="mt-1 max-h-40 overflow-x-auto rounded bg-base-300 p-2 text-xs"
-        >{pretty_json(proposal.proposed_value["value"])}</pre>
+          source={pretty_json(proposal.proposed_value["value"])}
+          class="mt-1 max-h-40"
+        />
       </.suggestion_card>
     </div>
     """
@@ -2543,7 +2542,7 @@ defmodule VarselWeb.CaseDetailLive do
 
         <details>
           <summary class="cursor-pointer text-xs text-base-content/60">Report payload</summary>
-          <pre class="bg-base-300 rounded p-2 text-xs overflow-x-auto max-h-60 mt-1">{pretty_json(report.report_json)}</pre>
+          <.code_block source={pretty_json(report.report_json)} class="mt-1 max-h-60" />
         </details>
       </div>
     </.panel>
@@ -2634,10 +2633,7 @@ defmodule VarselWeb.CaseDetailLive do
 
           <div :if={@preview_tab == "json"}>
             <p :if={@preview == :loading} class="text-sm text-base-content/60">Rendering…</p>
-            <pre
-              :if={is_map(@preview)}
-              class="overflow-x-auto rounded-lg border border-base-300 bg-base-100 p-3 font-mono text-xs leading-5"
-            >{json_highlight(@preview["cna"])}</pre>
+            <.code_block :if={is_map(@preview)} source={pretty_json(@preview["cna"])} />
           </div>
 
           <div :if={@preview_tab == "diff"}>
@@ -2646,13 +2642,11 @@ defmodule VarselWeb.CaseDetailLive do
               <p :if={not Diff.changed?(@diff)} class="text-sm text-base-content/60">
                 No changes against the published record.
               </p>
-              <pre
+              <.code_block
                 :if={Diff.changed?(@diff)}
-                class="overflow-x-auto rounded-lg border border-base-300 bg-base-100 p-3 text-xs leading-5"
-              ><span
-        :for={line <- @diff}
-        class={["block whitespace-pre", diff_line_class(line)]}
-      >{diff_line_text(line)}</span></pre>
+                source={Enum.map_join(@diff, "\n", &diff_line_text/1)}
+                language="diff"
+              />
             </div>
           </div>
         </div>
@@ -2780,10 +2774,11 @@ defmodule VarselWeb.CaseDetailLive do
         </span>
       </div>
 
-      <pre
+      <.code_block
         :if={@proposal.operation != :set and @proposal.proposed_value}
-        class="mt-1 max-h-40 overflow-x-auto rounded bg-base-300 p-2 text-xs"
-      >{pretty_json(@proposal.proposed_value["value"])}</pre>
+        source={pretty_json(@proposal.proposed_value["value"])}
+        class="mt-1 max-h-40"
+      />
 
       <div :if={@proposal.reasoning} class="mt-1 text-base-content/80">
         <.markdown content={@proposal.reasoning} class="prose-xs" />

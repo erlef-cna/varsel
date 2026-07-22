@@ -47,6 +47,11 @@ config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
+# mdex_native reads this at compile time to decide which syntax highlighter NIF
+# feature to build; must be set before it compiles (mdex's markdown code-block
+# highlighting and VarselWeb.CoreComponents.code_block/1 both depend on Lumis).
+config :mdex_native, syntax_highlighter: :lumis
+
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 

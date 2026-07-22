@@ -59,6 +59,6 @@ defmodule Varsel.CVE.CveSchema do
     |> Path.join("cve_schema")
     |> Path.join(path)
     |> File.read!()
-    |> Jason.decode!()
+    |> JSON.decode!()
   end
 end

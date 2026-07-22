@@ -46,7 +46,7 @@ defmodule Varsel.CVE.Cvelint do
 
         File.mkdir_p!(tmp_dir)
         path = Path.join(tmp_dir, "#{cve_id}.json")
-        File.write!(path, Jason.encode!(cve_json))
+        File.write!(path, JSON.encode!(cve_json))
 
         try do
           run(path)
@@ -85,7 +85,7 @@ defmodule Varsel.CVE.Cvelint do
   end
 
   defp parse_errors(out) do
-    case Jason.decode(out) do
+    case JSON.decode(out) do
       {:ok, %{"results" => results}} when results != [] ->
         Enum.map(results, &parse_error/1)
 

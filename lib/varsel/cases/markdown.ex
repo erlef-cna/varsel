@@ -14,11 +14,28 @@ defmodule Varsel.Cases.Markdown do
     render: [hardbreaks: false]
   ]
 
+  # Lumis highlighting is display-only: the supportingMedia HTML embedded in
+  # published CVE records stays free of site-specific `.l-*` token markup.
+  @display_options @options ++
+                     [syntax_highlight: [engine: :lumis, opts: [formatter: :html_linked]]]
+
   @doc "Renders markdown to HTML (the supportingMedia text/html value)."
   @spec to_html(String.t()) :: String.t()
   def to_html(markdown) when is_binary(markdown) do
     markdown
     |> MDEx.to_html!(@options)
+    |> String.trim()
+  end
+
+  @doc """
+  Renders markdown to HTML for on-site display: `to_html/1` plus Lumis
+  syntax highlighting of fenced code blocks (`.lumis` / `.l-*` classes,
+  styled by the generated `assets/vendor/css/lumis.css`).
+  """
+  @spec to_display_html(String.t()) :: String.t()
+  def to_display_html(markdown) when is_binary(markdown) do
+    markdown
+    |> MDEx.to_html!(@display_options)
     |> String.trim()
   end
 

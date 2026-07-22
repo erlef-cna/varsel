@@ -8,6 +8,13 @@
    https://tailwindcss.com/docs/configuration */
 
 @import "tailwindcss" source(none);
+
+/* Lumis syntax-highlighting token classes (.lumis container, .l-* tokens),
+   generated for both site themes by `mix generate_lumis_css` — regenerate
+   rather than editing. Deliberately unlayered so its codebox container rule
+   wins over the typography plugin's `pre` styling in rendered markdown. */
+@import "../vendor/css/lumis.css";
+
 @source "../../deps/ash_authentication_phoenix";
 @source "../css";
 @source "../js";

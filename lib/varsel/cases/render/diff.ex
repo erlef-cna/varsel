@@ -43,6 +43,8 @@ defmodule Varsel.Cases.Render.Diff do
 
   @doc "Pretty JSON with recursively sorted object keys (stable across runs)."
   @spec stable_json(term()) :: String.t()
+  # Jason, not the stdlib JSON module: this needs both the pretty printer and
+  # OrderedObject's caller-controlled key order.
   def stable_json(term) do
     term |> stable() |> Jason.encode!(pretty: true)
   end

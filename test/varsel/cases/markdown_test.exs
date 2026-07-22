@@ -12,6 +12,17 @@ defmodule Varsel.Cases.MarkdownTest do
              "<p>Hello <code>code</code> <strong>bold</strong></p>"
   end
 
+  test "display HTML highlights fenced code blocks; record HTML stays plain" do
+    markdown = "```elixir\ndef foo, do: :bar\n```"
+
+    assert Markdown.to_html(markdown) ==
+             ~s(<pre><code class="language-elixir">def foo, do: :bar\n</code></pre>)
+
+    display = Markdown.to_display_html(markdown)
+    assert display =~ ~s(<pre class="lumis">)
+    assert display =~ ~s(<span class="l-keyword-function">def</span>)
+  end
+
   test "plain text strips inline formatting and keeps paragraph breaks" do
     markdown = """
     First paragraph with `inline code`.

@@ -6,8 +6,9 @@ defmodule VarselWeb.MarkdownInput do
   @moduledoc """
   Markdown editor form field with a Write/Preview switch.
 
-  Preview renders through `Varsel.Cases.Markdown.to_html/1` — the same engine
-  the published record uses, so what you preview is what MITRE gets. The
+  Preview renders through `Varsel.Cases.Markdown.to_display_html/1` — the
+  same document semantics the published record uses (plus display-only code
+  highlighting), so what you preview is what MITRE gets. The
   textarea stays in the DOM while previewing (only visually hidden): a form
   submitted mid-preview still carries the field's value.
 
@@ -105,7 +106,7 @@ defmodule VarselWeb.MarkdownInput do
         # Comrak escapes raw HTML embedded in the markdown by default
         # (render.unsafe is off in Varsel.Cases.Markdown), so the rendered
         # output is safe to inject.
-        raw(Markdown.to_html(to_string(markdown)))
+        raw(Markdown.to_display_html(to_string(markdown)))
     end
   end
 end

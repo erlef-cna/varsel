@@ -479,7 +479,7 @@ defmodule Varsel.CVE.OsvConverter do
   @spec content_hash(map()) :: String.t()
   def content_hash(osv) do
     :sha256
-    |> :crypto.hash(Jason.encode!(Map.delete(osv, "modified")))
+    |> :crypto.hash(JSON.encode!(Map.delete(osv, "modified")))
     |> Base.encode16(case: :lower)
   end
 

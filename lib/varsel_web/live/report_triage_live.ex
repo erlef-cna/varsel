@@ -138,6 +138,7 @@ defmodule VarselWeb.ReportTriageLive do
   defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M")
 
+  # Jason, not the stdlib JSON module: only Jason has a pretty printer.
   defp pretty_json(value), do: Jason.encode!(value, pretty: true)
 
   defp case_label(case_record) do
@@ -184,7 +185,7 @@ defmodule VarselWeb.ReportTriageLive do
 
           <details class="mt-1">
             <summary class="cursor-pointer text-sm text-base-content/60">Report payload</summary>
-            <pre class="bg-base-300 rounded p-3 text-xs overflow-x-auto max-h-72 mt-1">{pretty_json(report.report_json)}</pre>
+            <.code_block source={pretty_json(report.report_json)} class="mt-1 max-h-72" />
           </details>
 
           <.link

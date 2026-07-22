@@ -1472,11 +1472,12 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Diff to published") |> render_click()
       html = render_async(lv)
 
-      # The published title leaves, the case title arrives.
+      # The published title leaves, the case title arrives, tinted by the
+      # Lumis diff grammar's minus/plus tokens.
       assert html =~ "Old title"
       assert html =~ "New title"
-      assert html =~ "bg-error/10"
-      assert html =~ "bg-success/10"
+      assert html =~ ~s(<span class="l-diff-minus">)
+      assert html =~ ~s(<span class="l-diff-plus">)
     end
 
     test "never-published cases show no diff button in the preview", %{conn: conn, poc: poc} do
@@ -1531,10 +1532,11 @@ defmodule VarselWeb.CaseLiveTest do
 
       html = lv |> element("button", "Rendered JSON") |> render_click()
 
-      # The JSON is open (no <details>), keys tinted primary, strings success.
+      # The JSON is open (no <details>), Lumis-highlighted: keys are
+      # .l-property tokens, string values .l-string.
       refute html =~ "CNA container JSON"
-      assert html =~ ~s(<span class="text-primary">&quot;descriptions&quot;</span>)
-      assert html =~ ~s(<span class="text-success">)
+      assert html =~ ~s(<span class="l-property">&quot;descriptions&quot;</span>)
+      assert html =~ ~s(<span class="l-string">)
     end
 
     test "publish is visually gated in the footer while blockers exist", %{conn: conn, poc: poc} do

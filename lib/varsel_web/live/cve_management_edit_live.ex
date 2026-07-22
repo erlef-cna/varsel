@@ -76,10 +76,11 @@ defmodule VarselWeb.VarselEditLive do
   end
 
   defp encode_json(nil), do: "{}"
+  # Jason, not the stdlib JSON module: only Jason has a pretty printer.
   defp encode_json(map) when is_map(map), do: Jason.encode!(map, pretty: true)
 
   defp decode_json(text) do
-    case Jason.decode(text) do
+    case JSON.decode(text) do
       {:ok, json} -> {:ok, json}
       {:error, _} -> {:error, :invalid_json}
     end
