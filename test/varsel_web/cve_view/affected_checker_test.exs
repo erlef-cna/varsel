@@ -545,4 +545,36 @@ defmodule VarselWeb.CveView.AffectedCheckerTest do
       assert via.raw == "26.2.5.15"
     end
   end
+
+  describe "ranges without a changes key (real records, e.g. CVE-2026-20038)" do
+    test "normalized nil changes do not crash matching and lessThan drives the verdict" do
+      # The canonical shape produced by normalize_versions for a version
+      # that only had lessThan — the "changes" key EXISTS with a list value
+      # after normalization; this test locks that invariant end to end.
+      [package] =
+        VarselWeb.CveHTML.checker_packages([
+          %{
+            "vendor" => "mtrudel",
+            "product" => "bandit",
+            "packageURL" => "pkg:hex/bandit",
+            "defaultStatus" => "unaffected",
+            "versions" => [
+              %{
+                "version" => "0",
+                "lessThan" => "1.11.0",
+                "status" => "affected",
+                "versionType" => "semver"
+              }
+            ]
+          }
+        ])
+
+      assert package["state"] == "checkable"
+      assert [%{"changes" => changes} | _rest] = package["versions"]
+      assert is_list(changes)
+
+      assert {:affected, %{raw: "1.11.0"}, _others} = Checker.match("1.0.0", package["versions"])
+      assert :fixed = package["versions"] |> then(&Checker.match("1.11.0", &1)) |> elem(0)
+    end
+  end
 end

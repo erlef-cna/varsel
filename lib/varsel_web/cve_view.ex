@@ -782,7 +782,9 @@ defmodule VarselWeb.CveView do
 
   defp normalize_entry(_entry), do: nil
 
-  defp normalize_changes(nil), do: nil
+  # Canonical versions always carry a LIST — a nil here once leaked into
+  # Enum.filter via Map.get's default (which only applies to absent keys).
+  defp normalize_changes(nil), do: []
 
   # R1 applies to changes[].at too — a purl-typed range's chained fixes
   # (pkg:otp/ssh@5.3.3) arrive purl-prefixed just like the top-level bounds.
