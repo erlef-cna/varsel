@@ -545,7 +545,7 @@ defmodule VarselWeb.CveListLive do
                   <form
                     :if={@confirming_reject_id == record.id}
                     phx-submit="reject"
-                    class="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex w-[26rem] flex-wrap items-center justify-end gap-2 rounded-md border border-error/30 bg-base-200 px-3 py-2 shadow-lg"
+                    class="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex w-[min(26rem,calc(100vw-3rem))] flex-wrap items-center justify-end gap-2 rounded-md border border-error/30 bg-base-200 px-3 py-2 shadow-lg"
                   >
                     <input type="hidden" name="record_id" value={record.id} />
                     <span class="text-xs text-base-content/60 basis-full text-right">
