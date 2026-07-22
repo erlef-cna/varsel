@@ -154,10 +154,10 @@ defmodule VarselWeb.CaseLiveTest do
 
       # Cached derived ranges show per channel, plus the implicit git entry.
       assert html =~ "≥ 1.0.0 &lt; 2.0.0"
-      assert html =~ "(implicit)"
+      assert html =~ "github (implicit)"
       assert html =~ "≥ aaaaaaaaaaaa…"
       assert html =~ "no introduced boundary fact recorded"
-      assert html =~ "Ranges derived"
+      assert html =~ "derived"
     end
 
     test "renders content, allows editing in draft", %{conn: conn, poc: poc} do

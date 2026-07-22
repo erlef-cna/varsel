@@ -209,6 +209,83 @@
 
 /* This file is for your main application CSS */
 
+/* ------------------------------------------------------- Boundary timeline */
+/* Board C's "boundary facts -> derived ranges" picture: one row per release
+   line, a full-width track, and positioned nodes/tags. Percent offsets and
+   the vulnerable-span gradient are computed server-side and passed through
+   inline styles (--tl-pos / --tl-span-*), same approach as the mock. */
+.timeline-track {
+  position: relative;
+  height: 2px;
+  border-radius: 2px;
+  background-color: var(--color-base-300);
+}
+
+.timeline-track.is-vulnerable {
+  background: linear-gradient(
+    90deg,
+    var(--color-base-300) 0%,
+    var(--color-base-300) var(--tl-span-start, 0%),
+    var(--color-warning) var(--tl-span-start, 0%),
+    var(--color-warning) var(--tl-span-end, 100%),
+    var(--color-base-300) var(--tl-span-end, 100%)
+  );
+}
+
+.timeline-node {
+  position: absolute;
+  top: 50%;
+  left: var(--tl-pos, 0%);
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px var(--color-base-200);
+}
+
+.timeline-node.is-intro {
+  background-color: var(--color-warning);
+}
+
+.timeline-node.is-fix {
+  background-color: var(--color-success);
+}
+
+.timeline-node.is-pending {
+  background-color: transparent;
+  border: 2px solid var(--color-warning);
+}
+
+/* Node tags sit above the track: tiny faint mono per the mock, truncated so
+   adjacent tags can't run into each other (the full text is in the title
+   attribute). The tag is a child of its node, so it centers on the node;
+   nodes near either end anchor their tag inward instead, so it cannot
+   escape the card. */
+.timeline-tag {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.3rem;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  max-width: 8.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-node.tag-left .timeline-tag {
+  left: 0;
+  transform: none;
+}
+
+.timeline-node.tag-right .timeline-tag {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
 /* ---------------------------------------------------------------- Charts */
 /* Ported from the Jekyll site's head-custom.html. CSS-only hover popovers. */
 

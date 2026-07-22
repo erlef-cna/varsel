@@ -11,8 +11,11 @@ defmodule VarselWeb.CaseDetailLive do
 
   Content edits follow the content freeze (draft/review only); lifecycle
   decisions are POC-only — the same policies the API enforces, mirrored here
-  only to hide dead buttons. Child rows are added/edited through one modal
-  `AshPhoenix.Form` at a time; per-row actions stay raw.
+  only to hide dead buttons. Most child rows are added/edited through one
+  modal `AshPhoenix.Form` at a time; an affected package's own fields and its
+  channels/boundary facts/program files instead open in place inside its own
+  card (`expanded_package_id`) — the board-C affected editor. Per-row actions
+  stay raw.
   """
   use VarselWeb, :live_view
 
@@ -138,6 +141,7 @@ defmodule VarselWeb.CaseDetailLive do
         suggest?: socket.assigns.live_action == :propose,
         editing_section: if(socket.assigns.live_action == :view, do: nil, else: "summary"),
         mode: :view,
+        expanded_package_id: nil,
         child_form: nil,
         preview: nil,
         preview_open?: false,
@@ -328,6 +332,18 @@ defmodule VarselWeb.CaseDetailLive do
 
   ## -------------------------------------------------------------- child rows
 
+  # Opens the affected package's in-place editor (board C): the boundary
+  # timeline, channels-with-disclosure and program files, replacing the old
+  # centered modal for this one row. Channel/boundary child rows still use
+  # the modal (`child_form`) from inside it.
+  def handle_event("expand_package", %{"id" => id}, socket) do
+    {:noreply, assign(socket, expanded_package_id: id)}
+  end
+
+  def handle_event("collapse_package", _params, socket) do
+    {:noreply, assign(socket, expanded_package_id: nil, child_form: nil)}
+  end
+
   def handle_event("new_child", %{"type" => type} = params, socket) do
     %{resource: resource, title: title} = config = Map.fetch!(@children, type)
 
@@ -374,6 +390,13 @@ defmodule VarselWeb.CaseDetailLive do
       row
       |> AshPhoenix.Form.for_update(:edit, as: "child", actor: socket.assigns.current_user)
       |> to_form()
+
+    socket =
+      if type == "package" do
+        assign(socket, expanded_package_id: id)
+      else
+        socket
+      end
 
     {:noreply,
      assign(socket,
@@ -1034,8 +1057,6 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp humanize_action(action), do: String.replace(action, "_", " ")
 
-  defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M")
-
   defp pretty_json(nil), do: ""
   defp pretty_json(value), do: Jason.encode!(value, pretty: true)
 
@@ -1192,6 +1213,8 @@ defmodule VarselWeb.CaseDetailLive do
                 marks={marks(@projection)}
                 current_user={@current_user}
                 can_resolve={can_edit?(@case_record, @current_user)}
+                expanded_package_id={@expanded_package_id}
+                child_form={@child_form}
               />
             </div>
             <.rows_section
@@ -1337,7 +1360,7 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
 
         <.child_modal
-          :if={@child_form}
+          :if={@child_form && not package_field_form?(@child_form)}
           child_form={@child_form}
           catalog_options={@catalog_options}
           mode={@mode}
@@ -1744,246 +1767,147 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
+  # One board-A/board-C style card per affected package: package identity in
+  # the header, at rest a compact channels table plus a disclosure footer; the
+  # package's own "Edit" opens the board-C editor in place (boundary
+  # timeline, channel disclosure rows, program files) instead of a modal.
+  # Channel and boundary child rows still use the shared `child_modal`.
   defp affected_section(assigns) do
     ~H"""
-    <.panel title="Affected">
-      <:actions>
-        <button class="link link-hover text-primary" phx-click="refresh_derivation">
-          Refresh derivation
-        </button>
-        <div :if={@mode != :view} class="dropdown dropdown-end">
-          <div tabindex="0" role="button" class="link link-hover text-primary cursor-pointer">
-            Add package ▾
-          </div>
-          <ul
-            tabindex="0"
-            class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-10 w-44 p-1 shadow"
-          >
-            <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
-            <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
-            <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
-            <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
-          </ul>
+    <div class="flex items-center justify-between mb-1">
+      <h2 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/60">
+        Affected
+      </h2>
+      <div :if={@mode != :view} class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="link link-hover text-primary cursor-pointer text-xs">
+          Add package ▾
         </div>
-      </:actions>
-
-      <div
-        :for={package <- @case_record.affected_packages}
-        class="rounded-lg border border-base-300 bg-base-300/30 mb-4 last:mb-0"
-      >
-        <div class="card-body p-4">
-          <div class="flex items-start justify-between">
-            <div>
-              <h3 class={["font-semibold", package.id in @marks.deleted && "line-through opacity-60"]}>
-                {package.vendor} / {package.product}
-                <span
-                  :if={package.id in @marks.phantom}
-                  class="badge badge-info badge-xs align-middle"
-                >proposed</span>
-                <span
-                  :if={package.id in @marks.deleted}
-                  class="badge badge-error badge-xs align-middle"
-                >
-                  removal proposed
-                </span>
-              </h3>
-              <p :if={package.repo_url} class="text-sm font-mono text-base-content/70">
-                {package.repo_url}
-              </p>
-              <p class="text-xs text-base-content/60 mt-1">
-                default status: {package.default_status}
-                <span :if={package.allow_unreleased_fix}>· allows unreleased fixes</span>
-              </p>
-            </div>
-            <div
-              :if={
-                @mode != :view and package.id not in @marks.phantom and
-                  package.id not in @marks.deleted
-              }
-              class="flex gap-1"
-            >
-              <button
-                class="btn btn-ghost btn-xs"
-                phx-click="edit_child"
-                phx-value-type="package"
-                phx-value-id={package.id}
-              >
-                Edit
-              </button>
-              <button
-                class="btn btn-ghost btn-xs text-error"
-                phx-click="remove_child"
-                phx-value-type="package"
-                phx-value-id={package.id}
-                data-confirm={
-                  if @mode == :propose,
-                    do: "Propose removing this package?",
-                    else: "Remove this package with all its channels and boundary facts?"
-                }
-              >
-                {if @mode == :propose, do: "Propose removal", else: "Remove"}
-              </button>
-            </div>
-          </div>
-
-          <div class="mt-2">
-            <div class="flex items-center justify-between">
-              <h4 class="text-sm font-semibold text-base-content/70">Channels</h4>
-              <button
-                :if={@mode != :view and package.id not in @marks.phantom}
-                class="btn btn-ghost btn-xs"
-                phx-click="new_child"
-                phx-value-type="channel"
-                phx-value-affected_package_id={package.id}
-              >
-                Add channel
-              </button>
-            </div>
-            <table :if={package.channels != []} class="table table-xs">
-              <tbody>
-                <tr :for={channel <- package.channels}>
-                  <td><span class="badge badge-ghost badge-sm">{channel.purl_type}</span></td>
-                  <td
-                    class="font-mono"
-                    title={Channel.purl_string(package, channel)}
-                  >
-                    {channel_label(package, channel) || "—"}
-                  </td>
-                  <td class="text-xs text-base-content/70 font-mono">
-                    {derived_versions_label(package, channel.id)}
-                  </td>
-                  <td class="text-xs text-base-content/60">
-                    {if channel.versions_override, do: "versions overridden"}
-                    {if channel.entry_override, do: "entry overridden"}
-                  </td>
-                  <td :if={@mode != :view} class="text-right whitespace-nowrap">
-                    <button
-                      :if={channel.id not in @marks.phantom and channel.id not in @marks.deleted}
-                      class="btn btn-ghost btn-xs"
-                      phx-click="edit_child"
-                      phx-value-type="channel"
-                      phx-value-id={channel.id}
-                    >
-                      Edit
-                    </button>
-                    <span :if={channel.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
-                    <span :if={channel.id in @marks.deleted} class="badge badge-error badge-xs">removal proposed</span>
-                    <button
-                      :if={channel.id not in @marks.phantom and channel.id not in @marks.deleted}
-                      class="btn btn-ghost btn-xs text-error"
-                      phx-click="remove_child"
-                      phx-value-type="channel"
-                      phx-value-id={channel.id}
-                      data-confirm={
-                        if @mode == :propose,
-                          do: "Propose removing this channel?",
-                          else: "Remove this channel?"
-                      }
-                    >
-                      {if @mode == :propose, do: "Propose removal", else: "Remove"}
-                    </button>
-                  </td>
-                </tr>
-                <tr :if={package.repo_url}>
-                  <td><span class="badge badge-ghost badge-sm">git</span></td>
-                  <td class="font-mono text-base-content/60">
-                    {String.replace_prefix(package.repo_url, "https://", "")} (implicit)
-                  </td>
-                  <td class="text-xs text-base-content/70 font-mono">
-                    {derived_versions_label(package, "git")}
-                  </td>
-                  <td class="text-xs text-base-content/60"></td>
-                  <td :if={@mode != :view}></td>
-                </tr>
-              </tbody>
-            </table>
-            <p :if={package.channels == []} class="text-sm text-base-content/60">No channels yet.</p>
-            <p :if={derivation_issues(package) != []} class="text-xs text-warning mt-1">
-              ⚠ {Enum.join(derivation_issues(package), " · ")}
-            </p>
-            <p :if={package.derivation_cached_at} class="text-xs text-base-content/50 mt-1">
-              Ranges derived {format_dt(package.derivation_cached_at)} — refresh derivation for
-              current data.
-            </p>
-          </div>
-
-          <div class="mt-2">
-            <div class="flex items-center justify-between">
-              <h4 class="text-sm font-semibold text-base-content/70">Version boundaries</h4>
-              <button
-                :if={@mode != :view and package.id not in @marks.phantom}
-                class="btn btn-ghost btn-xs"
-                phx-click="new_child"
-                phx-value-type="event"
-                phx-value-affected_package_id={package.id}
-              >
-                Add boundary
-              </button>
-            </div>
-            <table :if={package.version_events != []} class="table table-xs">
-              <tbody>
-                <tr :for={event <- package.version_events}>
-                  <td>
-                    <span class={[
-                      "badge badge-sm",
-                      if(event.event == :fixed, do: "badge-success", else: "badge-warning")
-                    ]}>
-                      {event.event}
-                    </span>
-                  </td>
-                  <td class="font-mono text-xs" title={event.commit_sha}>
-                    {boundary_label(event)}
-                  </td>
-                  <td class="text-xs">
-                    <span
-                      :if={event.package_channel_id}
-                      class="badge badge-ghost badge-sm font-mono"
-                      title="Applies only to this channel"
-                    >
-                      {scoped_channel_label(package, event)}
-                    </span>
-                  </td>
-                  <td class="text-xs text-base-content/60">{event.note}</td>
-                  <td :if={@mode != :view} class="text-right whitespace-nowrap">
-                    <button
-                      :if={event.id not in @marks.phantom and event.id not in @marks.deleted}
-                      class="btn btn-ghost btn-xs"
-                      phx-click="edit_child"
-                      phx-value-type="event"
-                      phx-value-id={event.id}
-                    >
-                      Edit
-                    </button>
-                    <span :if={event.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
-                    <span :if={event.id in @marks.deleted} class="badge badge-error badge-xs">removal proposed</span>
-                    <button
-                      :if={event.id not in @marks.phantom and event.id not in @marks.deleted}
-                      class="btn btn-ghost btn-xs text-error"
-                      phx-click="remove_child"
-                      phx-value-type="event"
-                      phx-value-id={event.id}
-                      data-confirm={
-                        if @mode == :propose,
-                          do: "Propose removing this boundary?",
-                          else: "Remove this boundary fact?"
-                      }
-                    >
-                      {if @mode == :propose, do: "Propose removal", else: "Remove"}
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <p :if={package.version_events == []} class="text-sm text-base-content/60">
-              No boundary facts yet (introduced/fixed commits or versions).
-            </p>
-          </div>
-        </div>
+        <ul
+          tabindex="0"
+          class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-10 w-44 p-1 shadow"
+        >
+          <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
+          <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
+          <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
+          <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
+        </ul>
       </div>
+    </div>
+
+    <div class="space-y-4">
+      <.affected_package_card
+        :for={package <- @case_record.affected_packages}
+        package={package}
+        expanded?={package.id == @expanded_package_id}
+        field_form={
+          @child_form && package_field_form?(@child_form) &&
+            @child_form.form.source.data.id == package.id &&
+            @child_form.form
+        }
+        mode={@mode}
+        marks={@marks}
+        raw_case_record={@raw_case_record}
+        current_user={@current_user}
+        can_resolve={@can_resolve}
+      />
 
       <p :if={@case_record.affected_packages == []} class="text-sm text-base-content/60">
         No affected packages yet.
       </p>
+    </div>
+    """
+  end
+
+  attr :package, :map, required: true
+  attr :expanded?, :boolean, required: true
+  attr :field_form, :any, required: true
+  attr :mode, :atom, required: true
+  attr :marks, :map, required: true
+  attr :raw_case_record, :map, required: true
+  attr :current_user, :map, required: true
+  attr :can_resolve, :boolean, required: true
+
+  defp affected_package_card(assigns) do
+    ~H"""
+    <.panel
+      editing?={@expanded? && !!@field_form}
+      title={
+        if @field_form,
+          do: "Affected — #{@package.vendor} / #{@package.product} — editing",
+          else: "Affected — #{@package.vendor} / #{@package.product}"
+      }
+    >
+      <:actions>
+        <span :if={@package.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
+        <span :if={@package.id in @marks.deleted} class="badge badge-error badge-xs">
+          removal proposed
+        </span>
+        <%!-- Board B: an editing card's header carries no action links. --%>
+        <span :if={!@field_form} class="contents">
+          <button
+            :if={!@expanded?}
+            class="link link-hover text-primary"
+            phx-click="expand_package"
+            phx-value-id={@package.id}
+          >
+            Open
+          </button>
+          <button :if={@expanded?} class="link link-hover text-primary" phx-click="collapse_package">
+            Close
+          </button>
+          <button
+            :if={
+              @mode != :view and @package.id not in @marks.phantom and
+                @package.id not in @marks.deleted
+            }
+            class="link link-hover text-primary"
+            phx-click="edit_child"
+            phx-value-type="package"
+            phx-value-id={@package.id}
+          >
+            Edit
+          </button>
+          <button
+            :if={
+              @mode != :view and @package.id not in @marks.phantom and
+                @package.id not in @marks.deleted
+            }
+            class="link link-hover text-base-content/50 hover:text-error"
+            phx-click="remove_child"
+            phx-value-type="package"
+            phx-value-id={@package.id}
+            data-confirm={
+              if @mode == :propose,
+                do: "Propose removing this package?",
+                else: "Remove this package with all its channels and boundary facts?"
+            }
+          >
+            {if @mode == :propose, do: "Propose removal", else: "Remove"}
+          </button>
+          <button class="link link-hover text-primary" phx-click="refresh_derivation">
+            Refresh ranges
+          </button>
+        </span>
+      </:actions>
+
+      <p class="text-xs font-mono text-base-content/60 -mt-1.5 mb-2">
+        <span :if={@package.repo_url}>{@package.repo_url}</span>
+        <span class="font-sans">
+          · default status: {@package.default_status}
+          <span :if={@package.allow_unreleased_fix}>· allows unreleased fixes</span>
+        </span>
+      </p>
+
+      <.affected_field_form :if={@field_form} form={@field_form} mode={@mode} />
+
+      <.affected_card_editor
+        :if={@expanded? && !@field_form}
+        package={@package}
+        mode={@mode}
+        marks={@marks}
+      />
+
+      <.affected_card_at_rest :if={!@expanded?} package={@package} mode={@mode} marks={@marks} />
 
       <.inline_suggestions
         case_record={@raw_case_record}
@@ -1994,6 +1918,481 @@ defmodule VarselWeb.CaseDetailLive do
     </.panel>
     """
   end
+
+  # The package's own field-edit form (vendor/product/repo/status/program
+  # files/CPE/allow_unreleased_fix), opened in place inside the expanded card
+  # — same anatomy (footer save/cancel/reasoning) as the content editors.
+  attr :form, :any, required: true
+  attr :mode, :atom, required: true
+
+  defp affected_field_form(assigns) do
+    ~H"""
+    <div class="flex justify-end mb-2">
+      <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
+    </div>
+    <.form for={@form} id="child-form" phx-change="validate_child" phx-submit="submit_child">
+      <.child_fields type="package" form={@form} catalog_options={nil} channel_options={[]} />
+
+      <div class="flex items-end gap-2 mt-4">
+        <button type="submit" class={["btn btn-sm", save_button_class(@mode)]}>
+          {if @mode == :propose, do: "Suggest changes", else: "Save changes"}
+        </button>
+        <button type="button" class="btn btn-eef-quiet btn-sm" phx-click="cancel_child">
+          Cancel
+        </button>
+        <input
+          :if={@mode == :propose}
+          type="text"
+          name="reasoning"
+          placeholder="Reasoning (attached to the suggestion, optional)"
+          class="input input-bordered input-sm flex-1"
+        />
+      </div>
+    </.form>
+    """
+  end
+
+  # At rest: a compact channels table (mock's Channel / Derived range /
+  # action columns) plus a disclosure footer for boundary facts, program
+  # files and derivation freshness — no always-open sub-tables.
+  attr :package, :map, required: true
+  attr :mode, :atom, required: true
+  attr :marks, :map, required: true
+
+  defp affected_card_at_rest(assigns) do
+    ~H"""
+    <div
+      :if={@package.channels != [] or @package.repo_url}
+      class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] items-center gap-x-3"
+    >
+      <div class="contents text-[0.65rem] font-bold uppercase tracking-wider text-base-content/50">
+        <div class="py-1">Channel</div>
+        <div class="py-1">Derived range</div>
+        <div></div>
+      </div>
+      <div
+        :for={channel <- @package.channels}
+        class="col-span-3 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
+      >
+        <div class="min-w-0">
+          <span
+            class="inline-block max-w-full truncate align-bottom rounded-[5px] border border-base-300 bg-base-100 px-1.5 py-0.5 font-mono text-xs"
+            title={Channel.purl_string(@package, channel)}
+          >
+            {channel_label(@package, channel) || "—"}
+          </span>
+        </div>
+        <div
+          class="min-w-0 truncate font-mono text-xs text-base-content/60"
+          title={derived_versions_label(@package, channel.id)}
+        >
+          {derived_versions_label(@package, channel.id)}
+        </div>
+        <div class="whitespace-nowrap text-right">
+          <span :if={channel.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
+          <span :if={channel.id in @marks.deleted} class="badge badge-error badge-xs">
+            removal proposed
+          </span>
+          <button
+            :if={
+              @mode != :view and channel.id not in @marks.phantom and
+                channel.id not in @marks.deleted
+            }
+            class="link link-hover text-primary text-xs"
+            phx-click="edit_child"
+            phx-value-type="channel"
+            phx-value-id={channel.id}
+          >
+            Edit
+          </button>
+          <button
+            :if={
+              @mode != :view and channel.id not in @marks.phantom and
+                channel.id not in @marks.deleted
+            }
+            class="link link-hover text-xs text-base-content/50 hover:text-error ml-2"
+            phx-click="remove_child"
+            phx-value-type="channel"
+            phx-value-id={channel.id}
+            data-confirm={
+              if @mode == :propose,
+                do: "Propose removing this channel?",
+                else: "Remove this channel?"
+            }
+          >
+            {if @mode == :propose, do: "Propose removal", else: "Remove"}
+          </button>
+        </div>
+      </div>
+      <div
+        :if={@package.repo_url}
+        class="col-span-3 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
+      >
+        <div class="min-w-0">
+          <span class="inline-block max-w-full truncate align-bottom rounded-[5px] border border-base-300 bg-base-100 px-1.5 py-0.5 font-mono text-xs">
+            github (implicit)
+          </span>
+        </div>
+        <div
+          class="min-w-0 truncate font-mono text-xs text-base-content/60"
+          title={derived_versions_label(@package, "git")}
+        >
+          {git_compact_label(@package)}
+        </div>
+        <div></div>
+      </div>
+    </div>
+    <p :if={@package.channels == [] and !@package.repo_url} class="text-sm text-base-content/60">
+      No channels yet.
+    </p>
+
+    <div class="flex items-center gap-3 text-xs text-base-content/50 mt-2">
+      <button
+        class="link link-hover"
+        phx-click={JS.toggle(to: "#affected-boundary-#{@package.id}")}
+      >
+        Boundary facts ▸
+      </button>
+      ·
+      <button
+        class="link link-hover"
+        phx-click={JS.toggle(to: "#affected-files-#{@package.id}")}
+      >
+        program files ({length(@package.program_files)}) ▸
+      </button>
+      <span :if={@package.derivation_cached_at}>
+        · derived <.relative_timestamp at={@package.derivation_cached_at} />
+      </span>
+      <button class="link link-hover text-primary ml-auto" phx-click="refresh_derivation">
+        Refresh
+      </button>
+    </div>
+    <p :if={derivation_issues(@package) != []} class="text-xs text-warning mt-1">
+      ⚠ {Enum.join(derivation_issues(@package), " · ")}
+    </p>
+
+    <div id={"affected-boundary-#{@package.id}"} class="hidden mt-3 pt-3 border-t border-base-300">
+      <.boundary_facts_table package={@package} mode={@mode} marks={@marks} />
+    </div>
+    <div id={"affected-files-#{@package.id}"} class="hidden mt-3 pt-3 border-t border-base-300">
+      <.program_files_rows package={@package} />
+    </div>
+    """
+  end
+
+  # The old always-shown "Version boundaries" table, kept as the on-demand
+  # disclosure body — badges tinted per the mock instead of solid-filled.
+  attr :package, :map, required: true
+  attr :mode, :atom, required: true
+  attr :marks, :map, required: true
+
+  defp boundary_facts_table(assigns) do
+    ~H"""
+    <div class="flex items-center justify-between mb-1">
+      <h4 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50">
+        Boundary facts
+      </h4>
+      <button
+        :if={@mode != :view and @package.id not in @marks.phantom}
+        class="btn btn-ghost btn-xs"
+        phx-click="new_child"
+        phx-value-type="event"
+        phx-value-affected_package_id={@package.id}
+      >
+        Add boundary
+      </button>
+    </div>
+    <div :if={@package.version_events != []} class="overflow-x-auto">
+      <table class="table table-xs w-full">
+        <tbody>
+          <tr :for={event <- @package.version_events}>
+            <td>
+              <span class={["badge badge-sm", boundary_badge_class(event.event)]}>
+                {event.event}
+              </span>
+            </td>
+            <td class="font-mono text-xs" title={event.commit_sha}>
+              {boundary_label(event)}
+            </td>
+            <td class="text-xs">
+              <span
+                :if={event.package_channel_id}
+                class="badge badge-ghost badge-sm font-mono"
+                title="Applies only to this channel"
+              >
+                {scoped_channel_label(@package, event)}
+              </span>
+            </td>
+            <td class="text-xs text-base-content/60">{event.note}</td>
+            <td :if={@mode != :view} class="text-right whitespace-nowrap">
+              <span :if={event.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
+              <span :if={event.id in @marks.deleted} class="badge badge-error badge-xs">
+                removal proposed
+              </span>
+              <button
+                :if={event.id not in @marks.phantom and event.id not in @marks.deleted}
+                class="link link-hover text-primary text-xs"
+                phx-click="edit_child"
+                phx-value-type="event"
+                phx-value-id={event.id}
+              >
+                Edit
+              </button>
+              <button
+                :if={event.id not in @marks.phantom and event.id not in @marks.deleted}
+                class="link link-hover text-xs text-base-content/50 hover:text-error ml-2"
+                phx-click="remove_child"
+                phx-value-type="event"
+                phx-value-id={event.id}
+                data-confirm={
+                  if @mode == :propose,
+                    do: "Propose removing this boundary?",
+                    else: "Remove this boundary fact?"
+                }
+              >
+                {if @mode == :propose, do: "Propose removal", else: "Remove"}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p :if={@package.version_events == []} class="text-sm text-base-content/60">
+      No boundary facts yet (introduced/fixed commits or versions).
+    </p>
+    """
+  end
+
+  defp boundary_badge_class(:fixed), do: "text-success bg-success/15"
+  defp boundary_badge_class(_introduced), do: "text-warning bg-warning/15"
+
+  attr :package, :map, required: true
+
+  defp program_files_rows(assigns) do
+    ~H"""
+    <div class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50 mb-1.5">
+      Program files
+    </div>
+    <%!-- Inline text flow (not a flex row): path and chips wrap as one line
+          of text, so every row breaks the same way regardless of path
+          length. --%>
+    <div :if={@package.program_files != []} class="space-y-1">
+      <div :for={file <- @package.program_files} class="min-w-0 text-xs leading-6">
+        <span class="font-mono text-base-content/70 break-all">{file.path}</span>
+        <span
+          :for={mod <- file.modules}
+          class="ml-1 rounded-[5px] border border-base-300 bg-base-100 font-mono px-1 py-0.5 text-[0.68rem]"
+        >
+          {mod}
+        </span>
+        <span
+          :for={routine <- file.routines}
+          class="ml-1 rounded-[5px] border border-base-300 bg-base-100 font-mono px-1 py-0.5 text-[0.68rem]"
+        >
+          {routine}
+        </span>
+      </div>
+    </div>
+    <p :if={@package.program_files == []} class="text-sm text-base-content/60">
+      No program files recorded.
+    </p>
+    """
+  end
+
+  # Board C: the boundary timeline (read-only picture of derivation_cache),
+  # channels with per-row disclosure for their machinery, and program files —
+  # this is the in-place replacement for the old centered package modal.
+  attr :package, :map, required: true
+  attr :mode, :atom, required: true
+  attr :marks, :map, required: true
+
+  defp affected_card_editor(assigns) do
+    assigns = assign(assigns, :timeline_rows, timeline_rows(assigns.package))
+
+    ~H"""
+    <div class="flex items-center justify-between mb-1">
+      <h4 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50">
+        Boundary facts → derived ranges
+      </h4>
+      <button
+        :if={@mode != :view and @package.id not in @marks.phantom}
+        class="btn btn-ghost btn-xs"
+        phx-click="new_child"
+        phx-value-type="event"
+        phx-value-affected_package_id={@package.id}
+      >
+        Add boundary
+      </button>
+    </div>
+
+    <div :if={@timeline_rows != []} class="space-y-2 mb-4">
+      <.boundary_timeline_row :for={row <- @timeline_rows} row={row} />
+    </div>
+    <p :if={@timeline_rows == []} class="text-sm text-base-content/60 mb-4">
+      No boundary facts yet — the timeline fills in once introduced/fixed
+      commits or versions are recorded.
+    </p>
+
+    <div class="flex items-center justify-between mb-1">
+      <h4 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50">
+        Channels
+      </h4>
+      <button
+        :if={@mode != :view and @package.id not in @marks.phantom}
+        class="btn btn-ghost btn-xs"
+        phx-click="new_child"
+        phx-value-type="channel"
+        phx-value-affected_package_id={@package.id}
+      >
+        Add channel
+      </button>
+    </div>
+    <div
+      :if={@package.channels != [] or @package.repo_url}
+      class="grid grid-cols-[minmax(0,1fr)_minmax(0,0.5fr)_minmax(0,1.2fr)_auto] items-center gap-x-3"
+    >
+      <div class="contents text-[0.65rem] font-bold uppercase tracking-wider text-base-content/50">
+        <div class="py-1">Channel</div>
+        <div class="py-1">Subpath</div>
+        <div class="py-1">Derived</div>
+        <div></div>
+      </div>
+      <div
+        :for={channel <- @package.channels}
+        class="col-span-4 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
+      >
+        <div class="min-w-0">
+          <span
+            class="inline-block max-w-full truncate align-bottom rounded-[5px] border border-base-300 bg-base-100 px-1.5 py-0.5 font-mono text-xs"
+            title={Channel.purl_string(@package, channel)}
+          >
+            {channel_label(@package, channel) || "—"}
+          </span>
+        </div>
+        <div class="min-w-0 truncate font-mono text-xs text-base-content/60">
+          {channel.subpath || "—"}
+        </div>
+        <div
+          class="min-w-0 truncate font-mono text-xs text-base-content/60"
+          title={derived_versions_label(@package, channel.id)}
+        >
+          {derived_versions_label(@package, channel.id)}
+          <span :if={overridden_note(channel) != ""} class="text-base-content/40">
+            · {overridden_note(channel)}
+          </span>
+        </div>
+        <div class="whitespace-nowrap text-right">
+          <span :if={channel.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
+          <span :if={channel.id in @marks.deleted} class="badge badge-error badge-xs">
+            removal proposed
+          </span>
+          <button
+            :if={
+              @mode != :view and channel.id not in @marks.phantom and
+                channel.id not in @marks.deleted
+            }
+            class="link link-hover text-primary text-xs"
+            phx-click="edit_child"
+            phx-value-type="channel"
+            phx-value-id={channel.id}
+          >
+            ▸
+          </button>
+          <button
+            :if={
+              @mode != :view and channel.id not in @marks.phantom and
+                channel.id not in @marks.deleted
+            }
+            class="link link-hover text-xs text-base-content/50 hover:text-error ml-2"
+            phx-click="remove_child"
+            phx-value-type="channel"
+            phx-value-id={channel.id}
+            data-confirm={
+              if @mode == :propose,
+                do: "Propose removing this channel?",
+                else: "Remove this channel?"
+            }
+          >
+            {if @mode == :propose, do: "Propose removal", else: "Remove"}
+          </button>
+        </div>
+      </div>
+      <div
+        :if={@package.repo_url}
+        class="col-span-4 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
+      >
+        <div class="min-w-0">
+          <span class="inline-block max-w-full truncate align-bottom rounded-[5px] border border-base-300 bg-base-100 px-1.5 py-0.5 font-mono text-xs">
+            github (implicit)
+          </span>
+        </div>
+        <div class="min-w-0 truncate font-mono text-xs text-base-content/60">—</div>
+        <div
+          class="min-w-0 truncate font-mono text-xs text-base-content/60"
+          title={derived_versions_label(@package, "git")}
+        >
+          {derived_versions_label(@package, "git")}
+        </div>
+        <div></div>
+      </div>
+    </div>
+
+    <.program_files_rows package={@package} />
+
+    <div class="flex items-center gap-3 mt-3 pt-3 border-t border-base-300 text-xs text-base-content/50">
+      <span :if={derivation_issues(@package) != []} class="text-warning">
+        ⚠ {Enum.join(derivation_issues(@package), " · ")}
+      </span>
+      <span class="ml-auto">
+        <span :if={@package.derivation_cached_at}>
+          derived <.relative_timestamp at={@package.derivation_cached_at} /> ·
+        </span>
+        <button class="link link-hover text-primary" phx-click="refresh_derivation">
+          Refresh
+        </button>
+      </span>
+    </div>
+    """
+  end
+
+  attr :row, :map, required: true
+
+  # Each row reserves headroom (pt) for its own node tags — the tags are
+  # absolutely positioned above the track, so without it they collide with
+  # the row above / the section label.
+  defp boundary_timeline_row(assigns) do
+    ~H"""
+    <div class="flex items-center gap-2.5 pt-6 pb-1">
+      <span class="w-24 shrink-0 truncate text-right font-mono text-[0.68rem] text-base-content/50">
+        {@row.label}
+      </span>
+      <div
+        class={["timeline-track flex-1", @row.span && "is-vulnerable"]}
+        style={@row.span && "--tl-span-start: #{@row.span.start}%; --tl-span-end: #{@row.span.stop}%"}
+      >
+        <div
+          :for={node <- @row.nodes}
+          class={["timeline-node", timeline_node_class(node.kind), tag_anchor_class(node.pos)]}
+          style={"--tl-pos: #{node.pos}%"}
+        >
+          <span class="timeline-tag font-mono text-base-content/40" title={node.tag}>
+            {node.tag}
+          </span>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp timeline_node_class(:intro), do: "is-intro"
+  defp timeline_node_class(:fix), do: "is-fix"
+  defp timeline_node_class(:pending), do: "is-pending"
+
+  # Tags on nodes near either track end anchor inward so they can't spill
+  # out of the card.
+  defp tag_anchor_class(pos) when pos <= 10, do: "tag-left"
+  defp tag_anchor_class(pos) when pos >= 85, do: "tag-right"
+  defp tag_anchor_class(_centered), do: nil
 
   attr :id, :string, required: true
   attr :heading, :string, required: true
@@ -2815,6 +3214,13 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
+  # Board C opens a package's own field edit (vendor/product/repo/program
+  # files) in place inside its expanded card, not the centered child modal —
+  # true only for an *update* form (a brand-new package still has no card to
+  # expand into, so "Add package" stays on the modal).
+  defp package_field_form?(%{type: "package", form: %{source: %{type: :update}}}), do: true
+  defp package_field_form?(_child_form), do: false
+
   defp update_child_form(socket, fun) do
     child_form = socket.assigns.child_form
     form = child_form.form.source |> fun.() |> to_form()
@@ -2845,21 +3251,31 @@ defmodule VarselWeb.CaseDetailLive do
     end
   end
 
+  # Board C's channel row annotates overridden machinery inline; these fields
+  # hold the override value itself ({:array, :map} / :map), not a boolean.
+  defp overridden_note(channel) do
+    [
+      channel.versions_override not in [nil, []] && "versions overridden",
+      channel.entry_override not in [nil, %{}] && "entry overridden"
+    ]
+    |> Enum.filter(& &1)
+    |> Enum.join(", ")
+  end
+
   # The purl without its qualifier tail — OTP channels carry long
-  # repository_url/vcs_url qualifiers that would drown the UI; "?…" hints at
-  # the elided rest (the channel table cell's title shows the full purl).
+  # repository_url/vcs_url qualifiers that would drown the UI, so rendered
+  # surfaces show the clean base purl only; the full string lives in the
+  # rendering element's title attribute.
   defp channel_label(package, channel) do
     case Channel.purl_string(package, channel) do
-      nil ->
-        channel.name
-
-      purl ->
-        case String.split(purl, "?", parts: 2) do
-          [purl] -> purl
-          [base, _qualifiers] -> base <> "?…"
-        end
+      nil -> channel.name
+      purl -> purl |> String.split("?", parts: 2) |> hd()
     end
   end
+
+  # The timeline's row label: the short channel name ("inets", "bandit"),
+  # never the purl — purls belong on the chips.
+  defp channel_row_label(channel), do: channel.name || to_string(channel.purl_type)
 
   # Compact per-channel summary of the cached derivation result ("git" is the
   # implicit forge entry). Never authoritative — publish recomputes.
@@ -2879,12 +3295,166 @@ defmodule VarselWeb.CaseDetailLive do
     end
   end
 
+  # The at-rest github row's cell, mock style: "63e186ae… → 2 fix commits";
+  # the full derived label sits in the cell's title.
+  defp git_compact_label(package) do
+    case channel_derivation(package.derivation_cache, "git") do
+      nil -> nil
+      derivation -> git_compact_range_label(derivation)
+    end
+  end
+
+  defp git_compact_range_label(derivation) do
+    versions = derivation["versions"] || []
+    git_range = Enum.find(versions, &(&1["versionType"] == "git")) || List.first(versions)
+
+    cond do
+      git_range -> "#{shorten(git_range["version"])} → #{fix_commit_count_label(git_range)}"
+      (derivation["pending"] || []) == [] -> "no derived range"
+      true -> "fix unreleased"
+    end
+  end
+
+  defp fix_commit_count_label(range) do
+    count =
+      cond do
+        is_list(range["changes"]) -> length(range["changes"])
+        range["lessThan"] not in [nil, "*"] -> 1
+        true -> 0
+      end
+
+    case count do
+      0 -> "no fix commits"
+      1 -> "1 fix commit"
+      n -> "#{n} fix commits"
+    end
+  end
+
   defp channel_derivation(nil, _key), do: nil
   defp channel_derivation(cache, "git"), do: cache["git"]
   defp channel_derivation(cache, channel_id), do: get_in(cache, ["channels", channel_id])
 
+  # Board C's boundary timeline, from the same derivation_cache the derived
+  # labels read. The git row carries the raw commit boundaries (intro/fix
+  # SHAs); each channel row carries ITS OWN derived version boundaries (its
+  # ranges' intro/fix versions, its pending state). Node x-positions are
+  # evenly spaced — version numbers have no common linear scale to place
+  # them on honestly. Per the mock, only channel rows tint their vulnerable
+  # span; the git track stays plain.
+  defp timeline_rows(%{derivation_cache: nil}), do: []
+
+  defp timeline_rows(package) do
+    cache = package.derivation_cache
+    intro = cache["intro"]
+    lines = Enum.sort_by(cache["lines"] || [], & &1["pending"])
+
+    git_row =
+      if cache["git"] && intro do
+        fixes =
+          Enum.map(lines, fn
+            %{"pending" => true} -> {:pending, "fix unreleased"}
+            line -> {:fix, sha_tag(line["fix_sha"] || line["fix_version"], "fix")}
+          end)
+
+        build_timeline_row(
+          "git",
+          sha_tag(intro["sha"] || intro["version"], "intro"),
+          fixes,
+          false
+        )
+      end
+
+    channel_rows =
+      Enum.map(package.channels, fn channel ->
+        channel_timeline_row(channel, cache["channels"][channel.id], intro)
+      end)
+
+    Enum.reject([git_row | channel_rows], &is_nil/1)
+  end
+
+  # A channel row is built from that channel's own derivation result: the
+  # first derived range gives the intro/fix version tags, a non-empty pending
+  # list appends the hollow "fix unreleased" node. Channels with nothing
+  # derived render no row.
+  defp channel_timeline_row(_channel, nil, _global_intro), do: nil
+
+  defp channel_timeline_row(channel, derivation, global_intro) do
+    pending? = (derivation["pending"] || []) != []
+
+    {intro_tag, fixes} = channel_timeline_tags(derivation, global_intro)
+    fixes = fixes ++ if(pending?, do: [{:pending, "fix unreleased"}], else: [])
+
+    if intro_tag || fixes != [] do
+      build_timeline_row(channel_row_label(channel), intro_tag, fixes, true)
+    end
+  end
+
+  defp channel_timeline_tags(derivation, global_intro) do
+    case derivation["versions"] || [] do
+      [range | _rest] ->
+        {shorten(range["version"]), range_fix_markers(range)}
+
+      [] ->
+        # Pending-only channel: no derived range yet, but the unreleased
+        # fix still deserves a row — fall back to the global intro tag.
+        {global_intro && shorten(global_intro["version"] || global_intro["sha"]), []}
+    end
+  end
+
+  # A range's fix markers: a changes[] chain renders as one node listing the
+  # fixed versions, a bounded range as its "< upper" boundary, an open range
+  # as none (the vulnerable span then runs to the row's end).
+  defp range_fix_markers(%{"changes" => changes}) when is_list(changes) do
+    [{:fix, "fixed: #{Enum.map_join(changes, ", ", &shorten(&1["at"]))}"}]
+  end
+
+  defp range_fix_markers(%{"lessThan" => upper}) when upper not in [nil, "*"] do
+    [{:fix, "< #{shorten(upper)}"}]
+  end
+
+  defp range_fix_markers(_open_range), do: []
+
+  defp build_timeline_row(label, intro_tag, fixes, tint?) do
+    fix_count = length(fixes)
+    intro_pos = 6
+
+    fix_nodes =
+      fixes
+      |> Enum.with_index(1)
+      |> Enum.map(fn {{kind, tag}, index} ->
+        # Evenly spread with the last fix near the row's end (~90%), so the
+        # track is used and pending fixes read as "at the end", per the mock.
+        %{
+          kind: kind,
+          pos: intro_pos + round(index / fix_count * (90 - intro_pos)),
+          tag: tag
+        }
+      end)
+
+    span =
+      if tint? do
+        stop =
+          case List.last(fix_nodes) do
+            nil -> 100
+            %{kind: :pending} -> 100
+            %{pos: pos} -> pos
+          end
+
+        %{start: intro_pos, stop: stop}
+      end
+
+    %{
+      label: label,
+      nodes: [%{kind: :intro, pos: intro_pos, tag: intro_tag} | fix_nodes],
+      span: span
+    }
+  end
+
+  defp sha_tag(nil, _kind), do: nil
+  defp sha_tag(sha, kind), do: "#{shorten(sha)} #{kind}"
+
   defp range_label(%{"version" => from, "changes" => changes}) when is_list(changes) do
-    "≥ #{from}; fixed: #{Enum.map_join(changes, ", ", &shorten(&1["at"]))}"
+    "≥ #{from} · fixed: #{Enum.map_join(changes, ", ", &shorten(&1["at"]))}"
   end
 
   defp range_label(%{"version" => from, "lessThan" => "*"}), do: "≥ #{shorten(from)}"
