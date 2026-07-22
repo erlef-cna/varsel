@@ -1065,6 +1065,97 @@ defmodule VarselWeb.CaseLiveTest do
              |> render() =~ "hidden"
     end
 
+    test "a one-word change to a long text renders as a merged inline word diff, not stacked blocks",
+         %{conn: conn, poc: poc, supporter: supporter} do
+      old_description =
+        "Bandit's HTTP/1 parser accepted chunk extensions containing bare CR characters, " <>
+          "allowing a malformed request body to be read differently by Bandit and by upstream proxies."
+
+      new_description = String.replace(old_description, "malformed", "crafted")
+
+      case_record = Fixtures.open_case(poc, %{description_md: old_description})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :case,
+          operation: :set,
+          field_name: "description_md",
+          proposed_value: %{"value" => new_description}
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # The changed word appears as adjacent del/ins spans...
+      assert html =~ ~s(line-through decoration-error/45">malformed</span>)
+      assert html =~ ~s(bg-success/15 text-success">crafted</span>)
+
+      # ...and the unchanged tail renders once in the merged body — not
+      # duplicated across a red block and a green block. (It appears a
+      # second time on the page only as the section's own field value.)
+      unchanged_tail = "request body to be read differently by Bandit and by upstream proxies."
+
+      suggestion_html =
+        html |> String.split(~s(class="rounded-md border border-base-300)) |> Enum.at(1)
+
+      assert length(String.split(suggestion_html, unchanged_tail)) == 2
+    end
+
+    test "runs of untouched paragraphs collapse behind a fold row, revealed client-side", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      old_description =
+        Enum.join(
+          [
+            "First paragraph has a typo in it.",
+            "Second paragraph stays exactly the same across both versions.",
+            "Third paragraph also stays identical, word for word, untouched.",
+            "Last paragraph also has a typo right here."
+          ],
+          "\n\n"
+        )
+
+      new_description =
+        old_description
+        |> String.replace("has a typo in it", "has a typoo in it")
+        |> String.replace("typo right here", "typoo right here")
+
+      case_record = Fixtures.open_case(poc, %{description_md: old_description})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :case,
+          operation: :set,
+          field_name: "description_md",
+          proposed_value: %{"value" => new_description}
+        },
+        actor: supporter
+      )
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      # Both changed paragraphs render in full with their word diffs.
+      assert html =~ ~s(>typo</span>)
+      assert html =~ ~s(>typoo</span>)
+
+      # The two untouched middle paragraphs sit behind one fold row; the
+      # content is already in the DOM (client-side JS.toggle, no round
+      # trip) but hidden.
+      assert html =~ "2 unchanged paragraphs"
+
+      fold_content = lv |> element(~s{[id^="fold-"][id$="-content"]}) |> render()
+      assert fold_content =~ "hidden"
+      assert fold_content =~ "Second paragraph stays exactly the same"
+      assert fold_content =~ "Third paragraph also stays identical"
+    end
+
     test "a suggestion's reply thread is collapsed behind its reply count", %{
       conn: conn,
       poc: poc,

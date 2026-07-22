@@ -15,6 +15,7 @@ defmodule VarselWeb.CaseComponents do
 
   alias Phoenix.LiveView.JS
   alias Varsel.Cases.Markdown
+  alias Varsel.Cases.WordDiff
 
   @lifecycle [draft: "Draft", review: "Review", approved: "Approved", published: "Published"]
 
@@ -212,29 +213,129 @@ defmodule VarselWeb.CaseComponents do
   end
 
   @doc """
-  Renders a suggestion's change as an old → new diff: the current value
-  struck through on a red tint, the suggested value on a green tint. Either
-  side may be absent (pure additions/removals).
+  Renders a suggestion's change as an old → new diff over the raw field
+  value (never markdown-rendered — what's being accepted is the raw
+  text). When both sides are plain strings similar enough to merge
+  (`Varsel.Cases.WordDiff`), renders one neutral body with removed words
+  struck red and added words green, folding runs of untouched paragraphs
+  behind a client-side toggle. Otherwise falls back to the stacked
+  old-then-new blocks (pure additions/removals, dissimilar rewrites, and
+  non-prose values all take this path). Either side may be absent (pure
+  additions/removals always stack).
   """
   attr :old, :string, default: nil
   attr :new, :string, default: nil
 
   def suggestion_diff(assigns) do
+    assigns = assign(assigns, :result, word_diff_result(assigns.old, assigns.new))
+
     ~H"""
     <div class="rounded-md border border-base-300 overflow-hidden text-sm">
+      <.merged_diff_body :if={match?({:merged, _paragraphs}, @result)} paragraphs={elem(@result, 1)} />
       <%!-- phx-no-format: pre-wrap would render the formatter's indentation --%>
-      <div
-        :if={@old not in [nil, ""]}
-        class="px-2.5 py-1 bg-error/10 text-error/80 line-through decoration-error/40 whitespace-pre-wrap break-words"
-        phx-no-format
-      >{@old}</div>
-      <div
-        :if={@new not in [nil, ""]}
-        class="px-2.5 py-1 bg-success/10 text-success whitespace-pre-wrap break-words"
-        phx-no-format
-      >{@new}</div>
+      <%= if @result == :stacked do %>
+        <div
+          :if={@old not in [nil, ""]}
+          class="px-2.5 py-1 bg-error/10 text-error/80 line-through decoration-error/40 whitespace-pre-wrap break-words"
+          phx-no-format
+        >{@old}</div>
+        <div
+          :if={@new not in [nil, ""]}
+          class="px-2.5 py-1 bg-success/10 text-success whitespace-pre-wrap break-words"
+          phx-no-format
+        >{@new}</div>
+      <% end %>
     </div>
     """
+  end
+
+  defp word_diff_result(old, new) when is_binary(old) and is_binary(new), do: WordDiff.diff(old, new)
+
+  defp word_diff_result(_old, _new), do: :stacked
+
+  attr :paragraphs, :list, required: true
+
+  defp merged_diff_body(assigns) do
+    assigns = assign(assigns, :rows, fold_rows(assigns.paragraphs))
+
+    ~H"""
+    <%= for row <- @rows do %>
+      <div
+        :if={row.kind == :paragraph}
+        class="px-2.5 py-1 whitespace-pre-wrap break-words text-base-content"
+        phx-no-format
+      ><.diff_segments segments={row.segments} /></div>
+
+      <div :if={row.kind == :fold} id={row.id}>
+        <button
+          type="button"
+          class="w-full border-y border-base-300/60 bg-base-content/2 px-2.5 py-1 text-left text-xs text-base-content/50 cursor-pointer select-none"
+          phx-click={JS.toggle(to: "##{row.id}-content")}
+        >
+          <span class="font-mono">⋯</span> {row.count} unchanged paragraph{if row.count > 1, do: "s"}
+        </button>
+        <div
+          id={"#{row.id}-content"}
+          class="hidden px-2.5 py-1 whitespace-pre-wrap break-words text-base-content/70"
+          phx-no-format
+        >
+          <.diff_segments :for={segments <- row.paragraphs} segments={segments} />
+        </div>
+      </div>
+    <% end %>
+    """
+  end
+
+  attr :segments, :list, required: true
+
+  defp diff_segments(assigns) do
+    ~H"""
+    <span :for={{kind, text} <- @segments} class={diff_segment_class(kind)}>{text}</span>
+    """
+  end
+
+  defp diff_segment_class(:eq), do: nil
+
+  defp diff_segment_class(:del),
+    do: "rounded-[3px] px-0.5 box-decoration-clone bg-error/15 text-error/85 line-through decoration-error/45"
+
+  defp diff_segment_class(:ins), do: "rounded-[3px] px-0.5 box-decoration-clone bg-success/15 text-success"
+
+  # Folds runs of unchanged paragraphs into a single toggle row when the
+  # run is >= 2 long or touches the start/end (edge context is pure cost —
+  # fold even a single one); a lone unchanged paragraph strictly between
+  # two changed ones renders in place instead, since folding it saves one
+  # paragraph and costs a click.
+  defp fold_rows(paragraphs) do
+    chunks = Enum.chunk_by(paragraphs, &elem(&1, 0))
+    last_index = length(chunks) - 1
+
+    chunks
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {chunk, index} -> fold_chunk(chunk, index, last_index) end)
+  end
+
+  defp fold_chunk([{:changed, _} | _] = chunk, _index, _last_index) do
+    Enum.map(chunk, fn {:changed, segments} -> %{kind: :paragraph, segments: segments} end)
+  end
+
+  defp fold_chunk([{:unchanged, _} | _] = chunk, index, last_index) do
+    edge? = index == 0 or index == last_index
+
+    if length(chunk) >= 2 or edge? do
+      [fold_row(chunk)]
+    else
+      Enum.map(chunk, fn {:unchanged, segments} -> %{kind: :paragraph, segments: segments} end)
+    end
+  end
+
+  defp fold_row(chunk) do
+    %{
+      kind: :fold,
+      id: "fold-#{System.unique_integer([:positive])}",
+      count: length(chunk),
+      paragraphs: Enum.map(chunk, fn {:unchanged, segments} -> segments end)
+    }
   end
 
   @doc """
@@ -475,7 +576,7 @@ defmodule VarselWeb.CaseComponents do
         [
           inner,
           ~s(<span class="text-primary">),
-          escape(Jason.encode!(to_string(key))),
+          escape(JSON.encode!(to_string(key))),
           "</span>: ",
           json_frag(value, inner)
         ]
@@ -493,14 +594,14 @@ defmodule VarselWeb.CaseComponents do
   end
 
   defp json_frag(value, _indent) when is_binary(value) do
-    [~s(<span class="text-success">), escape(Jason.encode!(value)), "</span>"]
+    [~s(<span class="text-success">), escape(JSON.encode!(value)), "</span>"]
   end
 
   defp json_frag(value, _indent) when is_number(value) do
-    [~s(<span class="text-warning">), Jason.encode!(value), "</span>"]
+    [~s(<span class="text-warning">), JSON.encode!(value), "</span>"]
   end
 
-  defp json_frag(value, _indent), do: escape(Jason.encode!(value))
+  defp json_frag(value, _indent), do: escape(JSON.encode!(value))
 
   defp escape(binary) do
     {:safe, iodata} = Phoenix.HTML.html_escape(binary)
