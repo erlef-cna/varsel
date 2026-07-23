@@ -152,10 +152,8 @@ defmodule VarselWeb.ReportTriageLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <.console_header
-      title="Report Triage"
-      subtitle="Inbound vulnerability reports: triage, accept into a case, or reject."
-    >
+    <.console_header subtitle="Inbound vulnerability reports: triage, accept into a case, or reject.">
+      <:title>Report Triage</:title>
       <:actions>
         <.link navigate={~p"/report"} class="btn btn-sm btn-eef">Submit a report</.link>
       </:actions>

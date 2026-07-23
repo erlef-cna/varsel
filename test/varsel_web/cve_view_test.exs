@@ -5,6 +5,8 @@
 defmodule VarselWeb.CveViewTest do
   use ExUnit.Case, async: true
 
+  import Phoenix.LiveViewTest, only: [render_component: 2]
+
   alias VarselWeb.CveView
 
   describe "package_link/1" do
@@ -122,6 +124,220 @@ defmodule VarselWeb.CveViewTest do
     test "builds mitre definition urls" do
       assert CveView.cwe_url("CWE-22") == "https://cwe.mitre.org/data/definitions/22.html"
       assert CveView.capec_url("CAPEC-180") == "https://capec.mitre.org/data/definitions/180.html"
+    end
+  end
+
+  describe "cwe_id_number/1 and capec_id_number/1" do
+    test "parses the numeric id for catalog map lookups" do
+      assert CveView.cwe_id_number("CWE-444") == 444
+      assert CveView.capec_id_number("CAPEC-33") == 33
+    end
+  end
+
+  describe "cwe_descriptions/1" do
+    test "enumerates every English CWE problemType description, not just the first" do
+      cna = %{
+        "problemTypes" => [
+          %{"descriptions" => [%{"lang" => "en", "type" => "CWE", "cweId" => "CWE-1"}]},
+          %{"descriptions" => [%{"lang" => "en", "type" => "CWE", "cweId" => "CWE-2"}]}
+        ]
+      }
+
+      assert Enum.map(CveView.cwe_descriptions(cna), & &1["cweId"]) == ["CWE-1", "CWE-2"]
+      assert CveView.cwe_description(cna)["cweId"] == "CWE-1"
+    end
+  end
+
+  describe "fix_boundary/1" do
+    test "returns a concrete lessThan" do
+      assert CveView.fix_boundary(%{"lessThan" => "1.4.0"}) == "1.4.0"
+    end
+
+    test "returns nil for a fully open range" do
+      assert CveView.fix_boundary(%{"lessThan" => "*"}) == nil
+    end
+
+    test "walks changes[] for the lowest unaffected boundary within an open range" do
+      version = %{
+        "versionType" => "semver",
+        "lessThan" => "*",
+        "changes" => [
+          %{"at" => "1.4.9", "status" => "unaffected"},
+          %{"at" => "1.5.8", "status" => "unaffected"}
+        ]
+      }
+
+      assert CveView.fix_boundary(version) == "1.4.9"
+    end
+
+    test "picks the lowest boundary by PARSED version, not array order (semver)" do
+      version = %{
+        "versionType" => "semver",
+        "lessThan" => "*",
+        "changes" => [
+          %{"at" => "3.5.39", "status" => "unaffected"},
+          %{"at" => "1.5.8", "status" => "unaffected"},
+          %{"at" => "2.0.0", "status" => "unaffected"}
+        ]
+      }
+
+      assert CveView.fix_boundary(version) == "1.5.8"
+    end
+
+    test "picks the lowest OTP release tag by parsed version, deliberately shuffled — CVE-2098-0002 shape" do
+      version = %{
+        "versionType" => "otp",
+        "lessThan" => "*",
+        "changes" => [
+          %{"at" => "28.0.3", "status" => "unaffected"},
+          %{"at" => "27.3.4.3", "status" => "unaffected"},
+          %{"at" => "26.2.5.15", "status" => "unaffected"}
+        ]
+      }
+
+      assert CveView.fix_boundary(version) == "26.2.5.15"
+    end
+
+    test "ignores affected-status changes when ranking the fix boundary" do
+      version = %{
+        "versionType" => "semver",
+        "lessThan" => "*",
+        "changes" => [
+          %{"at" => "1.0.0", "status" => "affected"},
+          %{"at" => "2.5.0", "status" => "unaffected"},
+          %{"at" => "1.9.0", "status" => "unaffected"}
+        ]
+      }
+
+      assert CveView.fix_boundary(version) == "1.9.0"
+    end
+
+    test "falls back to array order when boundaries don't parse (e.g. git shas)" do
+      version = %{
+        "versionType" => "git",
+        "lessThan" => "*",
+        "changes" => [
+          %{"at" => "5f9af63eec4657a37663828d206517828cb9f288", "status" => "unaffected"},
+          %{"at" => "d49efa2d4fa9e6f7ee658719cd76ffe7a33c2401", "status" => "unaffected"}
+        ]
+      }
+
+      assert CveView.fix_boundary(version) == "5f9af63eec4657a37663828d206517828cb9f288"
+    end
+  end
+
+  describe "branch_label/2" do
+    test "semver-like versions render an X.Y series label from the fix boundary" do
+      assert CveView.branch_label("1.5.8", "semver") == "1.5 series"
+      assert CveView.branch_label("1.4.11", nil) == "1.4 series"
+    end
+
+    test "otp versionType renders a maint-N label, with or without the OTP- prefix" do
+      assert CveView.branch_label("OTP-26.2.5.6", "otp") == "maint-26"
+      assert CveView.branch_label("27.3.4", "otp") == "maint-27"
+    end
+
+    test "nil fix boundary yields no label" do
+      assert CveView.branch_label(nil, "semver") == nil
+    end
+  end
+
+  describe "sort_references/1" do
+    test "advisory-tagged references sort first, stable within each group" do
+      refs = [
+        %{"url" => "a", "tags" => ["patch"]},
+        %{"url" => "b", "tags" => ["vendor-advisory"]},
+        %{"url" => "c", "tags" => ["mailing-list"]},
+        %{"url" => "d", "tags" => ["vendor-advisory"]}
+      ]
+
+      assert Enum.map(CveView.sort_references(refs), & &1["url"]) == ["b", "d", "a", "c"]
+    end
+
+    test "patch-tagged references sort ahead of the rest, behind advisories" do
+      refs = [
+        %{"url" => "mailing-list", "tags" => ["mailing-list"]},
+        %{"url" => "patch-1", "tags" => ["patch"]},
+        %{"url" => "advisory", "tags" => ["vendor-advisory"]},
+        %{"url" => "patch-2", "tags" => ["patch"]},
+        %{"url" => "no-tags", "tags" => []}
+      ]
+
+      assert Enum.map(CveView.sort_references(refs), & &1["url"]) == [
+               "advisory",
+               "patch-1",
+               "patch-2",
+               "mailing-list",
+               "no-tags"
+             ]
+    end
+  end
+
+  describe "registry_link/1" do
+    test "hex and npm purls get a registry link" do
+      assert CveView.registry_link(%{"packageURL" => "pkg:hex/bandit"}) ==
+               {"Hex.pm", "https://hex.pm/packages/bandit"}
+
+      assert CveView.registry_link(%{"packageURL" => "pkg:npm/left-pad"}) ==
+               {"npm", "https://www.npmjs.com/package/left-pad"}
+    end
+
+    test "a github purl has no registry link (Repository covers it)" do
+      assert CveView.registry_link(%{"packageURL" => "pkg:github/erlang/otp"}) == nil
+    end
+
+    test "an unlinkable purl type has no registry link" do
+      assert CveView.registry_link(%{"vendor" => "Acme", "product" => "widget"}) == nil
+    end
+  end
+
+  describe "id_name_chip/1" do
+    test "renders the mono id, a separator, and the name, name span truncatable via name_class" do
+      html =
+        render_component(&CveView.id_name_chip/1, %{id: "CWE-444", name: "HTTP Request Smuggling"})
+
+      assert html =~ "CWE-444"
+      assert html =~ "·"
+      assert html =~ "HTTP Request Smuggling"
+    end
+
+    test "a nil name renders only the bare id, no dangling separator" do
+      html = render_component(&CveView.id_name_chip/1, %{id: "CWE-9999", name: nil})
+
+      assert html =~ "CWE-9999"
+      refute html =~ "·"
+    end
+
+    test "defaults to truncating the name (band chip usage)" do
+      html =
+        render_component(&CveView.id_name_chip/1, %{id: "CWE-444", name: "HTTP Request Smuggling"})
+
+      assert html =~ "text-ellipsis"
+      assert html =~ "whitespace-nowrap"
+      refute html =~ "break-words"
+    end
+
+    test "truncate?={false} lets the full name wrap instead of ellipsizing (in-card usage)" do
+      html =
+        render_component(&CveView.id_name_chip/1, %{
+          id: "CWE-78",
+          name: "Improper Neutralization of Special Elements used in an OS Command",
+          truncate?: false
+        })
+
+      assert html =~ "break-words"
+      refute html =~ "text-ellipsis"
+      refute html =~ "whitespace-nowrap"
+      assert html =~ "Improper Neutralization of Special Elements used in an OS Command"
+    end
+  end
+
+  describe "package_chip/1" do
+    test "renders the mono pkg: label" do
+      html =
+        render_component(&CveView.package_chip/1, %{entry: %{"packageURL" => "pkg:hex/bandit"}})
+
+      assert html =~ "pkg:hex/bandit"
     end
   end
 end

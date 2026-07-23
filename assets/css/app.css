@@ -9,6 +9,16 @@
 
 @import "tailwindcss" source(none);
 
+/* Montserrat (erlef.org's face) as the default sans — self-hosted variable
+   fonts declared in the vendor sheet; the previous platform stack stays as
+   fallback. Montserrat has no mono variant, so the mono stack is untouched. */
+@import "../vendor/css/montserrat.css";
+
+@theme {
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
 /* Lumis syntax-highlighting token classes (.lumis container, .l-* tokens),
    generated for both site themes by `mix generate_lumis_css` — regenerate
    rather than editing. Deliberately unlayered so its codebox container rule
@@ -281,6 +291,14 @@
   background-color: color-mix(in oklab, var(--color-base-300) 60%, transparent);
   color: var(--color-base-content);
   box-shadow: inset 2px 0 0 var(--color-primary);
+}
+
+/* [data-toc] scroll-spy (public/docs pages, marked by the plain-JS spy in
+   app.js — these pages are controller-rendered, no phx hook runs): active
+   entry gets the accent left-border + ink text treatment. */
+[data-toc] a.is-active {
+  border-color: var(--color-primary);
+  color: var(--color-base-content);
 }
 
 /* Slide-over scrim (board D): darker than black/50 so it registers on the

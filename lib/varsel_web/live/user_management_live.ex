@@ -65,10 +65,9 @@ defmodule VarselWeb.UserManagementLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <.console_header
-      title="Users"
-      subtitle="Manage who can access the CNA tooling and their role."
-    />
+    <.console_header subtitle="Manage who can access the CNA tooling and their role.">
+      <:title>Users</:title>
+    </.console_header>
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
       <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">

@@ -4,225 +4,326 @@ SPDX-License-Identifier: Apache-2.0
 --%>
 <% cve_id = @cve["cveMetadata"]["cveId"] %>
 <% cvss = best_cvss(@cna) %>
-<% cwe = cwe_description(@cna) %>
-<% capecs = capec_items(@cna) %>
-<% self_url = url(~p"/cves/#{cve_id}") %>
+<% description = prose(@cna["descriptions"], @cna["references"] || []) %>
+<% weaknesses = cwe_descriptions(@cna) %>
+<% attack_patterns = capec_items(@cna) %>
+<% affected = @cna["affected"] || [] %>
+<% references = visible_references(@cna, cve_id) %>
+<% sections = sections(@cna, cve_id, description, cvss) %>
+<% present = Map.new(sections, &{&1.id, &1.present?}) %>
 
-<header class="bg-primary text-primary-content py-10">
-  <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl">
-    <h1 class="text-lg font-normal opacity-90">{cve_id}</h1>
-    <h2 class="text-3xl sm:text-4xl font-bold mt-3 break-words">
-      {raw(String.replace(@cve["containers"]["cna"]["title"] || cve_id, "_", "_<wbr>"))}
-    </h2>
-
-    <div :if={(@cna["tags"] || []) != []} class="mt-4 flex flex-wrap gap-2">
-      <span :for={tag <- @cna["tags"]} class={["badge uppercase", cna_tag_class(tag)]}>
-        {humanize_tag(tag)}
-      </span>
-    </div>
-
-    <div class="mt-6 flex justify-between text-sm">
-      <.link navigate={~p"/cves"} class="link link-hover">&laquo; Back to all CVEs</.link>
-      <a href={"https://osv.dev/vulnerability/EEF-#{cve_id}"} class="link link-hover">
-        See on OSV.dev &raquo;
-      </a>
+<div class="console-band">
+  <div class="container mx-auto max-w-5xl px-4 py-5 sm:px-6 lg:px-8">
+    <div class="flex flex-col items-start justify-between gap-4 lg:flex-row">
+      <div class="min-w-0">
+        <p class="eef-eyebrow">
+          {cve_id} · published {format_cve_date(@cve["cveMetadata"]["datePublished"])} · updated {format_cve_date(
+            @cve["cveMetadata"]["dateUpdated"]
+          )}
+        </p>
+        <h1 class="mt-1 break-words text-2xl font-bold leading-tight sm:text-3xl">
+          {raw(String.replace(@cna["title"] || cve_id, "_", "_<wbr>"))}
+        </h1>
+        <div class="mt-2.5 flex flex-wrap items-center gap-2">
+          <.severity_chip score={cvss && cvss["baseScore"] / 1} variant={:full} />
+          <.package_chip :for={entry <- affected} entry={entry} />
+          <.id_name_chip
+            :for={cwe <- weaknesses}
+            id={cwe["cweId"]}
+            name={Map.get(@cwe_names, cwe_id_number(cwe["cweId"]))}
+            name_class="max-w-64"
+          />
+        </div>
+      </div>
+      <div class="flex flex-shrink-0 items-center gap-2">
+        <a
+          href={"https://osv.dev/vulnerability/EEF-#{cve_id}"}
+          target="_blank"
+          rel="noopener"
+          class="btn btn-eef-quiet btn-sm"
+        >
+          OSV.dev
+        </a>
+        <.link navigate={~p"/cves/#{cve_id <> ".json"}"} class="btn btn-eef-quiet btn-sm">
+          JSON
+        </.link>
+      </div>
     </div>
   </div>
-</header>
+</div>
 
-<main class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl py-8">
-  <%!-- At a glance --%>
-  <section :if={cvss || cwe || capecs != []} class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-    <div>
-      <div :if={cwe}>
-        <h3 class="font-semibold mb-2">Weakness Type (CWE)</h3>
-        <p class="mb-4">
-          <a href={cwe_url(cwe["cweId"])} class="link link-primary">
-            {cwe["cweId"]} — {cwe["description"]}
+<div class="container mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+  <div class="lg:grid lg:grid-cols-[1fr_15rem] lg:gap-12">
+    <div class="flex min-w-0 flex-col gap-4">
+      <.panel :if={present["am-i-affected"]} id="am-i-affected">
+        <:title>Am I affected?</:title>
+        {live_render(@conn, VarselWeb.AffectedCheckerLive,
+          id: "affected-checker",
+          session: %{"packages" => checker_packages(affected)}
+        )}
+      </.panel>
+
+      <.panel :if={present["description"]} id="description">
+        <:title>Description</:title>
+        <div class="prose max-w-none text-sm">{description}</div>
+      </.panel>
+
+      <.panel :if={present["weaknesses"]} id="weaknesses">
+        <:title>Weaknesses &amp; attack patterns</:title>
+        <div :if={weaknesses != []}>
+          <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+            Weakness
+          </p>
+          <div :for={cwe <- weaknesses} class="flex flex-wrap items-start gap-2 py-0.5">
+            <.id_name_chip
+              id={cwe["cweId"]}
+              name={Map.get(@cwe_names, cwe_id_number(cwe["cweId"]))}
+              class="flex-1"
+              truncate?={false}
+            />
+            <span class="ml-auto flex flex-shrink-0 items-center gap-3">
+              <.link
+                :if={Map.get(@cwe_names, cwe_id_number(cwe["cweId"]))}
+                navigate={~p"/common-weaknesses?cwe=#{cwe["cweId"]}"}
+                class="text-xs text-primary hover:underline"
+              >
+                in catalog →
+              </.link>
+              <a
+                href={cwe_url(cwe["cweId"])}
+                target="_blank"
+                rel="noopener"
+                class="text-xs text-primary hover:underline"
+              >
+                MITRE ↗
+              </a>
+            </span>
+          </div>
+        </div>
+        <div :if={attack_patterns != []} class={weaknesses != [] && "mt-3"}>
+          <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+            Attack patterns
+          </p>
+          <div :for={capec <- attack_patterns} class="py-0.5">
+            <div class="flex flex-wrap items-start gap-2">
+              <.id_name_chip
+                id={capec["capecId"]}
+                name={Map.get(@capec_names, capec_id_number(capec["capecId"]))}
+                class="flex-1"
+                truncate?={false}
+              />
+              <a
+                href={capec_url(capec["capecId"])}
+                target="_blank"
+                rel="noopener"
+                class="ml-auto flex-shrink-0 text-xs text-primary hover:underline"
+              >
+                MITRE ↗
+              </a>
+            </div>
+            <p
+              :if={capec_text(capec, Map.get(@capec_names, capec_id_number(capec["capecId"])))}
+              class="mt-0.5 pl-0.5 text-xs text-base-content/60"
+            >
+              {capec_text(capec, Map.get(@capec_names, capec_id_number(capec["capecId"])))}
+            </p>
+          </div>
+        </div>
+      </.panel>
+
+      <.panel :for={{entry, index} <- Enum.with_index(affected)} id={affected_card_id(index)}>
+        <:title>
+          Affected — <.package_ref entry={entry} />
+        </:title>
+        <:actions :if={registry_link(entry)}>
+          <a href={elem(registry_link(entry), 1)} target="_blank" rel="noopener">
+            {elem(registry_link(entry), 0)} ↗
           </a>
-        </p>
-      </div>
+        </:actions>
+        <:actions :if={entry["repo"]}>
+          <a href={entry["repo"]} target="_blank" rel="noopener">Repository ↗</a>
+        </:actions>
 
-      <div :if={capecs != []}>
-        <h3 class="font-semibold mb-2">CAPEC</h3>
-        <ul class="space-y-1">
-          <li :for={capec <- capecs}>
-            <a href={capec_url(capec["capecId"])} class="link link-primary">
-              {capec["capecId"]} — {capec_text(capec)}
+        <p
+          :if={(entry["versions"] || []) == [] and entry["defaultStatus"] == "affected"}
+          class="text-sm"
+        >
+          All versions affected.
+        </p>
+
+        <div :if={affected_ranges(entry) != []} class="flex flex-col gap-1 font-mono text-sm">
+          <div :for={range <- affected_ranges(entry)}>
+            <%= if range.kind == :git do %>
+              <span :if={range.intro_sha} class="font-sans text-sm text-base-content/60">
+                introduced by
+              </span>
+              <code :if={range.intro_sha} title={range.intro_sha_title}>{range.intro_sha}</code>
+              <span
+                :if={range.intro_sha && range.fix_sha}
+                class="font-sans text-sm text-base-content/60"
+              >
+                ·
+              </span>
+              <span :if={range.fix_sha} class="font-sans text-sm text-base-content/60">
+                fixed by
+              </span>
+              <code :if={range.fix_sha} title={range.fix_sha_title}>{range.fix_sha}</code>
+              <span class="font-sans text-sm text-base-content/60">· {range.note}</span>
+            <% else %>
+              <span :if={range.branch_label} class="mr-2 font-sans text-xs text-base-content/50">
+                {range.branch_label}
+              </span>
+              <span :if={range.lower}>
+                ≥ <span title={range.lower_title}>{range.lower}</span>
+              </span>
+              <span :if={range.fix}>
+                &lt; <span title={range.fix_title}>{range.fix}</span>
+              </span>
+              <span class="font-sans text-sm text-base-content/60">
+                · {range.note}<span :if={range.fix_paren_label}> ({range.fix_paren_label})</span>
+              </span>
+            <% end %>
+          </div>
+        </div>
+
+        <div class="mt-2 flex flex-col gap-0.5">
+          <div class="flex items-baseline gap-3 py-0.5">
+            <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+              default status
+            </span>
+            <span class="text-xs text-base-content/70">{entry["defaultStatus"]}</span>
+          </div>
+          <div :if={cpe_line(entry)} class="flex items-baseline gap-3 py-0.5">
+            <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+              cpe
+            </span>
+            <span class="break-all font-mono text-xs text-base-content/70">{cpe_line(entry)}</span>
+          </div>
+        </div>
+
+        <details :if={has_components?(entry)} class="mt-2">
+          <summary class="cursor-pointer text-xs text-base-content/50">
+            {components_summary(entry)}
+          </summary>
+          <div class="mt-2 flex flex-col gap-0.5 border-t border-dashed border-base-300 pt-2">
+            <div
+              :for={{label, value} <- component_field_rows(entry)}
+              class="flex items-baseline gap-3 py-0.5"
+            >
+              <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+                {label}
+              </span>
+              <span class="break-all font-mono text-xs text-base-content/70">{value}</span>
+            </div>
+          </div>
+        </details>
+      </.panel>
+
+      <.panel :if={present["workarounds"]} id="workarounds">
+        <:title>Workarounds</:title>
+        <div class="prose max-w-none text-sm">
+          {prose(@cna["workarounds"], @cna["references"] || [])}
+        </div>
+      </.panel>
+
+      <.panel :if={present["configurations"]} id="configurations">
+        <:title>Configurations</:title>
+        <div class="prose max-w-none text-sm">
+          {prose(@cna["configurations"], @cna["references"] || [])}
+        </div>
+      </.panel>
+
+      <.panel :if={present["solutions"]} id="solutions">
+        <:title>Solutions</:title>
+        <div class="prose max-w-none text-sm">
+          {prose(@cna["solutions"], @cna["references"] || [])}
+        </div>
+      </.panel>
+
+      <.panel :if={present["references"]} id="references">
+        <:title>References</:title>
+        <div class="flex flex-col gap-1.5 text-sm">
+          <div
+            :for={row <- Enum.map(sort_references(references), &reference_row/1)}
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="h-[5px] w-[5px] flex-shrink-0 rounded-[1px] bg-base-content/35"
+            ></span>
+            <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              <.reference_body row={row} />
+            </span>
+            <span
+              :if={row.tag}
+              class={[
+                "flex-shrink-0 rounded-[5px] border px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap",
+                if(row.tone == :warn,
+                  do: "border-warning/40 text-warning",
+                  else: "border-base-300/70 text-base-content/50"
+                )
+              ]}
+            >
+              {row.tag}
+            </span>
+          </div>
+        </div>
+      </.panel>
+
+      <.panel :if={present["credits"]} id="credits">
+        <:title>Credits</:title>
+        <div class="flex flex-col gap-1.5 text-sm">
+          <div :for={credit <- @cna["credits"]} class="flex items-center gap-2">
+            <span>{credit["value"]}</span>
+            <span class="rounded-[5px] border border-base-300/70 px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-base-content/50">
+              {humanize_credit(credit["type"] || "")}
+            </span>
+          </div>
+        </div>
+      </.panel>
+
+      <.panel :if={present["cvss-breakdown"]} id="cvss-breakdown">
+        <:title>CVSS breakdown</:title>
+        <div class="flex flex-wrap items-center gap-3">
+          <.severity_chip score={cvss["baseScore"] / 1} variant={:full} />
+          <a
+            :if={cvss_calculator_url(cvss)}
+            href={cvss_calculator_url(cvss)}
+            target="_blank"
+            rel="noopener"
+            class="ml-auto text-xs text-primary hover:underline"
+          >
+            open in calculator →
+          </a>
+        </div>
+        <.cvss_vector vector={cvss["vectorString"]} />
+      </.panel>
+
+      <.link navigate={~p"/cves"} class="text-sm text-primary hover:underline">
+        &laquo; All CVEs
+      </.link>
+    </div>
+
+    <nav
+      class="order-first hidden lg:order-last lg:block"
+      aria-label="Table of contents"
+      data-toc
+    >
+      <div class="sticky top-24">
+        <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+          On this page
+        </p>
+        <ul class="space-y-1 border-l border-base-300 text-sm">
+          <li :for={section <- Enum.filter(sections, & &1.present?)}>
+            <a
+              href={"##{section.id}"}
+              class="block border-l-2 border-transparent -ml-px py-0.5 pl-3 text-base-content/70 transition-colors hover:border-primary hover:text-primary"
+            >
+              {section.toc_label}
             </a>
           </li>
         </ul>
       </div>
-    </div>
-
-    <div :if={cvss}>
-      <h3 class="font-semibold mb-2">CVSS {cvss["version"]} Score</h3>
-      <p class="text-4xl font-bold mb-1">{cvss["baseScore"]}</p>
-      <div class="mb-2">
-        <.severity_chip score={cvss["baseScore"] / 1} variant={:full} />
-      </div>
-      <p class="text-sm">
-        <a :if={cvss_calculator_url(cvss)} href={cvss_calculator_url(cvss)} class="link">
-          <code>{cvss["vectorString"]}</code>
-        </a>
-        <code :if={is_nil(cvss_calculator_url(cvss))}>{cvss["vectorString"]}</code>
-      </p>
-    </div>
-  </section>
-
-  <%!-- Description --%>
-  <section class="prose max-w-none mb-8">
-    <h2>Vulnerability description</h2>
-    {prose(@cna["descriptions"], @cna["references"] || [])}
-  </section>
-
-  <%!-- Affected --%>
-  <section :if={(@cna["affected"] || []) != []} class="mb-8">
-    <h2 class="text-2xl font-bold mb-4">Affected</h2>
-    <div :for={entry <- @cna["affected"]} class="mb-6">
-      <h3 class="font-semibold mb-3">
-        <.package_ref entry={entry} link={true} />
-      </h3>
-
-      <%!-- Components table --%>
-      <div
-        :if={entry["modules"] || entry["programFiles"] || entry["programRoutines"]}
-        class="overflow-x-auto mb-3"
-      >
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              <th :if={entry["modules"]}>Module</th>
-              <th :if={entry["programFiles"]}>Source File</th>
-              <th :if={entry["programRoutines"]}>Routine</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :for={row <- component_rows(entry)}>
-              <td :if={entry["modules"]}><code :if={row.module}>{row.module}</code></td>
-              <td :if={entry["programFiles"]}><code :if={row.file}>{row.file}</code></td>
-              <td :if={entry["programRoutines"]}><code :if={row.routine}>{row.routine}</code></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <%!-- Versions table --%>
-      <div :if={(entry["versions"] || []) != []} class="overflow-x-auto mb-3">
-        <table class="table table-sm table-zebra">
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th>Type</th>
-              <th>Version</th>
-              <th :if={any_changes?(entry)}>Changes / Fixed in</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :for={version <- entry["versions"]}>
-              <td class="font-semibold capitalize">{version["status"]}</td>
-              <td>
-                {version["versionType"]}
-                <a
-                  :if={version_type_info(version["versionType"])}
-                  href={elem(version_type_info(version["versionType"]), 0)}
-                  title={elem(version_type_info(version["versionType"]), 1)}
-                  target="_blank"
-                  rel="noopener"
-                ><sup>ⓘ</sup></a>
-              </td>
-              <td>
-                <.version_ref
-                  version={version["version"]}
-                  type={version["versionType"]}
-                  entry={entry}
-                />
-              </td>
-              <td :if={any_changes?(entry)}>
-                <ul :if={(version["changes"] || []) != []} class="list-disc pl-4 mb-0">
-                  <li :for={change <- version["changes"]}>
-                    {change["status"]} at
-                    <.version_ref
-                      version={change["at"]}
-                      type={version["versionType"]}
-                      entry={entry}
-                    />
-                  </li>
-                </ul>
-                <span :if={(version["changes"] || []) == [] and version["lessThan"] == "*"}>
-                  <.version_ref version="*" type={version["versionType"]} entry={entry} />
-                </span>
-                <span :if={
-                  ((version["changes"] || []) == [] and version["lessThan"]) &&
-                    version["lessThan"] != "*"
-                }>
-                  &lt;
-                  <.version_ref
-                    version={version["lessThan"]}
-                    type={version["versionType"]}
-                    entry={entry}
-                  />
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div
-        :if={(entry["versions"] || []) == [] and entry["defaultStatus"] == "affected"}
-        class="alert alert-warning mb-3"
-      >
-        <div>
-          <strong>All versions affected.</strong>
-          No patched version is currently available. If a fix becomes available, please
-          <.link navigate={~p"/contact"} class="link">let us know</.link>
-          so we can update this record.
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <%!-- Configurations / Workarounds / Solutions --%>
-  <section :for={
-    {heading, key} <- [
-      {"Configurations", "configurations"},
-      {"Workarounds", "workarounds"},
-      {"Solutions", "solutions"}
-    ]
-  }>
-    <div :if={prose(@cna[key], @cna["references"] || [])} class="prose max-w-none mb-8">
-      <h2>{heading}</h2>
-      {prose(@cna[key], @cna["references"] || [])}
-    </div>
-  </section>
-
-  <%!-- References --%>
-  <section :if={visible_references(@cna, self_url) != []} class="mb-8">
-    <h2 class="text-2xl font-bold mb-4">References</h2>
-    <ul class="list-disc pl-5 space-y-1">
-      <li :for={ref <- visible_references(@cna, self_url)}>
-        <a href={ref["url"]} class="link link-primary">{ref["name"] || ref["url"]}</a>
-        <span :for={tag <- ref["tags"] || []} class={["badge badge-sm ml-1", ref_tag_class(tag)]}>
-          {tag}
-        </span>
-      </li>
-    </ul>
-  </section>
-
-  <%!-- Credits --%>
-  <section :if={(@cna["credits"] || []) != []} class="mb-8">
-    <h2 class="text-2xl font-bold mb-4">Credits</h2>
-    <ul class="list-disc pl-5 space-y-1">
-      <li :for={credit <- @cna["credits"]}>
-        <strong>{humanize_credit(credit["type"] || "")}</strong>: {credit["value"]}
-      </li>
-    </ul>
-  </section>
-
-  <%!-- JSON links --%>
-  <p class="mt-10 text-sm text-base-content/60">
-    CVE record as JSON:
-    <a href={~p"/cves/#{cve_id <> ".json"}"} class="link"><code>GET /cves/{cve_id}.json</code></a>
-  </p>
-</main>
+    </nav>
+  </div>
+</div>
