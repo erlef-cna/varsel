@@ -98,4 +98,16 @@ defmodule Varsel.Cases.Derivation.GitRepoTest do
   test "an unknown commit reports commit_not_found", %{url: url} do
     assert {:error, :commit_not_found} = GitRepo.tags_containing(url, String.duplicate("f", 40))
   end
+
+  test "aborts when the commit graph exceeds the configured cap", %{url: url, c2: c2} do
+    # The fixture has 4 commits; a cap of 2 trips the graph-walk bound.
+    prev = Application.get_env(:varsel, :git_max_commits)
+    Application.put_env(:varsel, :git_max_commits, 2)
+    on_exit(fn -> restore_env(:git_max_commits, prev) end)
+
+    assert {:error, :too_many_commits} = GitRepo.tags_containing(url, c2)
+  end
+
+  defp restore_env(key, nil), do: Application.delete_env(:varsel, key)
+  defp restore_env(key, value), do: Application.put_env(:varsel, key, value)
 end

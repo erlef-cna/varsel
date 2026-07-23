@@ -37,6 +37,15 @@ defmodule Varsel.Cases.Derivation.GitRepo do
 
   @ttl_seconds 900
 
+  # Bound the graph walk so a pathological `repo_url` can't tie up derivation
+  # (see THREAT_MODEL.md §9): abort once the reachable commit count exceeds
+  # this. 250k sits well above any real repo — OTP, one of the largest, is
+  # ~65k commits. (A byte cap on the fetch itself isn't usable here: `tree:0`
+  # returns only commit objects, and exgit's `max_cache_bytes` evicts exactly
+  # those to stay under the cap, which would corrupt the graph.) Overridable
+  # via config so tests can drive the cap without a huge fixture.
+  @default_max_commits 250_000
+
   defmodule Graph do
     @moduledoc false
     @enforce_keys [:store, :tags, :children, :fetched_at]
@@ -122,31 +131,28 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   # Lazy clone (refs only) + one tree:0 fetch wanting every ref tip, then one
   # BFS over parent edges recording reverse (children) edges.
   defp build_graph(repo_url) do
-    case Exgit.clone(repo_url, lazy: true) do
-      {:ok, repo} ->
-        tags = list_refs(repo, "refs/tags/")
-        heads = list_refs(repo, "refs/heads/")
-        tips = (tags ++ heads) |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
-
-        case ObjectStore.Promisor.fetch_with_filter(repo.object_store, tips, filter: "tree:0") do
-          {:ok, store} ->
-            children = build_children(store, tips)
-
-            {:ok,
-             %Graph{
-               store: store,
-               tags: tags,
-               children: children,
-               fetched_at: System.monotonic_time(:second)
-             }}
-
-          {:error, reason} ->
-            {:error, {:fetch_failed, reason}}
-        end
-
-      {:error, reason} ->
-        {:error, {:clone_failed, reason}}
+    with {:clone, {:ok, repo}} <- {:clone, Exgit.clone(repo_url, lazy: true)},
+         tags = list_refs(repo, "refs/tags/"),
+         tips = ref_tips(tags, list_refs(repo, "refs/heads/")),
+         {:fetch, {:ok, store}} <-
+           {:fetch, ObjectStore.Promisor.fetch_with_filter(repo.object_store, tips, filter: "tree:0")},
+         {:ok, children} <- build_children(store, tips) do
+      {:ok,
+       %Graph{
+         store: store,
+         tags: tags,
+         children: children,
+         fetched_at: System.monotonic_time(:second)
+       }}
+    else
+      {:clone, {:error, reason}} -> {:error, {:clone_failed, reason}}
+      {:fetch, {:error, reason}} -> {:error, {:fetch_failed, reason}}
+      {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp ref_tips(tags, heads) do
+    (tags ++ heads) |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
   end
 
   defp list_refs(repo, prefix) do
@@ -183,14 +189,21 @@ defmodule Varsel.Cases.Derivation.GitRepo do
     walk(store, :queue.from_list(start), MapSet.new(start), %{})
   end
 
+  # `seen` accumulates every commit reached, so its size is the running commit
+  # count; abort once it exceeds @max_commits rather than walking the whole
+  # graph of a pathological repo.
   defp walk(store, queue, seen, children) do
-    case :queue.out(queue) do
-      {:empty, _queue} ->
-        children
+    if MapSet.size(seen) > max_commits() do
+      {:error, :too_many_commits}
+    else
+      case :queue.out(queue) do
+        {:empty, _queue} ->
+          {:ok, children}
 
-      {{:value, sha}, queue} ->
-        {queue, seen, children} = visit(store, sha, queue, seen, children)
-        walk(store, queue, seen, children)
+        {{:value, sha}, queue} ->
+          {queue, seen, children} = visit(store, sha, queue, seen, children)
+          walk(store, queue, seen, children)
+      end
     end
   end
 
@@ -215,6 +228,10 @@ defmodule Varsel.Cases.Derivation.GitRepo do
     else
       {:queue.in(parent, queue), MapSet.put(seen, parent), children}
     end
+  end
+
+  defp max_commits do
+    Application.get_env(:varsel, :git_max_commits, @default_max_commits)
   end
 
   # The target itself counts as its own descendant (a tag pointing exactly at
