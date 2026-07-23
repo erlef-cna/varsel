@@ -212,10 +212,10 @@ claims:
 
 | Knob | Default | Effect on model |
 | --- | --- | --- |
-| `:dev_routes` (compile) | off in prod | Mounts the dev dashboards (§3). If ever compiled into a prod release, those tools are exposed and this model no longer holds. (`router.ex`) |
+| `:dev_routes` (compile) | off in prod | Mounts the dev dashboards (§3), which also run their own relaxed CSP (`:dev_tools_relaxed_csp`, plus a `frame_src` loosening in `dev.exs`). All of it is compiled out of a prod release; if ever compiled in, those tools are exposed and this model no longer holds. (`router.ex`, `dev.exs`) |
 | `TEST_DEPLOYMENT` (runtime) | `true` | When true, serves a disallow-all `robots.txt`, `X-Robots-Tag: noindex`, and a warning banner. **Must be set `false` on the real production instance.** Not a security control — an indexing/labeling one. (`config.exs`, `runtime.exs`) |
 | `MITRE_CVE_API_BASE_URL` | none (required) | Points the publish pipeline at a MITRE endpoint. Every configured endpoint (including MITRE's shared staging, `cveawg-test`) is a real remote system — the pipeline has no in-app dry-run or sandbox, so any publish leaves the machine (see §9, "false friend"). (`mitre_cve_api.ex`) |
-| GraphiQL relaxed CSP | route-scoped | `/gql/playground` serves `'unsafe-inline'` + a jsdelivr allowlist so GraphiQL boots. The rest of the site is deny-by-default (`default-src 'none'`, `script-src 'self'`, nonce'd). The relaxation is confined to that one login-gated route. (`router.ex`, `config.exs`) |
+| GraphiQL relaxed CSP | route-scoped | `/gql/playground` serves `'unsafe-inline'` + a jsdelivr allowlist so GraphiQL boots. The rest of the site is deny-by-default (`default-src 'none'`, `script-src 'self'`, nonce'd). In a prod build this is the *only* CSP relaxation, and it is confined to that one login-gated route (the `/dev/*` relaxation above compiles out). (`router.ex`, `config.exs`) |
 
 No build knob silently voids a §7 auth property; the two that matter
 (`:dev_routes` compiled into prod, `TEST_DEPLOYMENT` left true) are
@@ -274,9 +274,9 @@ Every markdown/HTML render sink now sanitizes (ammonia allow-list) before
 **strict CSP** (`default-src 'none'`, `script-src 'self'` with per-request
 nonce, **no `unsafe-inline`/`unsafe-eval`**) is a second, independent layer:
 even a sanitizer bypass would need an inline `<script>`/event handler the
-browser refuses. (`config.exs`) The CSP relaxation does
-**not** apply to the main site — only to `/gql/playground`, which is
-login-gated and serves no user-authored content (§5a).
+browser refuses. (`config.exs`) In a prod build the only CSP relaxation is
+`/gql/playground`, which is login-gated and serves no user-authored content;
+the `/dev/*` relaxation compiles out (§5a).
 
 ### 6b. Delegated and inherited surface
 
