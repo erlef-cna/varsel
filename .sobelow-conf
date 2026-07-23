@@ -2,4 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# ignore Config.CSP: sobelow only recognizes CSP set via
+# put_secure_browser_headers, not the plug_content_security_policy library we
+# use (see VarselWeb.Endpoint) — the finding is a false positive.
 [exit: :low, format: "txt", ignore_files: [], ignore: ["Config.CSP"], out: nil, private: false, router: nil, skip: true, threshold: :low, verbose: false, version: false]
