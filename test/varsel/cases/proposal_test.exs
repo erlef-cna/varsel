@@ -59,7 +59,9 @@ defmodule Varsel.Cases.ProposalTest do
                  actor: poc
                )
 
-      assert Exception.message(error) =~ "not a proposable field"
+      # The message names the bad field and lists the allowed ones (interpolated).
+      assert Exception.message(error) =~ "unknown field \"state\""
+      assert Exception.message(error) =~ "allowed:"
     end
 
     test "type-checks the proposed value against the real attribute type", %{
@@ -154,7 +156,8 @@ defmodule Varsel.Cases.ProposalTest do
                  actor: poc
                )
 
-      assert Exception.message(error) =~ "not a proposable field"
+      assert Exception.message(error) =~ "unknown field \"case_id\""
+      assert Exception.message(error) =~ "allowed:"
     end
 
     test "proposals cannot be created on a closed case", %{poc: poc, case: case_record} do

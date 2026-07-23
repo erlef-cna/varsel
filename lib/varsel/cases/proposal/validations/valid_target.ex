@@ -112,7 +112,7 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
   defp validate_value(target, :set, field_name, %{"value" => value}) do
     resource = Target.resource(target)
 
-    with {:ok, field} <- existing_field(resource, field_name, Proposable.set_fields(resource)) do
+    with {:ok, field} <- existing_field(field_name, Proposable.set_fields(resource)) do
       cast_field(resource, field, value)
     end
   end
@@ -175,7 +175,7 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
     resource = Target.resource(:affected_package)
     arguments = Preset.arguments(preset)
 
-    with {:ok, field} <- existing_field(resource, key, [:preset | Preset.payload_fields(preset)]) do
+    with {:ok, field} <- existing_field(key, [:preset | Preset.payload_fields(preset)]) do
       cond do
         field == :preset -> :ok
         field in arguments -> validate_preset_argument(field, value)
@@ -193,13 +193,14 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
         {:error,
          field: :proposed_value,
          message: "unknown preset %{preset}; known presets: %{known}",
-         vars: [preset: inspect(preset_input), known: Enum.join(Preset.values(), ", ")]}
+         preset: if(is_binary(preset_input), do: preset_input, else: inspect(preset_input)),
+         known: Enum.join(Preset.values(), ", ")}
     end
   end
 
   defp require_applications(preset, payload) do
     if Preset.applications?(preset) and is_nil(payload["applications"] || payload[:applications]) do
-      {:error, field: :proposed_value, message: "the %{preset} preset requires applications", vars: [preset: preset]}
+      {:error, field: :proposed_value, message: "the %{preset} preset requires applications", preset: preset}
     else
       :ok
     end
@@ -230,28 +231,33 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
   end
 
   defp validate_payload_entry(resource, allowed, {key, value}) do
-    with {:ok, field} <- existing_field(resource, key, allowed) do
+    with {:ok, field} <- existing_field(key, allowed) do
       cast_field(resource, field, value)
     end
   end
 
-  defp existing_field(resource, name, allowed) do
+  defp existing_field(name, allowed) do
     field = if is_atom(name), do: name, else: String.to_existing_atom(name)
 
     if field in allowed do
       {:ok, field}
     else
-      {:error,
-       field: :field_name,
-       message: "%{name} is not a proposable field of %{resource}",
-       vars: [name: name, resource: inspect(resource)]}
+      unknown_field_error(name, allowed)
     end
   rescue
-    ArgumentError ->
-      {:error,
-       field: :field_name,
-       message: "%{name} is not a proposable field of %{resource}",
-       vars: [name: name, resource: inspect(resource)]}
+    # String.to_existing_atom/1 raises when the key is not even a known atom.
+    ArgumentError -> unknown_field_error(name, allowed)
+  end
+
+  # Interpolation vars must be TOP-LEVEL keys of the returned keyword, not
+  # nested under a `vars:` key: Ash passes the whole keyword as the error's
+  # vars, so a nested `vars:` would shadow them and leave %{...} unrendered.
+  defp unknown_field_error(name, allowed) do
+    {:error,
+     field: :field_name,
+     message: "unknown field %{name}; allowed: %{allowed}",
+     name: to_string(name),
+     allowed: allowed |> Enum.map(&to_string/1) |> Enum.sort() |> Enum.join(", ")}
   end
 
   defp cast_field(resource, field, value) do
@@ -262,7 +268,8 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
       :ok
     else
       _ ->
-        {:error, field: :proposed_value, message: "%{field} does not accept the proposed value", vars: [field: field]}
+        {:error,
+         field: :proposed_value, message: "%{field_key} does not accept the proposed value", field_key: to_string(field)}
     end
   end
 
