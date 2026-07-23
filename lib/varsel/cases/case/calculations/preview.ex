@@ -5,8 +5,9 @@
 defmodule Varsel.Cases.Case.Calculations.Preview do
   @moduledoc """
   Renders the case to its CNA container without publishing: the container, the
-  full CVE record, which override escape hatches fired, and the conditions that
-  would block publishing (plus a validation summary once a CVE ID is assigned).
+  full CVE record (with a placeholder CVE ID until one is assigned), a
+  validation summary, which override escape hatches fired, and the conditions
+  that would block publishing.
 
   Loading this calculation is the only preview entry point, so authorization is
   the case read policy itself — you can only `load(:preview)` on a case you were
@@ -27,14 +28,14 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
 
   defp preview(case_record, actor) do
     {:ok, %{result: result, cve_json: cve_json}} = Publication.render(case_record, actor: actor)
-    validation = cve_json && Publication.validate(cve_json)
+    validation = Publication.validate(cve_json)
 
     %{
       "cna" => result.cna,
       "cve_json" => cve_json,
       "blockers" => result.blockers,
       "overrides_applied" => result.overrides_applied,
-      "validation" => validation && Map.take(validation, [:valid, :errors])
+      "validation" => Map.take(validation, [:valid, :errors])
     }
   end
 end

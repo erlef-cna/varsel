@@ -75,7 +75,7 @@ defmodule Varsel.Cases.Publication do
   handoff both have one); `refresh: true` recomputes derivations.
   """
   @spec render(Case.t(), keyword()) ::
-          {:ok, %{result: Render.Result.t(), cve_json: map() | nil}}
+          {:ok, %{result: Render.Result.t(), cve_json: map()}}
   def render(case_record, opts \\ []) do
     case_record = load_render_tree(case_record, opts)
     result = Render.render_cna(case_record, derivations(case_record, opts))
@@ -83,16 +83,20 @@ defmodule Varsel.Cases.Publication do
     {:ok, %{result: result, cve_json: cve_json(case_record, result)}}
   end
 
-  # The full record as handed to CveRecord.request_publish/update. Only
-  # assemblable once a CVE ID is assigned.
-  defp cve_json(%{cve_id: nil}, _result), do: nil
+  # A placeholder used in `cveMetadata.cveId` before a real ID is assigned, so
+  # the preview can still assemble and validate a complete record. The publish
+  # path guards on an assigned CVE record first (see PublishToCveRecord), so a
+  # placeholder never reaches a real MITRE push.
+  @placeholder_cve_id "CVE-0000-0000"
 
+  # The full record: as handed to CveRecord.request_publish/update once a CVE
+  # ID is assigned, or with a placeholder ID for a pre-assignment preview.
   defp cve_json(case_record, result) do
     %{
       "dataType" => "CVE_RECORD",
       "dataVersion" => "5.2",
       "cveMetadata" => %{
-        "cveId" => case_record.cve_id,
+        "cveId" => case_record.cve_id || @placeholder_cve_id,
         "assignerOrgId" => Application.fetch_env!(:varsel, :cna_org_id),
         "assignerShortName" => Application.get_env(:varsel, :cna_short_name, "EEF"),
         "state" => "PUBLISHED"

@@ -209,6 +209,20 @@ defmodule Varsel.Cases.PublicationTest do
     assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
   end
 
+  test "preview assembles a full record with a placeholder ID before assignment", %{poc: poc} do
+    # A case with no CVE record/ID assigned yet.
+    case_record = Fixtures.open_case(poc, %{title: "Unassigned"})
+
+    preview = Cases.render_case_preview!(%{id: case_record.id}, actor: poc)
+
+    # The full CVE 5.x envelope is present (not nil), so validation runs even
+    # without a real ID — the "no CVE ID assigned" case no longer needs the
+    # caller to hand-wrap the container.
+    assert get_in(preview, ["cve_json", "cveMetadata", "cveId"]) == "CVE-0000-0000"
+    assert get_in(preview, ["cve_json", "containers", "cna"])
+    assert %{valid: _, errors: _} = preview["validation"]
+  end
+
   test "preview is gated by the case read policy, not just actor presence", %{case: case_record} do
     # A logged-in user with no role and no assignment to this case: the
     # :preview calculation must be unreachable because the case itself is.
