@@ -83,7 +83,7 @@ Roles live in `Varsel.Accounts.User.Role` (`:poc | :supporter`, plus `nil`)
 | Auth surface (GitHub OAuth login, OAuth 2.1 server, API keys, session) | `/auth`, `/oauth/*`, `/sign-in`, `/settings/tokens` | GitHub IdP, DB | **Yes** |
 | CNA workbench (cases, reports, CVE lifecycle, user mgmt) — LiveView + GraphQL/MCP tools | `/cases`, `/reports`, `/users`, `/cves/manage`, GraphQL/MCP POC tools | DB, **MITRE API**, **git egress** | **Yes** |
 | Render-time derivation (`exgit` git clone/fetch of package repos) | `Varsel.Cases.Derivation` | **Outbound git to `repo_url`** | **Yes — key boundary (§4)** |
-| Catalog sync (CWE/CAPEC/OTP-versions/MITRE import) — Oban jobs | scheduled workers | Outbound HTTPS to fixed hosts | **Yes (trusted-source egress)** |
+| Catalog sync (CWE/CAPEC/OTP-versions) — Oban jobs | scheduled workers | Outbound HTTPS to fixed hosts | **Yes (trusted-source egress)** |
 | `cvelint` subprocess (validates rendered CVE JSON) | `Varsel.CVE.Cvelint` | `System.cmd`, temp file | **Yes** |
 | Dev dashboards (LiveDashboard, Oban Web, AshAdmin, Swoosh mailbox) | `/dev/*` | DB, mail | **No — §3 (compile-flag only)** |
 | GraphiQL playground | `/gql/playground` | DB | **Yes, but relaxed CSP — §5a** |
@@ -165,9 +165,10 @@ claims:
 - **Report intake** — reachable by **any authenticated user**. `report_json`
   is fully attacker-controlled at that privilege; downstream sinks (email,
   triage UI) are the question.
-- **Catalog sync / MITRE import** — runs only via the Oban bypass on
-  fixed-host URLs; not reachable from any request. A finding premised on an
-  actor controlling those URLs is out of model.
+- **Catalog sync / MITRE import** — the egress targets are compile-time
+  constants (the CWE/CAPEC/OTP-versions URLs) or a single operator-configured
+  endpoint (`MITRE_CVE_API_BASE_URL`); no actor picks where these requests go.
+  A finding premised on an *actor controlling those URLs* is out of model.
 - **CVE lifecycle writes** — POC-only. Not reachable below POC.
 
 ---
