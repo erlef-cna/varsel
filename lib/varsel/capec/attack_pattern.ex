@@ -115,10 +115,17 @@ defmodule Varsel.CAPEC.AttackPattern do
     end
 
     read :search do
-      description "Full-text search over name, description, prerequisites, mitigations, and consequences."
+      description """
+      Full-text search over name, description, prerequisites, mitigations, and
+      consequences, best match first. Terms are ANDed by default; separate
+      alternatives with OR for broad recall (e.g. `malformed OR crash OR
+      length OR validation`), or wrap an exact phrase in double quotes.
+      """
+
       argument :query, :string, allow_nil?: false
 
       filter expr(matches_query(query: ^arg(:query)))
+      prepare build(sort: [search_rank: {%{query: arg(:query)}, :desc}])
     end
 
     create :upsert do
@@ -309,9 +316,27 @@ defmodule Varsel.CAPEC.AttackPattern do
   end
 
   calculations do
+    # websearch_to_tsquery (not plainto_): tolerates arbitrary user input
+    # without raising, and honors OR / quoted-phrase operators the caller may
+    # pass for broader recall.
     calculate :matches_query,
               :boolean,
-              expr(fragment("search_vector @@ plainto_tsquery('english', ?)", ^arg(:query))) do
+              expr(fragment("search_vector @@ websearch_to_tsquery('english', ?)", ^arg(:query))) do
+      public? false
+
+      argument :query, :string do
+        allow_nil? false
+      end
+    end
+
+    calculate :search_rank,
+              :float,
+              expr(
+                fragment(
+                  "ts_rank(search_vector, websearch_to_tsquery('english', ?))",
+                  ^arg(:query)
+                )
+              ) do
       public? false
 
       argument :query, :string do

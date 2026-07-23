@@ -26,11 +26,13 @@ Pick from `related_attack_patterns` the pattern(s) that match *how* this specifi
 
 ## Search (fallback)
 
-Full-text search over name, description, prerequisites, mitigations, and consequences:
+Full-text search over name, description, prerequisites, mitigations, and consequences, best match first:
 
 ```
 mcp__varsel__search_attack_patterns(input: {query: "path traversal"})
 ```
+
+Terms are ANDed by default, so a long descriptive query (e.g. "malformed input crash denial of service") often matches nothing. For broad recall, **separate alternative terms with `OR`** — `malformed OR crash OR length OR validation` — or wrap an exact phrase in double quotes. Start with a specific 1–2 word phrase; if you get too few hits, re-run with `OR` between the candidate terms. Results are ranked, so the best match is first.
 
 Pick the most specific pattern that describes *how* the attack works, not just the outcome. Multiple CAPECs are fine when the vulnerability can be exploited via genuinely distinct techniques (e.g. both relative and absolute path traversal).
 
@@ -44,12 +46,12 @@ Check the name and description against the actual attack technique. The returned
 
 ## Output
 
-Report the chosen CAPEC(s) (id + name) and why each fits. Then, in the `/new-cve` flow, land each on the case as its own proposal:
+Report the chosen CAPEC(s) (id + name) and why each fits. Then, in the `/new-cve` flow, land each on the case as its own proposal (payload is the **id only** — no name):
 
 ```
 create_case_proposal(input: {
   case_id: <id>, target: "impact", operation: "insert",
-  proposed_value: {"value": {"capec_id": <ID>, "name": "<Name>"}},
+  proposed_value: {"value": {"capec_id": <ID>}},
   reasoning: "why this attack pattern matches"
 })
 ```

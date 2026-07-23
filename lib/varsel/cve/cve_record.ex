@@ -295,11 +295,18 @@ defmodule Varsel.CVE.CveRecord do
     end
 
     read :search do
-      description "Full-text search over CVE ID, title, descriptions, affected packages, workarounds, and configurations."
+      description """
+      Full-text search over CVE ID, title, descriptions, affected packages,
+      workarounds, and configurations, best match first. Terms are ANDed by
+      default; separate alternatives with OR for broad recall, or wrap an exact
+      phrase in double quotes.
+      """
+
       argument :query, :string, allow_nil?: false
 
       prepare build(load: [:cve_id, :title, :date_published, :date_updated, :purls])
       filter expr(matches_query(query: ^arg(:query)) and state == :published)
+      prepare build(sort: [search_rank: {%{query: arg(:query)}, :desc}])
     end
 
     read :list_by_purl do
@@ -735,9 +742,27 @@ defmodule Varsel.CVE.CveRecord do
       public? true
     end
 
+    # websearch_to_tsquery (not plainto_): tolerates arbitrary user input
+    # without raising, and honors OR / quoted-phrase operators the caller may
+    # pass for broader recall.
     calculate :matches_query,
               :boolean,
-              expr(fragment("search_vector @@ plainto_tsquery('english', ?)", ^arg(:query))) do
+              expr(fragment("search_vector @@ websearch_to_tsquery('english', ?)", ^arg(:query))) do
+      public? false
+
+      argument :query, :string do
+        allow_nil? false
+      end
+    end
+
+    calculate :search_rank,
+              :float,
+              expr(
+                fragment(
+                  "ts_rank(search_vector, websearch_to_tsquery('english', ?))",
+                  ^arg(:query)
+                )
+              ) do
       public? false
 
       argument :query, :string do

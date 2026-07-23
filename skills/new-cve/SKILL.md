@@ -130,31 +130,28 @@ Notes:
 
 ## Step 7 — Descriptions, metadata, references, credits
 
-Propose the remaining fields onto the case:
+Propose the remaining fields onto the case. The `create_case_proposal` tool description lists the exact payload keys and enum values per target — follow it; the notes here are the editorial judgment on top. Keep `reasoning` ASCII (no em-dashes / non-ASCII — they can break the call's JSON).
 
-- **Descriptions** (`set` on the description field): both plain text and HTML. In HTML use `<tt>` for code/paths and `<p>` for paragraphs. Do not mention other CVE IDs — name the vulnerability class instead. The "This issue affects …" sentence ends with a real version (or `before TODO` if unpatched), never a bare `TODO`.
-- **`discovery`** (`set`): `EXTERNAL` / `INTERNAL` / `UNKNOWN`.
-- **Configurations** (`set` on `configurations_md`): only if the vulnerability requires specific deployment conditions; plain text + HTML. Omit when unconditional.
-- **Workarounds** (`set` on `workarounds_md`): only genuine mitigations. Never "apply the patch". Omit if none.
-- **Weaknesses** (`target: "weakness", operation: "insert"`): use `/find-cwe`.
-- **Impacts** (`target: "impact", operation: "insert"`): use `/find-capec`.
-- **References** (`target: "reference", operation: "insert"`), in order:
-  1. Vendor advisory — GHSA gets `["vendor-advisory", "related"]`.
-  2. `https://cna.erlef.org/cves/CVE-<num>.html` — `["related"]` (add `"third-party-advisory"` if no vendor advisory).
-  3. `https://osv.dev/vulnerability/EEF-CVE-<num>` — `["related"]`.
-  4. Remaining: patch commit(s) tagged `"patch"`; for OTP add `https://www.erlang.org/doc/system/versions.html#order-of-versions` tagged `["x_version-scheme"]`. If unpatched, use a `/TODO` patch URL and confirm intentional-no-patch with the user.
-- **Credits** (`target: "credit", operation: "insert"`): reporter → `finder`, remediation_developer → `remediation developer`, reviewer → `remediation reviewer`, coordinator → `analyst`. `value` is the full real name only (no handle). Do not skip `pending` credits.
+- **Description** (`set` `description_md`): do not mention other CVE IDs — name the vulnerability class. The "This issue affects …" sentence ends with a real version (or `before TODO` if unpatched), never a bare `TODO`.
+- **Discovery** (`set` `discovery`): often already set at `open_case`.
+- **Configurations** (`set` `configurations_md`): only if the vulnerability needs specific deployment conditions; omit when unconditional.
+- **Workarounds** (`set` `workarounds_md`): only genuine mitigations. Never "apply the patch". Omit if none.
+- **Weakness** (`insert`): use `/find-cwe`.
+- **Impact** (`insert`): use `/find-capec`.
+- **References** (`insert`), in order: vendor advisory (GHSA → `["vendor-advisory", "related"]`), then patch commit(s) (`["patch"]`), then for OTP the version-scheme doc (`["x_version-scheme"]`). Varsel auto-adds the `cna.erlef.org` and `osv.dev` references on ID assignment — do not propose them. If unpatched, use a `/TODO` patch URL and confirm intentional-no-patch with the user.
+- **Credits** (`insert`): map GHSA roles — reporter → `finder`, remediation_developer → `remediation_developer`, reviewer → `remediation_reviewer`, coordinator → `analyst`. `name` is the full real name only (no handle). Do not skip `pending` credits.
 
 ## Step 8 — Derive and check the ranges
 
-Once the affected-package proposals are accepted, recompute and inspect the derived ranges:
+⚠️ **Derivation and rendering run on _applied_ (accepted) state, not on open proposals.** Everything you submitted above is an open proposal until a human accepts it in the UI. So this step only works once the affected-package proposal (at minimum) has been **accepted** — before that, there is no `affected_package` row to derive against. If proposals are still open, pause and ask the user to accept them (they may accept just the affected-package one to unblock derivation), then continue.
+
+Once accepted, render and inspect the derived ranges:
 
 ```
-mcp__varsel__refresh_case_derivation(id: <case-id>)
 mcp__varsel__render_case_preview(input: {id: <case-id>})
 ```
 
-`render_case_preview` returns the rendered CNA container, the validation result, applied overrides, and publish blockers — without publishing. Confirm each affected entry's derived `from X before Y` matches the advisory's first-affected / fixed versions. A wrong range means a wrong boundary SHA — fix it with a new proposal.
+`render_case_preview` computes derivation on demand and returns the rendered CNA container, the validation result, applied overrides, and publish blockers — without publishing. (A standalone `mcp__varsel__refresh_case_derivation(id: ...)` exists to recompute the cache, but the preview does it for you; prefer the preview.) Confirm each affected entry's derived `from X before Y` matches the advisory's first-affected / fixed versions. A wrong range means a wrong boundary SHA — fix it with a new proposal (which again needs accepting before it takes effect).
 
 ## Step 9 — Verify
 

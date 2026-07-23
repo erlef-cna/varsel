@@ -129,6 +129,32 @@ defmodule Varsel.Cases.Proposal do
       channels) and one version boundary fact per commit. When vulnerable code moved between OTP applications
       over time, additionally propose channel-scoped explicit version events
       bounding the former application's channel.
+
+      Payload keys per target (the value inside the {"value": ...} envelope;
+      any other key is rejected). :set targets the `case` fields; :insert
+      targets a child row:
+        - case (:set field_name): title, description_md, workarounds_md,
+          configurations_md, solutions_md, discovery (external|internal|
+          unknown), cvss_v4 (a CVSS:4.0/... vector string), date_public,
+          timeline, cna_override.
+        - affected_package (:insert): vendor, product, repo_url, cpe,
+          default_status, program_files, platforms, allow_unreleased_fix,
+          position -- OR a preset payload (above).
+        - package_channel (:insert, target_id = affected_package): purl_type,
+          namespace, name, qualifiers, subpath, tag_suffixes,
+          versions_override, entry_override, position.
+        - version_event (:insert, target_id = affected_package): event
+          (introduced|fixed), commit_sha, version, note.
+        - reference (:insert): url, tags (e.g. ["vendor-advisory"], ["patch"],
+          ["x_version-scheme"]), position. Do NOT propose the
+          cna.erlef.org/cves/... or osv.dev/... references -- Varsel adds those
+          automatically when the CVE ID is assigned.
+        - credit (:insert): name (the full real name), credit_type (finder|
+          reporter|analyst|coordinator|remediation_developer|
+          remediation_reviewer|remediation_verifier|sponsor|tool|other),
+          organization (optional), position.
+        - weakness (:insert): cwe_id (integer only).
+        - impact (:insert): capec_id (integer only).
       """
 
       accept [

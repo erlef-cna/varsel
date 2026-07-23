@@ -381,5 +381,39 @@ defmodule Varsel.CAPEC.AttackPatternTest do
 
       assert results == []
     end
+
+    test "OR broadens recall: a descriptive query still matches" do
+      # No single pattern contains all of these words; ANDing them (the old
+      # plainto_tsquery behavior) would match nothing. With OR the buffer
+      # overflow pattern surfaces on the overlapping term.
+      results =
+        AttackPattern
+        |> Ash.Query.for_read(:search, %{query: "overflow OR flooding OR exhaustion"}, authorize?: false)
+        |> Ash.read!(authorize?: false)
+
+      assert Enum.any?(results, &(&1.capec_id == 100))
+    end
+
+    test "ranks matches ahead of non-matches" do
+      results =
+        AttackPattern
+        |> Ash.Query.for_read(:search, %{query: "sql injection"}, authorize?: false)
+        |> Ash.read!(authorize?: false)
+
+      ids = Enum.map(results, & &1.capec_id)
+      # The two SQL-injection patterns rank ahead of the unrelated buffer
+      # overflow pattern (which shares none of the query terms).
+      assert 66 in ids and 7 in ids
+      refute 100 in ids
+    end
+
+    test "does not raise on tsquery operator characters in raw input" do
+      results =
+        AttackPattern
+        |> Ash.Query.for_read(:search, %{query: "sql:*() & | !"}, authorize?: false)
+        |> Ash.read!(authorize?: false)
+
+      assert is_list(results)
+    end
   end
 end

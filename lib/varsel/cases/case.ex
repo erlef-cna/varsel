@@ -181,8 +181,12 @@ defmodule Varsel.Cases.Case do
       case by id: the rendered CNA container, validation result, applied
       overrides and publish blockers, without publishing. Authorization is the
       case read policy — the fetch below runs under the actor, so a case the
-      actor may not read is `NotFound`. Uses cached derivations
-      (refresh_derivation recomputes them).
+      actor may not read is `NotFound`.
+
+      Renders from the case's *applied* state, i.e. accepted proposals only —
+      open (unaccepted) proposals do not appear, and a case with no accepted
+      affected_package derives no version ranges yet. Computes derivation on
+      demand (no need to call refresh_derivation first).
       """
 
       argument :id, :uuid, allow_nil?: false
@@ -200,7 +204,7 @@ defmodule Varsel.Cases.Case do
     end
 
     update :refresh_derivation do
-      description "Recomputes the derived version data (SHA → version ranges) of every affected package."
+      description "Recomputes the derived version data (SHA → version ranges) of every *accepted* affected package. Usually unnecessary — render_preview derives on demand. A case with no accepted affected_package has nothing to derive."
       accept []
       require_atomic? false
 

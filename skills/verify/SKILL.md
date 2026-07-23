@@ -18,11 +18,12 @@ Verify the case specified by the user (or the current working case). Fix any iss
 ## Step 1 — Render the preview
 
 ```
-mcp__varsel__refresh_case_derivation(id: <case-id>)
 mcp__varsel__render_case_preview(input: {id: <case-id>})
 ```
 
-`render_case_preview` returns the rendered CNA container, a validation result, applied overrides, and **publish blockers**. Any publish blocker is an automatic FAIL — resolve it before anything else. Use the rendered container as the record under test for the checks below.
+`render_case_preview` derives on demand and returns the rendered CNA container, a validation result, applied overrides, and **publish blockers**. Any publish blocker is an automatic FAIL — resolve it before anything else. Use the rendered container as the record under test for the checks below.
+
+Note: the preview reflects **accepted** proposals only. If you (or the user) just submitted fixes as new proposals, they must be accepted before they show up here — re-render after acceptance.
 
 ## Step 2 — Validators
 
