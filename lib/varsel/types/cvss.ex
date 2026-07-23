@@ -17,6 +17,9 @@ defmodule Varsel.Types.CVSS do
 
   use Ash.Type
 
+  # Encodes to JSON (e.g. when an MCP/GraphQL read returns a case's cvss_v4)
+  # as its four public fields; the vector is authoritative, the rest derived.
+  @derive {Jason.Encoder, only: [:vector, :version, :score, :severity]}
   @enforce_keys [:vector, :version, :score, :severity]
   defstruct [:vector, :version, :score, :severity]
 
