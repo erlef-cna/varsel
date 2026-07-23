@@ -431,8 +431,13 @@ defmodule VarselWeb.CveView do
 
   The commit base URL is taken from the first reference whose URL matches a
   GitHub `.../commit/<sha>` shape; SHAs are shown truncated to 10 chars.
+
+  Callers pass HTML that has already been sanitized (`markdown/1` /
+  `MDExNative.Ammonia.safe_html/1`); the SHA-links injected here are built
+  from a hex-only regex and a github.com base URL, so the output stays safe.
   """
-  # sobelow_skip ["XSS.Raw"] - CVE HTML is trusted
+  # Input is already sanitized; the injected SHA links are hex-only.
+  # sobelow_skip ["XSS.Raw"]
   @spec link_commit_shas(String.t(), [map()]) :: Phoenix.HTML.safe()
   def link_commit_shas(html, references) when is_binary(html) do
     case commit_base_url(references) do
@@ -478,7 +483,9 @@ defmodule VarselWeb.CveView do
       entry ->
         html =
           case Enum.find(entry["supportingMedia"] || [], &(&1["type"] == "text/html")) do
-            %{"value" => value} -> value
+            # supportingMedia HTML may come straight from a MITRE import, so
+            # sanitize it. `markdown/1` already sanitizes its own output.
+            %{"value" => value} -> MDExNative.Ammonia.safe_html(value)
             _ -> markdown(entry["value"] || "")
           end
 
@@ -490,12 +497,18 @@ defmodule VarselWeb.CveView do
     entries |> List.wrap() |> Enum.find(&(&1["lang"] == "en"))
   end
 
-  @doc "Renders a markdown string to HTML (same engine nimble_publisher uses)."
+  @doc """
+  Renders a markdown string to HTML (same engine nimble_publisher uses).
+
+  `unsafe: true` passes literal HTML through Comrak; `sanitize` then strips
+  scripts and dangerous attributes so the result is safe for `raw/1`.
+  """
   @spec markdown(String.t()) :: String.t()
   def markdown(text) when is_binary(text) do
     MDExNative.Comrak.markdown_to_html(text,
       extension: [table: true, autolink: true, strikethrough: true],
-      render: [hardbreaks: false, unsafe: true]
+      render: [hardbreaks: false, unsafe: true],
+      sanitize: MDEx.Document.default_sanitize_options()
     )
   end
 

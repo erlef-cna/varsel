@@ -44,4 +44,21 @@ defmodule Varsel.Cases.MarkdownTest do
   test "plain text renders lists" do
     assert Markdown.to_plaintext("Options:\n\n* one\n* two") == "Options:\n\n* one\n* two"
   end
+
+  test "sanitizes dangerous HTML but keeps safe author HTML" do
+    for render <- [&Markdown.to_html/1, &Markdown.to_display_html/1] do
+      html = render.("Hi <b>there</b> <script>alert('xss')</script>")
+      assert html =~ "<b>there</b>"
+      refute html =~ "<script"
+      refute html =~ "alert"
+    end
+
+    # Event-handler attributes and javascript: URLs are stripped.
+    img = "<img src=x onerror=" <> ~s("steal") <> ">"
+    assert Markdown.to_html(img) == "<img src=" <> ~s("x") <> ">"
+
+    js_scheme = "javascript" <> ":"
+    js_link = "[x]" <> "(" <> js_scheme <> "alert" <> ")"
+    refute Markdown.to_html(js_link) =~ js_scheme
+  end
 end

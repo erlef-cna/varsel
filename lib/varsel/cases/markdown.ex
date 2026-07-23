@@ -9,9 +9,14 @@ defmodule Varsel.Cases.Markdown do
   value. Both derive from the same MDEx document, so they always agree.
   """
 
+  # `unsafe: true` lets authors embed literal HTML in their markdown; the
+  # `sanitize` pass (ammonia, MDEx's conservative default allow-list) then
+  # strips scripts, event handlers, and dangerous attributes/URLs before the
+  # HTML is rendered with `raw/1`. See https://mdex.hexdocs.pm/safety.html.
   @options [
     extension: [table: true, autolink: true, strikethrough: true],
-    render: [hardbreaks: false]
+    render: [hardbreaks: false, unsafe: true],
+    sanitize: MDEx.Document.default_sanitize_options()
   ]
 
   # Lumis highlighting is display-only: the supportingMedia HTML embedded in
