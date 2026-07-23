@@ -75,6 +75,7 @@ defmodule Varsel.MixProject do
       {:ash_postgres, "~> 2.0"},
       {:ash_state_machine, "~> 0.2"},
       {:bandit, "~> 1.5"},
+      {:cidr, "~> 1.2"},
       {:cloak, "~> 1.1"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:cvss, "~> 0.1"},
