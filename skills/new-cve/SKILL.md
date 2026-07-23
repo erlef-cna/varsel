@@ -128,7 +128,9 @@ Notes:
 
 ## Step 7 — Descriptions, metadata, references, credits
 
-Propose the remaining fields onto the case, one typed tool per field. Each tool's description lists its exact arguments and enum values — follow it; the notes here are the editorial judgment on top. Keep `reasoning` ASCII (no em-dashes / non-ASCII — they can break the call's JSON).
+Propose the remaining fields onto the case, one typed tool per field. Each tool's description lists its exact arguments and enum values — follow it; the notes here are the editorial judgment on top.
+
+Use correct Unicode everywhere, including full diacritics in names (e.g. `Michał Wąsowski`, `Jonatan Männchen`). Never transliterate or strip accents from a real name.
 
 - **Description** (`propose_description`, `value`): do not mention other CVE IDs — name the vulnerability class. The "This issue affects …" sentence ends with a real version (or `before TODO` if unpatched), never a bare `TODO`.
 - **Discovery** (`propose_discovery`, `value`): often already set at `open_case`.
@@ -137,7 +139,7 @@ Propose the remaining fields onto the case, one typed tool per field. Each tool'
 - **Weakness** (`propose_weakness`): use `/find-cwe`.
 - **Impact** (`propose_impact`): use `/find-capec`.
 - **References** (`propose_reference`, `url` + `tags`), in order: vendor advisory (GHSA → `["vendor-advisory", "related"]`), then patch commit(s) (`["patch"]`), then for OTP the version-scheme doc (`["x_version-scheme"]`). Varsel auto-adds the `cna.erlef.org` and `osv.dev` references on ID assignment — do not propose them. If unpatched, use a `/TODO` patch URL and confirm intentional-no-patch with the user.
-- **Credits** (`propose_credit`, `name` + `credit_type` [+ `organization`]): map GHSA roles — reporter → `finder`, remediation_developer → `remediation_developer`, reviewer → `remediation_reviewer`, coordinator → `analyst`. `name` is the full real name only (no handle). Do not skip `pending` credits.
+- **Credits** (`propose_credit`, `name` + `credit_type` [+ `organization`]): map GHSA roles — reporter → `finder`, remediation_developer → `remediation_developer`, reviewer → `remediation_reviewer`, coordinator → `analyst`. `name` is the full real name only (no handle), spelled with its correct diacritics. Do not skip `pending` credits.
 
 To remove a child row, use `propose_delete` with its `target` (e.g. `"reference"`) and `target_id`.
 

@@ -27,13 +27,9 @@ Note: the preview reflects **accepted** proposals only. If you (or the user) jus
 
 ## Step 2 — Validators
 
-Run the MCP validators on the rendered CNA JSON:
+`render_case_preview` already runs the validators for you: its **`validation`** field is the schema + cvelint + hex-package result (`{valid, errors}`) over the full record it assembles (`cve_json`, using a `CVE-0000-0000` placeholder until an ID is assigned). Read `preview.validation` — any error there is a FAIL. Fix it as a proposal, re-render, and re-check.
 
-```
-mcp__varsel__validate_cve_record(input: {cve_json: <rendered container>})
-```
-
-This runs schema + cvelint + hex-package checks together. If you need to isolate a failure, the individual tools are `validate_cve_record_schema`, `validate_cve_record_cvelint`, and `validate_cve_record_hex_packages`. Fix any error (as a proposal, then re-render) before proceeding.
+You normally do not need the standalone `validate_cve_record` tool. Reach for it (and the per-check `validate_cve_record_schema` / `_cvelint` / `_hex_packages`) only to isolate a specific failure against a hand-modified record.
 
 ## Step 3 — Convention checklist
 
