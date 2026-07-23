@@ -14,7 +14,9 @@ defmodule Varsel.CVE.CveRecord.Validations.ValidCveRecord do
 
   use Ash.Resource.Validation
 
-  @impl true
+  alias Ash.Resource.Validation
+
+  @impl Validation
   def atomic(_changeset, _opts, _context) do
     # Only reached when the validation's `where` conditions match (Ash skips
     # it otherwise), i.e. on actions that must set `require_atomic? false`
@@ -22,7 +24,7 @@ defmodule Varsel.CVE.CveRecord.Validations.ValidCveRecord do
     {:not_atomic, "CVE record validation calls external services and cannot run atomically"}
   end
 
-  @impl true
+  @impl Validation
   def validate(changeset, _opts, _context) do
     case Ash.Changeset.get_attribute(changeset, :cve_json) do
       # Leave missing JSON to the action's own presence checks. This also keeps

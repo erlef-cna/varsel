@@ -9,7 +9,7 @@ defmodule Varsel.Application do
 
   use Application
 
-  @impl true
+  @impl Application
   def start(_type, _args) do
     children = [
       {AshAuthentication.Oauth2Server.Supervisor, [otp_app: :varsel]},
@@ -41,7 +41,7 @@ defmodule Varsel.Application do
 
   # Tell Phoenix to update the endpoint configuration
   # whenever the application is updated.
-  @impl true
+  @impl Application
   def config_change(changed, _new, removed) do
     VarselWeb.Endpoint.config_change(changed, removed)
     :ok

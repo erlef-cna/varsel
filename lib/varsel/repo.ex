@@ -6,7 +6,7 @@ defmodule Varsel.Repo do
   use AshPostgres.Repo,
     otp_app: :varsel
 
-  @impl true
+  @impl AshPostgres.Repo
   def installed_extensions do
     # Add extensions here, and the migration generator will install them.
     ["ash-functions", "citext"]
@@ -14,12 +14,12 @@ defmodule Varsel.Repo do
 
   # Don't open unnecessary transactions
   # will default to `false` in 4.0
-  @impl true
+  @impl AshPostgres.Repo
   def prefer_transaction? do
     false
   end
 
-  @impl true
+  @impl AshPostgres.Repo
   def min_pg_version do
     %Version{major: 17, minor: 9, patch: 0}
   end
