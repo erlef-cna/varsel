@@ -67,6 +67,10 @@ defmodule VarselWeb.Endpoint do
   # Runs before the router so the per-request script nonce it generates lands
   # in conn.assigns before the root layout renders <script nonce=…>.
   plug PlugContentSecurityPolicy
+  # Extra security headers (Permissions-Policy, COOP, X-Frame-Options, CORP)
+  # not covered by put_secure_browser_headers or the CSP. Ahead of
+  # SearchIndexing so its early robots.txt response carries them too.
+  plug VarselWeb.Plugs.SecurityHeaders
   plug VarselWeb.Plugs.SearchIndexing
   plug VarselWeb.Router
 end

@@ -11,6 +11,7 @@ defmodule VarselWeb.Router do
   alias Varsel.Accounts.User
   alias VarselWeb.Plugs.ApiKeyAuth
   alias VarselWeb.Plugs.OauthBearerAuth
+  alias VarselWeb.Plugs.PublicResource
 
   # Accepts an `eefcna_` API key, an AshAuthentication session JWT, or an
   # OAuth 2.1 access token; anonymous requests get the 401 challenge.
@@ -67,6 +68,11 @@ defmodule VarselWeb.Router do
     # The OAuth consent screen identifies the consenting user through the
     # conn's Ash actor (Ash.PlugHelpers.get_actor/1).
     plug :set_actor, :user
+    # `/cves/<id>.json`, `/osv/*.json` and the Atom/RSS feeds are served on this
+    # pipeline (the `.json` id delegates within the HTML detail action). Drop
+    # CORP for those JSON/feed responses so they stay fetchable cross-origin;
+    # HTML pages keep the default same-site policy (content-type gated).
+    plug PublicResource
   end
 
   # Auth pages (sign in / register / reset / confirm) use a bare, centered
@@ -86,6 +92,8 @@ defmodule VarselWeb.Router do
     plug ApiKeyAuth
     plug :load_from_bearer
     plug :set_actor, :user
+    # Public JSON data — drop CORP so it can be fetched cross-origin.
+    plug PublicResource
   end
 
   # MCP tool calls read the actor from the conn (Ash.PlugHelpers). Access
