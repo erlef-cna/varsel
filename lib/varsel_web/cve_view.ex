@@ -87,6 +87,19 @@ defmodule VarselWeb.CveView do
     {:safe, iodata}
   end
 
+  @doc """
+  A CVE title split for wrapping at underscores via `<wbr>`: the raw title
+  segments interspersed with a `raw/1`'d `_<wbr>`. HEEx escapes the bare title
+  segments on render, so `raw/1` only ever touches the fixed literal and a
+  title carrying markup renders as inert text.
+  """
+  @spec wrap_title(String.t()) :: Phoenix.HTML.Safe.t()
+  def wrap_title(title) when is_binary(title) do
+    title
+    |> String.split("_")
+    |> Enum.intersperse(Phoenix.HTML.raw("_<wbr>"))
+  end
+
   ## ---------------------------------------------------------------- CWE / CAPEC
 
   @doc "The primary English CWE problemType description, or nil."
