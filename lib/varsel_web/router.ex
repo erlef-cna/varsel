@@ -291,6 +291,7 @@ defmodule VarselWeb.Router do
         :list_users,
         :update_user,
         :set_user_role,
+        :open_case,
         :list_cases,
         :get_case,
         :render_case_preview,

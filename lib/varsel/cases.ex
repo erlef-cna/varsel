@@ -25,6 +25,11 @@ defmodule Varsel.Cases do
   end
 
   tools do
+    # Opening a fresh draft is the one lifecycle action exposed to the agent:
+    # it creates the empty workspace the agent then fills via proposals, rather
+    # than advancing or resolving an existing case (POC-only, same as the UI).
+    tool :open_case, Case, :open
+
     # Case reading + previews (policy-gated: POC or assigned; requires an API key actor).
     tool :list_cases, Case, :list_cases do
       load [:cve_id]
