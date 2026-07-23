@@ -23,12 +23,18 @@ config :swoosh, local: false
 # before starting your production server.
 config :varsel, VarselWeb.Endpoint, cache_static_manifest: "priv/static/cache_manifest.json"
 
-# Force using SSL in production. This also sets the "strict-security-transport" header,
-# known as HSTS. If you have a health check endpoint, you may want to exclude it below.
-# Note `:force_ssl` is required to be set at compile-time.
+# Force using SSL in production. This also sets the "strict-transport-security"
+# header (HSTS). We only ever serve over HTTPS, so opt into the strongest
+# policy: a 2-year max-age with `includeSubDomains`, and `preload` so browsers
+# ship with the host pinned to HTTPS (these are exactly the HSTS preload-list
+# requirements — https://hstspreload.org). `:force_ssl` must be set at
+# compile-time.
 config :varsel, VarselWeb.Endpoint,
   force_ssl: [
     rewrite_on: [:x_forwarded_proto],
+    expires: 63_072_000,
+    preload: true,
+    subdomains: true,
     exclude: [
       # paths: ["/health"],
       hosts: ["localhost", "127.0.0.1"]
