@@ -30,6 +30,7 @@ defmodule Varsel.Cases.Proposal do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshPaperTrail.Resource, AshGraphql.Resource],
+    fragments: [Varsel.Cases.Proposal.ProposeActions],
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
@@ -107,53 +108,19 @@ defmodule Varsel.Cases.Proposal do
     end
 
     create :propose do
+      # The generic entry point behind every specialized propose_* action;
+      # internal-only (private) but the resource's primary create.
+      primary? true
+      public? false
+
       description """
-      Creates a change request against a case. Exactly one of: set one field
-      (operation :set, field_name + proposed_value), add a child row (:insert,
-      proposed_value is the row payload; target_id references the parent
-      affected_package for package_channel/version_event targets), or remove a
-      child row (:delete, target_id references the row). The value always
-      travels in a {"value": ...} envelope.
-
-      Payload keys per target (the map inside {"value": ...}; any other key is
-      rejected, and the error lists the allowed keys). :set targets a `case`
-      field via field_name; :insert supplies a child row:
-        - case (:set field_name): title, description_md, workarounds_md,
-          configurations_md, solutions_md, discovery (external|internal|
-          unknown), cvss_v4 (a CVSS:4.0/... vector string), date_public,
-          timeline, cna_override.
-        - weakness (:insert): cwe_id (integer only).
-        - impact (:insert): capec_id (integer only).
-        - reference (:insert): url, tags (e.g. ["vendor-advisory"], ["patch"],
-          ["x_version-scheme"]), position. Do NOT propose the
-          cna.erlef.org/cves/... or osv.dev/... references -- Varsel adds those
-          automatically when the CVE ID is assigned.
-        - credit (:insert): name (the full real name), credit_type (finder|
-          reporter|analyst|coordinator|remediation_developer|
-          remediation_reviewer|remediation_verifier|sponsor|tool|other),
-          organization (optional), position.
-        - affected_package (:insert): vendor, product, repo_url, cpe,
-          default_status, program_files, platforms, allow_unreleased_fix,
-          position -- OR a preset payload (see below).
-        - package_channel (:insert, target_id = affected_package): purl_type,
-          namespace, name, qualifiers, subpath, tag_suffixes,
-          versions_override, entry_override, position.
-        - version_event (:insert, target_id = affected_package): event
-          (introduced|fixed), commit_sha, version, note.
-
-      Preset shortcut (affected_package :insert only): a payload may instead
-      name a well-known product preset: {"preset": "otp" | "elixir" | "gleam",
-      "applications": [...], "introduced_commit": sha, "fixed_commits": [sha,
-      ...], "program_files": [{"path": "lib/ssh/src/ssh_sftpd.erl", "modules":
-      ["ssh_sftpd"], "routines": ["ssh_sftpd:handle_op/4"]}, ...]}. Paths are
-      repository-root-relative; each rendered entry scopes files/modules/
-      routines to its channel's subpath (prefilled per application). Accepting
-      creates the package with vendor/product/repo/CPE prefilled, one
-      pkg:otp/<application> channel per application (otp/elixir; gleam takes no
-      applications and gets its sid + OCI channels), and one version boundary
-      fact per commit. When vulnerable code moved between OTP applications over
-      time, additionally propose channel-scoped explicit version events
-      bounding the former application's channel.
+      Internal generic proposal writer backing the typed `propose_*` actions
+      and the UI's batch/counter path. Sets one field (`:set`, field_name +
+      value), inserts a child row (`:insert`, payload map), or deletes one
+      (`:delete`, target_id); the value travels in a {"value": ...} envelope.
+      Public callers use the typed `propose_*` actions instead. Payload rules
+      live in `Varsel.Cases.Proposal.Validations.ValidTarget` and
+      `Varsel.Cases.Proposable`.
       """
 
       accept [
@@ -166,17 +133,12 @@ defmodule Varsel.Cases.Proposal do
         :reasoning,
         :parent_proposal_id
       ]
-
-      change relate_actor(:author)
-
-      validate {CaseState,
-                states: [:draft, :review, :approved, :publishing, :published],
-                message: "proposals cannot be created on a closed case"}
-
-      # The validation needs target/operation present (the MCP permission
-      # check probes the action with empty input).
-      validate ValidTarget, only_when_valid?: true
     end
+
+    # The specialized, strongly-typed propose_* create actions live in the
+    # Varsel.Cases.Proposal.ProposeActions fragment (added via `fragments:`
+    # above). They are the public MCP/GraphQL surface; the generic :propose
+    # here stays private and backs them.
 
     update :accept do
       description """
@@ -248,7 +210,15 @@ defmodule Varsel.Cases.Proposal do
       authorize_if relates_to_actor_via(:author)
     end
 
-    policy action([:propose, :accept, :decline]) do
+    # Every create action is a propose variant (the generic :propose plus the
+    # specialized propose_* actions), so gate them by type rather than naming
+    # each one.
+    policy action_type(:create) do
+      authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    policy action([:accept, :decline]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
@@ -270,6 +240,22 @@ defmodule Varsel.Cases.Proposal do
 
     publish_all :create, [[:case_id]]
     publish_all :update, [[:case_id]]
+  end
+
+  # Every create action is a propose variant (the generic :propose plus the
+  # specialized propose_* actions); these apply to all of them so each action
+  # only declares its own payload and PackProposal change.
+  changes do
+    change relate_actor(:author), on: [:create]
+  end
+
+  validations do
+    validate {CaseState,
+              states: [:draft, :review, :approved, :publishing, :published],
+              message: "proposals cannot be created on a closed case"},
+             on: [:create]
+
+    validate ValidTarget, on: [:create], only_when_valid?: true
   end
 
   attributes do

@@ -55,7 +55,31 @@ defmodule Varsel.Cases do
     # through their lifecycle stays in the human UI.
     tool :list_case_proposals, Proposal, :list_for_case
     tool :list_open_case_proposals, Proposal, :list_open_for_case
-    tool :create_case_proposal, Proposal, :propose
+
+    # One typed propose_* tool per field/child kind (the generic :propose stays
+    # private; the agent picks the tool that names what it is changing).
+    tool :propose_title, Proposal, :propose_title
+    tool :propose_description, Proposal, :propose_description
+    tool :propose_workarounds, Proposal, :propose_workarounds
+    tool :propose_configurations, Proposal, :propose_configurations
+    tool :propose_solutions, Proposal, :propose_solutions
+    tool :propose_discovery, Proposal, :propose_discovery
+    tool :propose_cvss, Proposal, :propose_cvss
+    tool :propose_date_public, Proposal, :propose_date_public
+    tool :propose_timeline, Proposal, :propose_timeline
+    tool :propose_cna_override, Proposal, :propose_cna_override
+    tool :propose_weakness, Proposal, :propose_weakness
+    tool :propose_impact, Proposal, :propose_impact
+    tool :propose_reference, Proposal, :propose_reference
+    tool :propose_credit, Proposal, :propose_credit
+    tool :propose_affected_package, Proposal, :propose_affected_package
+    tool :propose_otp_affected_package, Proposal, :propose_otp_affected_package
+    tool :propose_elixir_affected_package, Proposal, :propose_elixir_affected_package
+    tool :propose_gleam_affected_package, Proposal, :propose_gleam_affected_package
+    tool :propose_package_channel, Proposal, :propose_package_channel
+    tool :propose_version_event, Proposal, :propose_version_event
+    tool :propose_delete, Proposal, :propose_delete
+
     tool :withdraw_case_proposal, Proposal, :withdraw
     tool :list_case_comments, Comment, :list_for_case
     tool :create_case_comment, Comment, :post
@@ -119,7 +143,27 @@ defmodule Varsel.Cases do
       create CaseImpact, :add_case_impact, :add
       destroy CaseImpact, :remove_case_impact, :remove
 
-      create Proposal, :create_case_proposal, :propose
+      create Proposal, :propose_case_title, :propose_title
+      create Proposal, :propose_case_description, :propose_description
+      create Proposal, :propose_case_workarounds, :propose_workarounds
+      create Proposal, :propose_case_configurations, :propose_configurations
+      create Proposal, :propose_case_solutions, :propose_solutions
+      create Proposal, :propose_case_discovery, :propose_discovery
+      create Proposal, :propose_case_cvss, :propose_cvss
+      create Proposal, :propose_case_date_public, :propose_date_public
+      create Proposal, :propose_case_timeline, :propose_timeline
+      create Proposal, :propose_case_cna_override, :propose_cna_override
+      create Proposal, :propose_case_weakness, :propose_weakness
+      create Proposal, :propose_case_impact, :propose_impact
+      create Proposal, :propose_case_reference, :propose_reference
+      create Proposal, :propose_case_credit, :propose_credit
+      create Proposal, :propose_case_affected_package, :propose_affected_package
+      create Proposal, :propose_case_otp_affected_package, :propose_otp_affected_package
+      create Proposal, :propose_case_elixir_affected_package, :propose_elixir_affected_package
+      create Proposal, :propose_case_gleam_affected_package, :propose_gleam_affected_package
+      create Proposal, :propose_case_package_channel, :propose_package_channel
+      create Proposal, :propose_case_version_event, :propose_version_event
+      create Proposal, :propose_case_delete, :propose_delete
       update Proposal, :accept_case_proposal, :accept
       update Proposal, :decline_case_proposal, :decline
       update Proposal, :withdraw_case_proposal, :withdraw
@@ -233,7 +277,32 @@ defmodule Varsel.Cases do
     end
 
     resource Proposal do
+      # Internal generic entry point (private action) for the LiveView's
+      # projection-diff engine and tests; not exposed on MCP/GraphQL.
       define :create_case_proposal, action: :propose
+
+      define :propose_title, action: :propose_title
+      define :propose_description, action: :propose_description
+      define :propose_workarounds, action: :propose_workarounds
+      define :propose_configurations, action: :propose_configurations
+      define :propose_solutions, action: :propose_solutions
+      define :propose_discovery, action: :propose_discovery
+      define :propose_cvss, action: :propose_cvss
+      define :propose_date_public, action: :propose_date_public
+      define :propose_timeline, action: :propose_timeline
+      define :propose_cna_override, action: :propose_cna_override
+      define :propose_weakness, action: :propose_weakness
+      define :propose_impact, action: :propose_impact
+      define :propose_reference, action: :propose_reference
+      define :propose_credit, action: :propose_credit
+      define :propose_affected_package, action: :propose_affected_package
+      define :propose_otp_affected_package, action: :propose_otp_affected_package
+      define :propose_elixir_affected_package, action: :propose_elixir_affected_package
+      define :propose_gleam_affected_package, action: :propose_gleam_affected_package
+      define :propose_package_channel, action: :propose_package_channel
+      define :propose_version_event, action: :propose_version_event
+      define :propose_delete, action: :propose_delete
+
       define :list_case_proposals, action: :list_for_case, args: [:case_id]
       define :list_open_case_proposals, action: :list_open_for_case, args: [:case_id]
       define :get_case_proposal, action: :read, get_by: [:id]

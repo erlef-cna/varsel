@@ -75,6 +75,16 @@ defmodule Varsel.Types.CVSS do
     cast_input(vector, constraints)
   end
 
+  # A previously-dumped value (`dump_to_embedded`/`dump_to_native`) round-trips
+  # back through the authoritative vector, so the derived fields stay in sync.
+  def cast_input(%{"vector" => vector}, constraints) when is_binary(vector) do
+    cast_input(vector, constraints)
+  end
+
+  def cast_input(%{vector: vector}, constraints) when is_binary(vector) do
+    cast_input(vector, constraints)
+  end
+
   def cast_input(parsed, constraints) when is_tuple(parsed) do
     apply_constraints(
       %__MODULE__{

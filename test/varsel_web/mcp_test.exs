@@ -82,7 +82,9 @@ defmodule VarselWeb.McpTest do
                    request_publish_cve reject_cve list_users update_user set_user_role
                    submit_vulnerability_report list_cases get_case render_case_preview
                    refresh_case_derivation list_case_proposals list_open_case_proposals
-                   create_case_proposal withdraw_case_proposal list_case_comments
+                   propose_title propose_credit propose_weakness propose_reference
+                   propose_otp_affected_package propose_version_event propose_delete
+                   withdraw_case_proposal list_case_comments
                    create_case_comment) do
       assert body =~ tool
     end

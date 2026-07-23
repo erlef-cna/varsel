@@ -240,16 +240,7 @@ defmodule Varsel.Cases.CaseTest do
       case_record = Fixtures.open_case(poc)
 
       proposal =
-        Cases.create_case_proposal!(
-          %{
-            case_id: case_record.id,
-            target: :case,
-            operation: :set,
-            field_name: "title",
-            proposed_value: %{"value" => "Better title"}
-          },
-          actor: poc
-        )
+        Cases.propose_title!(%{case_id: case_record.id, value: "Better title"}, actor: poc)
 
       Cases.close_case!(case_record, %{}, actor: poc)
 

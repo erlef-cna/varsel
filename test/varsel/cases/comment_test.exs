@@ -25,16 +25,7 @@ defmodule Varsel.Cases.CommentTest do
 
   test "optionally references a proposal of the same case", %{poc: poc, case: case_record} do
     proposal =
-      Cases.create_case_proposal!(
-        %{
-          case_id: case_record.id,
-          target: :case,
-          operation: :set,
-          field_name: "title",
-          proposed_value: %{"value" => "x"}
-        },
-        actor: poc
-      )
+      Cases.propose_title!(%{case_id: case_record.id, value: "x"}, actor: poc)
 
     comment =
       Cases.post_case_comment!(
@@ -49,16 +40,7 @@ defmodule Varsel.Cases.CommentTest do
     other_case = Fixtures.open_case(poc, %{title: "Other"})
 
     proposal =
-      Cases.create_case_proposal!(
-        %{
-          case_id: other_case.id,
-          target: :case,
-          operation: :set,
-          field_name: "title",
-          proposed_value: %{"value" => "x"}
-        },
-        actor: poc
-      )
+      Cases.propose_title!(%{case_id: other_case.id, value: "x"}, actor: poc)
 
     assert {:error, error} =
              Cases.post_case_comment(

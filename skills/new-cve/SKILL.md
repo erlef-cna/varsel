@@ -15,7 +15,7 @@ You file CVEs through the **Varsel MCP** (`mcp__varsel__*` tools). This assumes 
 
 The unit of work is a **case**. You describe the vulnerability as **facts** — commit SHAs, package channels, references, credits, weaknesses, impacts — by submitting **field-level proposals**. Varsel **derives** the affected version ranges from the commit SHAs and **renders** the CNA record for you. You do not write version ranges, `cpeApplicability`, `programFiles` prefixes, or any CVE JSON by hand: state the facts, let the server compute the record.
 
-Every change to a case is a **proposal** (`mcp__varsel__create_case_proposal`). Proposals are reviewed and accepted by a human — you author them, you never self-approve.
+Every change to a case is a **proposal**. There is one typed `mcp__varsel__propose_*` tool per thing you can change — pick the tool that names it (`propose_title`, `propose_cvss`, `propose_weakness`, `propose_reference`, `propose_credit`, `propose_affected_package` / `propose_otp_affected_package` / `propose_elixir_affected_package` / `propose_gleam_affected_package`, `propose_package_channel`, `propose_version_event`, `propose_delete`, …). Each takes `case_id`, `reasoning`, and the typed fields for that one change. Proposals are reviewed and accepted by a human — you author them, you never self-approve.
 
 Work through the steps interactively. Pause after each discussion step for the user before proceeding.
 
@@ -56,10 +56,8 @@ The rest of this skill assumes you have a `case_id`.
 Use the `/cvss` skill to produce a CVSS v4.0 vector and score. Discuss severity, exploitability conditions, and any Supplemental metrics, then **wait for user confirmation** and propose it:
 
 ```
-create_case_proposal(input: {
-  case_id: <id>, target: "case", operation: "set",
-  field_name: "cvss_v4",
-  proposed_value: {"value": "CVSS:4.0/AV:.../..."},
+mcp__varsel__propose_cvss(input: {
+  case_id: <id>, value: "CVSS:4.0/AV:.../...",
   reasoning: "..."
 })
 ```
@@ -86,40 +84,40 @@ Use the `/find-intro-commit` skill to get the introducing commit SHA. You need t
 
 ## Step 6 — Describe the affected product
 
-Propose an **affected package** with `create_case_proposal(target: "affected_package", operation: "insert", ...)`. You state commit SHAs and program files; Varsel derives the version ranges, CPEs, and per-channel path scoping.
+Propose an **affected package** with `mcp__varsel__propose_affected_package(...)`. You state commit SHAs and program files; Varsel derives the version ranges, CPEs, and per-channel path scoping.
 
 ### Presets for OTP / Elixir / Gleam
 
-The `affected_package` insert payload accepts a **preset** that prefills vendor/product/repo/CPE and creates the channels plus one version-boundary fact per commit:
+For EEF-maintained products there is a dedicated preset tool per product —
+`propose_otp_affected_package`, `propose_elixir_affected_package`,
+`propose_gleam_affected_package` — that prefills vendor/product/repo/CPE and
+creates the channels plus one version-boundary fact per commit:
 
 ```
-create_case_proposal(input: {
-  case_id: <id>, target: "affected_package", operation: "insert",
-  proposed_value: {"value": {
-    "preset": "otp" | "elixir" | "gleam",
-    "applications": ["ssh"],              // otp/elixir: one channel per app; gleam takes none
-    "introduced_commit": "<intro-SHA>",
-    "fixed_commits": ["<fix-SHA>", ...],  // one per maintained release line; omit if unpatched
-    "program_files": [
-      {"path": "lib/ssh/src/ssh_sftpd.erl",
-       "modules": ["ssh_sftpd"],
-       "routines": ["ssh_sftpd:handle_op/4"]}
-    ]
-  }},
+mcp__varsel__propose_otp_affected_package(input: {
+  case_id: <id>,
+  applications: ["ssh"],              // otp/elixir: one channel per app; gleam omits this field
+  introduced_commit: "<intro-SHA>",
+  fixed_commits: ["<fix-SHA>", ...],  // one per maintained release line; omit if unpatched
+  program_files: [
+    {"path": "lib/ssh/src/ssh_sftpd.erl",
+     "modules": ["ssh_sftpd"],
+     "routines": ["ssh_sftpd:handle_op/4"]}
+  ],
   reasoning: "..."
 })
 ```
 
 - **Paths are repository-root-relative.** Each rendered channel scopes files/modules/routines to its own subpath automatically (per-application prefixes are handled for you).
-- `otp` / `elixir` create one `pkg:otp/<application>` channel per listed application, plus a boundary fact per commit. `gleam` takes no applications and gets its `sid` + OCI channels.
+- `propose_otp_affected_package` / `propose_elixir_affected_package` create one `pkg:otp/<application>` channel per listed application, plus a boundary fact per commit. `propose_gleam_affected_package` takes no applications and gets its `sid` + OCI channels.
 - When vulnerable code **moved between OTP applications** over time, additionally propose channel-scoped explicit `version_event`s bounding the former application's channel — the preset can't infer historical moves.
 
 ### Hex packages and everything else
 
-For a third-party hex package or any non-preset product, insert an `affected_package` (vendor/product/repo/CPE), then add its channels and boundary facts as child proposals:
+For a third-party hex package or any non-preset product, insert an `affected_package` (vendor/product/repo/CPE) with `propose_affected_package`, then add its channels and boundary facts as child proposals (pass the new package's id as `target_id`):
 
-- `target: "package_channel", operation: "insert", target_id: <affected_package-id>` — the purl channel(s): `pkg:hex/<name>` plus a `pkg:github/<owner>/<repo>` channel for the source repo.
-- `target: "version_event", operation: "insert", target_id: <affected_package-id>` — the boundary **facts**: the introducing commit and each fix commit. State the SHAs; do not write ranges.
+- `mcp__varsel__propose_package_channel(input: {case_id, target_id: <affected_package-id>, purl_type, name, ...})` — the purl channel(s): `pkg:hex/<name>` plus a `pkg:github/<owner>/<repo>` channel for the source repo.
+- `mcp__varsel__propose_version_event(input: {case_id, target_id: <affected_package-id>, event, commit_sha})` — the boundary **facts**: the introducing commit (`event: "introduced"`) and each fix commit (`event: "fixed"`). State the SHAs; do not write ranges.
 
 Notes:
 - **npm mirror**: some Elixir libs (eg. Phoenix, …) ship a companion npm package. If the vulnerable file actually ships in the npm tarball (`npm pack --dry-run` to confirm; paths may differ), add a `pkg:npm/<name>` channel with its own program-file paths. If the CVE only touches Elixir/Erlang source, skip it.
@@ -130,16 +128,18 @@ Notes:
 
 ## Step 7 — Descriptions, metadata, references, credits
 
-Propose the remaining fields onto the case. The `create_case_proposal` tool description lists the exact payload keys and enum values per target — follow it; the notes here are the editorial judgment on top. Keep `reasoning` ASCII (no em-dashes / non-ASCII — they can break the call's JSON).
+Propose the remaining fields onto the case, one typed tool per field. Each tool's description lists its exact arguments and enum values — follow it; the notes here are the editorial judgment on top. Keep `reasoning` ASCII (no em-dashes / non-ASCII — they can break the call's JSON).
 
-- **Description** (`set` `description_md`): do not mention other CVE IDs — name the vulnerability class. The "This issue affects …" sentence ends with a real version (or `before TODO` if unpatched), never a bare `TODO`.
-- **Discovery** (`set` `discovery`): often already set at `open_case`.
-- **Configurations** (`set` `configurations_md`): only if the vulnerability needs specific deployment conditions; omit when unconditional.
-- **Workarounds** (`set` `workarounds_md`): only genuine mitigations. Never "apply the patch". Omit if none.
-- **Weakness** (`insert`): use `/find-cwe`.
-- **Impact** (`insert`): use `/find-capec`.
-- **References** (`insert`), in order: vendor advisory (GHSA → `["vendor-advisory", "related"]`), then patch commit(s) (`["patch"]`), then for OTP the version-scheme doc (`["x_version-scheme"]`). Varsel auto-adds the `cna.erlef.org` and `osv.dev` references on ID assignment — do not propose them. If unpatched, use a `/TODO` patch URL and confirm intentional-no-patch with the user.
-- **Credits** (`insert`): map GHSA roles — reporter → `finder`, remediation_developer → `remediation_developer`, reviewer → `remediation_reviewer`, coordinator → `analyst`. `name` is the full real name only (no handle). Do not skip `pending` credits.
+- **Description** (`propose_description`, `value`): do not mention other CVE IDs — name the vulnerability class. The "This issue affects …" sentence ends with a real version (or `before TODO` if unpatched), never a bare `TODO`.
+- **Discovery** (`propose_discovery`, `value`): often already set at `open_case`.
+- **Configurations** (`propose_configurations`, `value`): only if the vulnerability needs specific deployment conditions; omit when unconditional.
+- **Workarounds** (`propose_workarounds`, `value`): only genuine mitigations. Never "apply the patch". Omit if none.
+- **Weakness** (`propose_weakness`): use `/find-cwe`.
+- **Impact** (`propose_impact`): use `/find-capec`.
+- **References** (`propose_reference`, `url` + `tags`), in order: vendor advisory (GHSA → `["vendor-advisory", "related"]`), then patch commit(s) (`["patch"]`), then for OTP the version-scheme doc (`["x_version-scheme"]`). Varsel auto-adds the `cna.erlef.org` and `osv.dev` references on ID assignment — do not propose them. If unpatched, use a `/TODO` patch URL and confirm intentional-no-patch with the user.
+- **Credits** (`propose_credit`, `name` + `credit_type` [+ `organization`]): map GHSA roles — reporter → `finder`, remediation_developer → `remediation_developer`, reviewer → `remediation_reviewer`, coordinator → `analyst`. `name` is the full real name only (no handle). Do not skip `pending` credits.
+
+To remove a child row, use `propose_delete` with its `target` (e.g. `"reference"`) and `target_id`.
 
 ## Step 8 — Derive and check the ranges
 

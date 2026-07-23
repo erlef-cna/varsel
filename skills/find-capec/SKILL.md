@@ -49,9 +49,8 @@ Check the name and description against the actual attack technique. The returned
 Report the chosen CAPEC(s) (id + name) and why each fits. Then, in the `/new-cve` flow, land each on the case as its own proposal (payload is the **id only** — no name):
 
 ```
-create_case_proposal(input: {
-  case_id: <id>, target: "impact", operation: "insert",
-  proposed_value: {"value": {"capec_id": <ID>}},
+mcp__varsel__propose_impact(input: {
+  case_id: <id>, capec_id: <ID>,
   reasoning: "why this attack pattern matches"
 })
 ```

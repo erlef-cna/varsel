@@ -40,9 +40,8 @@ Check the name, description, and consequences against the vulnerability. If it d
 Report the chosen CWE (id + name) and why it fits. Then, in the `/new-cve` flow, land it on the case (payload is the **id only** — no name):
 
 ```
-create_case_proposal(input: {
-  case_id: <id>, target: "weakness", operation: "insert",
-  proposed_value: {"value": {"cwe_id": <ID>}},
+mcp__varsel__propose_weakness(input: {
+  case_id: <id>, cwe_id: <ID>,
   reasoning: "why this CWE matches the root cause"
 })
 ```
