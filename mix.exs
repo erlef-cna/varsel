@@ -28,7 +28,8 @@ defmodule Varsel.MixProject do
         # analysed too; add ExUnit to the PLT so its callbacks resolve, and
         # Mix for the tasks under lib/mix/tasks.
         plt_add_apps: [:ex_unit, :mix]
-      ]
+      ],
+      usage_rules: usage_rules()
     ]
   end
 
@@ -118,7 +119,8 @@ defmodule Varsel.MixProject do
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
-      {:tidewave, "~> 0.6", only: :dev}
+      {:tidewave, "~> 0.6", only: :dev},
+      {:usage_rules, "~> 1.0", only: [:dev]}
     ]
   end
 
@@ -165,6 +167,13 @@ defmodule Varsel.MixProject do
         "dialyzer",
         "test"
       ]
+    ]
+  end
+
+  defp usage_rules do
+    [
+      file: "AGENTS.md",
+      usage_rules: ["usage_rules:all", :ash, :phoenix]
     ]
   end
 end
