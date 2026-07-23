@@ -10,6 +10,7 @@ defmodule Varsel.MixProject do
       app: :varsel,
       version: "0.1.0",
       elixir: "~> 1.15",
+      elixirc_options: [warnings_as_errors: true],
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -153,7 +154,7 @@ defmodule Varsel.MixProject do
         "phx.digest"
       ],
       precommit: [
-        "compile --warnings-as-errors",
+        "compile",
         "deps.unlock --unused",
         "format",
         "credo --strict",
