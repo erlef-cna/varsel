@@ -38,8 +38,6 @@ Extract and present:
 - Fix commit / patched version if available
 - CVE ID if already assigned in the advisory
 
-Advisory comments (visible in the GitHub UI) are **not available via the API**. Ask the user to check the advisory page for any comments containing a CVE number or instructions.
-
 Check for prior art / duplicates: `mcp__varsel__list_cves_by_purl` (e.g. `pkg:hex/<name>`) and `mcp__varsel__list_cves` / `mcp__varsel__list_cases`. Keep things consistent with existing published CVEs.
 
 **Do not treat the advisory as authoritative.** It may have been filed by someone unfamiliar with CVE conventions or the real scope. Flag anything suspicious.
@@ -49,7 +47,9 @@ Check for prior art / duplicates: `mcp__varsel__list_cves_by_purl` (e.g. `pkg:he
 A case may already exist (an inbound vulnerability report accepted into a case, or a case the user points you at).
 
 - **Existing:** find it with `mcp__varsel__list_cases` (filter by title/description), read it with `mcp__varsel__get_case`, and read pending proposals with `mcp__varsel__list_open_case_proposals`.
-- **New:** if none exists, ask the user to create one at `/cases` (or accept the relevant vulnerability report). The rest of this skill assumes you have a `case_id`.
+- **New:** if none exists, open a fresh draft with `mcp__varsel__open_case(input: {title: "<advisory title>"})`. It returns the new case (state `draft`); use its `id` as the `case_id` for every proposal below. You can seed just the title here — all other content lands as proposals in the later steps.
+
+The rest of this skill assumes you have a `case_id`.
 
 ## Step 3 — CVSS scoring
 

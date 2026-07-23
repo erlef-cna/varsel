@@ -56,9 +56,9 @@ as sub-steps.
 - **Formatting, schema validation, cvelint, hex-package checks** — the `render_case_preview` and `validate_cve_record*` tools.
 - **The MITRE push and OSV derivation** — the derived OSV records follow publish.
 
-Case creation, CVE ID assignment, proposal acceptance, and publishing all happen
-in the UI (a human), not through the agent — the skills work within an existing
-case, author proposals, and stop at a verified, review-ready state.
+The agent can open a fresh draft case (`open_case`) and author proposals against
+it, but CVE ID assignment, proposal acceptance, and publishing all happen in the
+UI (a human) — the skills stop at a verified, review-ready state.
 
 ## Guardrails
 
