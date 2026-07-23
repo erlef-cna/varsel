@@ -1513,11 +1513,11 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "CVSS v4 vector is missing"
       assert html =~ "Go to severity"
 
-      # Without a CVE ID the validators cannot run yet.
-      assert html =~ "runs once a CVE ID is assigned"
-
-      # The footer footnote counts the ✗ rows.
-      assert html =~ "4 blockers · resolves after approval"
+      # Validation runs against a placeholder CVE ID (no assignment needed), so
+      # the per-check rows render alongside the blockers.
+      assert html =~ "cvelint"
+      assert html =~ "CVE record schema"
+      assert html =~ "Hex packages exist"
     end
 
     test "the Rendered JSON tab shows the open, syntax-tinted CNA container", %{

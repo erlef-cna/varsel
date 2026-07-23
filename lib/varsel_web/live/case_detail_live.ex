@@ -2634,9 +2634,6 @@ defmodule VarselWeb.CaseDetailLive do
                   </a>
                 </li>
               </ul>
-              <p :if={is_nil(@preview["validation"])} class="mt-2 text-xs text-base-content/50">
-                Record validation (schema, cvelint, hex.pm) runs once a CVE ID is assigned.
-              </p>
               <p :if={@preview["overrides_applied"] != []} class="mt-3 text-xs text-base-content/50">
                 Overrides applied: {Enum.join(@preview["overrides_applied"], ", ")}
               </p>
@@ -2645,7 +2642,7 @@ defmodule VarselWeb.CaseDetailLive do
 
           <div :if={@preview_tab == "json"}>
             <p :if={@preview == :loading} class="text-sm text-base-content/60">Rendering…</p>
-            <.code_block :if={is_map(@preview)} source={pretty_json(@preview["cna"])} />
+            <.code_block :if={is_map(@preview)} source={pretty_json(@preview["cve_json"])} />
           </div>
 
           <div :if={@preview_tab == "diff"}>
@@ -2715,8 +2712,6 @@ defmodule VarselWeb.CaseDetailLive do
         %{ok: false, text: blocker, section: blocker_section(blocker)}
       end)
   end
-
-  defp validator_rows(nil), do: []
 
   defp validator_rows(validation) do
     errors = validation[:errors] || []
