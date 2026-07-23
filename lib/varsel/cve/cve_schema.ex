@@ -53,10 +53,12 @@ defmodule Varsel.CVE.CveSchema do
     end
   end
 
+  # sobelow_skip ["Traversal.FileModule"]
   defp load_schema_file!(path) do
-    :varsel
-    |> :code.priv_dir()
-    |> Path.join("cve_schema")
+    priv_dir = Path.join(:code.priv_dir(:varsel), "cve_schema")
+    {:ok, path} = Path.safe_relative(path, priv_dir)
+
+    priv_dir
     |> Path.join(path)
     |> File.read!()
     |> JSON.decode!()

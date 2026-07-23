@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 2026 Erlang Ecosystem Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# CSRF not needed for Dev only GraphiQL Playground
+Config.CSRF: Missing CSRF Protections,lib/varsel_web/router.ex:29,32F00F4

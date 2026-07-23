@@ -23,6 +23,7 @@ defmodule Varsel.CVE.Cvelint do
 
   Returns `:ok` or `{:error, [{message, json_path | nil}]}`.
   """
+  # sobelow_skip ["Traversal.FileModule"]
   @spec lint(map()) :: :ok | {:error, [{String.t(), String.t() | nil}]}
   def lint(cve_json) when is_map(cve_json) do
     # cvelint silently skips ("not a CVE v5 JSON record") anything without an

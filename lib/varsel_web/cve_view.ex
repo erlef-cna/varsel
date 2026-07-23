@@ -432,6 +432,7 @@ defmodule VarselWeb.CveView do
   The commit base URL is taken from the first reference whose URL matches a
   GitHub `.../commit/<sha>` shape; SHAs are shown truncated to 10 chars.
   """
+  # sobelow_skip ["XSS.Raw"] - CVE HTML is trusted
   @spec link_commit_shas(String.t(), [map()]) :: Phoenix.HTML.safe()
   def link_commit_shas(html, references) when is_binary(html) do
     case commit_base_url(references) do

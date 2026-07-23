@@ -103,6 +103,7 @@ defmodule VarselWeb.MarkdownInput do
 
   defp tab_class(false), do: "text-base-content/50 hover:text-base-content"
 
+  # sobelow_skip ["XSS.Raw"] - Sanitized by comrak
   defp preview(value) do
     case value do
       value when value in [nil, ""] ->

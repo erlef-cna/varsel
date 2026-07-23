@@ -97,5 +97,15 @@ in
     mix-format.enable = true;
     reuse.enable = true;
     zizmor.enable = true;
+
+    # git-hooks.nix has no built-in sobelow hook. Run it as a project-wide
+    # security scan (fails on findings via `exit: :low` in .sobelow-conf).
+    sobelow = {
+      enable = true;
+      name = "sobelow";
+      entry = "mix sobelow";
+      files = "\\.exs?$";
+      pass_filenames = false;
+    };
   };
 }

@@ -58,6 +58,23 @@ jobs:
           sarif_file: credo.sarif
           category: credo
 
+  sobelow:
+    name: Sobelow
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: nix develop --no-pure-eval -c bash -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          elixir: true
+      - name: mix sobelow
+        # Fails the build on findings (`exit: :low` in .sobelow-conf).
+        run: mix sobelow
+
   test:
     name: Test
     runs-on: ubuntu-latest

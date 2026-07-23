@@ -1,0 +1,5 @@
+# SPDX-FileCopyrightText: 2026 2026 Erlang Ecosystem Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
+[exit: :low, format: "txt", ignore_files: [], ignore: ["Config.CSP"], out: nil, private: false, router: nil, skip: true, threshold: :low, verbose: false, version: false]
