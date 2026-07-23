@@ -45,7 +45,17 @@ defmodule Varsel.CVE.CveValidationTest do
             ]
           }
         ],
-        "references" => [%{"url" => "https://example.com/advisory"}]
+        "references" => [%{"url" => "https://example.com/advisory"}],
+        "metrics" => [
+          %{
+            "cvssV4_0" => %{
+              "version" => "4.0",
+              "vectorString" => "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+              "baseScore" => 8.7,
+              "baseSeverity" => "HIGH"
+            }
+          }
+        ]
       }
     }
   }
@@ -66,6 +76,24 @@ defmodule Varsel.CVE.CveValidationTest do
     assert Enum.any?(errors, &(&1.source == :schema))
   end
 
+  test "the EEF policy validator flags a missing title, CVSS v4 and placeholder id" do
+    stripped =
+      @valid_cve_json
+      |> update_in(["containers", "cna"], &Map.delete(&1, "title"))
+      |> update_in(["containers", "cna"], &Map.delete(&1, "metrics"))
+      |> put_in(["cveMetadata", "cveId"], "CVE-0000-0000")
+
+    assert %{valid: false, errors: errors} = CVE.validate_cve_record_eef!(stripped)
+    by_code = Map.new(errors, &{&1.code, &1.message})
+    assert by_code["EEF001"] == "title is missing"
+    assert by_code["EEF002"] == "CVSS v4 vector is missing"
+    assert by_code["EEF003"] == "no CVE ID assigned"
+  end
+
+  test "the EEF policy validator accepts a real CVE ID" do
+    assert %{valid: true, errors: []} = CVE.validate_cve_record_eef!(@valid_cve_json)
+  end
+
   test "cvelint findings are reported" do
     # E004: descriptions must not have leading or trailing whitespace
     invalid =
@@ -76,7 +104,7 @@ defmodule Varsel.CVE.CveValidationTest do
       )
 
     assert %{valid: false, errors: errors} = CVE.validate_cve_record!(invalid)
-    assert Enum.any?(errors, &(&1.source == :cvelint and &1.message =~ "E004"))
+    assert Enum.any?(errors, &(&1.source == :cvelint and &1.code == "E004"))
   end
 
   test "missing hex packages are reported" do
@@ -88,7 +116,7 @@ defmodule Varsel.CVE.CveValidationTest do
       )
 
     assert %{valid: false, errors: errors} = CVE.validate_cve_record!(invalid)
-    assert [%{source: :hex, message: message}] = errors
+    assert [%{source: :hex, code: "HEX001", message: message}] = errors
     assert message =~ "ghost_package"
   end
 

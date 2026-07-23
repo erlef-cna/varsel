@@ -26,6 +26,10 @@ defmodule Varsel.CVE do
       load [:cve_id, :title, :date_published, :date_updated, :purls]
     end
 
+    tool :validate_cve, CveRecord, :get_published do
+      load [:cve_id, :validation]
+    end
+
     tool :search_cves, CveRecord, :search do
       load [:cve_id, :title, :date_published, :date_updated, :purls]
     end
@@ -38,6 +42,7 @@ defmodule Varsel.CVE do
     tool :validate_cve_record_schema, CveValidation, :validate_schema
     tool :validate_cve_record_cvelint, CveValidation, :validate_cvelint
     tool :validate_cve_record_hex_packages, CveValidation, :validate_hex_packages
+    tool :validate_cve_record_eef, CveValidation, :validate_eef
 
     tool :list_osv_records, OsvRecord, :read
     tool :get_osv_record, OsvRecord, :get
@@ -80,6 +85,7 @@ defmodule Varsel.CVE do
       action CveValidation, :validate_cve_schema, :validate_schema
       action CveValidation, :validate_cve_cvelint, :validate_cvelint
       action CveValidation, :validate_cve_hex_packages, :validate_hex_packages
+      action CveValidation, :validate_cve_eef, :validate_eef
     end
 
     mutations do
@@ -137,6 +143,7 @@ defmodule Varsel.CVE do
       define :validate_cve_record_schema, action: :validate_schema, args: [:cve_json]
       define :validate_cve_record_cvelint, action: :validate_cvelint, args: [:cve_json]
       define :validate_cve_record_hex_packages, action: :validate_hex_packages, args: [:cve_json]
+      define :validate_cve_record_eef, action: :validate_eef, args: [:cve_json]
     end
 
     resource OsvRecord do

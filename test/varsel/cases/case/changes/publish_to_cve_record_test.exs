@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Cases.PublicationTest do
+defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
   @moduledoc """
   End-to-end publish flow: propose → accept → approve → publish (handoff to
   the CVE record + MITRE double) → mark_published, plus the amendment loop.
@@ -10,7 +10,6 @@ defmodule Varsel.Cases.PublicationTest do
 
   use Varsel.DataCase, async: false
 
-  alias Ash.Error.Query.NotFound
   alias Varsel.Cases
   alias Varsel.CVE.CveRecord
   alias Varsel.Fixtures
@@ -84,6 +83,9 @@ defmodule Varsel.Cases.PublicationTest do
     )
 
     case_record = Cases.assign_case_cve_id!(case_record, %{}, actor: poc)
+    # Render reads cached derivations, so refresh them the way the UI and the
+    # publish path do before previewing/validating.
+    {:ok, case_record} = Cases.refresh_case_derivation(case_record, actor: poc)
 
     %{poc: poc, case: case_record, cve_id: cve_id}
   end
@@ -195,47 +197,5 @@ defmodule Varsel.Cases.PublicationTest do
     cve_record = Ash.get!(CveRecord, case_record.cve_record_id, authorize?: false)
     assert cve_record.state == :pending_update
     assert get_in(cve_record.cve_json, ["containers", "cna", "title"]) == "Worse than we thought"
-  end
-
-  test "render_preview reports validation and blockers without publishing", %{
-    poc: poc,
-    case: case_record
-  } do
-    preview = Cases.render_case_preview!(%{id: case_record.id}, actor: poc)
-
-    assert preview["blockers"] == []
-    assert preview["validation"][:valid] == true
-    assert get_in(preview, ["cna", "providerMetadata", "shortName"]) == "EEF"
-    assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
-  end
-
-  test "preview assembles a full record with a placeholder ID before assignment", %{poc: poc} do
-    # A case with no CVE record/ID assigned yet.
-    case_record = Fixtures.open_case(poc, %{title: "Unassigned"})
-
-    preview = Cases.render_case_preview!(%{id: case_record.id}, actor: poc)
-
-    # The full CVE 5.x envelope is present (not nil), so validation runs even
-    # without a real ID — the "no CVE ID assigned" case no longer needs the
-    # caller to hand-wrap the container.
-    assert get_in(preview, ["cve_json", "cveMetadata", "cveId"]) == "CVE-0000-0000"
-    assert get_in(preview, ["cve_json", "containers", "cna"])
-    assert %{valid: _, errors: _} = preview["validation"]
-  end
-
-  test "preview is gated by the case read policy, not just actor presence", %{case: case_record} do
-    # A logged-in user with no role and no assignment to this case: the
-    # :preview calculation must be unreachable because the case itself is.
-    outsider = Fixtures.register_user("preview_outsider", :supporter)
-
-    assert {:error, get_error} =
-             Ash.get(Cases.Case, case_record.id, load: [:preview], actor: outsider)
-
-    assert Enum.any?(List.wrap(get_error.errors), &match?(%NotFound{}, &1))
-
-    assert {:error, action_error} =
-             Cases.render_case_preview(%{id: case_record.id}, actor: outsider)
-
-    assert Enum.any?(List.wrap(action_error.errors), &match?(%NotFound{}, &1))
   end
 end

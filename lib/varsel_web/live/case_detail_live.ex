@@ -26,6 +26,8 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.AffectedPackage.Preset
+  alias Varsel.Cases.Case.Calculations.Preview.Channel
+  alias Varsel.Cases.Case.Calculations.Preview.Diff
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseReference
@@ -34,8 +36,6 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposable
   alias Varsel.Cases.Readiness
-  alias Varsel.Cases.Render.Channel
-  alias Varsel.Cases.Render.Diff
   alias Varsel.Cases.VersionEvent
   alias Varsel.Types.CVSS
 
@@ -143,6 +143,7 @@ defmodule VarselWeb.CaseDetailLive do
         expanded_package_id: nil,
         child_form: nil,
         preview: nil,
+        validation: nil,
         preview_open?: false,
         preview_tab: "validation",
         diff: nil,
@@ -288,7 +289,7 @@ defmodule VarselWeb.CaseDetailLive do
      |> assign(preview: :loading)
      |> start_async(:preview, fn ->
        {:ok, _} = Cases.refresh_case_derivation(case_record, actor: actor)
-       Cases.render_case_preview!(%{id: case_record.id}, actor: actor)
+       Cases.get_case!(case_record.id, load: [:preview, :validation], actor: actor)
      end)}
   end
 
@@ -306,12 +307,12 @@ defmodule VarselWeb.CaseDetailLive do
      socket
      |> assign(preview: :loading, preview_open?: true)
      |> start_async(:preview, fn ->
-       Cases.render_case_preview!(%{id: case_record.id}, actor: actor)
+       Cases.get_case!(case_record.id, load: [:preview, :validation], actor: actor)
      end)}
   end
 
   def handle_event("close_preview", _params, socket) do
-    {:noreply, assign(socket, preview_open?: false, preview: nil, diff: nil)}
+    {:noreply, assign(socket, preview_open?: false, preview: nil, validation: nil, diff: nil)}
   end
 
   def handle_event("preview_tab", %{"tab" => tab}, socket) when tab in ["validation", "json", "diff"] do
@@ -559,14 +560,18 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   @impl Phoenix.LiveView
-  def handle_async(:preview, {:ok, preview}, socket) do
-    {:noreply, assign(socket, preview: preview)}
+  def handle_async(:preview, {:ok, case_record}, socket) do
+    {:noreply,
+     assign(socket,
+       preview: case_record.preview,
+       validation: case_record.validation
+     )}
   end
 
   def handle_async(:preview, {:exit, reason}, socket) do
     {:noreply,
      socket
-     |> assign(preview: nil)
+     |> assign(preview: nil, validation: nil)
      |> put_flash(:error, "Preview failed: #{Exception.format_exit(reason)}")}
   end
 
@@ -622,7 +627,10 @@ defmodule VarselWeb.CaseDetailLive do
       case_record =
         Cases.get_case!(case_record.id, load: [:preview, :published_cna], actor: actor)
 
-      Diff.lines(case_record.published_cna || %{}, case_record.preview["cna"])
+      Diff.lines(
+        case_record.published_cna || %{},
+        get_in(case_record.preview.cve_record, ["containers", "cna"])
+      )
     end)
   end
 
@@ -1369,6 +1377,7 @@ defmodule VarselWeb.CaseDetailLive do
       case_record={@case_record}
       current_user={@current_user}
       preview={@preview}
+      validation={@validation}
       preview_tab={@preview_tab}
       diff={@diff}
       amendment={amendment?(@case_record)}
@@ -2618,7 +2627,7 @@ defmodule VarselWeb.CaseDetailLive do
             <div :if={is_map(@preview)}>
               <ul class="text-[0.79rem]">
                 <li
-                  :for={row <- validation_rows(@preview)}
+                  :for={row <- validation_rows(@preview, @validation)}
                   class="flex items-center gap-2 py-1 text-base-content/70"
                 >
                   <span :if={row.ok} class="shrink-0 font-bold text-success">✓</span>
@@ -2634,15 +2643,15 @@ defmodule VarselWeb.CaseDetailLive do
                   </a>
                 </li>
               </ul>
-              <p :if={@preview["overrides_applied"] != []} class="mt-3 text-xs text-base-content/50">
-                Overrides applied: {Enum.join(@preview["overrides_applied"], ", ")}
+              <p :if={@preview.overrides_applied != []} class="mt-3 text-xs text-base-content/50">
+                Overrides applied: {Enum.join(@preview.overrides_applied, ", ")}
               </p>
             </div>
           </div>
 
           <div :if={@preview_tab == "json"}>
             <p :if={@preview == :loading} class="text-sm text-base-content/60">Rendering…</p>
-            <.code_block :if={is_map(@preview)} source={pretty_json(@preview["cve_json"])} />
+            <.code_block :if={is_map(@preview)} source={pretty_json(@preview.cve_record)} />
           </div>
 
           <div :if={@preview_tab == "diff"}>
@@ -2668,10 +2677,10 @@ defmodule VarselWeb.CaseDetailLive do
             case_record={@case_record}
             current_user={@current_user}
             include_publish={true}
-            publish_blocked={blocker_count(@preview) > 0}
+            publish_blocked={blocker_count(@preview, @validation) > 0}
           />
-          <span :if={blocker_count(@preview) > 0} class="text-xs text-base-content/50">
-            {blocker_note(blocker_count(@preview), @case_record.state)}
+          <span :if={blocker_count(@preview, @validation) > 0} class="text-xs text-base-content/50">
+            {blocker_note(blocker_count(@preview, @validation), @case_record.state)}
           </span>
         </div>
       </aside>
@@ -2706,28 +2715,50 @@ defmodule VarselWeb.CaseDetailLive do
   # blocker count refers to.
   @validators [schema: "CVE record schema", cvelint: "cvelint", hex: "Hex packages exist"]
 
-  defp validation_rows(preview) do
-    validator_rows(preview["validation"]) ++
-      Enum.map(preview["blockers"], fn blocker ->
+  defp validation_rows(preview, validation) do
+    errors = (validation && validation.errors) || []
+    {eef_errors, catalog_errors} = Enum.split_with(errors, &(&1.source == :eef))
+
+    # Each validator shows a ✓ pass row or one ✗ row per finding; EEF policy
+    # errors and render blockers each get their own ✗ row. Every ✗ links to the
+    # section that fixes it when we can map the finding to one.
+    validator_rows(catalog_errors) ++
+      Enum.map(eef_errors, &%{ok: false, text: &1.message, section: error_section(&1)}) ++
+      Enum.map(preview.blockers, fn blocker ->
         %{ok: false, text: blocker, section: blocker_section(blocker)}
       end)
   end
 
-  defp validator_rows(validation) do
-    errors = validation[:errors] || []
-
+  defp validator_rows(errors) do
     Enum.flat_map(@validators, fn {source, label} ->
       case Enum.filter(errors, &(&1.source == source)) do
         [] ->
           [%{ok: true, text: label, section: nil}]
 
         failures ->
-          Enum.map(failures, &%{ok: false, text: "#{label}: #{&1.message}", section: nil})
+          Enum.map(
+            failures,
+            &%{ok: false, text: "#{label}: #{&1.message}", section: error_section(&1)}
+          )
       end
     end)
   end
 
-  defp blocker_count(preview), do: Enum.count(validation_rows(preview), &(not &1.ok))
+  # The workspace section a validation finding's code points at — cvelint
+  # (github.com/mprpic/cvelint ruleset) and EEF policy codes. A finding whose
+  # code we don't map (or that has no code) renders without a link.
+  @section_by_code [
+                     {"references", ~w(E001 E002 E010 E017)},
+                     {"affected", ~w(E006 E007 E008 E009 E011 E013 E014 HEX001)},
+                     {"summary", ~w(E003 E004 E016 E019 E020 EEF001)},
+                     {"severity", ~w(E005 E018 EEF002)}
+                   ]
+                   |> Enum.flat_map(fn {section, codes} -> Enum.map(codes, &{&1, section}) end)
+                   |> Map.new()
+
+  defp error_section(%{code: code}), do: Map.get(@section_by_code, code)
+
+  defp blocker_count(preview, validation), do: Enum.count(validation_rows(preview, validation), &(not &1.ok))
 
   defp blocker_note(count, state) do
     noun = if count == 1, do: "blocker", else: "blockers"

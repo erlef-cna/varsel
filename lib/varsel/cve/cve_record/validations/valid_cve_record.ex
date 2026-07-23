@@ -5,8 +5,8 @@
 defmodule Varsel.CVE.CveRecord.Validations.ValidCveRecord do
   @moduledoc """
   Validates the changeset's `cve_json` via the CVE domain's
-  `validate_cve_record/1` code interface (schema, cvelint, and hex.pm package
-  checks — see `Varsel.CVE.CveValidation`).
+  `validate_cve_record/1` code interface (schema, cvelint, hex.pm package, and
+  EEF policy checks — see `Varsel.CVE.CveValidation`).
 
   Used on the actions that hand a record to MITRE (`request_publish` and
   `update`); records in earlier lifecycle states may hold invalid JSON.

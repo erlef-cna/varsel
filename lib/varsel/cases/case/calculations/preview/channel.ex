@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Cases.Render.Channel do
+defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
   @moduledoc """
   Renders `affected[]` entries: one per `Varsel.Cases.PackageChannel` plus
   the implicit git/forge entry every package with a `repo_url` gets.
@@ -17,8 +17,8 @@ defmodule Varsel.Cases.Render.Channel do
   """
 
   alias Varsel.Cases.AffectedPackage
+  alias Varsel.Cases.Case.Calculations.Preview.MergePatch
   alias Varsel.Cases.PackageChannel
-  alias Varsel.Cases.Render.MergePatch
 
   @doc """
   The rendered `affected[]` entry for a channel. Returns

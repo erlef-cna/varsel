@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Cases.Render.Diff do
+defmodule Varsel.Cases.Case.Calculations.Preview.Diff do
   @moduledoc """
   Line-based diff between two CNA containers, for the "what will this
   amendment change at MITRE" view.

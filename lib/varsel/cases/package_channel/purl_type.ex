@@ -10,7 +10,7 @@ defmodule Varsel.Cases.PackageChannel.PurlType do
 
   The type fixes the rendered `affected[]` entry's constants (collectionURL,
   versionType) and the derivation semantics (see
-  `Varsel.Cases.Render.Channel` / `Varsel.Cases.Derivation`).
+  `Varsel.Cases.Case.Calculations.Preview.Channel` / `Varsel.Cases.Derivation`).
   """
 
   @behaviour AshGraphql.Type

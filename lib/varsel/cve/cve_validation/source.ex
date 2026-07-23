@@ -7,7 +7,9 @@ defmodule Varsel.CVE.CveValidation.Source do
 
   @behaviour AshGraphql.Type
 
-  use Ash.Type.Enum, values: [:schema, :cvelint, :hex]
+  # :eef covers EEF/CNA policy requirements beyond the CVE schema and cvelint
+  # (a title and a CVSS v4 metric are always required for our records).
+  use Ash.Type.Enum, values: [:schema, :cvelint, :hex, :eef]
 
   @impl AshGraphql.Type
   def graphql_type(_constraints), do: :cve_validation_source

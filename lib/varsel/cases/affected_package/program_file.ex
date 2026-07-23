@@ -9,7 +9,7 @@ defmodule Varsel.Cases.AffectedPackage.ProgramFile do
   of every rendered `affected[]` entry.
 
   Paths are repository-root-relative (`lib/ssh/src/ssh_sftpd.erl`). Storing
-  modules and routines *per file* lets `Varsel.Cases.Render.Channel` scope an
+  modules and routines *per file* lets `Varsel.Cases.Case.Calculations.Preview.Channel` scope an
   entry to the files under its channel's `subpath` (e.g. `lib/ssh` on
   `pkg:otp/ssh`) with the prefix stripped, while the git/forge entry keeps
   every file under its full path — matching how the published records spell

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Cases.Render.CvssV4 do
+defmodule Varsel.Cases.Case.Calculations.Preview.CvssV4 do
   @moduledoc """
   Expands a CVSS v4.0 vector into the full `cvssV4_0` metric object of the
   CVE 5.2 schema (as published in every EEF record): base metrics from the

@@ -175,34 +175,6 @@ defmodule Varsel.Cases.Case do
       change Varsel.Cases.Changes.ApplyProposedField
     end
 
-    action :render_preview, :map do
-      description """
-      Convenience entry point that returns the `:preview` calculation for a
-      case by id: the rendered CNA container, validation result, applied
-      overrides and publish blockers, without publishing. Authorization is the
-      case read policy — the fetch below runs under the actor, so a case the
-      actor may not read is `NotFound`.
-
-      Renders from the case's *applied* state, i.e. accepted proposals only —
-      open (unaccepted) proposals do not appear, and a case with no accepted
-      affected_package derives no version ranges yet. Computes derivation on
-      demand (no need to call refresh_derivation first).
-      """
-
-      argument :id, :uuid, allow_nil?: false
-
-      run fn input, context ->
-        with {:ok, case_record} <-
-               Varsel.Cases.get_case(input.arguments.id,
-                 load: [:preview],
-                 actor: context.actor,
-                 authorize?: true
-               ) do
-          {:ok, case_record.preview}
-        end
-      end
-    end
-
     update :refresh_derivation do
       description "Recomputes the derived version data (SHA → version ranges) of every *accepted* affected package. Usually unnecessary — render_preview derives on demand. A case with no accepted affected_package has nothing to derive."
       accept []
@@ -316,13 +288,6 @@ defmodule Varsel.Cases.Case do
     policy action([:edit, :apply_proposal, :request_review, :refresh_derivation]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:assignments, :user])
-    end
-
-    # render_preview only fetches the case (with the actor) and returns its
-    # :preview calculation, so the read policy above is the real gate: a
-    # non-readable case is NotFound. This clause just requires a logged-in actor.
-    policy action(:render_preview) do
-      authorize_if actor_present()
     end
 
     # Case lifecycle decisions are POC-only.
@@ -512,11 +477,26 @@ defmodule Varsel.Cases.Case do
       constraints one_of: [:none, :low, :medium, :high, :critical]
     end
 
-    calculate :preview, :map, Varsel.Cases.Case.Calculations.Preview do
+    calculate :preview,
+              Varsel.Cases.Case.Calculations.Preview.Result,
+              Varsel.Cases.Case.Calculations.Preview do
+      public? true
+
       description """
-      The rendered CNA container, full CVE record, applied overrides, publish
-      blockers and validation summary — without publishing. Loadable only on a
-      case the actor may read, so the case read policy is its authorization.
+      The full CVE record, applied overrides and publish blockers — without
+      publishing. Loadable only on a case the actor may read, so the case read
+      policy is its authorization.
+      """
+    end
+
+    calculate :validation,
+              Varsel.CVE.CveValidation.Result,
+              Varsel.Cases.Case.Calculations.Validation do
+      public? true
+
+      description """
+      The schema/cvelint/hex validation result (`valid` + `errors`) for the
+      case's rendered record. Loadable only on a case the actor may read.
       """
     end
 

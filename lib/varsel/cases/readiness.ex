@@ -8,8 +8,8 @@ defmodule Varsel.Cases.Readiness do
   rail: which parts of the record still need work before publishing is worth
   attempting.
 
-  Deliberately lighter than `Varsel.Cases.Publication` — that pipeline runs
-  the authoritative schema/cvelint/hex validation on the rendered record;
+  Deliberately lighter than the render + `validate` pipeline — that runs the
+  authoritative schema/cvelint/hex validation on the rendered record;
   this module answers "is the section filled in?" from the loaded case alone
   so the rail can show it on every render without rendering the record.
   """

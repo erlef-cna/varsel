@@ -10,7 +10,7 @@ defmodule Varsel.Cases.Case.Changes.RefreshDerivation do
 
   use Ash.Resource.Change
 
-  alias Varsel.Cases.Publication
+  alias Varsel.Cases.Derivation
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
@@ -20,9 +20,21 @@ defmodule Varsel.Cases.Case.Changes.RefreshDerivation do
       loads = [affected_packages: [:channels, :version_events]]
       loaded = Ash.load!(case_record, loads, actor: actor)
 
-      Enum.each(loaded.affected_packages, &Publication.refresh_package(&1, actor: actor))
+      Enum.each(loaded.affected_packages, &recompute/1)
 
       {:ok, case_record}
     end)
+  end
+
+  # Derives fresh ranges and caches them on the package. This runs as a
+  # side effect of the already policy-gated refresh, not a user edit, so the
+  # cache write bypasses authorization.
+  defp recompute(package) do
+    {:ok, derivation} = Derivation.derive(package)
+
+    package
+    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
+    |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: derivation}, authorize?: false)
+    |> Ash.update!()
   end
 end

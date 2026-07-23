@@ -681,6 +681,17 @@ defmodule Varsel.CVE.CveRecord do
   end
 
   calculations do
+    calculate :validation,
+              Varsel.CVE.CveValidation.Result,
+              Varsel.CVE.CveRecord.Calculations.Validation do
+      public? true
+
+      description """
+      The schema/cvelint/hex validation result (`valid` + `errors`) for the
+      record's stored cve_json, or nil for a record that has no cve_json yet.
+      """
+    end
+
     calculate :cve_id,
               :string,
               expr(

@@ -2,10 +2,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Cases.Render.MergePatchTest do
+defmodule Varsel.Cases.Case.Calculations.Preview.MergePatchTest do
   use ExUnit.Case, async: true
 
-  alias Varsel.Cases.Render.MergePatch
+  alias Varsel.Cases.Case.Calculations.Preview.MergePatch
 
   test "nil patch is a no-op" do
     assert MergePatch.apply(%{"a" => 1}, nil) == %{"a" => 1}

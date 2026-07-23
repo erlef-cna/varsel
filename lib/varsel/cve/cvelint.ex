@@ -21,10 +21,11 @@ defmodule Varsel.CVE.Cvelint do
   @doc """
   Lints a decoded CVE record map.
 
-  Returns `:ok` or `{:error, [{message, json_path | nil}]}`.
+  Returns `:ok` or `{:error, [{code | nil, message, json_path | nil}]}`.
   """
   # sobelow_skip ["Traversal.FileModule"]
-  @spec lint(map()) :: :ok | {:error, [{String.t(), String.t() | nil}]}
+  @spec lint(map()) ::
+          :ok | {:error, [{String.t() | nil, String.t(), String.t() | nil}]}
   def lint(cve_json) when is_map(cve_json) do
     # cvelint silently skips ("not a CVE v5 JSON record") anything without an
     # assignerShortName — reject upfront instead of pretending it was linted
@@ -32,7 +33,7 @@ defmodule Varsel.CVE.Cvelint do
       short_name when short_name in [nil, ""] ->
         {:error,
          [
-           {"cveMetadata.assignerShortName is missing — cvelint skips records without it",
+           {nil, "cveMetadata.assignerShortName is missing — cvelint skips records without it",
             "cveMetadata.assignerShortName"}
          ]}
 
@@ -78,7 +79,7 @@ defmodule Varsel.CVE.Cvelint do
         :ok
 
       {_out, status} when status in [126, 127] ->
-        {:error, [{"cvelint executable not found (is it installed and on $PATH?)", nil}]}
+        {:error, [{nil, "cvelint executable not found (is it installed and on $PATH?)", nil}]}
 
       {out, _status} ->
         {:error, parse_errors(out)}
@@ -91,13 +92,14 @@ defmodule Varsel.CVE.Cvelint do
         Enum.map(results, &parse_error/1)
 
       _ ->
-        [{"cvelint failed: #{String.trim(out)}", nil}]
+        [{nil, "cvelint failed: #{String.trim(out)}", nil}]
     end
   end
 
   defp parse_error(result) do
-    message = "#{result["errorCode"]} (#{result["ruleName"]}): #{result["errorText"]}"
+    code = result["errorCode"]
+    message = "#{code} (#{result["ruleName"]}): #{result["errorText"]}"
     path = if result["errorPath"] == "", do: nil, else: result["errorPath"]
-    {message, path}
+    {code, message, path}
   end
 end

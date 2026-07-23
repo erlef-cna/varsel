@@ -1504,17 +1504,21 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Preview") |> render_click()
       html = render_async(lv)
 
-      # Blockers are ✗ rows with per-section links — no alert/callout box.
+      # Findings are ✗ rows, not an alert/callout box.
       refute html =~ "alert-warning"
       assert html =~ "✗"
-      assert html =~ "no references recorded"
-      assert html =~ ~s(href="#references")
-      assert html =~ "Go to references"
+
+      # EEF policy findings get per-section deep links.
       assert html =~ "CVSS v4 vector is missing"
       assert html =~ "Go to severity"
 
+      # Known validator findings link to the section that fixes them: the
+      # missing-references cvelint error deep-links to the references section.
+      assert html =~ ~s(href="#references")
+      assert html =~ "Go to references"
+
       # Validation runs against a placeholder CVE ID (no assignment needed), so
-      # the per-check rows render alongside the blockers.
+      # the per-check rows render.
       assert html =~ "cvelint"
       assert html =~ "CVE record schema"
       assert html =~ "Hex packages exist"

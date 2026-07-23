@@ -21,15 +21,19 @@ Verify the case specified by the user (or the current working case). Fix any iss
 mcp__varsel__render_case_preview(input: {id: <case-id>})
 ```
 
-`render_case_preview` derives on demand and returns the rendered CNA container, a validation result, applied overrides, and **publish blockers**. Any publish blocker is an automatic FAIL — resolve it before anything else. Use the rendered container as the record under test for the checks below.
+This returns the case with a `preview` holding the full CVE record (`preview.cve_record`, using a `CVE-0000-0000` placeholder until an ID is assigned) and **publish blockers** (`preview.blockers`). Any publish blocker is an automatic FAIL — resolve it before anything else. Use the CNA container at `preview.cve_record.containers.cna` as the record under test for the convention checklist.
 
 Note: the preview reflects **accepted** proposals only. If you (or the user) just submitted fixes as new proposals, they must be accepted before they show up here — re-render after acceptance.
 
 ## Step 2 — Validators
 
-`render_case_preview` already runs the validators for you: its **`validation`** field is the schema + cvelint + hex-package result (`{valid, errors}`) over the full record it assembles (`cve_json`, using a `CVE-0000-0000` placeholder until an ID is assigned). Read `preview.validation` — any error there is a FAIL. Fix it as a proposal, re-render, and re-check.
+```
+mcp__varsel__validate_case(input: {id: <case-id>})
+```
 
-You normally do not need the standalone `validate_cve_record` tool. Reach for it (and the per-check `validate_cve_record_schema` / `_cvelint` / `_hex_packages`) only to isolate a specific failure against a hand-modified record.
+This returns the case with a `validation` result — the schema + cvelint + hex-package check (`{valid, errors}`) over the rendered record. Any error is a FAIL. Fix it as a proposal, then re-run.
+
+Reach for the standalone `validate_cve_record` (and the per-check `validate_cve_record_schema` / `_cvelint` / `_hex_packages`) only to isolate a specific failure against a hand-modified record.
 
 ## Step 3 — Convention checklist
 

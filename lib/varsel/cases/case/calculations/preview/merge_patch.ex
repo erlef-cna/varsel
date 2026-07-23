@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Cases.Render.MergePatch do
+defmodule Varsel.Cases.Case.Calculations.Preview.MergePatch do
   @moduledoc """
   RFC 7396 JSON Merge Patch — the semantics of every render escape hatch
   (`Case.cna_override`, `PackageChannel.entry_override`).

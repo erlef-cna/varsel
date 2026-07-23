@@ -47,7 +47,14 @@ defmodule Varsel.Cases do
       ]
     end
 
-    tool :render_case_preview, Case, :render_preview
+    tool :render_case_preview, Case, :read do
+      load [:preview]
+    end
+
+    tool :validate_case, Case, :read do
+      load [:validation]
+    end
+
     tool :refresh_case_derivation, Case, :refresh_derivation
 
     # Proposal workflow: discover → propose → discuss. Deliberately no
@@ -95,8 +102,6 @@ defmodule Varsel.Cases do
       get Proposal, :get_case_proposal, :read
 
       list Comment, :list_case_comments, :list_for_case
-
-      action Case, :render_case_preview, :render_preview
     end
 
     mutations do
@@ -190,7 +195,6 @@ defmodule Varsel.Cases do
       define :mark_case_published, action: :mark_published
       define :reopen_case, action: :reopen
       define :close_case, action: :close
-      define :render_case_preview, action: :render_preview
       define :refresh_case_derivation, action: :refresh_derivation
       define :apply_case_proposal, action: :apply_proposal
     end

@@ -13,8 +13,6 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecord do
 
   use Ash.Resource.Change
 
-  alias Varsel.Cases.Publication
-
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
     Ash.Changeset.before_action(changeset, &publish(&1, context.actor))
@@ -24,11 +22,11 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecord do
     case_record = changeset.data
 
     with :ok <- require_cve_record(case_record),
-         {:ok, %{result: result, cve_json: cve_json}} <-
-           Publication.render(case_record, refresh: true, actor: actor),
-         :ok <- check_blockers(result.blockers),
-         :ok <- check_validation(Publication.validate(cve_json)) do
-      hand_to_cve_record(changeset, case_record, cve_json, actor)
+         {:ok, refreshed} <- Varsel.Cases.refresh_case_derivation(case_record, actor: actor),
+         {:ok, %{preview: preview}} <- Ash.load(refreshed, [:preview], actor: actor),
+         :ok <- check_blockers(preview.blockers),
+         :ok <- check_validation(Varsel.CVE.validate_cve_record!(preview.cve_record)) do
+      hand_to_cve_record(changeset, case_record, preview.cve_record, actor)
     else
       {:error, messages} ->
         Enum.reduce(messages, changeset, fn message, changeset ->

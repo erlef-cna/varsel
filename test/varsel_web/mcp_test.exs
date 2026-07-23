@@ -78,9 +78,10 @@ defmodule VarselWeb.McpTest do
       |> mcp("tools/list")
       |> response(200)
 
-    for tool <- ~w(list_all_cves available_cve_ids assign_cve update_cve
+    for tool <- ~w(list_all_cves available_cve_ids assign_cve update_cve validate_cve
                    request_publish_cve reject_cve list_users update_user set_user_role
                    submit_vulnerability_report list_cases get_case render_case_preview
+                   validate_case
                    refresh_case_derivation list_case_proposals list_open_case_proposals
                    propose_title propose_credit propose_weakness propose_reference
                    propose_otp_affected_package propose_version_event propose_delete

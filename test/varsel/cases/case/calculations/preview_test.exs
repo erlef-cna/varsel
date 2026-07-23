@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Cases.RenderTest do
+defmodule Varsel.Cases.Case.Calculations.PreviewTest do
   @moduledoc """
   Golden test: a case modelled after the published CVE-2025-4754 record
   (ash_authentication_phoenix) must render the same structured CNA data —
@@ -13,8 +13,9 @@ defmodule Varsel.Cases.RenderTest do
 
   use Varsel.DataCase, async: false
 
+  alias Ash.Error.Query.NotFound
   alias Varsel.Cases
-  alias Varsel.Cases.Publication
+  alias Varsel.Cases.Case.Calculations.Preview.Result
   alias Varsel.Fixtures
   alias Varsel.Test.StubGitBackend
 
@@ -135,20 +136,27 @@ defmodule Varsel.Cases.RenderTest do
     case_record =
       Cases.assign_case_cve_id!(case_record, %{cve_record_id: reserved.id}, actor: poc)
 
+    # The :preview calculation reads cached derivations, so refresh them once
+    # here (as the UI and the publish path do before rendering/validating).
+    {:ok, case_record} = Cases.refresh_case_derivation(case_record, actor: poc)
+
     %{poc: poc, case: case_record}
   end
 
+  # Refresh cached derivations before rendering (as the UI and publish do);
+  # the nested describe setups build their own cases, so refresh per call.
   defp render!(case_record, actor) do
-    {:ok, %{result: result, cve_json: cve_json}} =
-      Publication.render(case_record, refresh: true, actor: actor)
-
-    {result, cve_json}
+    {:ok, _} = Cases.refresh_case_derivation(case_record, actor: actor)
+    Cases.get_case!(case_record.id, load: [:preview], actor: actor).preview
   end
 
-  test "renders the affected entries exactly as published", %{poc: poc, case: case_record} do
-    {result, _cve_json} = render!(case_record, poc)
+  # The CNA container from a Result, for the per-field assertions below.
+  defp cna(%Result{cve_record: cve_record}), do: cve_record["containers"]["cna"]
 
-    assert result.cna["affected"] == [
+  test "renders the affected entries exactly as published", %{poc: poc, case: case_record} do
+    result = render!(case_record, poc)
+
+    assert cna(result)["affected"] == [
              %{
                "collectionURL" => "https://repo.hex.pm",
                "cpes" => [@cpe],
@@ -194,9 +202,9 @@ defmodule Varsel.Cases.RenderTest do
     poc: poc,
     case: case_record
   } do
-    {result, _cve_json} = render!(case_record, poc)
+    result = render!(case_record, poc)
 
-    assert result.cna["cpeApplicability"] == [
+    assert cna(result)["cpeApplicability"] == [
              %{
                "operator" => "AND",
                "nodes" => [
@@ -217,9 +225,9 @@ defmodule Varsel.Cases.RenderTest do
   end
 
   test "renders classifications, credits and metrics as published", %{poc: poc, case: case_record} do
-    {result, _cve_json} = render!(case_record, poc)
+    result = render!(case_record, poc)
 
-    assert result.cna["problemTypes"] == [
+    assert cna(result)["problemTypes"] == [
              %{
                "descriptions" => [
                  %{
@@ -232,14 +240,14 @@ defmodule Varsel.Cases.RenderTest do
              }
            ]
 
-    assert result.cna["impacts"] == [
+    assert cna(result)["impacts"] == [
              %{
                "capecId" => "CAPEC-593",
                "descriptions" => [%{"lang" => "en", "value" => "CAPEC-593 Session Hijacking"}]
              }
            ]
 
-    assert result.cna["credits"] == [
+    assert cna(result)["credits"] == [
              %{"lang" => "en", "type" => "remediation reviewer", "value" => "James Harton"},
              %{"lang" => "en", "type" => "remediation developer", "value" => "Zach Daniel"},
              %{"lang" => "en", "type" => "analyst", "value" => "Mike Buhot"},
@@ -254,7 +262,7 @@ defmodule Varsel.Cases.RenderTest do
                "cvssV4_0" => cvss
              }
            ] =
-             result.cna["metrics"]
+             cna(result)["metrics"]
 
     assert cvss["vectorString"] == @vector
     assert cvss["baseScore"] == 2.3
@@ -271,9 +279,9 @@ defmodule Varsel.Cases.RenderTest do
     poc: poc,
     case: case_record
   } do
-    {result, _cve_json} = render!(case_record, poc)
+    result = render!(case_record, poc)
 
-    assert Enum.map(result.cna["references"], & &1["url"]) == [
+    assert Enum.map(cna(result)["references"], & &1["url"]) == [
              @advisory,
              "https://cna.erlef.org/cves/CVE-2025-4754.html",
              "https://osv.dev/vulnerability/EEF-CVE-2025-4754",
@@ -281,17 +289,17 @@ defmodule Varsel.Cases.RenderTest do
              "#{@repo}/commit/#{@fix_sha}"
            ]
 
-    assert List.first(result.cna["references"])["tags"] == ["vendor-advisory", "related"]
+    assert List.first(cna(result)["references"])["tags"] == ["vendor-advisory", "related"]
   end
 
   test "derives prose from markdown with plaintext, HTML and markdown representations", %{
     poc: poc,
     case: case_record
   } do
-    {result, _cve_json} = render!(case_record, poc)
+    result = render!(case_record, poc)
 
     assert [%{"lang" => "en", "value" => plaintext, "supportingMedia" => [html, markdown]}] =
-             result.cna["descriptions"]
+             cna(result)["descriptions"]
 
     assert plaintext =~ "Insufficient Session Expiration vulnerability"
     assert plaintext =~ "\n\nThis issue affects"
@@ -306,14 +314,15 @@ defmodule Varsel.Cases.RenderTest do
   end
 
   test "assembles the full record and it passes schema validation", %{poc: poc, case: case_record} do
-    {result, cve_json} = render!(case_record, poc)
+    result = render!(case_record, poc)
+    cve_json = result.cve_record
 
     assert result.blockers == []
     assert cve_json["cveMetadata"]["cveId"] == "CVE-2025-4754"
     assert cve_json["cveMetadata"]["assignerShortName"] == "EEF"
     assert cve_json["dataType"] == "CVE_RECORD"
 
-    assert %{valid: true, errors: []} = Publication.validate(cve_json)
+    assert %{valid: true, errors: []} = Varsel.CVE.validate_cve_record!(cve_json)
   end
 
   test "escape hatches: versions_override, entry_override, cna_override", %{
@@ -343,9 +352,10 @@ defmodule Varsel.Cases.RenderTest do
     Cases.edit_case!(case_record, %{cna_override: %{"tags" => ["exclusively-hosted-service"]}}, actor: poc)
 
     case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-    {result, _cve_json} = render!(case_record, poc)
+    result = render!(case_record, poc)
 
-    hex_entry = Enum.find(result.cna["affected"], &(&1["collectionURL"] == "https://repo.hex.pm"))
+    hex_entry =
+      Enum.find(cna(result)["affected"], &(&1["collectionURL"] == "https://repo.hex.pm"))
 
     assert hex_entry["versions"] == [
              %{
@@ -357,29 +367,27 @@ defmodule Varsel.Cases.RenderTest do
            ]
 
     assert hex_entry["platforms"] == ["BEAM"]
-    assert result.cna["tags"] == ["exclusively-hosted-service"]
+    assert cna(result)["tags"] == ["exclusively-hosted-service"]
 
     assert "ash_authentication_phoenix/hex: versions_override" in result.overrides_applied
     assert "ash_authentication_phoenix/hex: entry_override" in result.overrides_applied
     assert "cna_override" in result.overrides_applied
   end
 
-  test "publish blockers surface missing facts", %{poc: poc} do
+  test "render blockers are derivation-level only", %{poc: poc} do
     empty_case = Fixtures.open_case(poc, %{title: nil})
 
-    {:ok, %{result: result}} = Publication.render(empty_case, actor: poc)
+    result = render!(empty_case, poc)
 
-    assert "title is missing" in result.blockers
-    assert "description is missing" in result.blockers
-    assert "CVSS v4 vector is missing" in result.blockers
-    assert "no affected packages recorded" in result.blockers
-    assert "no CVE ID assigned" in result.blockers
+    # Missing content surfaces through the validators; blockers stay empty until
+    # a package's derivation itself has a problem.
+    assert result.blockers == []
   end
 
   test "a pending fix blocks publish unless allowed", %{poc: poc, case: case_record} do
     StubGitBackend.stub_tags(%{{@repo, @fix_sha} => []})
 
-    {result, _cve_json} = render!(case_record, poc)
+    result = render!(case_record, poc)
     assert Enum.any?(result.blockers, &(&1 =~ "no containing release"))
 
     case_record = Ash.load!(case_record, [:affected_packages], authorize?: false)
@@ -387,7 +395,7 @@ defmodule Varsel.Cases.RenderTest do
     Cases.edit_affected_package!(package, %{allow_unreleased_fix: true}, actor: poc)
 
     case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-    {result, _cve_json} = render!(case_record, poc)
+    result = render!(case_record, poc)
     refute Enum.any?(result.blockers, &(&1 =~ "no containing release"))
   end
 
@@ -405,10 +413,10 @@ defmodule Varsel.Cases.RenderTest do
       })
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-      {:ok, %{result: result}} = Publication.render(case_record, actor: poc)
+      result = render!(case_record, poc)
 
       # The implicit forge entry is the package's last (here: only) entry.
-      List.last(result.cna["affected"])
+      List.last(cna(result)["affected"])
     end
 
     test "the forge entry derives from the repository URL, .git suffix stripped", %{
@@ -459,10 +467,10 @@ defmodule Varsel.Cases.RenderTest do
       )
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-      {:ok, %{result: result}} = Publication.render(case_record, actor: poc)
+      result = render!(case_record, poc)
 
       # Only the hosted entry renders: no repo, no forge entry.
-      assert [entry] = result.cna["affected"]
+      assert [entry] = cna(result)["affected"]
       refute Map.has_key?(entry, "collectionURL")
       refute Map.has_key?(entry, "packageURL")
     end
@@ -498,8 +506,8 @@ defmodule Varsel.Cases.RenderTest do
       end
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-      {:ok, %{result: result}} = Publication.render(case_record, actor: poc)
-      result.cna["affected"]
+      result = render!(case_record, poc)
+      cna(result)["affected"]
     end
 
     test "pkg:otp entries list only their application's files, prefix stripped", %{
@@ -571,11 +579,60 @@ defmodule Varsel.Cases.RenderTest do
       )
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-      {:ok, %{result: result}} = Publication.render(case_record, actor: poc)
+      result = render!(case_record, poc)
 
-      assert [rebar3, git] = result.cna["affected"]
+      assert [rebar3, git] = cna(result)["affected"]
       assert rebar3["programFiles"] == ["apps/rebar/src/rebar3.erl"]
       assert git["programFiles"] == ["apps/rebar/src/rebar3.erl"]
+    end
+  end
+
+  describe "the :preview / :validation calculations" do
+    test "preview reports the container and blockers without publishing", %{
+      poc: poc,
+      case: case_record
+    } do
+      preview = Cases.get_case!(case_record.id, load: [:preview], actor: poc).preview
+
+      assert preview.blockers == []
+
+      assert get_in(preview.cve_record, ["containers", "cna", "providerMetadata", "shortName"]) ==
+               "EEF"
+
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
+    end
+
+    test "validation reports the schema/cvelint/hex result", %{poc: poc, case: case_record} do
+      result = Cases.get_case!(case_record.id, load: [:validation], actor: poc).validation
+
+      assert result.valid == true
+      assert result.errors == []
+    end
+
+    test "preview assembles a full record with a placeholder ID before assignment", %{poc: poc} do
+      # A case with no CVE record/ID assigned yet.
+      case_record = Fixtures.open_case(poc, %{title: "Unassigned"})
+
+      preview = Cases.get_case!(case_record.id, load: [:preview], actor: poc).preview
+
+      # The full CVE 5.x envelope is present even without a real ID, so
+      # validation can run without hand-wrapping the container.
+      assert get_in(preview.cve_record, ["cveMetadata", "cveId"]) == "CVE-0000-0000"
+      assert get_in(preview.cve_record, ["containers", "cna"])
+
+      result = Cases.get_case!(case_record.id, load: [:validation], actor: poc).validation
+      assert %Varsel.CVE.CveValidation.Result{} = result
+    end
+
+    test "preview is gated by the case read policy, not just actor presence", %{case: case_record} do
+      # A logged-in user with no role and no assignment to this case: the
+      # :preview calculation must be unreachable because the case itself is.
+      outsider = Fixtures.register_user("preview_outsider", :supporter)
+
+      assert {:error, get_error} =
+               Ash.get(Cases.Case, case_record.id, load: [:preview], actor: outsider)
+
+      assert Enum.any?(List.wrap(get_error.errors), &match?(%NotFound{}, &1))
     end
   end
 end

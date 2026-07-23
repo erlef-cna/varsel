@@ -2,10 +2,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Cases.Render.DiffTest do
+defmodule Varsel.Cases.Case.Calculations.Preview.DiffTest do
   use ExUnit.Case, async: true
 
-  alias Varsel.Cases.Render.Diff
+  alias Varsel.Cases.Case.Calculations.Preview.Diff
 
   test "identical containers diff to unchanged lines only" do
     cna = %{"title" => "Same", "source" => %{"discovery" => "EXTERNAL"}}

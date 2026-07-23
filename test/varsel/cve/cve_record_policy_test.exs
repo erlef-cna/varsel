@@ -116,7 +116,17 @@ defmodule Varsel.CVE.CveRecordPolicyTest do
               ]
             }
           ],
-          "references" => [%{"url" => "https://example.com/advisory"}]
+          "references" => [%{"url" => "https://example.com/advisory"}],
+          "metrics" => [
+            %{
+              "cvssV4_0" => %{
+                "version" => "4.0",
+                "vectorString" => "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+                "baseScore" => 8.7,
+                "baseSeverity" => "HIGH"
+              }
+            }
+          ]
         }
       }
     }
