@@ -76,10 +76,20 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
     end
 
     create :propose_cvss do
-      description "Proposes setting the CVSS v4.0 vector."
+      description "Proposes setting the CVSS v4.0 vector (a CVSS:4.0/... string)."
       accept [:case_id, :reasoning]
+      # Typed as CVSS so the vector is fully validated at the argument layer.
       argument :value, Varsel.Types.CVSS, allow_nil?: false
       change {PackProposal, target: :case, operation: :set, field: :cvss_v4}
+
+      # PackProposal packs the dumped {vector, score, severity, version} map;
+      # store just the vector string so the proposal envelope stays the plain
+      # CVSS text (score/severity/version are derived on re-cast anyway).
+      change fn changeset, _context ->
+        Ash.Changeset.update_change(changeset, :proposed_value, fn %{"value" => dumped} ->
+          %{"value" => dumped["vector"]}
+        end)
+      end
     end
 
     create :propose_date_public do

@@ -42,12 +42,21 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
       proposal = Cases.propose_cvss!(%{case_id: case_record.id, value: vector}, actor: poc)
 
       assert proposal.field_name == "cvss_v4"
-      # The CVSS struct dumps to its JSON map; the stored envelope re-casts.
-      assert proposal.proposed_value["value"]["vector"] == vector
+      # The envelope stores the plain vector string (not the dumped CVSS map);
+      # score/severity/version are derived when it re-casts on accept.
+      assert proposal.proposed_value["value"] == vector
 
       accepted = Cases.accept_case_proposal!(proposal, %{}, actor: poc)
       case_record = Ash.get!(Cases.Case, accepted.case_id, authorize?: false)
       assert case_record.cvss_v4.vector == vector
+    end
+
+    test "propose_cvss rejects a malformed vector at the argument layer", %{
+      poc: poc,
+      case: case_record
+    } do
+      assert {:error, _error} =
+               Cases.propose_cvss(%{case_id: case_record.id, value: "not-a-vector"}, actor: poc)
     end
 
     test "propose_discovery rejects a bad enum at the argument layer", %{
