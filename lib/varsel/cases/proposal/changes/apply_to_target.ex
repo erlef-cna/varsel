@@ -104,7 +104,7 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
       preset_input ->
         case Preset.cast(preset_input) do
           {:ok, preset} ->
-            {:ok, :"apply_proposal_insert_#{preset}", Map.drop(payload, ["preset", :preset])}
+            {:ok, preset_insert_action(preset), Map.drop(payload, ["preset", :preset])}
 
           :error ->
             {:error,
@@ -115,6 +115,13 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
         end
     end
   end
+
+  # The target resource's specialized preset create actions, as literal atoms
+  # (not interpolated) so no atom is created at runtime. Preset.cast/1 has
+  # already narrowed the input to this known set.
+  defp preset_insert_action(:otp), do: :apply_proposal_insert_otp
+  defp preset_insert_action(:elixir), do: :apply_proposal_insert_elixir
+  defp preset_insert_action(:gleam), do: :apply_proposal_insert_gleam
 
   defp apply_arguments(proposal) do
     %{

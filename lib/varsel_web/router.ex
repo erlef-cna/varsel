@@ -128,8 +128,13 @@ defmodule VarselWeb.Router do
   scope "/gql" do
     pipe_through [:graphql_playground]
 
+    # These Module.concat/1 calls take fixed compile-time module-name literals
+    # for modules that always exist, so they carry no runtime atom-exhaustion
+    # risk; safe_concat would only add a needless preload requirement.
     forward "/playground", Absinthe.Plug.GraphiQL,
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       schema: Module.concat(["VarselWeb.GraphqlSchema"]),
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       socket: Module.concat(["VarselWeb.GraphqlSocket"]),
       interface: :simple
   end
@@ -137,6 +142,7 @@ defmodule VarselWeb.Router do
   scope "/gql" do
     pipe_through [:graphql]
 
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     forward "/", Absinthe.Plug, schema: Module.concat(["VarselWeb.GraphqlSchema"])
   end
 
