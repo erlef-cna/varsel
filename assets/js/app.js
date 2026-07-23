@@ -51,6 +51,29 @@ const DragSort = {
   },
 }
 
+// Applies dynamic, per-render style values without an inline `style`
+// attribute, which the strict Content-Security-Policy forbids. Every
+// `data-css-*` attribute is written to the element's CSSOM style
+// (`el.style.setProperty`), which CSP does not govern. Property name is the
+// suffix verbatim, so `data-css--tl-pos` sets the `--tl-pos` custom property
+// and `data-css-background` sets `background`. Re-applied on every LiveView
+// patch so streamed diffs keep their values.
+const CssVars = {
+  apply() {
+    for (const {name, value} of this.el.attributes) {
+      if (name.startsWith("data-css-")) {
+        this.el.style.setProperty(name.slice("data-css-".length), value)
+      }
+    }
+  },
+  mounted() {
+    this.apply()
+  },
+  updated() {
+    this.apply()
+  },
+}
+
 // Workspace section rail. Two jobs:
 //
 // 1. Anchor navigation: on LiveView pages Chromium cancels the smooth
@@ -163,7 +186,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, DragSort, SectionRail},
+  hooks: {...colocatedHooks, DragSort, SectionRail, CssVars},
 })
 
 // Show progress bar on live navigation and form submits

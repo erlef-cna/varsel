@@ -24,6 +24,27 @@ config :phoenix_live_view,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true
 
+# The dev LiveReloader renders its reload/error overlay in a same-origin
+# <iframe>, which the app-wide `frame-src 'none'` blocks. Loosen just that one
+# directive to `'self'` for development. The `:directives` config value is a
+# whole map (not deep-merged), so this restates the production map from
+# config/config.exs with only `frame_src` changed — keep the two in sync.
+config :plug_content_security_policy,
+  directives: %{
+    default_src: ~w('none'),
+    script_src: ~w('self'),
+    style_src: ~w('self'),
+    img_src: ~w('self' data: https://github.com https://*.githubusercontent.com),
+    font_src: ~w('self'),
+    connect_src: ~w('self'),
+    manifest_src: ~w('self'),
+    base_uri: ~w('none'),
+    form_action: ~w('self'),
+    frame_ancestors: ~w('none'),
+    frame_src: ~w('self'),
+    object_src: ~w('none')
+  }
+
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
 

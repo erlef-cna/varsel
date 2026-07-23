@@ -63,6 +63,10 @@ defmodule VarselWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+  # Strict Content-Security-Policy (deny-by-default; see config/config.exs).
+  # Runs before the router so the per-request script nonce it generates lands
+  # in conn.assigns before the root layout renders <script nonce=…>.
+  plug PlugContentSecurityPolicy
   plug VarselWeb.Plugs.SearchIndexing
   plug VarselWeb.Router
 end

@@ -103,6 +103,7 @@ defmodule Varsel.MixProject do
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.1"},
       {:picosat_elixir, "~> 0.2"},
+      {:plug_content_security_policy, "~> 0.2"},
       {:postgrex, ">= 0.0.0"},
       {:purl, "~> 0.4.0"},
       {:req, "~> 0.5"},

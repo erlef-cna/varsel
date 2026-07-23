@@ -325,8 +325,9 @@
 /* ------------------------------------------------------- Boundary timeline */
 /* Board C's "boundary facts -> derived ranges" picture: one row per release
    line, a full-width track, and positioned nodes/tags. Percent offsets and
-   the vulnerable-span gradient are computed server-side and passed through
-   inline styles (--tl-pos / --tl-span-*), same approach as the mock. */
+   the vulnerable-span gradient are computed server-side and applied to the
+   --tl-pos / --tl-span-* custom properties by the CssVars JS hook (the strict
+   CSP forbids the inline style attribute the mock used). */
 .timeline-track {
   position: relative;
   height: 2px;

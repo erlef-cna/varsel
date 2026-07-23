@@ -55,6 +55,37 @@ config :mdex_native, syntax_highlighter: :lumis
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Content-Security-Policy. Deny-by-default (`default-src 'none'`) with an
+# explicit allow-list per resource type. Everything the app ships — JS, CSS,
+# fonts, its own images — is served same-origin, so those directives stay at
+# `'self'`. Notable specifics:
+#
+#   * script-src carries a per-request nonce (see `nonces_for`) so the one
+#     inline <script> in the root layout runs; there is no `'unsafe-inline'`
+#     and no `'unsafe-eval'`. Dynamic per-render styling is applied by the
+#     CssVars JS hook via CSSOM (which CSP does not govern), so there are no
+#     inline styles and style-src needs no nonce or `'unsafe-inline'`.
+#   * img-src allows `data:` for the daisyUI/heroicons SVG masks inlined in
+#     the CSS, plus github.com + *.githubusercontent.com for the console's
+#     GitHub avatar thumbnails (github.com/<handle>.png redirects there).
+#   * connect-src 'self' covers the LiveView WebSocket (same origin).
+config :plug_content_security_policy,
+  nonces_for: [:script_src],
+  directives: %{
+    default_src: ~w('none'),
+    script_src: ~w('self'),
+    style_src: ~w('self'),
+    img_src: ~w('self' data: https://github.com https://*.githubusercontent.com),
+    font_src: ~w('self'),
+    connect_src: ~w('self'),
+    manifest_src: ~w('self'),
+    base_uri: ~w('none'),
+    form_action: ~w('self'),
+    frame_ancestors: ~w('none'),
+    frame_src: ~w('none'),
+    object_src: ~w('none')
+  }
+
 config :spark,
   formatter: [
     remove_parens?: true,

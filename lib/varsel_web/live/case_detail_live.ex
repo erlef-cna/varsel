@@ -2217,7 +2217,7 @@ defmodule VarselWeb.CaseDetailLive do
     </div>
 
     <div :if={@timeline_rows != []} class="space-y-2 mb-4">
-      <.boundary_timeline_row :for={row <- @timeline_rows} row={row} />
+      <.boundary_timeline_row :for={row <- @timeline_rows} row={row} package_id={@package.id} />
     </div>
     <p :if={@timeline_rows == []} class="text-sm text-base-content/60 mb-4">
       No boundary facts yet — the timeline fills in once introduced/fixed
@@ -2375,10 +2375,16 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   attr :row, :map, required: true
+  attr :package_id, :string, required: true
 
   # Each row reserves headroom (pt) for its own node tags — the tags are
   # absolutely positioned above the track, so without it they collide with
   # the row above / the section label.
+  #
+  # The percentage offsets (--tl-pos) and vulnerable-span gradient bounds
+  # (--tl-span-*) are per-render dynamic values. The strict CSP forbids the
+  # inline `style` attribute, so they ride on `data-css-*` attributes and the
+  # CssVars JS hook copies them into the element's CSSOM style at mount/patch.
   defp boundary_timeline_row(assigns) do
     ~H"""
     <div class="flex items-center gap-2.5 pt-6 pb-1">
@@ -2386,13 +2392,18 @@ defmodule VarselWeb.CaseDetailLive do
         {@row.label}
       </span>
       <div
+        id={"tl-track-#{@package_id}-#{@row.label}"}
+        phx-hook="CssVars"
         class={["timeline-track flex-1", @row.span && "is-vulnerable"]}
-        style={@row.span && "--tl-span-start: #{@row.span.start}%; --tl-span-end: #{@row.span.stop}%"}
+        data-css--tl-span-start={@row.span && "#{@row.span.start}%"}
+        data-css--tl-span-end={@row.span && "#{@row.span.stop}%"}
       >
         <div
-          :for={node <- @row.nodes}
+          :for={{node, index} <- Enum.with_index(@row.nodes)}
+          id={"tl-node-#{@package_id}-#{@row.label}-#{index}"}
+          phx-hook="CssVars"
           class={["timeline-node", timeline_node_class(node.kind), tag_anchor_class(node.pos)]}
-          style={"--tl-pos: #{node.pos}%"}
+          data-css--tl-pos={"#{node.pos}%"}
         >
           <span class="timeline-tag font-mono text-base-content/40" title={node.tag}>
             {node.tag}

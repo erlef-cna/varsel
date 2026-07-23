@@ -30,6 +30,29 @@ defmodule VarselWeb.Router do
     plug :load_from_session
     plug :set_actor, :user
     plug :require_login
+    # The bundled GraphiQL page (login-gated dev/POC debugging tool) loads
+    # React/GraphiQL from cdn.jsdelivr.net and relies on inline <script>/<style>,
+    # none of which the app-wide strict CSP permits. Re-run the CSP plug with a
+    # policy scoped just to what GraphiQL needs; its header replaces the
+    # endpoint's for this route only, leaving the rest of the site deny-by-default.
+    # nonces_for: [] overrides the app-level default (which nonces script_src);
+    # a script nonce here would make browsers ignore the 'unsafe-inline' that
+    # GraphiQL's inline bootstrap script depends on.
+    plug PlugContentSecurityPolicy,
+      nonces_for: [],
+      directives: %{
+        default_src: ~w('self' https://cdn.jsdelivr.net),
+        script_src: ~w('self' 'unsafe-inline' https://cdn.jsdelivr.net),
+        style_src: ~w('self' 'unsafe-inline' https://cdn.jsdelivr.net),
+        img_src: ~w('self' data: https://cdn.jsdelivr.net),
+        font_src: ~w('self' data: https://cdn.jsdelivr.net),
+        # jsdelivr for the sourcemap (.map) fetches devtools makes; 'self' for
+        # GraphiQL's same-origin WebSocket back to the app.
+        connect_src: ~w('self' https://cdn.jsdelivr.net),
+        base_uri: ~w('none'),
+        object_src: ~w('none')
+      }
+
     plug AshGraphql.Plug
   end
 
@@ -77,6 +100,21 @@ defmodule VarselWeb.Router do
   # metadata) — called by external OAuth clients, so no session/CSRF.
   pipeline :oauth_protocol do
     plug :accepts, ["json"]
+  end
+
+  # The bundled dev dashboards (LiveDashboard, Oban Web, AshAdmin, Swoosh
+  # mailbox) all rely on inline scripts/styles and eval that the app-wide
+  # strict CSP forbids. They only mount under the `:dev_routes` compile flag
+  # (never in production), so replace the strict header with Phoenix's own
+  # secure-browser default (`base-uri 'self'; frame-ancestors 'self'`) — enough
+  # to keep clickjacking/base-tag protections without constraining these tools.
+  pipeline :dev_tools_relaxed_csp do
+    plug PlugContentSecurityPolicy,
+      nonces_for: [],
+      directives: %{
+        base_uri: ~w('self'),
+        frame_ancestors: ~w('self')
+      }
   end
 
   scope "/gql" do
@@ -305,7 +343,7 @@ defmodule VarselWeb.Router do
     import Phoenix.LiveDashboard.Router
 
     scope "/dev" do
-      pipe_through :browser
+      pipe_through [:browser, :dev_tools_relaxed_csp]
 
       live_dashboard "/dashboard", metrics: VarselWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview

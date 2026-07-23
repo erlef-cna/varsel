@@ -350,7 +350,14 @@ defmodule VarselWeb.ChartComponents do
           phx-click="select"
           phx-value-cwe={slice.id}
         >
-          <td><span class="cwe-swatch" style={"background:#{slice.color}"}></span></td>
+          <td>
+            <span
+              class="cwe-swatch"
+              phx-hook="CssVars"
+              id={"cwe-swatch-#{slice.id}"}
+              data-css-background={slice.color}
+            ></span>
+          </td>
           <td>{slice.name} <span class="cwe-legend-id">{slice.id}</span></td>
           <td class="cwe-legend-count">{slice.count} ({slice.pct}%)</td>
         </tr>
