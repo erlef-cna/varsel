@@ -94,6 +94,7 @@ defmodule Varsel.Cases.Comment do
     attribute :body, :string do
       description "Markdown comment body."
       allow_nil? false
+      constraints max_length: 20_000
       public? true
     end
 

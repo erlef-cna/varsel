@@ -360,26 +360,31 @@ defmodule Varsel.Cases.Case do
 
     attribute :title, :string do
       description "The CVE title (containers.cna.title). Required to publish."
+      constraints max_length: 500
       public? true
     end
 
     attribute :description_md, :string do
       description "Markdown source of the CVE description. Required to publish."
+      constraints max_length: 50_000
       public? true
     end
 
     attribute :workarounds_md, :string do
       description "Markdown workarounds; omitted from the record when nil."
+      constraints max_length: 50_000
       public? true
     end
 
     attribute :configurations_md, :string do
       description "Markdown configuration preconditions; omitted when nil."
+      constraints max_length: 50_000
       public? true
     end
 
     attribute :solutions_md, :string do
       description "Markdown solution description; omitted when nil."
+      constraints max_length: 50_000
       public? true
     end
 
@@ -419,11 +424,13 @@ defmodule Varsel.Cases.Case do
 
     attribute :internal_notes, :string do
       description "Internal working notes. Never rendered into the record."
+      constraints max_length: 50_000
       public? true
     end
 
     attribute :closed_reason, :string do
       description "Why the case was closed."
+      constraints max_length: 2_000
       public? true
     end
 

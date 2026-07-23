@@ -62,6 +62,16 @@ defmodule Varsel.Cases.CaseTest do
       assert case_record.description_md == "In review."
     end
 
+    test "rejects markdown content over the length cap", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      oversized = String.duplicate("x", 60_000)
+
+      assert {:error, error} =
+               Cases.edit_case(case_record, %{description_md: oversized}, actor: poc)
+
+      assert Exception.message(error) =~ "length must be less than or equal to"
+    end
+
     test "content is frozen from approved onward", %{poc: poc} do
       case_record = Fixtures.open_case(poc)
       case_record = Cases.request_case_review!(case_record, actor: poc)
