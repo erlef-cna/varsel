@@ -305,7 +305,7 @@ defmodule Varsel.Cases.Case do
     # POCs see every case; supporters only cases they are assigned to.
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if expr(exists(assignments, user_id == ^actor(:id)))
+      authorize_if relates_to_actor_via([:assignments, :user])
     end
 
     # Content edits and review handoff: POC or assigned supporter.

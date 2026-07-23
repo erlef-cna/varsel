@@ -59,7 +59,7 @@ defmodule Varsel.Accounts.ApiKey do
 
     # Users manage exactly their own keys.
     policy action_type(:read) do
-      authorize_if expr(user_id == ^actor(:id))
+      authorize_if relates_to_actor_via(:user)
     end
 
     policy action_type(:create) do
@@ -67,7 +67,7 @@ defmodule Varsel.Accounts.ApiKey do
     end
 
     policy action_type(:destroy) do
-      authorize_if expr(user_id == ^actor(:id))
+      authorize_if relates_to_actor_via(:user)
     end
   end
 

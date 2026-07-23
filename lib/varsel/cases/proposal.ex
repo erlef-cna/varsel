@@ -220,7 +220,7 @@ defmodule Varsel.Cases.Proposal do
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
-      authorize_if expr(author_id == ^actor(:id))
+      authorize_if relates_to_actor_via(:author)
     end
 
     policy action([:propose, :accept, :decline]) do
@@ -230,7 +230,7 @@ defmodule Varsel.Cases.Proposal do
 
     policy action(:withdraw) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if expr(author_id == ^actor(:id))
+      authorize_if relates_to_actor_via(:author)
     end
 
     # Internal only — invoked from sweep changes with authorize?: false.
