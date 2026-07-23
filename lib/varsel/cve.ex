@@ -42,7 +42,6 @@ defmodule Varsel.CVE do
     tool :list_osv_records, OsvRecord, :read
     tool :get_osv_record, OsvRecord, :get
 
-    # Public intake: anyone (including anonymous callers) may submit a report.
     tool :submit_vulnerability_report, VulnerabilityReport, :submit
 
     # POC-only lifecycle tooling (policy-gated; requires an API key actor).
@@ -84,7 +83,6 @@ defmodule Varsel.CVE do
     end
 
     mutations do
-      # Public intake: anyone (including anonymous callers) may submit a report.
       create VulnerabilityReport, :submit_vulnerability_report, :submit
 
       # POC-only report triage (policy-gated). Accepting without a case_id
