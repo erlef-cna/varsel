@@ -17,6 +17,49 @@ This repository follows the OpenSSF
 [Vulnerability Disclosure guide][openssf-cvd-guide].
 You can learn more about it in the [Finders Guide][openssf-cvd-finders-guide].
 
+## Scope
+
+Varsel is the CVE case-management service operated by the EEF CNA: it lets
+authenticated points-of-contact triage vulnerability reports, build CVE
+records and publish them to MITRE, and it serves the resulting public CVE,
+OSV, CWE and CAPEC data read-only. [`THREAT_MODEL.md`](THREAT_MODEL.md) is the
+detailed model — the trust boundaries, the roles, and the properties the
+project does and does not defend; consult it (and cite the relevant section)
+when deciding whether a finding is in scope.
+
+**In scope** — reports that break a security property the project claims,
+reachable by an attacker the model includes:
+
+- Authentication or authorization bypass — reading or modifying data across
+  the anonymous / authenticated-user / supporter / POC role boundaries (e.g.
+  an anonymous client reading unpublished records, a supporter reaching a case
+  they are not assigned to, any non-POC reaching publish authority).
+- Leaking another user's personal data (email, GitHub identity, role) or a
+  case's embargoed content.
+- Exposure of secrets or credentials (API keys, tokens, OAuth or signing
+  secrets).
+- Stored or reflected XSS, CSRF, or clickjacking on the web surface.
+- OAuth 2.1 flaws such as scope confusion between the MCP and GraphQL
+  surfaces.
+
+**Out of scope** — see `THREAT_MODEL.md` §3 and §9 for the reasoning:
+
+- Anything requiring an already-privileged **POC** account, or database, host,
+  TLS-intercept, or MITRE/GitHub/SMTP-provider access.
+- The `/dev/*` dashboards (mount only under a development compile flag, never
+  in production) and any instance left misconfigured
+  (`TEST_DEPLOYMENT` not set to `false`, `dev_routes` compiled into a release).
+- Denial of service by request volume or oversized payloads — application-level
+  rate limiting and payload caps are the operator's edge responsibility.
+- Outbound requests to a repository URL set on a case — that egress is a
+  bounded POC/assigned-collaborator capability, not an anonymous SSRF, unless
+  you can trigger it below that privilege.
+- Bugs inside bundled third-party tools (`exgit`, `mdex`, `saxy`, `cvelint`),
+  which we address by updating the dependency; report those upstream too.
+
+If you are unsure whether something is in scope, report it anyway — we would
+rather triage a borderline report than miss a real issue.
+
 ## Reporting Security Issues
 
 If you believe you have found a security vulnerability in this repository,
