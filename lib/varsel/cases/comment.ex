@@ -88,6 +88,9 @@ defmodule Varsel.Cases.Comment do
     publish_all :create, [[:case_id]]
   end
 
+  # Append-only: comments are never edited, so create_timestamp :inserted_at is
+  # the only meaningful timestamp; an updated_at would always equal it.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingTimestamps
   attributes do
     uuid_primary_key :id
 
@@ -116,6 +119,7 @@ defmodule Varsel.Cases.Comment do
 
     belongs_to :proposal, Varsel.Cases.Proposal do
       description "The proposal this comment discusses, if any."
+      allow_nil? true
       public? true
       attribute_writable? true
     end

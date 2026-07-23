@@ -48,8 +48,9 @@ defmodule Varsel.Cases.Validations.CaseEditable do
   defp case_state(nil), do: :error
 
   defp case_state(case_id) do
-    case Ash.get(Case, case_id, authorize?: false) do
+    case Varsel.Cases.get_case(case_id, authorize?: false, not_found_error?: false) do
       {:ok, %{state: state}} -> {:ok, state}
+      {:ok, nil} -> :error
       {:error, _} -> :error
     end
   end

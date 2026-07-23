@@ -110,6 +110,14 @@ defmodule Varsel.CVE do
       define :list_published_cve_records, action: :list_published
       define :get_published_cve_record, action: :get_published, args: [:cve_id]
       define :search_cve_records, action: :search, args: [:query]
+      define :list_cve_records_by_purl, action: :list_by_purl, args: [:purl]
+      define :available_cve_records, action: :available, args: [:year]
+
+      # Reservation-pool + MITRE sync management.
+      define :reserve_cve_record, action: :reserve
+      define :import_cve_record, action: :import
+      define :top_up_cve_pool, action: :top_up_pool
+      define :run_reject_stale_cve_records, action: :run_reject_stale
 
       # Admin (POC-only) lifecycle management, used by the CVE-management LiveView.
       define :list_all_cve_records, action: :list_all
@@ -117,16 +125,27 @@ defmodule Varsel.CVE do
       define :assign_cve_record, action: :assign
       define :request_publish_cve_record, action: :request_publish
       define :update_cve_record, action: :update
+      define :publish_cve_record, action: :publish
+      define :push_cve_record_update, action: :push_update
+      define :sync_cve_record_from_mitre, action: :sync_from_mitre
       define :reject_cve_record, action: :reject
+      define :mark_cve_record_rejected, action: :mark_rejected
     end
 
     resource CveValidation do
       define :validate_cve_record, action: :validate, args: [:cve_json]
+      define :validate_cve_record_schema, action: :validate_schema, args: [:cve_json]
+      define :validate_cve_record_cvelint, action: :validate_cvelint, args: [:cve_json]
+      define :validate_cve_record_hex_packages, action: :validate_hex_packages, args: [:cve_json]
     end
 
     resource OsvRecord do
+      define :list_osv_records, action: :read
       define :list_osv_feed, action: :list_feed
       define :get_osv_record, action: :get, args: [:osv_id]
+      define :create_osv_record, action: :create
+      define :create_missing_osv_records, action: :create_missing
+      define :sync_osv_record, action: :sync
     end
 
     resource VulnerabilityReport do
@@ -138,6 +157,7 @@ defmodule Varsel.CVE do
       define :triage_vulnerability_report, action: :triage
       define :accept_vulnerability_report, action: :accept
       define :reject_vulnerability_report, action: :reject
+      define :notify_pocs_of_vulnerability_report, action: :notify_pocs
     end
   end
 end

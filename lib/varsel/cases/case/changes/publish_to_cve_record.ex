@@ -56,7 +56,7 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecord do
   end
 
   defp hand_to_cve_record(changeset, case_record, cve_json, actor) do
-    cve_record = Ash.get!(Varsel.CVE.CveRecord, case_record.cve_record_id, authorize?: false)
+    cve_record = Varsel.CVE.get_cve_record!(case_record.cve_record_id, authorize?: false)
 
     action =
       case cve_record.state do

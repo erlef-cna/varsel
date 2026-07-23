@@ -29,10 +29,12 @@ defmodule Varsel.CAPEC.AttackPatternRelationship do
   actions do
     read :read do
       primary? true
+      description "List directed relationships between CAPEC attack patterns."
     end
 
     create :create do
       primary? true
+      description "Upsert a directed CAPEC attack-pattern relationship from the catalog sync."
       accept [:source_capec_id, :target_capec_id, :nature]
       upsert? true
       upsert_fields []
@@ -40,11 +42,13 @@ defmodule Varsel.CAPEC.AttackPatternRelationship do
 
     update :update do
       primary? true
+      description "Update a CAPEC attack-pattern relationship."
       accept []
     end
 
     destroy :destroy do
       primary? true
+      description "Delete a CAPEC attack-pattern relationship."
     end
   end
 
@@ -58,6 +62,9 @@ defmodule Varsel.CAPEC.AttackPatternRelationship do
     end
   end
 
+  # Pure MITRE-derived join table (rows come from the CAPEC catalog sync, not
+  # user writes), so per-row created/updated timestamps carry no meaning.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingTimestamps
   attributes do
     attribute :source_capec_id, :integer do
       allow_nil? false
@@ -86,6 +93,7 @@ defmodule Varsel.CAPEC.AttackPatternRelationship do
       source_attribute :source_capec_id
       destination_attribute :capec_id
       define_attribute? false
+      allow_nil? false
       public? true
     end
 
@@ -93,6 +101,7 @@ defmodule Varsel.CAPEC.AttackPatternRelationship do
       source_attribute :target_capec_id
       destination_attribute :capec_id
       define_attribute? false
+      allow_nil? false
       public? true
     end
   end

@@ -66,10 +66,14 @@ defmodule Varsel.Cases.VersionEvent do
   end
 
   actions do
-    defaults [:read]
+    read :read do
+      description "Lists boundary facts."
+      primary? true
+    end
 
     create :add do
       description "Records a vulnerability boundary fact for a logical product."
+      primary? true
       accept [:case_id, :affected_package_id, :package_channel_id | Proposable.fields(__MODULE__)]
       validate CaseEditable
       validate ConsistentBoundary
@@ -77,6 +81,7 @@ defmodule Varsel.Cases.VersionEvent do
 
     update :edit do
       description "Edits a boundary fact. Only allowed while the case is editable."
+      primary? true
       accept Proposable.fields(__MODULE__)
       require_atomic? false
       validate CaseEditable
@@ -85,6 +90,7 @@ defmodule Varsel.Cases.VersionEvent do
 
     destroy :remove do
       description "Removes a boundary fact."
+      primary? true
       require_atomic? false
       validate CaseEditable
       change SupersedeOrphanedProposals
@@ -188,6 +194,7 @@ defmodule Varsel.Cases.VersionEvent do
 
     belongs_to :package_channel, Varsel.Cases.PackageChannel do
       description "Scopes the fact to one channel; nil applies to all channels."
+      allow_nil? true
       public? true
       attribute_writable? true
     end

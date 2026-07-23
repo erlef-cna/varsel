@@ -152,6 +152,7 @@ defmodule Varsel.Cases.Case do
 
     update :edit do
       description "Edits case content. Only allowed while the case is in :draft or :review."
+      primary? true
       accept @content_fields
       require_atomic? false
       validate CaseEditable
@@ -189,7 +190,7 @@ defmodule Varsel.Cases.Case do
 
       run fn input, context ->
         with {:ok, case_record} <-
-               Ash.get(__MODULE__, input.arguments.id,
+               Varsel.Cases.get_case(input.arguments.id,
                  load: [:preview],
                  actor: context.actor,
                  authorize?: true
@@ -440,6 +441,7 @@ defmodule Varsel.Cases.Case do
   relationships do
     belongs_to :cve_record, Varsel.CVE.CveRecord do
       description "The reserved/published MITRE CVE record backing this case."
+      allow_nil? true
       public? true
     end
 

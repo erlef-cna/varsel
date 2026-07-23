@@ -68,6 +68,7 @@ defmodule Varsel.MixProject do
       {:ash_authentication_oauth2_server, "~> 0.2"},
       {:ash_authentication_phoenix, "~> 3.0-rc"},
       {:ash_cloak, "~> 0.2"},
+      {:ash_credo, "~> 0.17", only: [:dev, :test], runtime: false},
       {:ash_graphql, "~> 1.0"},
       {:ash_oban, "~> 0.8"},
       {:ash_paper_trail, "~> 0.6"},

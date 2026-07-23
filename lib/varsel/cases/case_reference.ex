@@ -68,12 +68,14 @@ defmodule Varsel.Cases.CaseReference do
 
     create :add do
       description "Adds a reference to a case."
+      primary? true
       accept [:case_id | Proposable.fields(__MODULE__)]
       validate CaseEditable
     end
 
     update :edit do
       description "Edits a reference. Only allowed while the case is editable."
+      primary? true
       accept Proposable.fields(__MODULE__)
       require_atomic? false
       validate CaseEditable
@@ -81,6 +83,7 @@ defmodule Varsel.Cases.CaseReference do
 
     destroy :remove do
       description "Removes a reference from a case."
+      primary? true
       require_atomic? false
       validate CaseEditable
       change SupersedeOrphanedProposals

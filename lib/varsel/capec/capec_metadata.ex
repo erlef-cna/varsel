@@ -27,9 +27,12 @@ defmodule Varsel.CAPEC.CapecMetadata do
   actions do
     read :read do
       primary? true
+      description "Read the singleton CAPEC catalog-sync metadata row."
     end
 
     create :upsert do
+      primary? true
+      description "Upsert the singleton CAPEC catalog-sync metadata row."
       accept [:last_modified, :last_synced_at]
       upsert? true
       upsert_fields [:last_modified, :last_synced_at]
@@ -46,6 +49,9 @@ defmodule Varsel.CAPEC.CapecMetadata do
     end
   end
 
+  # Singleton catalog-sync bookkeeping row; its meaningful timing lives in the
+  # explicit last_modified/last_synced_at attributes, not generic timestamps.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingTimestamps
   attributes do
     attribute :singleton_key, :string do
       primary_key? true

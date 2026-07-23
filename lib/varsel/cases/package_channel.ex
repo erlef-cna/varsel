@@ -66,6 +66,7 @@ defmodule Varsel.Cases.PackageChannel do
     defaults [:read]
 
     create :add do
+      primary? true
       description "Adds a distribution channel to a logical product."
       accept [:case_id, :affected_package_id | Proposable.fields(__MODULE__)]
       validate CaseEditable
@@ -73,6 +74,7 @@ defmodule Varsel.Cases.PackageChannel do
     end
 
     update :edit do
+      primary? true
       description "Edits a channel. Only allowed while the case is editable."
       accept Proposable.fields(__MODULE__)
       require_atomic? false
@@ -81,6 +83,7 @@ defmodule Varsel.Cases.PackageChannel do
     end
 
     destroy :remove do
+      primary? true
       description "Removes a channel from a logical product."
       require_atomic? false
       validate CaseEditable

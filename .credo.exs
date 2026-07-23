@@ -40,7 +40,7 @@
       #
       # Load and configure plugins here:
       #
-      plugins: [],
+      plugins: [{AshCredo, []}],
       #
       # If you create your own checks, you must specify the source files for
       # them here, so they can be loaded by Credo before running the analysis.
@@ -171,9 +171,52 @@
           #
           {Credo.Check.Readability.ImplTrue, []},
           {Credo.Check.Warning.MixEnv, []},
-          {Credo.Check.Warning.UnsafeToAtom, []}
+          {Credo.Check.Warning.UnsafeToAtom, []},
+
+          #
+          ## Ash-specific checks (ash_credo plugin)
+          #
+          # Actions never called through a code interface are suppressed at the
+          # source: resources where *every* action is excluded (Token,
+          # UserIdentity, the four OAuth2-server resources) carry a
+          # `credo:disable-for-this-file` directive; individual excluded actions
+          # (User's AshAuthentication strategy actions, the apply_proposal*
+          # engine variants) carry a `credo:disable-for-next-line` above them.
+          {AshCredo.Check.Design.MissingCodeInterface, []},
+          {AshCredo.Check.Design.MissingIdentity, []},
+          {AshCredo.Check.Design.MissingPrimaryAction, []},
+          {AshCredo.Check.Design.MissingTimestamps, []},
+          {AshCredo.Check.Readability.ActionMissingDescription, []},
+          {AshCredo.Check.Readability.BelongsToMissingAllowNil, []},
+          {AshCredo.Check.Refactor.AnonymousFunctionInDsl, []},
+          {AshCredo.Check.Refactor.DirectiveInFunctionBody, []},
+          {AshCredo.Check.Refactor.UseCodeInterface, []},
+          {AshCredo.Check.Warning.ActorOnCallOptions, []},
+          # Banned in the web layer only; resource/action/change/validation
+          # bypass is sanctioned (see no-authorize-false-in-app-code).
+          {AshCredo.Check.Warning.AuthorizeFalse,
+           [include_non_ash_calls: false, excluded_paths: [~r"/test/", "test", ~r"^lib/varsel/"]]},
+          {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
+          {AshCredo.Check.Warning.CompileTimeDefault, []},
+          {AshCredo.Check.Warning.EmptyDomain, []},
+          {AshCredo.Check.Warning.MissingBuiltinWrapper, []},
+          {AshCredo.Check.Warning.MissingDomain, []},
+          {AshCredo.Check.Warning.MissingMacroDirective, []},
+          {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
+          {AshCredo.Check.Warning.PinnedTimeInExpression, []},
+          {AshCredo.Check.Warning.RedundantValidation, []},
+          {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
+          {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
+          {AshCredo.Check.Warning.UnknownAction, []},
+          {AshCredo.Check.Warning.WildcardAcceptOnAction, []}
         ],
         disabled: [
+          #
+          # Ash resources are inherently large (attributes + actions + policies +
+          # relationships in one DSL); splitting into fragments hurts readability
+          # more than it helps here. Off for now.
+          {AshCredo.Check.Refactor.LargeResource, []},
+
           #
           # Checks scheduled for next check update (opt-in for now)
           {Credo.Check.Refactor.UtcNowTruncate, []},

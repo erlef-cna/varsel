@@ -37,8 +37,24 @@ defmodule Varsel.CWE do
   end
 
   resources do
-    resource Weakness
-    resource Varsel.CWE.WeaknessRelationship
-    resource Varsel.CWE.CweMetadata
+    resource Weakness do
+      define :list_weaknesses, action: :read
+      define :get_weakness, action: :get_by_cwe_id, args: [:cwe_id]
+      define :search_weaknesses, action: :search, args: [:query]
+      define :upsert_weakness, action: :upsert
+      define :sync_cwe_catalog, action: :sync_cwe_catalog
+    end
+
+    resource Varsel.CWE.WeaknessRelationship do
+      define :list_weakness_relationships, action: :read
+      define :create_weakness_relationship, action: :create
+      define :update_weakness_relationship, action: :update
+      define :destroy_weakness_relationship, action: :destroy
+    end
+
+    resource Varsel.CWE.CweMetadata do
+      define :read_cwe_metadata, action: :read
+      define :upsert_cwe_metadata, action: :upsert
+    end
   end
 end

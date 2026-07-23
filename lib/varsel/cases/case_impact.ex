@@ -51,12 +51,14 @@ defmodule Varsel.Cases.CaseImpact do
 
     create :add do
       description "Classifies the case with a CAPEC attack pattern."
+      primary? true
       accept [:case_id, :capec_id, :position]
       validate CaseEditable
     end
 
     destroy :remove do
       description "Removes a CAPEC classification."
+      primary? true
       require_atomic? false
       validate CaseEditable
       change SupersedeOrphanedProposals

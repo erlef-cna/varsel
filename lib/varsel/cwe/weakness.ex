@@ -99,6 +99,7 @@ defmodule Varsel.CWE.Weakness do
 
   actions do
     read :read do
+      description "Lists weaknesses with keyset pagination."
       primary? true
       pagination keyset?: true, required?: false
     end
@@ -275,7 +276,7 @@ defmodule Varsel.CWE.Weakness do
   # ---------------------------------------------------------------------------
 
   defp fetch_stored_last_modified do
-    case Ash.read(CweMetadata, authorize?: false) do
+    case Varsel.CWE.read_cwe_metadata(authorize?: false) do
       {:ok, [%{last_modified: lm}]} -> lm
       _ -> nil
     end
@@ -309,10 +310,9 @@ defmodule Varsel.CWE.Weakness do
           |> Enum.flat_map(fn chunk ->
             chunk
             |> Enum.map(&Map.delete(&1, :related_weaknesses))
-            |> Ash.bulk_create!(__MODULE__, :upsert,
+            |> Varsel.CWE.upsert_weakness!(
               authorize?: false,
-              return_errors?: true,
-              stop_on_error?: true
+              bulk_options: [return_errors?: true, stop_on_error?: true]
             )
 
             Enum.map(chunk, &Map.take(&1, [:cwe_id, :related_weaknesses]))
@@ -339,11 +339,9 @@ defmodule Varsel.CWE.Weakness do
         |> Enum.map(&Map.put(&1, :source_cwe_id, source_cwe_id))
       end)
 
-    Ash.bulk_create!(rows, WeaknessRelationship, :create,
+    Varsel.CWE.create_weakness_relationship!(rows,
       authorize?: false,
-      return_errors?: true,
-      stop_on_error?: true,
-      batch_size: 500
+      bulk_options: [return_errors?: true, stop_on_error?: true, batch_size: 500]
     )
 
     :ok

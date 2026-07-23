@@ -11,8 +11,6 @@ defmodule Varsel.Cases.Case.Changes.AssignCveRecord do
 
   use Ash.Resource.Change
 
-  alias Varsel.CVE.CveRecord
-
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
     Ash.Changeset.before_action(changeset, fn changeset ->
@@ -50,8 +48,8 @@ defmodule Varsel.Cases.Case.Changes.AssignCveRecord do
   defp pick_record(nil) do
     year = Date.utc_today().year
 
-    case CveRecord
-         |> Ash.Query.for_read(:available, %{year: year}, authorize?: false)
+    case year
+         |> Varsel.CVE.query_to_available_cve_records(authorize?: false)
          |> Ash.Query.load(:cve_id)
          |> Ash.read!(authorize?: false)
          |> Enum.sort_by(&cve_number/1)
@@ -62,7 +60,7 @@ defmodule Varsel.Cases.Case.Changes.AssignCveRecord do
   end
 
   defp pick_record(cve_record_id) do
-    case Ash.get(CveRecord, cve_record_id, authorize?: false) do
+    case Varsel.CVE.get_cve_record(cve_record_id, authorize?: false) do
       {:ok, %{state: :reserved} = record} -> {:ok, record}
       {:ok, %{state: state}} -> {:error, "CVE record is #{state}, not reserved"}
       {:error, _} -> {:error, "CVE record does not exist"}

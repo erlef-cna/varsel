@@ -2,8 +2,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# credo:disable-for-this-file AshCredo.Check.Design.MissingCodeInterface
+# All actions are AshAuthentication-managed and never called via a code interface.
 defmodule Varsel.Accounts.UserIdentity do
   @moduledoc false
+  # AshAuthentication-managed identity join between users and OAuth providers;
+  # its schema is owned by the strategy and carries no user-meaningful timestamps.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingTimestamps
   use Ash.Resource,
     otp_app: :varsel,
     domain: Varsel.Accounts,

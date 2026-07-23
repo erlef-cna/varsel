@@ -262,6 +262,8 @@ defmodule Varsel.CVE.CveRecord do
     defaults [:read]
 
     read :list_published do
+      description "Lists published CVE records, newest first."
+
       prepare build(
                 load: [:cve_id, :title, :date_published, :date_updated],
                 sort: [date_published: :desc]
@@ -286,6 +288,7 @@ defmodule Varsel.CVE.CveRecord do
     end
 
     read :get_published do
+      description "Fetches a single published CVE record by its CVE ID."
       argument :cve_id, :string, allow_nil?: false
       get? true
       filter expr(cve_id == ^arg(:cve_id) and state == :published)
@@ -323,6 +326,7 @@ defmodule Varsel.CVE.CveRecord do
 
     create :reserve do
       description "Creates a pool reservation from a raw MITRE API reservation object."
+      primary? true
       accept [:reservation_json]
 
       upsert? true
@@ -357,7 +361,7 @@ defmodule Varsel.CVE.CveRecord do
         end)
         |> Enum.chunk_every(100)
         |> Enum.each(fn chunk ->
-          Ash.bulk_create!(chunk, __MODULE__, :import, authorize?: false)
+          Varsel.CVE.import_cve_record!(chunk, authorize?: false)
         end)
 
         {:ok, :ok}
@@ -371,6 +375,8 @@ defmodule Varsel.CVE.CveRecord do
     end
 
     update :update do
+      description "Records an updated CNA container for a published CVE and enqueues the push to MITRE."
+      primary? true
       accept [:cve_json]
       require_atomic? false
       change transition_state(:pending_update)
@@ -378,64 +384,19 @@ defmodule Varsel.CVE.CveRecord do
     end
 
     update :push_update do
+      description "Oban worker action: pushes an updated CNA container to MITRE and re-syncs the record."
       accept []
       require_atomic? false
 
-      change fn changeset, _context ->
-        record = changeset.data
-
-        if record.state == :published do
-          # Already pushed — idempotent no-op (concurrent job succeeded first)
-          changeset
-        else
-          cve_id = get_in(record.cve_json, ["cveMetadata", "cveId"])
-          cna_container = record.cve_json |> Map.get("containers", %{}) |> Map.get("cna", %{})
-
-          with {:ok, _} <- MitreCveApi.update_cna(cve_id, cna_container),
-               {:ok, full_record} <- MitreCveApi.get(cve_id) do
-            changeset
-            |> Ash.Changeset.force_change_attribute(:cve_json, full_record)
-            |> Ash.Changeset.force_change_attribute(:last_synced_at, DateTime.utc_now())
-            |> AshStateMachine.transition_state(:published)
-          else
-            {:error, reason} -> Ash.Changeset.add_error(changeset, reason)
-          end
-        end
-      end
+      change Varsel.CVE.CveRecord.Changes.PushUpdate
     end
 
     update :sync_from_mitre do
+      description "Oban worker action: pulls the latest record from MITRE, adopting it only when newer."
       accept []
       require_atomic? false
 
-      change fn changeset, _context ->
-        record = changeset.data
-        cve_id = get_in(record.cve_json, ["cveMetadata", "cveId"])
-
-        case MitreCveApi.get(cve_id) do
-          {:ok, remote_record} ->
-            remote_updated =
-              remote_record |> get_in(["cveMetadata", "dateUpdated"]) |> parse_datetime()
-
-            local_updated =
-              record.cve_json |> get_in(["cveMetadata", "dateUpdated"]) |> parse_datetime()
-
-            if remote_updated != nil and
-                 (local_updated == nil or DateTime.after?(remote_updated, local_updated)) do
-              changeset
-              |> Ash.Changeset.force_change_attribute(:cve_json, remote_record)
-              |> Ash.Changeset.force_change_attribute(:last_synced_at, DateTime.utc_now())
-            else
-              # Only bookkeeping changes — not worth an audit version
-              changeset
-              |> Ash.Changeset.force_change_attribute(:last_synced_at, DateTime.utc_now())
-              |> Ash.Changeset.set_context(%{ash_paper_trail_disabled?: true})
-            end
-
-          {:error, reason} ->
-            Ash.Changeset.add_error(changeset, reason)
-        end
-      end
+      change Varsel.CVE.CveRecord.Changes.SyncFromMitre
     end
 
     update :request_publish do
@@ -456,26 +417,7 @@ defmodule Varsel.CVE.CveRecord do
       accept []
       require_atomic? false
 
-      change fn changeset, _context ->
-        record = changeset.data
-
-        if record.state == :published do
-          # Already published — idempotent no-op (concurrent job succeeded first)
-          changeset
-        else
-          cve_id = get_in(record.cve_json, ["cveMetadata", "cveId"])
-          cna_container = record.cve_json |> Map.get("containers", %{}) |> Map.get("cna", %{})
-
-          with {:ok, _} <- MitreCveApi.publish(cve_id, cna_container),
-               {:ok, full_record} <- MitreCveApi.get(cve_id) do
-            changeset
-            |> Ash.Changeset.force_change_attribute(:cve_json, full_record)
-            |> AshStateMachine.transition_state(:published)
-          else
-            {:error, reason} -> Ash.Changeset.add_error(changeset, reason)
-          end
-        end
-      end
+      change Varsel.CVE.CveRecord.Changes.Publish
     end
 
     update :reject do
@@ -548,8 +490,8 @@ defmodule Varsel.CVE.CveRecord do
           min_size = Application.get_env(:varsel, :cve_pool_min_size, 10)
 
           open_count =
-            __MODULE__
-            |> Ash.Query.for_read(:available, %{year: year}, authorize?: false)
+            year
+            |> Varsel.CVE.query_to_available_cve_records(authorize?: false)
             |> Ash.count!(authorize?: false)
 
           if open_count < min_size do
@@ -559,7 +501,7 @@ defmodule Varsel.CVE.CveRecord do
               {:ok, reservation_jsons} ->
                 inputs = Enum.map(reservation_jsons, &%{reservation_json: &1})
 
-                Ash.bulk_create!(inputs, __MODULE__, :reserve, authorize?: false)
+                Varsel.CVE.reserve_cve_record!(inputs, authorize?: false)
 
               {:error, reason} ->
                 raise "Failed to reserve CVE IDs from MITRE: #{reason}"
@@ -584,7 +526,7 @@ defmodule Varsel.CVE.CveRecord do
         |> Stream.map(&%{reservation_json: &1})
         |> Stream.chunk_every(100)
         |> Enum.each(fn chunk ->
-          Ash.bulk_create!(chunk, __MODULE__, :reserve, authorize?: false)
+          Varsel.CVE.reserve_cve_record!(chunk, authorize?: false)
         end)
 
         # 2. Mark local pool rows rejected for IDs that MITRE has rejected externally.
@@ -609,11 +551,13 @@ defmodule Varsel.CVE.CveRecord do
 
         __MODULE__
         |> Ash.Query.filter(state == :reserved and reserved_at < ^current_year_start)
-        |> Ash.bulk_update!(:reject, %{rejection_reason: "Stale prior-year reservation"},
+        |> Varsel.CVE.reject_cve_record!(%{rejection_reason: "Stale prior-year reservation"},
           authorize?: false,
-          return_errors?: true,
-          strategy: :stream,
-          allow_stream_with: :full_read
+          bulk_options: [
+            return_errors?: true,
+            strategy: :stream,
+            allow_stream_with: :full_read
+          ]
         )
 
         {:ok, :ok}
@@ -795,22 +739,15 @@ defmodule Varsel.CVE.CveRecord do
   defp reject_pool_row(cve_id, reason) do
     __MODULE__
     |> Ash.Query.filter(cve_id == ^cve_id and state == :reserved)
-    |> Ash.bulk_update!(:mark_rejected, %{rejection_reason: reason},
+    |> Varsel.CVE.mark_cve_record_rejected!(%{rejection_reason: reason},
       authorize?: false,
-      return_errors?: true,
-      strategy: :stream,
-      allow_stream_with: :full_read
+      bulk_options: [
+        return_errors?: true,
+        strategy: :stream,
+        allow_stream_with: :full_read
+      ]
     )
 
     :ok
-  end
-
-  defp parse_datetime(nil), do: nil
-
-  defp parse_datetime(str) do
-    case DateTime.from_iso8601(str) do
-      {:ok, dt, _} -> dt
-      _ -> nil
-    end
   end
 end

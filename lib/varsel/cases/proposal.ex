@@ -85,7 +85,13 @@ defmodule Varsel.Cases.Proposal do
   end
 
   actions do
-    defaults [:read]
+    read :read do
+      description "Reads proposals."
+      primary? true
+      # Keyset pagination keeps the action streamable, which the bulk
+      # :supersede update relies on.
+      pagination keyset?: true, required?: false
+    end
 
     read :list_for_case do
       description "All proposals of a case, newest first."
@@ -153,6 +159,8 @@ defmodule Varsel.Cases.Proposal do
       Accepts a proposal: applies the change to its target (as the accepting
       user) and supersedes competing open proposals, all in one transaction.
       """
+
+      primary? true
 
       accept [:resolution_note]
       require_atomic? false
@@ -323,11 +331,13 @@ defmodule Varsel.Cases.Proposal do
 
     belongs_to :resolved_by, User do
       description "Who accepted or declined the proposal."
+      allow_nil? true
       public? true
     end
 
     belongs_to :parent_proposal, __MODULE__ do
       description "The proposal this one counters."
+      allow_nil? true
       public? true
       attribute_writable? true
     end

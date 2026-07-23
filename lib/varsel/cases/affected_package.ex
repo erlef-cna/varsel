@@ -69,6 +69,7 @@ defmodule Varsel.Cases.AffectedPackage do
 
     create :add do
       description "Adds a logical product to a case."
+      primary? true
       accept [:case_id | Proposable.fields(__MODULE__)]
       validate CaseEditable
     end
@@ -164,6 +165,7 @@ defmodule Varsel.Cases.AffectedPackage do
 
     update :edit do
       description "Edits a logical product. Only allowed while the case is editable."
+      primary? true
       accept Proposable.fields(__MODULE__)
       require_atomic? false
       validate CaseEditable
@@ -171,6 +173,7 @@ defmodule Varsel.Cases.AffectedPackage do
 
     destroy :remove do
       description "Removes a logical product (with all its channels and version events) from a case."
+      primary? true
       require_atomic? false
       validate CaseEditable
       change SupersedeOrphanedProposals

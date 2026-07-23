@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# credo:disable-for-this-file AshCredo.Check.Design.MissingCodeInterface
+# Driven entirely by the OAuth2 server extension; no code interface is called.
 defmodule Varsel.Accounts.OauthRefreshToken do
   @moduledoc false
   use Ash.Resource,
@@ -20,6 +22,9 @@ defmodule Varsel.Accounts.OauthRefreshToken do
     defaults [:read, :destroy]
 
     create :issue do
+      primary? true
+      description "Issues a refresh token as the head of a new rotation chain."
+
       accept [
         :id,
         :chain_id,
@@ -34,6 +39,7 @@ defmodule Varsel.Accounts.OauthRefreshToken do
     end
 
     update :rotate do
+      description "Rotates a refresh token, linking it to its successor in the chain."
       argument :rotated_to_id, :uuid_v7, allow_nil?: false
       accept []
 
@@ -41,6 +47,8 @@ defmodule Varsel.Accounts.OauthRefreshToken do
     end
 
     update :revoke do
+      description "Revokes a refresh token."
+      primary? true
       accept []
       change atomic_update(:revoked_at, expr(now()))
     end
@@ -52,6 +60,9 @@ defmodule Varsel.Accounts.OauthRefreshToken do
     end
   end
 
+  # Token carries its own explicit expires_at/revoked_at lifecycle; generic
+  # created/updated timestamps add no meaning.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingTimestamps
   attributes do
     attribute :token_hash, :string do
       allow_nil? false

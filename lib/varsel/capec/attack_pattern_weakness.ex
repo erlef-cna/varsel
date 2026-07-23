@@ -21,10 +21,12 @@ defmodule Varsel.CAPEC.AttackPatternWeakness do
   actions do
     read :read do
       primary? true
+      description "List CAPEC attack-pattern to CWE weakness mappings."
     end
 
     create :create do
       primary? true
+      description "Upsert a CAPEC-to-CWE mapping from the catalog sync."
       accept [:capec_id, :cwe_id]
       upsert? true
       upsert_fields []
@@ -32,6 +34,7 @@ defmodule Varsel.CAPEC.AttackPatternWeakness do
 
     destroy :destroy do
       primary? true
+      description "Delete a CAPEC-to-CWE mapping."
     end
   end
 
@@ -45,6 +48,9 @@ defmodule Varsel.CAPEC.AttackPatternWeakness do
     end
   end
 
+  # Pure MITRE-derived join table (rows come from the CAPEC catalog sync, not
+  # user writes), so per-row created/updated timestamps carry no meaning.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingTimestamps
   attributes do
     attribute :capec_id, :integer do
       allow_nil? false
@@ -66,6 +72,7 @@ defmodule Varsel.CAPEC.AttackPatternWeakness do
       source_attribute :capec_id
       destination_attribute :capec_id
       define_attribute? false
+      allow_nil? false
       public? true
     end
 
@@ -73,6 +80,7 @@ defmodule Varsel.CAPEC.AttackPatternWeakness do
       source_attribute :cwe_id
       destination_attribute :cwe_id
       define_attribute? false
+      allow_nil? false
       public? true
     end
   end

@@ -45,7 +45,7 @@ defmodule Varsel.Cases.Case.Changes.HandleCveRecordOnClose do
 
   defp reject_cve_record(changeset, actor) do
     reason = Ash.Changeset.get_attribute(changeset, :closed_reason) || "Case closed"
-    cve_record = Ash.get!(Varsel.CVE.CveRecord, changeset.data.cve_record_id, authorize?: false)
+    cve_record = Varsel.CVE.get_cve_record!(changeset.data.cve_record_id, authorize?: false)
 
     case cve_record
          |> Ash.Changeset.for_update(:reject, %{rejection_reason: reason}, actor: actor)

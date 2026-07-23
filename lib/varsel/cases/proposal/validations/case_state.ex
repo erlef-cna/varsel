@@ -36,7 +36,7 @@ defmodule Varsel.Cases.Proposal.Validations.CaseState do
   defp fetch_case_state(nil), do: :error
 
   defp fetch_case_state(case_id) do
-    case Ash.get(Varsel.Cases.Case, case_id, authorize?: false) do
+    case Varsel.Cases.get_case(case_id, authorize?: false) do
       {:ok, %{state: state}} -> {:ok, state}
       {:error, _} -> :error
     end

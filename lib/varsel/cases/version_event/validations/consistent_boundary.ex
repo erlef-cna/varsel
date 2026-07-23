@@ -38,7 +38,7 @@ defmodule Varsel.Cases.VersionEvent.Validations.ConsistentBoundary do
 
     with false <- is_nil(case_id) or is_nil(affected_package_id),
          {:ok, %{case_id: package_case_id}} <-
-           Ash.get(Varsel.Cases.AffectedPackage, affected_package_id, authorize?: false),
+           Varsel.Cases.get_affected_package(affected_package_id, authorize?: false),
          false <- package_case_id == case_id do
       {:error, field: :affected_package_id, message: "belongs to a different case"}
     else
@@ -53,7 +53,7 @@ defmodule Varsel.Cases.VersionEvent.Validations.ConsistentBoundary do
 
     with false <- is_nil(package_channel_id),
          {:ok, %{affected_package_id: channel_package_id}} <-
-           Ash.get(Varsel.Cases.PackageChannel, package_channel_id, authorize?: false),
+           Varsel.Cases.get_package_channel(package_channel_id, authorize?: false),
          false <- channel_package_id == affected_package_id do
       {:error, field: :package_channel_id, message: "belongs to a different package"}
     else

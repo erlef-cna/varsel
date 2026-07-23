@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# credo:disable-for-this-file AshCredo.Check.Design.MissingCodeInterface
+# Driven entirely by the OAuth2 server extension; no code interface is called.
 defmodule Varsel.Accounts.OauthConsent do
   @moduledoc false
   use Ash.Resource,
@@ -19,6 +21,8 @@ defmodule Varsel.Accounts.OauthConsent do
     defaults [:read, :destroy]
 
     create :grant do
+      primary? true
+      description "Records (or refreshes) a user's consent for an OAuth client and scope."
       upsert? true
       upsert_identity :by_user_client
       accept [:user_id, :client_id, :scope]
@@ -32,6 +36,9 @@ defmodule Varsel.Accounts.OauthConsent do
     end
   end
 
+  # Consent record carries its own explicit granted_at; generic
+  # created/updated timestamps add no meaning.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingTimestamps
   attributes do
     uuid_v7_primary_key :id
 

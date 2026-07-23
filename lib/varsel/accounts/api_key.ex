@@ -43,6 +43,7 @@ defmodule Varsel.Accounts.ApiKey do
 
     create :create do
       primary? true
+      description "Creates a personal API key for the acting user."
       accept [:name, :expires_at]
 
       change relate_actor(:user)

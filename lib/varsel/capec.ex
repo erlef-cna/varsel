@@ -37,9 +37,30 @@ defmodule Varsel.CAPEC do
   end
 
   resources do
-    resource AttackPattern
-    resource Varsel.CAPEC.AttackPatternWeakness
-    resource Varsel.CAPEC.AttackPatternRelationship
-    resource Varsel.CAPEC.CapecMetadata
+    resource AttackPattern do
+      define :list_attack_patterns, action: :read
+      define :get_attack_pattern, action: :get_by_capec_id, args: [:capec_id]
+      define :search_attack_patterns, action: :search, args: [:query]
+      define :upsert_attack_pattern, action: :upsert
+      define :sync_capec_catalog, action: :sync_capec_catalog
+    end
+
+    resource Varsel.CAPEC.AttackPatternWeakness do
+      define :list_attack_pattern_weaknesses, action: :read
+      define :create_attack_pattern_weakness, action: :create
+      define :destroy_attack_pattern_weakness, action: :destroy
+    end
+
+    resource Varsel.CAPEC.AttackPatternRelationship do
+      define :list_attack_pattern_relationships, action: :read
+      define :create_attack_pattern_relationship, action: :create
+      define :update_attack_pattern_relationship, action: :update
+      define :destroy_attack_pattern_relationship, action: :destroy
+    end
+
+    resource Varsel.CAPEC.CapecMetadata do
+      define :read_capec_metadata, action: :read
+      define :upsert_capec_metadata, action: :upsert
+    end
   end
 end

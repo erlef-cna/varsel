@@ -16,7 +16,7 @@ defmodule Varsel.Cases.Comment.Validations.ProposalBelongsToCase do
 
     with false <- is_nil(proposal_id),
          {:ok, %{case_id: proposal_case_id}} <-
-           Ash.get(Varsel.Cases.Proposal, proposal_id, authorize?: false),
+           Varsel.Cases.get_case_proposal(proposal_id, authorize?: false),
          false <- proposal_case_id == case_id do
       {:error, field: :proposal_id, message: "belongs to a different case"}
     else

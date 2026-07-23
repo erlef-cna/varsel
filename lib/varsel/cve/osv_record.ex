@@ -119,6 +119,8 @@ defmodule Varsel.CVE.OsvRecord do
     end
 
     create :create do
+      description "Persists a derived OSV record, upserting on the parent CVE record."
+
       accept [:osv_id, :cve_record_id, :osv_json, :content_hash, :modified_at, :synced_at]
 
       # Concurrent runs racing the create_missing anti-join collapse into an
@@ -189,49 +191,7 @@ defmodule Varsel.CVE.OsvRecord do
       accept []
       require_atomic? false
 
-      change fn changeset, _context ->
-        record = changeset.data
-        cve_record = Ash.get!(CveRecord, record.cve_record_id, authorize?: false)
-        now = DateTime.utc_now()
-
-        case derive(cve_record) do
-          {:ok, _osv, content_hash}
-          when content_hash == record.content_hash and is_nil(record.withdrawn_at) ->
-            Ash.Changeset.force_change_attribute(changeset, :synced_at, now)
-
-          {:ok, osv, content_hash} ->
-            changeset
-            |> Ash.Changeset.force_change_attribute(:synced_at, now)
-            |> Ash.Changeset.force_change_attribute(:osv_json, stamp_modified(osv, now))
-            |> Ash.Changeset.force_change_attribute(:content_hash, content_hash)
-            |> Ash.Changeset.force_change_attribute(:modified_at, now)
-            |> Ash.Changeset.force_change_attribute(:withdrawn_at, nil)
-
-          {:skip, _reason} when not is_nil(record.withdrawn_at) ->
-            Ash.Changeset.force_change_attribute(changeset, :synced_at, now)
-
-          {:skip, _reason} ->
-            osv_json =
-              record.osv_json
-              |> Map.put("withdrawn", DateTime.to_iso8601(now))
-              |> stamp_modified(now)
-
-            changeset
-            |> Ash.Changeset.force_change_attribute(:synced_at, now)
-            |> Ash.Changeset.force_change_attribute(:osv_json, osv_json)
-            |> Ash.Changeset.force_change_attribute(:modified_at, now)
-            |> Ash.Changeset.force_change_attribute(:withdrawn_at, now)
-
-          # Transient state (the parent moved between the worker read and
-          # here, e.g. :published -> :pending_update): leave the record
-          # untouched — it is revisited once the parent settles.
-          :defer ->
-            changeset
-
-          {:error, reason} ->
-            Ash.Changeset.add_error(changeset, reason)
-        end
-      end
+      change Varsel.CVE.OsvRecord.Changes.Sync
     end
   end
 
@@ -300,16 +260,19 @@ defmodule Varsel.CVE.OsvRecord do
   # content hash from a CVE record.
   # Only the terminal :rejected state skips (and thereby withdraws); other
   # non-published states defer until the parent settles.
-  defp derive(%CveRecord{state: :rejected}), do: {:skip, "CVE record is rejected"}
+  # Public for the create_missing action and the Changes.Sync change.
+  @doc false
+  def derive(%CveRecord{state: :rejected}), do: {:skip, "CVE record is rejected"}
 
-  defp derive(%CveRecord{state: :published, cve_json: cve_json}) do
+  def derive(%CveRecord{state: :published, cve_json: cve_json}) do
     with {:ok, osv} <- OsvConverter.convert(cve_json),
          {:ok, osv} <- OsvConverter.enumerate_affected_versions(osv, &HexPm.package_versions/1) do
       {:ok, osv, OsvConverter.content_hash(osv)}
     end
   end
 
-  defp derive(%CveRecord{}), do: :defer
+  def derive(%CveRecord{}), do: :defer
 
-  defp stamp_modified(osv, %DateTime{} = at), do: Map.put(osv, "modified", DateTime.to_iso8601(at))
+  @doc false
+  def stamp_modified(osv, %DateTime{} = at), do: Map.put(osv, "modified", DateTime.to_iso8601(at))
 end

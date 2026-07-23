@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# credo:disable-for-this-file AshCredo.Check.Design.MissingCodeInterface
+# Driven entirely by the OAuth2 server extension; no code interface is called.
 defmodule Varsel.Accounts.OauthClient do
   @moduledoc false
   use Ash.Resource,
@@ -16,9 +18,20 @@ defmodule Varsel.Accounts.OauthClient do
   end
 
   actions do
-    defaults [:read, :destroy]
+    read :read do
+      description "List and read registered OAuth clients."
+      primary? true
+    end
+
+    destroy :destroy do
+      description "Delete a registered OAuth client."
+      primary? true
+    end
 
     create :register do
+      description "Register a new OAuth client via dynamic client registration."
+      primary? true
+
       accept [
         :client_name,
         :redirect_uris,
@@ -30,6 +43,9 @@ defmodule Varsel.Accounts.OauthClient do
     end
 
     update :touch do
+      description "Record the current time as the client's last-used timestamp."
+      primary? true
+
       accept []
       change atomic_update(:last_used_at, expr(now()))
     end

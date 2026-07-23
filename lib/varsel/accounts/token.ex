@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# credo:disable-for-this-file AshCredo.Check.Design.MissingCodeInterface
+# All actions are AshAuthentication-managed and never called via a code interface.
 defmodule Varsel.Accounts.Token do
   @moduledoc false
   use Ash.Resource,
@@ -29,6 +31,10 @@ defmodule Varsel.Accounts.Token do
     belongs_to_actor :user, Varsel.Accounts.User, domain: Varsel.Accounts
   end
 
+  # The three creates are AshAuthentication-managed token operations with no
+  # canonical human-facing create; marking one primary? would misdirect default
+  # create resolution.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingPrimaryAction
   actions do
     defaults [:read]
 

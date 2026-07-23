@@ -32,13 +32,11 @@ defmodule Varsel.Cases.Changes.SupersedeOrphanedProposals do
   defp sweep(record, context) do
     Proposal
     |> Ash.Query.filter(state == :open and target_id == ^record.id)
-    |> Ash.bulk_update!(
-      :supersede,
+    |> Varsel.Cases.supersede_case_proposal!(
       %{resolution_note: "the targeted row was deleted"},
       actor: context.actor,
       authorize?: false,
-      strategy: :stream,
-      return_errors?: true
+      bulk_options: [strategy: :stream, return_errors?: true]
     )
   end
 end

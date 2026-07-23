@@ -407,8 +407,8 @@ defmodule VarselWeb.Charts do
 
   # CWE catalog as %{id => weakness} with child_of edges loaded.
   defp cwe_catalog do
-    CWE.Weakness
-    |> Ash.read!(load: [:related_weakness_relationships], authorize?: false)
+    [load: [:related_weakness_relationships]]
+    |> CWE.list_weaknesses!()
     |> Map.new(fn w -> {w.cwe_id, w} end)
   rescue
     _error -> %{}

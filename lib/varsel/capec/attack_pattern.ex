@@ -45,7 +45,6 @@ defmodule Varsel.CAPEC.AttackPattern do
   alias Varsel.CAPEC.AttackPatternWeakness
   alias Varsel.CAPEC.CapecMetadata
   alias Varsel.CAPEC.CapecXmlParser
-  alias Varsel.CWE.CweMetadata
 
   graphql do
     type :attack_pattern
@@ -103,6 +102,7 @@ defmodule Varsel.CAPEC.AttackPattern do
 
   actions do
     read :read do
+      description "Lists attack patterns with keyset pagination."
       primary? true
       pagination keyset?: true, required?: false
     end
@@ -181,7 +181,7 @@ defmodule Varsel.CAPEC.AttackPattern do
       """
 
       run fn _input, _context ->
-        [_] = Ash.read!(CweMetadata, authorize?: false)
+        [_] = Varsel.CWE.read_cwe_metadata!(authorize?: false)
 
         req = build_req()
         stored_last_modified = fetch_stored_last_modified()
@@ -323,7 +323,7 @@ defmodule Varsel.CAPEC.AttackPattern do
   # ---------------------------------------------------------------------------
 
   defp fetch_stored_last_modified do
-    case Ash.read(CapecMetadata, authorize?: false) do
+    case Varsel.CAPEC.read_capec_metadata(authorize?: false) do
       {:ok, [%{last_modified: lm}]} -> lm
       _ -> nil
     end
@@ -335,10 +335,9 @@ defmodule Varsel.CAPEC.AttackPattern do
         attack_patterns
         |> Stream.chunk_every(200)
         |> Enum.each(fn chunk ->
-          Ash.bulk_create!(chunk, __MODULE__, :upsert,
+          Varsel.CAPEC.upsert_attack_pattern!(chunk,
             authorize?: false,
-            return_errors?: true,
-            stop_on_error?: true
+            bulk_options: [return_errors?: true, stop_on_error?: true]
           )
         end)
       end)

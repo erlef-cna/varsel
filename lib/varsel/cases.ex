@@ -138,58 +138,93 @@ defmodule Varsel.Cases do
       define :approve_case, action: :approve
       define :assign_case_cve_id, action: :assign_cve_id
       define :publish_case, action: :publish
+      define :mark_case_published, action: :mark_published
       define :reopen_case, action: :reopen
       define :close_case, action: :close
       define :render_case_preview, action: :render_preview
       define :refresh_case_derivation, action: :refresh_derivation
+      define :apply_case_proposal, action: :apply_proposal
     end
 
     resource CaseAssignment do
+      define :list_case_assignments, action: :read
       define :assign_case_user, action: :assign
       define :unassign_case_user, action: :unassign
     end
 
     resource AffectedPackage do
+      define :list_affected_packages, action: :read
+      define :get_affected_package, action: :read, get_by: [:id]
       define :add_affected_package, action: :add
       define :add_otp_affected_package, action: :add_otp
       define :add_elixir_affected_package, action: :add_elixir
       define :add_gleam_affected_package, action: :add_gleam
       define :edit_affected_package, action: :edit
       define :remove_affected_package, action: :remove
+      define :store_affected_package_derivation, action: :store_derivation
+      define :apply_affected_package_proposal, action: :apply_proposal
+      define :apply_affected_package_proposal_insert, action: :apply_proposal_insert
+      define :apply_affected_package_proposal_insert_otp, action: :apply_proposal_insert_otp
+      define :apply_affected_package_proposal_insert_elixir, action: :apply_proposal_insert_elixir
+      define :apply_affected_package_proposal_insert_gleam, action: :apply_proposal_insert_gleam
+      define :apply_affected_package_proposal_delete, action: :apply_proposal_delete
     end
 
     resource PackageChannel do
+      define :list_package_channels, action: :read
+      define :get_package_channel, action: :read, get_by: [:id]
       define :add_package_channel, action: :add
       define :edit_package_channel, action: :edit
       define :remove_package_channel, action: :remove
+      define :apply_package_channel_proposal, action: :apply_proposal
+      define :apply_package_channel_proposal_insert, action: :apply_proposal_insert
+      define :apply_package_channel_proposal_delete, action: :apply_proposal_delete
     end
 
     resource VersionEvent do
+      define :list_version_events, action: :read
       define :add_version_event, action: :add
       define :edit_version_event, action: :edit
       define :remove_version_event, action: :remove
+      define :apply_version_event_proposal, action: :apply_proposal
+      define :apply_version_event_proposal_insert, action: :apply_proposal_insert
+      define :apply_version_event_proposal_delete, action: :apply_proposal_delete
     end
 
     resource CaseReference do
+      define :list_case_references, action: :read
       define :add_case_reference, action: :add
       define :edit_case_reference, action: :edit
       define :remove_case_reference, action: :remove
+      define :apply_case_reference_proposal, action: :apply_proposal
+      define :apply_case_reference_proposal_insert, action: :apply_proposal_insert
+      define :apply_case_reference_proposal_delete, action: :apply_proposal_delete
     end
 
     resource CaseCredit do
+      define :list_case_credits, action: :read
       define :add_case_credit, action: :add
       define :edit_case_credit, action: :edit
       define :remove_case_credit, action: :remove
+      define :apply_case_credit_proposal, action: :apply_proposal
+      define :apply_case_credit_proposal_insert, action: :apply_proposal_insert
+      define :apply_case_credit_proposal_delete, action: :apply_proposal_delete
     end
 
     resource CaseWeakness do
+      define :list_case_weaknesses, action: :read
       define :add_case_weakness, action: :add
       define :remove_case_weakness, action: :remove
+      define :apply_case_weakness_proposal_insert, action: :apply_proposal_insert
+      define :apply_case_weakness_proposal_delete, action: :apply_proposal_delete
     end
 
     resource CaseImpact do
+      define :list_case_impacts, action: :read
       define :add_case_impact, action: :add
       define :remove_case_impact, action: :remove
+      define :apply_case_impact_proposal_insert, action: :apply_proposal_insert
+      define :apply_case_impact_proposal_delete, action: :apply_proposal_delete
     end
 
     resource Proposal do
@@ -200,9 +235,11 @@ defmodule Varsel.Cases do
       define :accept_case_proposal, action: :accept
       define :decline_case_proposal, action: :decline
       define :withdraw_case_proposal, action: :withdraw
+      define :supersede_case_proposal, action: :supersede
     end
 
     resource Comment do
+      define :list_case_comments_all, action: :read
       define :post_case_comment, action: :post
       define :list_case_comments, action: :list_for_case, args: [:case_id]
     end

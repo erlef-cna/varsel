@@ -51,12 +51,14 @@ defmodule Varsel.Cases.CaseWeakness do
 
     create :add do
       description "Classifies the case with a CWE."
+      primary? true
       accept [:case_id, :cwe_id, :position]
       validate CaseEditable
     end
 
     destroy :remove do
       description "Removes a CWE classification."
+      primary? true
       require_atomic? false
       validate CaseEditable
       change SupersedeOrphanedProposals

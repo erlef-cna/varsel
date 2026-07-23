@@ -3557,14 +3557,14 @@ defmodule VarselWeb.CaseDetailLive do
         Varsel.CWE.Weakness
         |> Ash.Query.select([:cwe_id, :name])
         |> Ash.Query.sort(:cwe_id)
-        |> Ash.read!(authorize?: false)
+        |> Ash.read!()
         |> Enum.map(&{&1.cwe_id, &1.name})
 
       attack_patterns =
         Varsel.CAPEC.AttackPattern
         |> Ash.Query.select([:capec_id, :name])
         |> Ash.Query.sort(:capec_id)
-        |> Ash.read!(authorize?: false)
+        |> Ash.read!()
         |> Enum.map(&{&1.capec_id, &1.name})
 
       assign(socket, catalog_options: %{cwe: weaknesses, capec: attack_patterns})

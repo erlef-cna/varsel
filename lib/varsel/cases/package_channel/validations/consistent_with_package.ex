@@ -28,7 +28,7 @@ defmodule Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage do
         {:error, field: :affected_package_id, message: "is required"}
 
       affected_package_id ->
-        case Ash.get(Varsel.Cases.AffectedPackage, affected_package_id, authorize?: false) do
+        case Varsel.Cases.get_affected_package(affected_package_id, authorize?: false) do
           {:ok, package} -> {:ok, package}
           {:error, _} -> {:error, field: :affected_package_id, message: "does not exist"}
         end

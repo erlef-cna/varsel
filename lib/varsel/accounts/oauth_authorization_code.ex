@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# credo:disable-for-this-file AshCredo.Check.Design.MissingCodeInterface
+# Driven entirely by the OAuth2 server extension; no code interface is called.
 defmodule Varsel.Accounts.OauthAuthorizationCode do
   @moduledoc false
   use Ash.Resource,
@@ -20,6 +22,9 @@ defmodule Varsel.Accounts.OauthAuthorizationCode do
     defaults [:read, :destroy]
 
     create :create do
+      primary? true
+      description "Issues an OAuth authorization code for a client/user grant."
+
       accept [
         :client_id,
         :user_id,
@@ -32,6 +37,7 @@ defmodule Varsel.Accounts.OauthAuthorizationCode do
     end
 
     update :consume do
+      description "Marks an authorization code consumed; rejects a second use."
       accept []
 
       validate absent(:consumed_at) do
@@ -48,6 +54,9 @@ defmodule Varsel.Accounts.OauthAuthorizationCode do
     end
   end
 
+  # Short-lived OAuth grant carrying its own expires_at/inserted_at semantics;
+  # generic created/updated timestamps add no meaning.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingTimestamps
   attributes do
     uuid_v7_primary_key :id
 

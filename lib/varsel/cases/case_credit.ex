@@ -55,12 +55,14 @@ defmodule Varsel.Cases.CaseCredit do
 
     create :add do
       description "Adds a credit to a case."
+      primary? true
       accept [:case_id, :user_id | Proposable.fields(__MODULE__)]
       validate CaseEditable
     end
 
     update :edit do
       description "Edits a credit. Only allowed while the case is editable."
+      primary? true
       accept [:user_id | Proposable.fields(__MODULE__)]
       require_atomic? false
       validate CaseEditable
@@ -68,6 +70,7 @@ defmodule Varsel.Cases.CaseCredit do
 
     destroy :remove do
       description "Removes a credit from a case."
+      primary? true
       require_atomic? false
       validate CaseEditable
       change SupersedeOrphanedProposals
@@ -166,6 +169,7 @@ defmodule Varsel.Cases.CaseCredit do
 
     belongs_to :user, User do
       description "The credited person's account, when known."
+      allow_nil? true
       public? true
       attribute_writable? true
     end

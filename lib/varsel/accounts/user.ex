@@ -4,6 +4,9 @@
 
 defmodule Varsel.Accounts.User do
   @moduledoc false
+  # Login is GitHub-OAuth-only (identity :unique_github_id on github_id); email
+  # is secondary, GitHub-synced profile data and intentionally not an identity.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingIdentity
   use Ash.Resource,
     otp_app: :varsel,
     domain: Varsel.Accounts,
@@ -89,11 +92,13 @@ defmodule Varsel.Accounts.User do
     end
 
     read :sign_in_with_api_key do
+      description "Signs a user in by verifying a presented personal API key."
       argument :api_key, :string, allow_nil?: false, sensitive?: true
       prepare AshAuthentication.Strategy.ApiKey.SignInPreparation
     end
 
     create :register_with_github do
+      description "Registers or updates a user from a GitHub OAuth sign-in."
       argument :user_info, :map, allow_nil?: false
       argument :oauth_tokens, :map, allow_nil?: false
       upsert? true
@@ -103,31 +108,12 @@ defmodule Varsel.Accounts.User do
       change AshAuthentication.GenerateTokenChange
       change AshAuthentication.Strategy.OAuth2.IdentityChange
 
-      change fn changeset, _ ->
-        user_info = Ash.Changeset.get_argument(changeset, :user_info)
-
-        changeset
-        |> Ash.Changeset.force_change_attribute(:github_id, to_string(user_info["sub"]))
-        |> Ash.Changeset.force_change_attribute(:github_handle, user_info["preferred_username"])
-        |> Ash.Changeset.force_change_attribute(:name, user_info["name"])
-        |> Ash.Changeset.force_change_attribute(:email, user_info["email"])
-      end
-
-      # The very first user to ever log in becomes a POC, so the CNA always
-      # has someone who can manage roles. Only applies on insert (the upsert
-      # leaves existing users' roles untouched).
-      change fn changeset, _context ->
-        Ash.Changeset.before_action(changeset, fn changeset ->
-          if changeset.action_type == :create and Ash.count!(__MODULE__, authorize?: false) == 0 do
-            Ash.Changeset.force_change_attribute(changeset, :role, :poc)
-          else
-            changeset
-          end
-        end)
-      end
+      change Varsel.Accounts.User.Changes.ApplyOauthUserInfo
+      change Varsel.Accounts.User.Changes.PromoteFirstUserToPoc
     end
 
     update :update do
+      description "Updates a user's own editable profile fields (name)."
       # Role is intentionally NOT accepted here: :update is self-editable
       # (see the policy below), and accepting role would let a non-POC
       # self-promote. Role changes go through :set_role, which is POC-only.

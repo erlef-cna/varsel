@@ -46,7 +46,12 @@ defmodule Varsel.Accounts do
 
     resource User do
       define :list_users, action: :read
+      define :update_user, action: :update
       define :set_user_role, action: :set_role, args: [:role]
+      define :get_user_by_subject, action: :get_by_subject, args: [:subject]
+      define :sign_in_user_with_api_key, action: :sign_in_with_api_key, args: [:api_key]
+      define :register_user_with_github, action: :register_with_github
+      define :log_out_user_everywhere, action: :log_out_everywhere
     end
 
     resource Varsel.Accounts.UserIdentity

@@ -29,10 +29,12 @@ defmodule Varsel.CWE.WeaknessRelationship do
   actions do
     read :read do
       primary? true
+      description "List directed relationships between CWE weaknesses."
     end
 
     create :create do
       primary? true
+      description "Upsert a directed CWE weakness relationship from the catalog sync."
       accept [:source_cwe_id, :target_cwe_id, :nature, :view_id, :ordinal]
       upsert? true
       upsert_fields [:nature, :view_id, :ordinal]
@@ -40,11 +42,13 @@ defmodule Varsel.CWE.WeaknessRelationship do
 
     update :update do
       primary? true
+      description "Update a CWE weakness relationship."
       accept []
     end
 
     destroy :destroy do
       primary? true
+      description "Delete a CWE weakness relationship."
     end
   end
 
@@ -58,6 +62,9 @@ defmodule Varsel.CWE.WeaknessRelationship do
     end
   end
 
+  # Pure MITRE-derived join table (rows come from the CWE catalog sync, not
+  # user writes), so per-row created/updated timestamps carry no meaning.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingTimestamps
   attributes do
     attribute :source_cwe_id, :integer do
       allow_nil? false
@@ -98,6 +105,7 @@ defmodule Varsel.CWE.WeaknessRelationship do
       source_attribute :source_cwe_id
       destination_attribute :cwe_id
       define_attribute? false
+      allow_nil? false
       public? true
     end
 
@@ -105,6 +113,7 @@ defmodule Varsel.CWE.WeaknessRelationship do
       source_attribute :target_cwe_id
       destination_attribute :cwe_id
       define_attribute? false
+      allow_nil? false
       public? true
     end
   end

@@ -50,7 +50,7 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
   end
 
   defp apply_to_target(%{operation: :set, target: :case} = proposal, actor) do
-    case_record = Ash.get!(Varsel.Cases.Case, proposal.case_id, authorize?: false)
+    case_record = Varsel.Cases.get_case!(proposal.case_id, authorize?: false)
 
     case_record
     |> Ash.Changeset.for_update(:apply_proposal, apply_arguments(proposal), actor: actor)

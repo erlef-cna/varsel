@@ -138,12 +138,14 @@ defmodule VarselWeb.CveListLive do
 
         CveRecord
         |> Ash.Query.filter(state == :published)
-        |> Ash.bulk_update!(:sync_from_mitre, %{},
+        |> CVE.sync_cve_record_from_mitre!(%{},
           actor: actor,
-          notify?: true,
-          return_errors?: true,
-          strategy: :stream,
-          allow_stream_with: :full_read
+          bulk_options: [
+            notify?: true,
+            return_errors?: true,
+            strategy: :stream,
+            allow_stream_with: :full_read
+          ]
         )
 
         :ok
