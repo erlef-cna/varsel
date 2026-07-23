@@ -16,15 +16,15 @@ defmodule Varsel.CWE do
 
   tools do
     tool :list_weaknesses, Weakness, :read do
-      load [:related_weakness_relationships]
+      load [:related_weakness_relationships, :related_attack_patterns]
     end
 
     tool :get_weakness, Weakness, :get_by_cwe_id do
-      load [:related_weakness_relationships]
+      load [:related_weakness_relationships, :related_attack_patterns]
     end
 
     tool :search_weaknesses, Weakness, :search do
-      load [:related_weakness_relationships]
+      load [:related_weakness_relationships, :related_attack_patterns]
     end
   end
 

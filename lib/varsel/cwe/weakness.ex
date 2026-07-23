@@ -39,6 +39,8 @@ defmodule Varsel.CWE.Weakness do
 
   import Ash.Expr
 
+  alias Varsel.CAPEC.AttackPattern
+  alias Varsel.CAPEC.AttackPatternWeakness
   alias Varsel.CWE.CweMetadata
   alias Varsel.CWE.CweXmlParser
   alias Varsel.CWE.Weakness.OkResult
@@ -257,6 +259,18 @@ defmodule Varsel.CWE.Weakness do
     has_many :related_weakness_relationships, WeaknessRelationship do
       source_attribute :cwe_id
       destination_attribute :source_cwe_id
+      public? true
+    end
+
+    # Reverse of AttackPattern.weaknesses: the CAPEC attack patterns that can
+    # exploit this weakness, through the shared join. Lets callers go CWE -> CAPEC
+    # (e.g. after picking a CWE, find the attack patterns that map to it).
+    many_to_many :related_attack_patterns, AttackPattern do
+      through AttackPatternWeakness
+      source_attribute :cwe_id
+      source_attribute_on_join_resource :cwe_id
+      destination_attribute :capec_id
+      destination_attribute_on_join_resource :capec_id
       public? true
     end
   end
