@@ -72,13 +72,26 @@ defmodule Varsel.CVE.CveValidation do
     reference an existing package on hex.pm (see `Varsel.CVE.HexPm`)
   """
 
-  use Ash.Resource, otp_app: :varsel, domain: Varsel.CVE
+  # AshGraphql.Resource is required even though this resource exposes no type
+  # of its own: ash_graphql (>= 1.10) only builds a domain's `action` query
+  # fields for resources that carry the extension. The generic actions here
+  # are exposed as queries in Varsel.CVE, so the extension must be present.
+  use Ash.Resource,
+    otp_app: :varsel,
+    domain: Varsel.CVE,
+    extensions: [AshGraphql.Resource]
 
   alias Varsel.CVE.Cvelint
   alias Varsel.CVE.CveSchema
   alias Varsel.CVE.CveValidation.Error
   alias Varsel.CVE.CveValidation.Result
   alias Varsel.CVE.HexPm
+
+  graphql do
+    # This resource has no GraphQL type of its own; it only exposes generic
+    # `action` queries (whose return types, Result/Error, are the real types).
+    generate_object? false
+  end
 
   resource do
     require_primary_key? false
