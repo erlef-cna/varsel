@@ -92,16 +92,17 @@ defmodule VarselWeb.Layouts do
     """
   end
 
-  @eef_logo_svg File.read!(Path.join([__DIR__, "..", "..", "..", "assets", "svg", "eef-header-logo.svg"]))
-  @external_resource Path.join([
-                       __DIR__,
-                       "..",
-                       "..",
-                       "..",
-                       "assets",
-                       "svg",
-                       "eef-header-logo.svg"
-                     ])
+  eef_header_logo_path =
+    Path.join([__DIR__, "..", "..", "..", "assets", "svg", "eef-header-logo.svg"])
+
+  @eef_logo_svg File.read!(eef_header_logo_path)
+  @external_resource eef_header_logo_path
+
+  eef_footer_logo_path =
+    Path.join([__DIR__, "..", "..", "..", "assets", "svg", "eef-footer-logo.svg"])
+
+  @eef_footer_logo_svg File.read!(eef_footer_logo_path)
+  @external_resource eef_footer_logo_path
 
   @doc """
   The EEF wordmark, read from `assets/svg/eef-header-logo.svg` at compile time
@@ -113,18 +114,20 @@ defmodule VarselWeb.Layouts do
   """
   attr :class, :string, default: "h-6"
   attr :id, :string, default: "eef-logo", doc: "unique base for the internal clip id"
+  attr :type, :atom, default: :header, values: [:header, :footer], doc: "which logo to render"
 
   def eef_logo(assigns) do
-    svg =
-      @eef_logo_svg
-      |> String.replace(~s(id="a"), ~s(id="#{assigns.id}-clip"))
-      |> String.replace("url(#a)", "url(##{assigns.id}-clip)")
+    logo =
+      case assigns.type do
+        :header -> @eef_logo_svg
+        :footer -> @eef_footer_logo_svg
+      end
 
-    assigns = assign(assigns, :svg, {:safe, svg})
+    assigns = assign(assigns, :svg, {:safe, logo})
 
     ~H"""
     <span
-      class={["eef-logo inline-flex items-center", @class]}
+      class={["eef-logo inline-flex items-center", "eef-logo-#{@type}", @class]}
       aria-label="Erlang Ecosystem Foundation"
       role="img"
     >
@@ -146,7 +149,7 @@ defmodule VarselWeb.Layouts do
           class="eef-band-plain flex items-center gap-3 shrink-0 text-white hover:opacity-80 transition-opacity"
         >
           <.eef_logo class="h-7" id="eef-logo-nav" />
-          <span class="font-semibold text-white/80 border-l border-white/20 pl-3 hidden sm:block">
+          <span class="italic font-black text-white text-lg border-l border-white/20 pl-3 hidden sm:block">
             CNA
           </span>
         </a>
@@ -288,8 +291,8 @@ defmodule VarselWeb.Layouts do
       <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-sm">
         <div class="col-span-2 md:col-span-1">
           <div class="flex items-center gap-3 mb-3 text-white">
-            <.eef_logo class="h-8" id="eef-logo-footer" />
-            <span class="font-semibold text-white/80 border-l border-white/20 pl-3">CNA</span>
+            <.eef_logo class="h-20" id="eef-logo-footer" type={:footer} />
+            <span class="italic font-black text-white text-xl border-l border-white/20 pl-3">CNA</span>
           </div>
           <p class="text-white/60 leading-relaxed">
             The Erlang Ecosystem Foundation's CVE Numbering Authority for the BEAM ecosystem.

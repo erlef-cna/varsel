@@ -1,0 +1,26 @@
+/* SPDX-FileCopyrightText: 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)
+ *
+ * SPDX-License-Identifier: OFL-1.1
+ *
+ * Montserrat — self-hosted variable fonts, compressed to woff2 from the
+ * official release's variable TTFs (full glyph coverage). Each face spans
+ * the whole weight axis, so every weight from Thin (100) through Bold to
+ * Black (900) — plus true italics — resolves from these two files; no
+ * weight is ever synthesized.
+ */
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/montserrat-variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/montserrat-italic-variable.woff2") format("woff2");
+}
