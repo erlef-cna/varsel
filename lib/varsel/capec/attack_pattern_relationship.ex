@@ -60,6 +60,16 @@ defmodule Varsel.CAPEC.AttackPatternRelationship do
     policy action_type(:read) do
       authorize_if always()
     end
+
+    # These rows have no independent lifecycle: they are only ever written as a
+    # side effect of managing an AttackPattern's related relationships (the
+    # catalog sync's manage_relationship), so authorize by that provenance.
+    policy action_type([:create, :update, :destroy]) do
+      authorize_if accessing_from(
+                     AttackPattern,
+                     :related_attack_pattern_relationships
+                   )
+    end
   end
 
   # Pure MITRE-derived join table (rows come from the CAPEC catalog sync, not

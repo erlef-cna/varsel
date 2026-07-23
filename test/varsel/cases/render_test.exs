@@ -138,13 +138,15 @@ defmodule Varsel.Cases.RenderTest do
     %{poc: poc, case: case_record}
   end
 
-  defp render!(case_record) do
-    {:ok, %{result: result, cve_json: cve_json}} = Publication.render(case_record, refresh: true)
+  defp render!(case_record, actor) do
+    {:ok, %{result: result, cve_json: cve_json}} =
+      Publication.render(case_record, refresh: true, actor: actor)
+
     {result, cve_json}
   end
 
-  test "renders the affected entries exactly as published", %{case: case_record} do
-    {result, _cve_json} = render!(case_record)
+  test "renders the affected entries exactly as published", %{poc: poc, case: case_record} do
+    {result, _cve_json} = render!(case_record, poc)
 
     assert result.cna["affected"] == [
              %{
@@ -188,8 +190,11 @@ defmodule Varsel.Cases.RenderTest do
            ]
   end
 
-  test "renders cpeApplicability without a lower bound for a \"0\" intro", %{case: case_record} do
-    {result, _cve_json} = render!(case_record)
+  test "renders cpeApplicability without a lower bound for a \"0\" intro", %{
+    poc: poc,
+    case: case_record
+  } do
+    {result, _cve_json} = render!(case_record, poc)
 
     assert result.cna["cpeApplicability"] == [
              %{
@@ -211,8 +216,8 @@ defmodule Varsel.Cases.RenderTest do
            ]
   end
 
-  test "renders classifications, credits and metrics as published", %{case: case_record} do
-    {result, _cve_json} = render!(case_record)
+  test "renders classifications, credits and metrics as published", %{poc: poc, case: case_record} do
+    {result, _cve_json} = render!(case_record, poc)
 
     assert result.cna["problemTypes"] == [
              %{
@@ -263,9 +268,10 @@ defmodule Varsel.Cases.RenderTest do
   end
 
   test "orders references: advisory, self-links, stored patches, fix commits", %{
+    poc: poc,
     case: case_record
   } do
-    {result, _cve_json} = render!(case_record)
+    {result, _cve_json} = render!(case_record, poc)
 
     assert Enum.map(result.cna["references"], & &1["url"]) == [
              @advisory,
@@ -279,9 +285,10 @@ defmodule Varsel.Cases.RenderTest do
   end
 
   test "derives prose from markdown with plaintext, HTML and markdown representations", %{
+    poc: poc,
     case: case_record
   } do
-    {result, _cve_json} = render!(case_record)
+    {result, _cve_json} = render!(case_record, poc)
 
     assert [%{"lang" => "en", "value" => plaintext, "supportingMedia" => [html, markdown]}] =
              result.cna["descriptions"]
@@ -298,8 +305,8 @@ defmodule Varsel.Cases.RenderTest do
     assert markdown["value"] =~ "This issue affects ash_authentication_phoenix until 2.10.0."
   end
 
-  test "assembles the full record and it passes schema validation", %{case: case_record} do
-    {result, cve_json} = render!(case_record)
+  test "assembles the full record and it passes schema validation", %{poc: poc, case: case_record} do
+    {result, cve_json} = render!(case_record, poc)
 
     assert result.blockers == []
     assert cve_json["cveMetadata"]["cveId"] == "CVE-2025-4754"
@@ -336,7 +343,7 @@ defmodule Varsel.Cases.RenderTest do
     Cases.edit_case!(case_record, %{cna_override: %{"tags" => ["exclusively-hosted-service"]}}, actor: poc)
 
     case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-    {result, _cve_json} = render!(case_record)
+    {result, _cve_json} = render!(case_record, poc)
 
     hex_entry = Enum.find(result.cna["affected"], &(&1["collectionURL"] == "https://repo.hex.pm"))
 
@@ -360,7 +367,7 @@ defmodule Varsel.Cases.RenderTest do
   test "publish blockers surface missing facts", %{poc: poc} do
     empty_case = Fixtures.open_case(poc, %{title: nil})
 
-    {:ok, %{result: result}} = Publication.render(empty_case)
+    {:ok, %{result: result}} = Publication.render(empty_case, actor: poc)
 
     assert "title is missing" in result.blockers
     assert "description is missing" in result.blockers
@@ -372,7 +379,7 @@ defmodule Varsel.Cases.RenderTest do
   test "a pending fix blocks publish unless allowed", %{poc: poc, case: case_record} do
     StubGitBackend.stub_tags(%{{@repo, @fix_sha} => []})
 
-    {result, _cve_json} = render!(case_record)
+    {result, _cve_json} = render!(case_record, poc)
     assert Enum.any?(result.blockers, &(&1 =~ "no containing release"))
 
     case_record = Ash.load!(case_record, [:affected_packages], authorize?: false)
@@ -380,7 +387,7 @@ defmodule Varsel.Cases.RenderTest do
     Cases.edit_affected_package!(package, %{allow_unreleased_fix: true}, actor: poc)
 
     case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-    {result, _cve_json} = render!(case_record)
+    {result, _cve_json} = render!(case_record, poc)
     refute Enum.any?(result.blockers, &(&1 =~ "no containing release"))
   end
 
@@ -398,7 +405,7 @@ defmodule Varsel.Cases.RenderTest do
       })
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-      {:ok, %{result: result}} = Publication.render(case_record)
+      {:ok, %{result: result}} = Publication.render(case_record, actor: poc)
 
       # The implicit forge entry is the package's last (here: only) entry.
       List.last(result.cna["affected"])
@@ -452,7 +459,7 @@ defmodule Varsel.Cases.RenderTest do
       )
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-      {:ok, %{result: result}} = Publication.render(case_record)
+      {:ok, %{result: result}} = Publication.render(case_record, actor: poc)
 
       # Only the hosted entry renders: no repo, no forge entry.
       assert [entry] = result.cna["affected"]
@@ -491,7 +498,7 @@ defmodule Varsel.Cases.RenderTest do
       end
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-      {:ok, %{result: result}} = Publication.render(case_record)
+      {:ok, %{result: result}} = Publication.render(case_record, actor: poc)
       result.cna["affected"]
     end
 
@@ -564,7 +571,7 @@ defmodule Varsel.Cases.RenderTest do
       )
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
-      {:ok, %{result: result}} = Publication.render(case_record)
+      {:ok, %{result: result}} = Publication.render(case_record, actor: poc)
 
       assert [rebar3, git] = result.cna["affected"]
       assert rebar3["programFiles"] == ["apps/rebar/src/rebar3.erl"]

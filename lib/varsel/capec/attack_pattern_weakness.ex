@@ -13,6 +13,8 @@ defmodule Varsel.CAPEC.AttackPatternWeakness do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer
 
+  alias Varsel.CAPEC.AttackPattern
+
   postgres do
     table "capec_attack_pattern_weaknesses"
     repo Varsel.Repo
@@ -46,6 +48,13 @@ defmodule Varsel.CAPEC.AttackPatternWeakness do
     policy action_type(:read) do
       authorize_if always()
     end
+
+    # These join rows have no independent lifecycle: they are only ever written
+    # as a side effect of managing an AttackPattern's :weaknesses (the catalog
+    # sync's manage_relationship), so authorize the write by that provenance.
+    policy action_type([:create, :destroy]) do
+      authorize_if accessing_from(AttackPattern, :weaknesses_join_assoc)
+    end
   end
 
   # Pure MITRE-derived join table (rows come from the CAPEC catalog sync, not
@@ -68,7 +77,7 @@ defmodule Varsel.CAPEC.AttackPatternWeakness do
   end
 
   relationships do
-    belongs_to :attack_pattern, Varsel.CAPEC.AttackPattern do
+    belongs_to :attack_pattern, AttackPattern do
       source_attribute :capec_id
       destination_attribute :capec_id
       define_attribute? false

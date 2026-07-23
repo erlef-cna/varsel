@@ -34,7 +34,8 @@ defmodule Varsel.Cases.Case.Changes.AssignCveRecord do
   end
 
   defp assign(changeset, actor) do
-    with {:ok, reserved} <- pick_record(Ash.Changeset.get_argument(changeset, :cve_record_id)),
+    with {:ok, reserved} <-
+           pick_record(Ash.Changeset.get_argument(changeset, :cve_record_id), actor),
          {:ok, assigned} <-
            reserved
            |> Ash.Changeset.for_update(:assign, %{}, actor: actor)
@@ -45,13 +46,15 @@ defmodule Varsel.Cases.Case.Changes.AssignCveRecord do
     end
   end
 
-  defp pick_record(nil) do
+  # The :assign_cve_id action is POC-only, so the actor reading the reserved
+  # pool here is a POC — CveRecord's read policy grants POCs every state.
+  defp pick_record(nil, actor) do
     year = Date.utc_today().year
 
     case year
-         |> Varsel.CVE.query_to_available_cve_records(authorize?: false)
+         |> Varsel.CVE.query_to_available_cve_records(actor: actor)
          |> Ash.Query.load(:cve_id)
-         |> Ash.read!(authorize?: false)
+         |> Ash.read!(actor: actor)
          |> Enum.sort_by(&cve_number/1)
          |> List.first() do
       nil -> {:error, "no reserved CVE IDs available in the #{year} pool"}
@@ -59,8 +62,8 @@ defmodule Varsel.Cases.Case.Changes.AssignCveRecord do
     end
   end
 
-  defp pick_record(cve_record_id) do
-    case Varsel.CVE.get_cve_record(cve_record_id, authorize?: false) do
+  defp pick_record(cve_record_id, actor) do
+    case Varsel.CVE.get_cve_record(cve_record_id, actor: actor) do
       {:ok, %{state: :reserved} = record} -> {:ok, record}
       {:ok, %{state: state}} -> {:error, "CVE record is #{state}, not reserved"}
       {:error, _} -> {:error, "CVE record does not exist"}

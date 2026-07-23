@@ -25,7 +25,7 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecord do
 
     with :ok <- require_cve_record(case_record),
          {:ok, %{result: result, cve_json: cve_json}} <-
-           Publication.render(case_record, refresh: true),
+           Publication.render(case_record, refresh: true, actor: actor),
          :ok <- check_blockers(result.blockers),
          :ok <- check_validation(Publication.validate(cve_json)) do
       hand_to_cve_record(changeset, case_record, cve_json, actor)

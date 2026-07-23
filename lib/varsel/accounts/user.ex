@@ -16,6 +16,7 @@ defmodule Varsel.Accounts.User do
     extensions: [AshAuthentication, AshPaperTrail.Resource, AshGraphql.Resource]
 
   alias AshAuthentication.Checks.AshAuthenticationInteraction
+  alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.Proposal
 
   graphql do
@@ -53,6 +54,12 @@ defmodule Varsel.Accounts.User do
 
   field_policies do
     field_policy_bypass :*, AshAuthenticationInteraction do
+      authorize_if always()
+    end
+
+    # The :notify_pocs Oban worker needs each POC's email; it reads through the
+    # Oban bypass (see the read policy), so grant it every field too.
+    field_policy_bypass :*, AshObanInteraction do
       authorize_if always()
     end
 
@@ -129,6 +136,12 @@ defmodule Varsel.Accounts.User do
 
   policies do
     bypass AshAuthenticationInteraction do
+      authorize_if always()
+    end
+
+    # The :notify_pocs Oban worker lists every POC to email them; it has no
+    # actor, so it authorizes through this bypass.
+    bypass AshObanInteraction do
       authorize_if always()
     end
 

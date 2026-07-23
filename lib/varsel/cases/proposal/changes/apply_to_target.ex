@@ -50,7 +50,7 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
   end
 
   defp apply_to_target(%{operation: :set, target: :case} = proposal, actor) do
-    case_record = Varsel.Cases.get_case!(proposal.case_id, authorize?: false)
+    case_record = Varsel.Cases.get_case!(proposal.case_id, actor: actor)
 
     case_record
     |> Ash.Changeset.for_update(:apply_proposal, apply_arguments(proposal), actor: actor)
@@ -59,7 +59,7 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
   end
 
   defp apply_to_target(%{operation: :set} = proposal, actor) do
-    with {:ok, row} <- fetch_target_row(proposal) do
+    with {:ok, row} <- fetch_target_row(proposal, actor) do
       row
       |> Ash.Changeset.for_update(:apply_proposal, apply_arguments(proposal), actor: actor)
       |> Ash.update()
@@ -84,7 +84,7 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
   end
 
   defp apply_to_target(%{operation: :delete} = proposal, actor) do
-    with {:ok, row} <- fetch_target_row(proposal) do
+    with {:ok, row} <- fetch_target_row(proposal, actor) do
       case row
            |> Ash.Changeset.for_destroy(:apply_proposal_delete, %{proposal_id: proposal.id}, actor: actor)
            |> Ash.destroy() do
@@ -139,8 +139,8 @@ defmodule Varsel.Cases.Proposal.Changes.ApplyToTarget do
     end
   end
 
-  defp fetch_target_row(proposal) do
-    case Ash.get(Target.resource(proposal.target), proposal.target_id, authorize?: false) do
+  defp fetch_target_row(proposal, actor) do
+    case Ash.get(Target.resource(proposal.target), proposal.target_id, actor: actor) do
       {:ok, row} -> {:ok, row}
       {:error, _} -> {:error, :stale_target}
     end

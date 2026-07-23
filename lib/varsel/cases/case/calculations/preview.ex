@@ -23,10 +23,10 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   def load(_query, _opts, _context), do: Publication.render_loads()
 
   @impl Calculation
-  def calculate(records, _opts, _context), do: Enum.map(records, &preview/1)
+  def calculate(records, _opts, context), do: Enum.map(records, &preview(&1, context.actor))
 
-  defp preview(case_record) do
-    {:ok, %{result: result, cve_json: cve_json}} = Publication.render(case_record)
+  defp preview(case_record, actor) do
+    {:ok, %{result: result, cve_json: cve_json}} = Publication.render(case_record, actor: actor)
     validation = cve_json && Publication.validate(cve_json)
 
     %{

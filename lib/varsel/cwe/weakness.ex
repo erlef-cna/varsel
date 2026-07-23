@@ -155,9 +155,11 @@ defmodule Varsel.CWE.Weakness do
       re-processing if unchanged, unzips, parses, and bulk-upserts all weaknesses.
       """
 
-      run fn _input, _context ->
+      run fn _input, context ->
+        opts = Varsel.ObanContext.forward(context)
+
         req = build_req()
-        stored_last_modified = fetch_stored_last_modified()
+        stored_last_modified = fetch_stored_last_modified(opts)
 
         headers =
           if stored_last_modified do
@@ -176,10 +178,10 @@ defmodule Varsel.CWE.Weakness do
             xml
             |> Varsel.Xml.chunk_binary()
             |> CweXmlParser.stream()
-            |> upsert_all()
+            |> upsert_all(opts)
 
             new_last_modified = get_header(resp_headers, "last-modified")
-            update_metadata(new_last_modified)
+            update_metadata(new_last_modified, opts)
             {:ok, :ok}
 
           {:ok, %{status: status}} ->
@@ -275,8 +277,8 @@ defmodule Varsel.CWE.Weakness do
   # Private sync helpers (used by the :sync_cwe_catalog action run fn)
   # ---------------------------------------------------------------------------
 
-  defp fetch_stored_last_modified do
-    case Varsel.CWE.read_cwe_metadata(authorize?: false) do
+  defp fetch_stored_last_modified(opts) do
+    case Varsel.CWE.read_cwe_metadata(opts) do
       {:ok, [%{last_modified: lm}]} -> lm
       _ -> nil
     end
@@ -298,7 +300,7 @@ defmodule Varsel.CWE.Weakness do
     end
   end
 
-  defp upsert_all(weaknesses) do
+  defp upsert_all(weaknesses, opts) do
     {:ok, _} =
       Ash.transact(__MODULE__, fn ->
         # 1. Upsert the weaknesses themselves (without relationships). The
@@ -310,16 +312,13 @@ defmodule Varsel.CWE.Weakness do
           |> Enum.flat_map(fn chunk ->
             chunk
             |> Enum.map(&Map.delete(&1, :related_weaknesses))
-            |> Varsel.CWE.upsert_weakness!(
-              authorize?: false,
-              bulk_options: [return_errors?: true, stop_on_error?: true]
-            )
+            |> Varsel.CWE.upsert_weakness!(Keyword.put(opts, :bulk_options, return_errors?: true, stop_on_error?: true))
 
             Enum.map(chunk, &Map.take(&1, [:cwe_id, :related_weaknesses]))
           end)
 
         # 2. Sync relationships as a flat set, now that every target exists.
-        sync_relationships(relationship_facts)
+        sync_relationships(relationship_facts, opts)
       end)
   end
 
@@ -328,7 +327,7 @@ defmodule Varsel.CWE.Weakness do
   # weakness upsert's manage_relationship, which mis-maps targets under a
   # chunked bulk_create. Rows referencing an unknown weakness are dropped
   # (the target FK would reject them anyway).
-  defp sync_relationships(weaknesses) do
+  defp sync_relationships(weaknesses, opts) do
     known = MapSet.new(weaknesses, & &1.cwe_id)
 
     rows =
@@ -339,18 +338,23 @@ defmodule Varsel.CWE.Weakness do
         |> Enum.map(&Map.put(&1, :source_cwe_id, source_cwe_id))
       end)
 
-    Varsel.CWE.create_weakness_relationship!(rows,
-      authorize?: false,
-      bulk_options: [return_errors?: true, stop_on_error?: true, batch_size: 500]
+    Varsel.CWE.create_weakness_relationship!(
+      rows,
+      Keyword.put(opts, :bulk_options,
+        return_errors?: true,
+        stop_on_error?: true,
+        batch_size: 500
+      )
     )
 
     :ok
   end
 
-  defp update_metadata(last_modified) do
-    Ash.create!(CweMetadata, %{last_modified: last_modified, last_synced_at: DateTime.utc_now()},
-      action: :upsert,
-      authorize?: false
+  defp update_metadata(last_modified, opts) do
+    Ash.create!(
+      CweMetadata,
+      %{last_modified: last_modified, last_synced_at: DateTime.utc_now()},
+      Keyword.put(opts, :action, :upsert)
     )
   end
 

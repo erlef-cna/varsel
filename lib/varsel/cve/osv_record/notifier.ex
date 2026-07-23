@@ -19,6 +19,9 @@ defmodule Varsel.CVE.OsvRecord.Notifier do
 
   @impl Ash.Notifier
   def notify(%Ash.Notifier.Notification{data: %{state: state} = record}) when state in [:published, :rejected] do
+    # Notifiers run post-transaction with no actor; loading the related OSV
+    # record to decide whether to fire the sync trigger is a system operation.
+    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
     record = Ash.load!(record, :osv_record, authorize?: false)
 
     cond do

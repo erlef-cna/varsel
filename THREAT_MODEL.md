@@ -159,9 +159,10 @@ claims:
   claim.)
 - **`repo_url` git egress** — reachable only by a **POC or a supporter
   assigned to that case** (the `AffectedPackage` create/update policy is
-  `role == :poc OR ActorAssignedToCase`). A finding here that assumes an
-  *ordinary* authenticated user or anonymous caller controls `repo_url` is
-  out of model. (`affected_package.ex`)
+  `role == :poc OR relates_to_actor_via([:case, :assignments, :user])` — the
+  actor is a POC, or the row's case has a `CaseAssignment` to the actor). A
+  finding here that assumes an *ordinary* authenticated user or anonymous
+  caller controls `repo_url` is out of model. (`affected_package.ex`)
 - **Report intake** — reachable by **any authenticated user**. `report_json`
   is fully attacker-controlled at that privilege; downstream sinks (email,
   triage UI) are the question.
@@ -350,9 +351,14 @@ restated as Varsel claims).
 
 1. **Role-scoped authorization on every resource.**
    Every action is policy-gated; the role→action matrix in §2 holds. No
-   exposed action grants callers `authorize?: false` (verified: that flag
-   appears only in internal changes/jobs, never in a caller-reachable
-   contract).
+   exposed action grants callers `authorize?: false`: outside tests the flag
+   is banned by the `AshCredo.Check.Warning.AuthorizeFalse` credo check
+   (`.credo.exs`), so the few remaining uses are all internal
+   changes/validations/notifiers, never a caller-reachable contract. Internal
+   system operations that legitimately bypass the actor's policy do so through
+   a bypass the actor cannot reach — the `AshObanInteraction` bypass for Oban
+   jobs (a caller cannot forge the `ash_oban?` context) or an `accessing_from`
+   policy for rows only ever written through a managed relationship.
    - *Violation symptom:* an actor performs an action, or reads a row/field,
      the matrix forbids (e.g. a supporter approves a case, an anonymous
      client reads a `draft` CVE, a non-POC reads another user's email).

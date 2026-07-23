@@ -55,7 +55,6 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
-  alias Varsel.Cases.Checks.ActorAssignedToCase
   alias Varsel.Cases.Validations.CaseEditable
 
   @content_fields [
@@ -312,7 +311,7 @@ defmodule Varsel.Cases.Case do
     # Content edits and review handoff: POC or assigned supporter.
     policy action([:edit, :apply_proposal, :request_review, :refresh_derivation]) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if ActorAssignedToCase
+      authorize_if relates_to_actor_via([:assignments, :user])
     end
 
     # render_preview only fetches the case (with the actor) and returns its
@@ -514,6 +513,13 @@ defmodule Varsel.Cases.Case do
       The rendered CNA container, full CVE record, applied overrides, publish
       blockers and validation summary — without publishing. Loadable only on a
       case the actor may read, so the case read policy is its authorization.
+      """
+    end
+
+    calculate :published_cna, :map, Varsel.Cases.Case.Calculations.PublishedCna do
+      description """
+      The CNA container currently published on the case's CVE record, or nil
+      when the case was never published — for diffing against :preview.
       """
     end
   end

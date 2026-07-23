@@ -28,10 +28,14 @@ defmodule Varsel.Cases.Publication do
   @spec render_loads() :: keyword()
   def render_loads, do: @render_loads
 
-  @doc "Loads everything `Varsel.Cases.Render.render_cna/2` needs."
-  @spec load_render_tree(Case.t()) :: Case.t()
-  def load_render_tree(case_record) do
-    Ash.load!(case_record, @render_loads, authorize?: false)
+  @doc """
+  Loads everything `Varsel.Cases.Render.render_cna/2` needs, under `actor` (the
+  render-tree children share the case's read policy, so whoever may read the
+  case may load them).
+  """
+  @spec load_render_tree(Case.t(), keyword()) :: Case.t()
+  def load_render_tree(case_record, opts \\ []) do
+    Ash.load!(case_record, @render_loads, actor: opts[:actor])
   end
 
   @doc """
@@ -39,7 +43,7 @@ defmodule Varsel.Cases.Publication do
   and stores the caches (the publish path); otherwise cached results are used
   and only cache misses are computed (the preview path).
   """
-  @spec derivations(Case.t(), refresh: boolean()) :: %{Ash.UUID.t() => map()}
+  @spec derivations(Case.t(), keyword()) :: %{Ash.UUID.t() => map()}
   def derivations(case_record, opts \\ []) do
     refresh? = Keyword.get(opts, :refresh, false)
 
@@ -53,18 +57,27 @@ defmodule Varsel.Cases.Publication do
   defp derivation_for(package, _refresh?) do
     {:ok, derivation} = Derivation.derive(package)
 
+    # The entry points that reach here — refresh_derivation, the publish
+    # handoff, preview — are already policy-gated; writing the resulting
+    # derivation cache is just their downstream side effect, not a separately
+    # authorized user edit.
     package
+    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
     |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: derivation}, authorize?: false)
     |> Ash.update!()
 
     derivation
   end
 
-  @doc "Renders the case and wraps the container into a full CVE record."
-  @spec render(Case.t(), refresh: boolean()) ::
+  @doc """
+  Renders the case and wraps the container into a full CVE record. Pass `actor`
+  so the render-tree load is authorized (the preview calculation and the publish
+  handoff both have one); `refresh: true` recomputes derivations.
+  """
+  @spec render(Case.t(), keyword()) ::
           {:ok, %{result: Render.Result.t(), cve_json: map() | nil}}
   def render(case_record, opts \\ []) do
-    case_record = load_render_tree(case_record)
+    case_record = load_render_tree(case_record, opts)
     result = Render.render_cna(case_record, derivations(case_record, opts))
 
     {:ok, %{result: result, cve_json: cve_json(case_record, result)}}
@@ -91,18 +104,19 @@ defmodule Varsel.Cases.Publication do
   @doc "Runs the full CveValidation suite over an assembled record."
   @spec validate(map()) :: Varsel.CVE.CveValidation.Result.t()
   def validate(cve_json) do
-    Varsel.CVE.validate_cve_record!(cve_json, authorize?: false)
+    Varsel.CVE.validate_cve_record!(cve_json)
   end
 
   @doc """
   The CNA container currently published on the case's CVE record, or nil when
   the case was never published. `providerMetadata.dateUpdated` is stripped —
   MITRE stamps it on every push, so it would be pure diff noise.
+
+  Expects `:cve_record` to be loaded (the `:published_cna` calculation declares
+  it); reached only through that calculation's authorized load path.
   """
   @spec published_cna(Case.t()) :: map() | nil
   def published_cna(case_record) do
-    case_record = Ash.load!(case_record, [:cve_record], authorize?: false)
-
     with %{cve_record: %{cve_json: cve_json}} when is_map(cve_json) <- case_record,
          %{} = cna <- get_in(cve_json, ["containers", "cna"]) do
       case cna do
@@ -117,22 +131,13 @@ defmodule Varsel.Cases.Publication do
     end
   end
 
-  @doc "Marks every package's derivation cache stale so the next preview recomputes."
-  @spec invalidate_derivations(Case.t()) :: :ok
-  def invalidate_derivations(case_record) do
-    case_record = Ash.load!(case_record, [:affected_packages], authorize?: false)
-
-    Enum.each(case_record.affected_packages, fn package ->
-      package
-      |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: nil}, authorize?: false)
-      |> Ash.update!()
-    end)
-  end
-
-  @doc "Recomputes and stores the derivation cache of one package."
-  @spec refresh_package(AffectedPackage.t()) :: map()
-  def refresh_package(package) do
-    package = Ash.load!(package, [:channels, :version_events], authorize?: false)
+  @doc """
+  Recomputes and stores the derivation cache of one package, loading its
+  boundary facts under `actor`.
+  """
+  @spec refresh_package(AffectedPackage.t(), keyword()) :: map()
+  def refresh_package(package, opts \\ []) do
+    package = Ash.load!(package, [:channels, :version_events], actor: opts[:actor])
     derivation_for(package, true)
   end
 end

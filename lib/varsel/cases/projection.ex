@@ -204,7 +204,7 @@ defmodule Varsel.Cases.Projection do
 
   defp with_catalog(row, key, catalog_resource, id_field) do
     catalog_row =
-      case Ash.get(catalog_resource, Map.get(row, id_field), authorize?: false) do
+      case Ash.get(catalog_resource, Map.get(row, id_field)) do
         {:ok, found} ->
           found
 

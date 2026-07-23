@@ -180,11 +180,13 @@ defmodule Varsel.CAPEC.AttackPattern do
       re-processing if unchanged, parses, and bulk-upserts all attack patterns.
       """
 
-      run fn _input, _context ->
-        [_] = Varsel.CWE.read_cwe_metadata!(authorize?: false)
+      run fn _input, context ->
+        opts = Varsel.ObanContext.forward(context)
+
+        [_] = Varsel.CWE.read_cwe_metadata!(opts)
 
         req = build_req()
-        stored_last_modified = fetch_stored_last_modified()
+        stored_last_modified = fetch_stored_last_modified(opts)
 
         headers =
           if stored_last_modified do
@@ -201,10 +203,10 @@ defmodule Varsel.CAPEC.AttackPattern do
             body
             |> Varsel.Xml.chunk_binary()
             |> CapecXmlParser.stream()
-            |> upsert_all()
+            |> upsert_all(opts)
 
             new_last_modified = get_header(resp_headers, "last-modified")
-            update_metadata(new_last_modified)
+            update_metadata(new_last_modified, opts)
             {:ok, :ok}
 
           %{status: status} ->
@@ -322,33 +324,32 @@ defmodule Varsel.CAPEC.AttackPattern do
   # Private sync helpers (used by the :sync_capec_catalog action run fn)
   # ---------------------------------------------------------------------------
 
-  defp fetch_stored_last_modified do
-    case Varsel.CAPEC.read_capec_metadata(authorize?: false) do
+  defp fetch_stored_last_modified(opts) do
+    case Varsel.CAPEC.read_capec_metadata(opts) do
       {:ok, [%{last_modified: lm}]} -> lm
       _ -> nil
     end
   end
 
-  defp upsert_all(attack_patterns) do
+  defp upsert_all(attack_patterns, opts) do
     {:ok, _} =
       Ash.transact(__MODULE__, fn ->
         attack_patterns
         |> Stream.chunk_every(200)
         |> Enum.each(fn chunk ->
-          Varsel.CAPEC.upsert_attack_pattern!(chunk,
-            authorize?: false,
-            bulk_options: [return_errors?: true, stop_on_error?: true]
+          Varsel.CAPEC.upsert_attack_pattern!(
+            chunk,
+            Keyword.put(opts, :bulk_options, return_errors?: true, stop_on_error?: true)
           )
         end)
       end)
   end
 
-  defp update_metadata(last_modified) do
+  defp update_metadata(last_modified, opts) do
     Ash.create!(
       CapecMetadata,
       %{last_modified: last_modified, last_synced_at: DateTime.utc_now()},
-      action: :upsert,
-      authorize?: false
+      Keyword.put(opts, :action, :upsert)
     )
   end
 

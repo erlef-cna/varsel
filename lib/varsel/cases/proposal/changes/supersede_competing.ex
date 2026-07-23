@@ -59,6 +59,10 @@ defmodule Varsel.Cases.Proposal.Changes.SupersedeCompeting do
   defp sweep(nil, _proposal, _actor), do: :ok
 
   defp sweep(query, proposal, actor) do
+    # Accepting a proposal is allowed for assigned supporters, but :supersede is
+    # POC-only; a supporter's accept must still sweep competitors, so this
+    # internal cascade bypasses the actor's authorization by design.
+    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
     Ash.bulk_update!(
       query,
       :supersede,

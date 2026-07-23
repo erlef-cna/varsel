@@ -14,8 +14,11 @@ defmodule Varsel.Accounts.User.Changes.PromoteFirstUserToPoc do
   @impl Ash.Resource.Change
   def change(changeset, _opts, _context) do
     Ash.Changeset.before_action(changeset, fn changeset ->
-      if changeset.action_type == :create and
-           Ash.count!(Varsel.Accounts.User, authorize?: false) == 0 do
+      # Bootstrap check during the very first GitHub registration: there is no
+      # privileged actor yet, and User reads are POC-or-self, so the count of
+      # existing users must bypass authorization.
+      # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
+      if Ash.count!(Varsel.Accounts.User, authorize?: false) < 1 do
         Ash.Changeset.force_change_attribute(changeset, :role, :poc)
       else
         changeset

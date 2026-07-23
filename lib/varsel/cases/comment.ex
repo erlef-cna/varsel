@@ -21,7 +21,6 @@ defmodule Varsel.Cases.Comment do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
-  alias Varsel.Cases.Checks.ActorAssignedToCase
 
   graphql do
     type :case_comment
@@ -70,14 +69,9 @@ defmodule Varsel.Cases.Comment do
   end
 
   policies do
-    policy action_type(:read) do
+    policy action_type([:read, :create]) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if expr(exists(case.assignments, user_id == ^actor(:id)))
-    end
-
-    policy action(:post) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if ActorAssignedToCase
+      authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
   end
 

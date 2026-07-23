@@ -277,6 +277,10 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
         _other -> target
       end
 
+    # Data-integrity check inside the already policy-gated :propose validation:
+    # confirm the referenced row's true case membership, independent of what the
+    # proposing actor happens to be able to read.
+    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
     case Ash.get(Target.resource(referenced), target_id, authorize?: false) do
       {:ok, %{case_id: ^case_id}} ->
         :ok

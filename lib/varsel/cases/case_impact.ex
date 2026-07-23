@@ -20,7 +20,6 @@ defmodule Varsel.Cases.CaseImpact do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
-  alias Varsel.Cases.Checks.ActorAssignedToCase
   alias Varsel.Cases.Validations.CaseEditable
 
   graphql do
@@ -85,14 +84,9 @@ defmodule Varsel.Cases.CaseImpact do
   end
 
   policies do
-    policy action_type(:read) do
+    policy action_type([:read, :create, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if expr(exists(case.assignments, user_id == ^actor(:id)))
-    end
-
-    policy action_type([:create, :destroy]) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if ActorAssignedToCase
+      authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
   end
 

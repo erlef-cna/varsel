@@ -33,7 +33,6 @@ defmodule Varsel.Cases.PackageChannel do
 
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
-  alias Varsel.Cases.Checks.ActorAssignedToCase
   alias Varsel.Cases.PackageChannel.PurlType
   alias Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage
   alias Varsel.Cases.Proposable
@@ -126,14 +125,9 @@ defmodule Varsel.Cases.PackageChannel do
   end
 
   policies do
-    policy action_type(:read) do
+    policy action_type([:read, :create, :update, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if expr(exists(case.assignments, user_id == ^actor(:id)))
-    end
-
-    policy action_type([:create, :update, :destroy]) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if ActorAssignedToCase
+      authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
   end
 

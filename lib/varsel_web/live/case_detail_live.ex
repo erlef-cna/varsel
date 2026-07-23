@@ -33,7 +33,6 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposable
-  alias Varsel.Cases.Publication
   alias Varsel.Cases.Readiness
   alias Varsel.Cases.Render.Channel
   alias Varsel.Cases.Render.Diff
@@ -618,11 +617,12 @@ defmodule VarselWeb.CaseDetailLive do
     socket
     |> assign(diff: :loading)
     |> start_async(:diff, fn ->
-      # Re-fetch with the actor so the diff is as authorized as the page load.
-      case_record = Cases.get_case!(case_record.id, actor: actor)
-      published = Publication.published_cna(case_record) || %{}
-      {:ok, %{result: result}} = Publication.render(case_record)
-      Diff.lines(published, result.cna)
+      # Both sides come from calculations loaded under the actor, so the diff is
+      # as authorized as the page load.
+      case_record =
+        Cases.get_case!(case_record.id, load: [:preview, :published_cna], actor: actor)
+
+      Diff.lines(case_record.published_cna || %{}, case_record.preview["cna"])
     end)
   end
 

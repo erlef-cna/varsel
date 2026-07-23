@@ -353,7 +353,9 @@ defmodule Varsel.CVE.CveRecord do
     action :import_from_mitre, OkResult do
       description "Fetches all CVE IDs from MITRE and imports any that do not exist locally."
 
-      run fn _input, _context ->
+      run fn _input, context ->
+        opts = Varsel.ObanContext.forward(context)
+
         MitreCveApi.stream_ids()
         |> Enum.map(fn cve_id ->
           {:ok, cve_json} = MitreCveApi.get(cve_id)
@@ -361,7 +363,7 @@ defmodule Varsel.CVE.CveRecord do
         end)
         |> Enum.chunk_every(100)
         |> Enum.each(fn chunk ->
-          Varsel.CVE.import_cve_record!(chunk, authorize?: false)
+          Varsel.CVE.import_cve_record!(chunk, opts)
         end)
 
         {:ok, :ok}
@@ -480,10 +482,11 @@ defmodule Varsel.CVE.CveRecord do
         description "Skip (no MITRE call) when no CVE records exist locally at all."
       end
 
-      run fn input, _context ->
+      run fn input, context ->
+        opts = Varsel.ObanContext.forward(context)
         skip_on_empty = input.arguments[:skip_on_empty]
 
-        if skip_on_empty and Ash.count!(__MODULE__, authorize?: false) == 0 do
+        if skip_on_empty and Ash.count!(__MODULE__, opts) == 0 do
           {:ok, :ok}
         else
           year = input.arguments[:year] || Date.utc_today().year
@@ -491,8 +494,8 @@ defmodule Varsel.CVE.CveRecord do
 
           open_count =
             year
-            |> Varsel.CVE.query_to_available_cve_records(authorize?: false)
-            |> Ash.count!(authorize?: false)
+            |> Varsel.CVE.query_to_available_cve_records(opts)
+            |> Ash.count!(opts)
 
           if open_count < min_size do
             amount = min_size - open_count
@@ -501,7 +504,7 @@ defmodule Varsel.CVE.CveRecord do
               {:ok, reservation_jsons} ->
                 inputs = Enum.map(reservation_jsons, &%{reservation_json: &1})
 
-                Varsel.CVE.reserve_cve_record!(inputs, authorize?: false)
+                Varsel.CVE.reserve_cve_record!(inputs, opts)
 
               {:error, reason} ->
                 raise "Failed to reserve CVE IDs from MITRE: #{reason}"
@@ -520,19 +523,21 @@ defmodule Varsel.CVE.CveRecord do
       IDs published externally are picked up by the import_from_mitre action instead.
       """
 
-      run fn _input, _context ->
+      run fn _input, context ->
+        opts = Varsel.ObanContext.forward(context)
+
         # 1. Upsert all RESERVED IDs from MITRE
         MitreCveApi.stream_reserved_ids()
         |> Stream.map(&%{reservation_json: &1})
         |> Stream.chunk_every(100)
         |> Enum.each(fn chunk ->
-          Varsel.CVE.reserve_cve_record!(chunk, authorize?: false)
+          Varsel.CVE.reserve_cve_record!(chunk, opts)
         end)
 
         # 2. Mark local pool rows rejected for IDs that MITRE has rejected externally.
         #    Only un-published pool rows are affected; published records are left intact.
         Enum.each(MitreCveApi.stream_rejected_ids(), fn rejected_cve_id ->
-          reject_pool_row(rejected_cve_id, "Rejected externally at MITRE")
+          reject_pool_row(rejected_cve_id, "Rejected externally at MITRE", opts)
         end)
 
         {:ok, :ok}
@@ -545,19 +550,20 @@ defmodule Varsel.CVE.CveRecord do
       Rejects all open prior-year reservations at MITRE via :reject.
       """
 
-      run fn _input, _context ->
+      run fn _input, context ->
+        opts = Varsel.ObanContext.forward(context)
         current_year = Date.utc_today().year
         current_year_start = DateTime.new!(Date.new!(current_year, 1, 1), ~T[00:00:00])
 
         __MODULE__
         |> Ash.Query.filter(state == :reserved and reserved_at < ^current_year_start)
-        |> Varsel.CVE.reject_cve_record!(%{rejection_reason: "Stale prior-year reservation"},
-          authorize?: false,
-          bulk_options: [
+        |> Varsel.CVE.reject_cve_record!(
+          %{rejection_reason: "Stale prior-year reservation"},
+          Keyword.put(opts, :bulk_options,
             return_errors?: true,
             strategy: :stream,
             allow_stream_with: :full_read
-          ]
+          )
         )
 
         {:ok, :ok}
@@ -580,9 +586,7 @@ defmodule Varsel.CVE.CveRecord do
 
     # POC-only admin lifecycle actions, used by the CVE-management LiveView.
     # The three MITRE sync actions also run on the nightly schedule through the
-    # AshOban bypass. The Oban worker actions (:publish, :push_update,
-    # :mark_rejected) and the create actions (:reserve, :import) are not listed
-    # here; they keep running only via the AshOban bypass / authorize?: false.
+    # AshOban bypass.
     policy action([
              :assign,
              :request_publish,
@@ -592,6 +596,16 @@ defmodule Varsel.CVE.CveRecord do
              :sync_from_mitre,
              :sync_reserved_from_mitre
            ]) do
+      authorize_if actor_attribute_equals(:role, :poc)
+    end
+
+    # Pool population: :reserve and :import are the nested creates the sync
+    # generic actions run. They are authorized for a POC (a POC-triggered sync
+    # from the console) or the scheduler (the AshOban bypass above). The Oban
+    # worker actions :publish, :push_update and :mark_rejected are never invoked
+    # directly by a user — only via request_publish/close/reject enqueuing their
+    # jobs — so they stay covered by the AshObanInteraction bypass alone.
+    policy action([:reserve, :import]) do
       authorize_if actor_attribute_equals(:role, :poc)
     end
   end
@@ -736,16 +750,16 @@ defmodule Varsel.CVE.CveRecord do
     identity :unique_cve_id, [:cve_id]
   end
 
-  defp reject_pool_row(cve_id, reason) do
+  defp reject_pool_row(cve_id, reason, opts) do
     __MODULE__
     |> Ash.Query.filter(cve_id == ^cve_id and state == :reserved)
-    |> Varsel.CVE.mark_cve_record_rejected!(%{rejection_reason: reason},
-      authorize?: false,
-      bulk_options: [
+    |> Varsel.CVE.mark_cve_record_rejected!(
+      %{rejection_reason: reason},
+      Keyword.put(opts, :bulk_options,
         return_errors?: true,
         strategy: :stream,
         allow_stream_with: :full_read
-      ]
+      )
     )
 
     :ok

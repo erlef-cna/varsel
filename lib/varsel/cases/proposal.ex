@@ -33,7 +33,6 @@ defmodule Varsel.Cases.Proposal do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
-  alias Varsel.Cases.Checks.ActorAssignedToCase
   alias Varsel.Cases.Proposal.Changes.ApplyToTarget
   alias Varsel.Cases.Proposal.Changes.EnsureOpen
   alias Varsel.Cases.Proposal.Changes.SupersedeCompeting
@@ -220,18 +219,13 @@ defmodule Varsel.Cases.Proposal do
     # their own.
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if expr(exists(case.assignments, user_id == ^actor(:id)))
+      authorize_if relates_to_actor_via([:case, :assignments, :user])
       authorize_if expr(author_id == ^actor(:id))
     end
 
-    policy action(:propose) do
+    policy action([:propose, :accept, :decline]) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if ActorAssignedToCase
-    end
-
-    policy action([:accept, :decline]) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if ActorAssignedToCase
+      authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
 
     policy action(:withdraw) do

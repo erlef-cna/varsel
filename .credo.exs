@@ -192,10 +192,10 @@
           {AshCredo.Check.Refactor.DirectiveInFunctionBody, []},
           {AshCredo.Check.Refactor.UseCodeInterface, []},
           {AshCredo.Check.Warning.ActorOnCallOptions, []},
-          # Banned in the web layer only; resource/action/change/validation
-          # bypass is sanctioned (see no-authorize-false-in-app-code).
-          {AshCredo.Check.Warning.AuthorizeFalse,
-           [include_non_ash_calls: false, excluded_paths: [~r"/test/", "test", ~r"^lib/varsel/"]]},
+          # Flag every `authorize?: false` in the app; only tests (factories,
+          # setup) are allowed to bypass. Legitimate app-code bypasses use a
+          # system actor + bypass policy, or an inline credo:disable with reason.
+          {AshCredo.Check.Warning.AuthorizeFalse, [include_non_ash_calls: false, excluded_paths: [~r"/test/", "test"]]},
           {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
           {AshCredo.Check.Warning.CompileTimeDefault, []},
           {AshCredo.Check.Warning.EmptyDomain, []},

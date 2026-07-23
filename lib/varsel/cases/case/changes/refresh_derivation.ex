@@ -13,12 +13,14 @@ defmodule Varsel.Cases.Case.Changes.RefreshDerivation do
   alias Varsel.Cases.Publication
 
   @impl Ash.Resource.Change
-  def change(changeset, _opts, _context) do
-    Ash.Changeset.after_action(changeset, fn _changeset, case_record ->
-      loaded =
-        Ash.load!(case_record, [affected_packages: [:channels, :version_events]], authorize?: false)
+  def change(changeset, _opts, context) do
+    actor = context.actor
 
-      Enum.each(loaded.affected_packages, &Publication.refresh_package/1)
+    Ash.Changeset.after_action(changeset, fn _changeset, case_record ->
+      loads = [affected_packages: [:channels, :version_events]]
+      loaded = Ash.load!(case_record, loads, actor: actor)
+
+      Enum.each(loaded.affected_packages, &Publication.refresh_package(&1, actor: actor))
 
       {:ok, case_record}
     end)

@@ -17,6 +17,9 @@ defmodule Varsel.Cases.Case.Notifier do
 
   @impl Ash.Notifier
   def notify(%Ash.Notifier.Notification{data: %{state: :published} = record}) do
+    # Notifiers run post-transaction with no actor; loading the related case to
+    # decide whether to fire the mark_published trigger is a system operation.
+    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
     record = Ash.load!(record, :case, authorize?: false)
 
     if record.case && record.case.state == :publishing do

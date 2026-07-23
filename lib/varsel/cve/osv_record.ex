@@ -138,11 +138,13 @@ defmodule Varsel.CVE.OsvRecord do
       raises (for the Oban retry) after all records were attempted.
       """
 
-      run fn _input, _context ->
+      run fn _input, context ->
+        opts = Varsel.ObanContext.forward(context)
+
         errors =
           CveRecord
           |> Ash.Query.filter(state == :published and not exists(osv_record, true))
-          |> Ash.read!(authorize?: false)
+          |> Ash.read!(opts)
           |> Enum.flat_map(fn cve_record ->
             case derive(cve_record) do
               {:ok, osv, content_hash} ->
@@ -158,8 +160,7 @@ defmodule Varsel.CVE.OsvRecord do
                     modified_at: now,
                     synced_at: now
                   },
-                  action: :create,
-                  authorize?: false
+                  Keyword.put(opts, :action, :create)
                 )
 
                 []
