@@ -108,43 +108,22 @@ defmodule Varsel.Cases.Proposal do
 
     create :propose do
       description """
-      Creates a change request against a case. Exactly one of:
-      set one field (operation :set, field_name + proposed_value), add a child
-      row (:insert, proposed_value is the row payload; target_id references
-      the parent affected_package for package_channel/version_event targets),
-      or remove a child row (:delete, target_id references the row).
-      The proposed value travels in a {"value": ...} envelope.
+      Creates a change request against a case. Exactly one of: set one field
+      (operation :set, field_name + proposed_value), add a child row (:insert,
+      proposed_value is the row payload; target_id references the parent
+      affected_package for package_channel/version_event targets), or remove a
+      child row (:delete, target_id references the row). The value always
+      travels in a {"value": ...} envelope.
 
-      An affected_package :insert payload may instead name a well-known
-      product preset: {"preset": "otp" | "elixir" | "gleam",
-      "applications": [...], "introduced_commit": sha,
-      "fixed_commits": [sha, ...], "program_files": [{"path":
-      "lib/ssh/src/ssh_sftpd.erl", "modules": ["ssh_sftpd"], "routines":
-      ["ssh_sftpd:handle_op/4"]}, ...]}. Paths are repository-root-relative;
-      each rendered entry scopes files/modules/routines to its channel's
-      subpath (prefilled per application by the presets). Accepting the
-      proposal creates the package with vendor/product/repo/CPE prefilled
-      plus one pkg:otp/<application> channel per affected application
-      (otp/elixir; gleam takes no applications and gets its sid + OCI
-      channels) and one version boundary fact per commit. When vulnerable code moved between OTP applications
-      over time, additionally propose channel-scoped explicit version events
-      bounding the former application's channel.
-
-      Payload keys per target (the value inside the {"value": ...} envelope;
-      any other key is rejected). :set targets the `case` fields; :insert
-      targets a child row:
+      Payload keys per target (the map inside {"value": ...}; any other key is
+      rejected, and the error lists the allowed keys). :set targets a `case`
+      field via field_name; :insert supplies a child row:
         - case (:set field_name): title, description_md, workarounds_md,
           configurations_md, solutions_md, discovery (external|internal|
           unknown), cvss_v4 (a CVSS:4.0/... vector string), date_public,
           timeline, cna_override.
-        - affected_package (:insert): vendor, product, repo_url, cpe,
-          default_status, program_files, platforms, allow_unreleased_fix,
-          position -- OR a preset payload (above).
-        - package_channel (:insert, target_id = affected_package): purl_type,
-          namespace, name, qualifiers, subpath, tag_suffixes,
-          versions_override, entry_override, position.
-        - version_event (:insert, target_id = affected_package): event
-          (introduced|fixed), commit_sha, version, note.
+        - weakness (:insert): cwe_id (integer only).
+        - impact (:insert): capec_id (integer only).
         - reference (:insert): url, tags (e.g. ["vendor-advisory"], ["patch"],
           ["x_version-scheme"]), position. Do NOT propose the
           cna.erlef.org/cves/... or osv.dev/... references -- Varsel adds those
@@ -153,8 +132,28 @@ defmodule Varsel.Cases.Proposal do
           reporter|analyst|coordinator|remediation_developer|
           remediation_reviewer|remediation_verifier|sponsor|tool|other),
           organization (optional), position.
-        - weakness (:insert): cwe_id (integer only).
-        - impact (:insert): capec_id (integer only).
+        - affected_package (:insert): vendor, product, repo_url, cpe,
+          default_status, program_files, platforms, allow_unreleased_fix,
+          position -- OR a preset payload (see below).
+        - package_channel (:insert, target_id = affected_package): purl_type,
+          namespace, name, qualifiers, subpath, tag_suffixes,
+          versions_override, entry_override, position.
+        - version_event (:insert, target_id = affected_package): event
+          (introduced|fixed), commit_sha, version, note.
+
+      Preset shortcut (affected_package :insert only): a payload may instead
+      name a well-known product preset: {"preset": "otp" | "elixir" | "gleam",
+      "applications": [...], "introduced_commit": sha, "fixed_commits": [sha,
+      ...], "program_files": [{"path": "lib/ssh/src/ssh_sftpd.erl", "modules":
+      ["ssh_sftpd"], "routines": ["ssh_sftpd:handle_op/4"]}, ...]}. Paths are
+      repository-root-relative; each rendered entry scopes files/modules/
+      routines to its channel's subpath (prefilled per application). Accepting
+      creates the package with vendor/product/repo/CPE prefilled, one
+      pkg:otp/<application> channel per application (otp/elixir; gleam takes no
+      applications and gets its sid + OCI channels), and one version boundary
+      fact per commit. When vulnerable code moved between OTP applications over
+      time, additionally propose channel-scoped explicit version events
+      bounding the former application's channel.
       """
 
       accept [
