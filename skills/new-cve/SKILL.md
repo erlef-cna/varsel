@@ -1,0 +1,165 @@
+<!--
+SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
+---
+name: new-cve
+description: File a new CVE as a Varsel case using the MCP. Use when starting a new CVE from a GHSA link or advisory URL and driving it through the case workflow to publish.
+---
+
+# New CVE Filing
+
+You file CVEs through the **Varsel MCP** (`mcp__varsel__*` tools). This assumes the Varsel MCP server is already installed and authenticated (`/mcp`); see <https://cna.erlef.org/api-access#mcp>. If the `mcp__varsel__*` tools are unavailable, stop and have the user connect it first.
+
+The unit of work is a **case**. You describe the vulnerability as **facts** — commit SHAs, package channels, references, credits, weaknesses, impacts — by submitting **field-level proposals**. Varsel **derives** the affected version ranges from the commit SHAs and **renders** the CNA record for you. You do not write version ranges, `cpeApplicability`, `programFiles` prefixes, or any CVE JSON by hand: state the facts, let the server compute the record.
+
+Every change to a case is a **proposal** (`mcp__varsel__create_case_proposal`). Proposals are reviewed and accepted by a human — you author them, you never self-approve.
+
+Work through the steps interactively. Pause after each discussion step for the user before proceeding.
+
+## Step 1 — Fetch advisory details
+
+Given a GHSA URL or advisory link, fetch it via the GitHub API:
+
+```bash
+gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
+```
+
+Extract and present:
+- Summary and description
+- Affected package + version range
+- Credits — for each GitHub login in `credits`, look up the real name via `gh api /users/<login>` (`name` field); never guess from the username. Known overrides:
+  - `IngelaAndin` → `Ingela Anderton Andin`
+  - `maennchen` (Jonatan Männchen) → `Jonatan Männchen / EEF` (when acting in his EEF capacity, e.g. as analyst/coordinator — append ` / EEF`)
+  - `u3s` → `Jakub Witczak`
+- CVSS if present (starting point only)
+- Fix commit / patched version if available
+- CVE ID if already assigned in the advisory
+
+Advisory comments (visible in the GitHub UI) are **not available via the API**. Ask the user to check the advisory page for any comments containing a CVE number or instructions.
+
+Check for prior art / duplicates: `mcp__varsel__list_cves_by_purl` (e.g. `pkg:hex/<name>`) and `mcp__varsel__list_cves` / `mcp__varsel__list_cases`. Keep things consistent with existing published CVEs.
+
+**Do not treat the advisory as authoritative.** It may have been filed by someone unfamiliar with CVE conventions or the real scope. Flag anything suspicious.
+
+## Step 2 — Open or locate the case
+
+A case may already exist (an inbound vulnerability report accepted into a case, or a case the user points you at).
+
+- **Existing:** find it with `mcp__varsel__list_cases` (filter by title/description), read it with `mcp__varsel__get_case`, and read pending proposals with `mcp__varsel__list_open_case_proposals`.
+- **New:** if none exists, ask the user to create one at `/cases` (or accept the relevant vulnerability report). The rest of this skill assumes you have a `case_id`.
+
+## Step 3 — CVSS scoring
+
+Use the `/cvss` skill to produce a CVSS v4.0 vector and score. Discuss severity, exploitability conditions, and any Supplemental metrics, then **wait for user confirmation** and propose it:
+
+```
+create_case_proposal(input: {
+  case_id: <id>, target: "case", operation: "set",
+  field_name: "cvss_v4",
+  proposed_value: {"value": "CVSS:4.0/AV:.../..."},
+  reasoning: "..."
+})
+```
+
+`cvss_v4` drives the derived score and severity bucket.
+
+## Step 4 — Sanity check
+
+Review the advisory critically and discuss with the user:
+
+- **Is this a valid CVE?** Criteria: https://cna.erlef.org/cve-criteria
+- **Is the vulnerable version range accurate?** You express this as commit SHAs; you verify the derived range in Step 8.
+- **Is the description technically accurate?** Flag vague, wrong, or misleading claims.
+- **Are the affected functions/files correct?** Inspect the repo if needed.
+- **Credits**: who found it vs. who fixed it?
+- **Configurations**: is it conditional on specific setup?
+- **Workarounds**: genuine mitigations short of patching?
+
+Present your assessment and proposed changes. **Wait for user confirmation before proceeding.** Do not look up the introducing commit here — that is Step 5.
+
+## Step 5 — Find the introducing commit
+
+Use the `/find-intro-commit` skill to get the introducing commit SHA. You need the real SHA — Varsel maps SHA → version range during derivation.
+
+## Step 6 — Describe the affected product
+
+Propose an **affected package** with `create_case_proposal(target: "affected_package", operation: "insert", ...)`. You state commit SHAs and program files; Varsel derives the version ranges, CPEs, and per-channel path scoping.
+
+### Presets for OTP / Elixir / Gleam
+
+The `affected_package` insert payload accepts a **preset** that prefills vendor/product/repo/CPE and creates the channels plus one version-boundary fact per commit:
+
+```
+create_case_proposal(input: {
+  case_id: <id>, target: "affected_package", operation: "insert",
+  proposed_value: {"value": {
+    "preset": "otp" | "elixir" | "gleam",
+    "applications": ["ssh"],              // otp/elixir: one channel per app; gleam takes none
+    "introduced_commit": "<intro-SHA>",
+    "fixed_commits": ["<fix-SHA>", ...],  // one per maintained release line; omit if unpatched
+    "program_files": [
+      {"path": "lib/ssh/src/ssh_sftpd.erl",
+       "modules": ["ssh_sftpd"],
+       "routines": ["ssh_sftpd:handle_op/4"]}
+    ]
+  }},
+  reasoning: "..."
+})
+```
+
+- **Paths are repository-root-relative.** Each rendered channel scopes files/modules/routines to its own subpath automatically (per-application prefixes are handled for you).
+- `otp` / `elixir` create one `pkg:otp/<application>` channel per listed application, plus a boundary fact per commit. `gleam` takes no applications and gets its `sid` + OCI channels.
+- When vulnerable code **moved between OTP applications** over time, additionally propose channel-scoped explicit `version_event`s bounding the former application's channel — the preset can't infer historical moves.
+
+### Hex packages and everything else
+
+For a third-party hex package or any non-preset product, insert an `affected_package` (vendor/product/repo/CPE), then add its channels and boundary facts as child proposals:
+
+- `target: "package_channel", operation: "insert", target_id: <affected_package-id>` — the purl channel(s): `pkg:hex/<name>` plus a `pkg:github/<owner>/<repo>` channel for the source repo.
+- `target: "version_event", operation: "insert", target_id: <affected_package-id>` — the boundary **facts**: the introducing commit and each fix commit. State the SHAs; do not write ranges.
+
+Notes:
+- **npm mirror**: some Elixir libs (eg. Phoenix, …) ship a companion npm package. If the vulnerable file actually ships in the npm tarball (`npm pack --dry-run` to confirm; paths may differ), add a `pkg:npm/<name>` channel with its own program-file paths. If the CVE only touches Elixir/Erlang source, skip it.
+- **Cross-language reachability (NIFs/BIFs)**: when the vulnerable code sits behind a language boundary, list **both sides** of the call chain in program files/modules/routines — the implementing function *and* the Erlang/Elixir wrapper callers invoke.
+- **Extraction packages**: if code in package A was extracted into package B, model them as two affected packages; A's fix boundary is the extraction point, B carries the real fix commit.
+- `programRoutines` list the **vulnerable** routines only (skip bookkeeping helpers the patch incidentally touched). Erlang notation `module:function/arity`; Elixir modules take the `'Elixir.ModuleName'` atom prefix.
+- **Unpatched**: omit `fixed_commits` / the fix boundary. Varsel renders the open-ended range; the description and references carry `TODO`.
+
+## Step 7 — Descriptions, metadata, references, credits
+
+Propose the remaining fields onto the case:
+
+- **Descriptions** (`set` on the description field): both plain text and HTML. In HTML use `<tt>` for code/paths and `<p>` for paragraphs. Do not mention other CVE IDs — name the vulnerability class instead. The "This issue affects …" sentence ends with a real version (or `before TODO` if unpatched), never a bare `TODO`.
+- **`discovery`** (`set`): `EXTERNAL` / `INTERNAL` / `UNKNOWN`.
+- **Configurations** (`set` on `configurations_md`): only if the vulnerability requires specific deployment conditions; plain text + HTML. Omit when unconditional.
+- **Workarounds** (`set` on `workarounds_md`): only genuine mitigations. Never "apply the patch". Omit if none.
+- **Weaknesses** (`target: "weakness", operation: "insert"`): use `/find-cwe`.
+- **Impacts** (`target: "impact", operation: "insert"`): use `/find-capec`.
+- **References** (`target: "reference", operation: "insert"`), in order:
+  1. Vendor advisory — GHSA gets `["vendor-advisory", "related"]`.
+  2. `https://cna.erlef.org/cves/CVE-<num>.html` — `["related"]` (add `"third-party-advisory"` if no vendor advisory).
+  3. `https://osv.dev/vulnerability/EEF-CVE-<num>` — `["related"]`.
+  4. Remaining: patch commit(s) tagged `"patch"`; for OTP add `https://www.erlang.org/doc/system/versions.html#order-of-versions` tagged `["x_version-scheme"]`. If unpatched, use a `/TODO` patch URL and confirm intentional-no-patch with the user.
+- **Credits** (`target: "credit", operation: "insert"`): reporter → `finder`, remediation_developer → `remediation developer`, reviewer → `remediation reviewer`, coordinator → `analyst`. `value` is the full real name only (no handle). Do not skip `pending` credits.
+
+## Step 8 — Derive and check the ranges
+
+Once the affected-package proposals are accepted, recompute and inspect the derived ranges:
+
+```
+mcp__varsel__refresh_case_derivation(id: <case-id>)
+mcp__varsel__render_case_preview(input: {id: <case-id>})
+```
+
+`render_case_preview` returns the rendered CNA container, the validation result, applied overrides, and publish blockers — without publishing. Confirm each affected entry's derived `from X before Y` matches the advisory's first-affected / fixed versions. A wrong range means a wrong boundary SHA — fix it with a new proposal.
+
+## Step 9 — Verify
+
+Run the `/verify` skill on the case. Fix any issues as proposals and re-verify until clean.
+
+## Done
+
+Hand off to the user with the case ready for review: the proposals are authored, the derived ranges check out, and verification passes. Assignment, proposal acceptance, and publishing happen in the UI (a human) — the agent never self-approves proposals and does not publish.

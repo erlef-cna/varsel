@@ -1,0 +1,24 @@
+{
+  "name": "varsel",
+  "owner": {
+    "name": "Erlang Ecosystem Foundation"
+  },
+  "metadata": {
+    "description": "Skills for Varsel CNA point-of-contacts filing CVEs through the Varsel MCP."
+  },
+  "plugins": [
+    {
+      "name": "varsel-poc",
+      "source": "./",
+      "description": "Varsel CNA point-of-contact skills: file, verify, and summarize CVEs as Varsel cases through the Varsel MCP.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Erlang Ecosystem Foundation"
+      },
+      "repository": "https://github.com/erlef-cna/varsel",
+      "homepage": "https://github.com/erlef-cna/varsel",
+      "category": "security",
+      "keywords": ["cve", "cna", "security", "vulnerability", "varsel", "mcp", "eef", "erlang", "elixir"]
+    }
+  ]
+}

@@ -53,6 +53,17 @@ in Sweden.
 - **MCP** — at `/mcp`: public CVE/CWE/CAPEC tools, plus lifecycle tools gated
   by personal API keys (managed at `/settings/tokens`).
 
+## Agent skills
+
+This repo is also a Claude Code plugin (`varsel-poc`) bundling skills for CNA
+points of contact who file CVEs with a local agent driving the MCP. See
+[`skills/README.md`](skills/README.md) for the skill list and installation:
+
+```
+/plugin marketplace add erlef-cna/varsel
+/plugin install varsel-poc@varsel
+```
+
 ## Technology
 
 Elixir and Phoenix (LiveView) with the [Ash](https://ash-hq.org/) framework on
