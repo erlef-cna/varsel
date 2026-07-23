@@ -10,6 +10,7 @@ defmodule Varsel.Cases.PublicationTest do
 
   use Varsel.DataCase, async: false
 
+  alias Ash.Error.Query.NotFound
   alias Varsel.Cases
   alias Varsel.CVE.CveRecord
   alias Varsel.Fixtures
@@ -206,5 +207,21 @@ defmodule Varsel.Cases.PublicationTest do
     assert preview["validation"][:valid] == true
     assert get_in(preview, ["cna", "providerMetadata", "shortName"]) == "EEF"
     assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
+  end
+
+  test "preview is gated by the case read policy, not just actor presence", %{case: case_record} do
+    # A logged-in user with no role and no assignment to this case: the
+    # :preview calculation must be unreachable because the case itself is.
+    outsider = Fixtures.register_user("preview_outsider", :supporter)
+
+    assert {:error, get_error} =
+             Ash.get(Cases.Case, case_record.id, load: [:preview], actor: outsider)
+
+    assert Enum.any?(List.wrap(get_error.errors), &match?(%NotFound{}, &1))
+
+    assert {:error, action_error} =
+             Cases.render_case_preview(%{id: case_record.id}, actor: outsider)
+
+    assert Enum.any?(List.wrap(action_error.errors), &match?(%NotFound{}, &1))
   end
 end

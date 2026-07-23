@@ -56,7 +56,6 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
   alias Varsel.Cases.Checks.ActorAssignedToCase
-  alias Varsel.Cases.Publication
   alias Varsel.Cases.Validations.CaseEditable
 
   @content_fields [
@@ -178,9 +177,11 @@ defmodule Varsel.Cases.Case do
 
     action :render_preview, :map do
       description """
-      Renders the case to its CNA container without publishing: returns the
-      container, the validation result, which override escape hatches fired,
-      and any conditions that would block publishing. Uses cached derivations
+      Convenience entry point that returns the `:preview` calculation for a
+      case by id: the rendered CNA container, validation result, applied
+      overrides and publish blockers, without publishing. Authorization is the
+      case read policy — the fetch below runs under the actor, so a case the
+      actor may not read is `NotFound`. Uses cached derivations
       (refresh_derivation recomputes them).
       """
 
@@ -188,19 +189,12 @@ defmodule Varsel.Cases.Case do
 
       run fn input, context ->
         with {:ok, case_record} <-
-               Ash.get(__MODULE__, input.arguments.id, actor: context.actor, authorize?: true),
-             {:ok, %{result: result, cve_json: cve_json}} <-
-               Publication.render(case_record) do
-          validation = cve_json && Publication.validate(cve_json)
-
-          {:ok,
-           %{
-             "cna" => result.cna,
-             "cve_json" => cve_json,
-             "blockers" => result.blockers,
-             "overrides_applied" => result.overrides_applied,
-             "validation" => validation && Map.take(validation, [:valid, :errors])
-           }}
+               Ash.get(__MODULE__, input.arguments.id,
+                 load: [:preview],
+                 actor: context.actor,
+                 authorize?: true
+               ) do
+          {:ok, case_record.preview}
         end
       end
     end
@@ -320,8 +314,9 @@ defmodule Varsel.Cases.Case do
       authorize_if ActorAssignedToCase
     end
 
-    # The preview loads the case with authorization — the read policy above
-    # scopes what any actor can render.
+    # render_preview only fetches the case (with the actor) and returns its
+    # :preview calculation, so the read policy above is the real gate: a
+    # non-readable case is NotFound. This clause just requires a logged-in actor.
     policy action(:render_preview) do
       authorize_if actor_present()
     end
@@ -510,6 +505,14 @@ defmodule Varsel.Cases.Case do
 
       public? true
       constraints one_of: [:none, :low, :medium, :high, :critical]
+    end
+
+    calculate :preview, :map, Varsel.Cases.Case.Calculations.Preview do
+      description """
+      The rendered CNA container, full CVE record, applied overrides, publish
+      blockers and validation summary — without publishing. Loadable only on a
+      case the actor may read, so the case read policy is its authorization.
+      """
     end
   end
 

@@ -24,6 +24,10 @@ defmodule Varsel.Cases.Publication do
     impacts: [:attack_pattern]
   ]
 
+  @doc "The relationship tree `Varsel.Cases.Render.render_cna/2` needs to render a case."
+  @spec render_loads() :: keyword()
+  def render_loads, do: @render_loads
+
   @doc "Loads everything `Varsel.Cases.Render.render_cna/2` needs."
   @spec load_render_tree(Case.t()) :: Case.t()
   def load_render_tree(case_record) do
