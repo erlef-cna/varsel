@@ -20,9 +20,20 @@ defmodule Varsel.Cases.Derivation.GitBackend do
   @callback tags_containing(repo_url :: String.t(), sha :: String.t()) ::
               {:ok, [String.t()]} | {:error, term()}
 
+  @doc """
+  Every release tag name (bare, without `refs/tags/`) in the repository — the
+  version universe `Varsel.Cases.Reachability` sorts and labels. Includes tags
+  that contain neither the intro nor a fix (an unaffected tag never surfaces
+  through `tags_containing/2` alone).
+  """
+  @callback all_tags(repo_url :: String.t()) :: {:ok, [String.t()]} | {:error, term()}
+
   @spec impl() :: module()
   def impl, do: Application.get_env(:varsel, :git_backend, Varsel.Cases.Derivation.GitRepo)
 
   @spec tags_containing(String.t(), String.t()) :: {:ok, [String.t()]} | {:error, term()}
   def tags_containing(repo_url, sha), do: impl().tags_containing(repo_url, sha)
+
+  @spec all_tags(String.t()) :: {:ok, [String.t()]} | {:error, term()}
+  def all_tags(repo_url), do: impl().all_tags(repo_url)
 end

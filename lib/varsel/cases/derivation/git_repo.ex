@@ -34,6 +34,7 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   alias Exgit.Object.Tag
   alias Exgit.ObjectStore
   alias Exgit.RefStore
+  alias Varsel.Cases.Derivation.GitBackend
 
   @ttl_seconds 900
 
@@ -56,9 +57,14 @@ defmodule Varsel.Cases.Derivation.GitRepo do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
 
-  @impl Varsel.Cases.Derivation.GitBackend
+  @impl GitBackend
   def tags_containing(repo_url, sha) do
     GenServer.call(__MODULE__, {:tags_containing, repo_url, sha}, to_timeout(minute: 10))
+  end
+
+  @impl GitBackend
+  def all_tags(repo_url) do
+    GenServer.call(__MODULE__, {:all_tags, repo_url}, to_timeout(minute: 10))
   end
 
   @impl GenServer
@@ -78,6 +84,12 @@ defmodule Varsel.Cases.Derivation.GitRepo do
     end
   end
 
+  @impl GenServer
+  def handle_call({:all_tags, repo_url}, _from, state) do
+    {answer, state} = compute_all_tags(state, repo_url)
+    {:reply, answer, state}
+  end
+
   defp compute(state, repo_url, sha) do
     case decode_sha(sha) do
       {:ok, target} ->
@@ -87,6 +99,31 @@ defmodule Varsel.Cases.Derivation.GitRepo do
 
       :error ->
         {{:error, :invalid_sha}, state}
+    end
+  end
+
+  # Every release tag name in the repository. Reuses a cached graph when fresh,
+  # else fetches one; unlike tags_containing/2 this needs no target commit.
+  defp compute_all_tags(state, repo_url) do
+    case any_graph(state, repo_url) do
+      {:ok, graph, state} -> {{:ok, Enum.map(graph.tags, &elem(&1, 0))}, state}
+      {:error, reason, state} -> {{:error, reason}, state}
+    end
+  end
+
+  # A fresh-enough cached graph, or a fresh fetch. No commit to check against.
+  defp any_graph(state, repo_url) do
+    now = System.monotonic_time(:second)
+
+    case Map.fetch(state.graphs, repo_url) do
+      {:ok, %Graph{fetched_at: fetched_at} = graph} when now - fetched_at < @ttl_seconds ->
+        {:ok, graph, state}
+
+      _stale_or_missing ->
+        case build_commit_graph(repo_url) do
+          {:ok, graph} -> {:ok, graph, %{state | graphs: Map.put(state.graphs, repo_url, graph)}}
+          {:error, reason} -> {:error, reason, state}
+        end
     end
   end
 
@@ -109,7 +146,7 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   end
 
   defp fresh_graph(state, repo_url, target) do
-    case build_graph(repo_url) do
+    case build_commit_graph(repo_url) do
       {:ok, graph} ->
         # A fresh graph invalidates memoized answers for this repo.
         answers =
@@ -130,7 +167,7 @@ defmodule Varsel.Cases.Derivation.GitRepo do
 
   # Lazy clone (refs only) + one tree:0 fetch wanting every ref tip, then one
   # BFS over parent edges recording reverse (children) edges.
-  defp build_graph(repo_url) do
+  defp build_commit_graph(repo_url) do
     with {:clone, {:ok, repo}} <- {:clone, Exgit.clone(repo_url, lazy: true)},
          tags = list_refs(repo, "refs/tags/"),
          tips = ref_tips(tags, list_refs(repo, "refs/heads/")),
