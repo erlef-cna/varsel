@@ -18,17 +18,32 @@ defmodule Varsel.Cases.Derivation.Platform do
   @type kind :: :otp | :semver
   @type t :: %__MODULE__{kind: kind()}
 
+  # The one repository that uses OTP's tree versioning (OTP-/OTP_R tags). Every
+  # other repo — including erlang/rebar3 and OTP applications hosted elsewhere
+  # (Elixir's, rebar3's) — is semver.
+  @otp_repo "github.com/erlang/otp"
+
   @doc """
-  Picks the platform for an affected package: erlang/otp's own release process
-  for packages living in the erlang/otp repository, `:semver` for everything
-  else. Deliberately keyed on the repository, not on `pkg:otp` channels — those
-  exist on foreign repos too (Elixir's or rebar3's applications), whose releases
-  are semver-tagged.
+  Picks the platform for an affected package: OTP's own release process for the
+  erlang/otp repository, `:semver` for everything else. Deliberately keyed on the
+  repository, not on `pkg:otp` channels — those exist on foreign repos too
+  (Elixir's or rebar3's applications), whose releases are semver-tagged.
   """
   @spec for_package(Varsel.Cases.AffectedPackage.t()) :: t()
   def for_package(package) do
-    kind = if (package.repo_url || "") =~ ~r{github\.com/erlang/otp}, do: :otp, else: :semver
-    %__MODULE__{kind: kind}
+    %__MODULE__{kind: if(otp_repo?(package.repo_url), do: :otp, else: :semver)}
+  end
+
+  # Matches the erlang/otp repository exactly — not a fork, not erlang/otp_foo,
+  # not erlang/rebar3. Tolerates scheme, a `.git` suffix, and a trailing slash.
+  defp otp_repo?(nil), do: false
+
+  defp otp_repo?(repo_url) do
+    repo_url
+    |> String.replace(~r{^https?://}, "")
+    |> String.replace(~r{\.git/?$}, "")
+    |> String.trim_trailing("/")
+    |> Kernel.==(@otp_repo)
   end
 
   @doc """
