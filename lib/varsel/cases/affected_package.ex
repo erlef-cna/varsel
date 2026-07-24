@@ -195,9 +195,14 @@ defmodule Varsel.Cases.AffectedPackage do
       description "Internal: creates the row proposed by an accepted :insert proposal."
       accept [:case_id | Proposable.fields(__MODULE__)]
 
+      # Channels and version events authored inline on the package proposal:
+      # created against the new package once it exists (see InsertChildren).
+      argument :channels, {:array, :map}, default: []
+      argument :version_events, {:array, :map}, default: []
       argument :proposal_id, :uuid, allow_nil?: false
 
       validate CaseEditable
+      change Varsel.Cases.AffectedPackage.Changes.InsertChildren
     end
 
     create :apply_proposal_insert_otp do

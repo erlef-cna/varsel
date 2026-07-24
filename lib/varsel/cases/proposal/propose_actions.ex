@@ -21,7 +21,9 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
   use Spark.Dsl.Fragment, of: Ash.Resource
 
   alias Varsel.Cases.AffectedPackage.ProgramFile
+  alias Varsel.Cases.PackageChannel.ChannelInput
   alias Varsel.Cases.Proposal.Changes.PackProposal
+  alias Varsel.Cases.VersionEvent.EventInput
 
   actions do
     create :propose_credit do
@@ -142,7 +144,18 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
     end
 
     create :propose_affected_package do
-      description "Proposes adding an affected package to the case."
+      description """
+      Proposes adding an affected package to the case, together with its
+      distribution channels and version boundary facts in one proposal —
+      accepting it creates the package and all its children at once. This is the
+      normal way to add a product; reach for propose_package_channel /
+      propose_version_event only to extend a package that is already accepted.
+
+      version_events are package-global boundaries. When channels genuinely need
+      different versions from each other, don't try to express it here — stop
+      and involve a human.
+      """
+
       accept [:case_id, :reasoning]
       argument :vendor, :string, allow_nil?: false
       argument :product, :string, allow_nil?: false
@@ -152,6 +165,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :program_files, {:array, ProgramFile}
       argument :platforms, {:array, :string}
       argument :allow_unreleased_fix, :boolean
+      argument :channels, {:array, ChannelInput}
+      argument :version_events, {:array, EventInput}
       change {PackProposal, target: :affected_package, operation: :insert}
     end
 

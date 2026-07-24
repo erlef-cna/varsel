@@ -179,6 +179,82 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
                "value" => %{"vendor" => "acme", "product" => "acme_lib"}
              }
     end
+
+    test "propose_affected_package packs inline channels and version events", %{
+      poc: poc,
+      case: case_record
+    } do
+      sha = String.duplicate("a", 40)
+
+      proposal =
+        Cases.propose_affected_package!(
+          %{
+            case_id: case_record.id,
+            vendor: "acme",
+            product: "acme_lib",
+            channels: [%{purl_type: :hex, name: "acme_lib"}],
+            version_events: [%{event: :introduced, commit_sha: sha}]
+          },
+          actor: poc
+        )
+
+      payload = proposal.proposed_value["value"]
+      assert [%{"purl_type" => "hex", "name" => "acme_lib"}] = payload["channels"]
+      assert [%{"event" => "introduced", "commit_sha" => ^sha}] = payload["version_events"]
+    end
+
+    test "propose_affected_package rejects a malformed inline channel at propose time", %{
+      poc: poc,
+      case: case_record
+    } do
+      assert {:error, _} =
+               Cases.propose_affected_package(
+                 %{
+                   case_id: case_record.id,
+                   vendor: "acme",
+                   product: "acme_lib",
+                   # purl_type is required on a channel.
+                   channels: [%{name: "acme_lib"}]
+                 },
+                 actor: poc
+               )
+    end
+
+    test "accepting a package proposal creates the package with its children", %{
+      poc: poc,
+      case: case_record
+    } do
+      sha = String.duplicate("a", 40)
+
+      proposal =
+        Cases.propose_affected_package!(
+          %{
+            case_id: case_record.id,
+            vendor: "acme",
+            product: "acme_lib",
+            repo_url: "https://github.com/acme/acme_lib",
+            channels: [%{purl_type: :hex, name: "acme_lib"}],
+            version_events: [
+              %{event: :introduced, version: "0"},
+              %{event: :fixed, commit_sha: sha}
+            ]
+          },
+          actor: poc
+        )
+
+      accepted = Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      package =
+        Ash.get!(Cases.AffectedPackage, accepted.applied_target_id,
+          load: [:channels, :version_events],
+          authorize?: false
+        )
+
+      assert package.product == "acme_lib"
+      assert [%{purl_type: :hex, name: "acme_lib"}] = package.channels
+      assert MapSet.new(package.version_events, & &1.event) == MapSet.new([:introduced, :fixed])
+      assert Enum.all?(package.version_events, &(&1.affected_package_id == package.id))
+    end
   end
 
   describe "preset insert actions" do

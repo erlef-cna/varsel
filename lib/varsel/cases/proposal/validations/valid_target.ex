@@ -138,14 +138,60 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
 
   defp validate_insert_payload(target, payload) do
     resource = Target.resource(target)
-    allowed = Proposable.fields(resource) ++ Proposable.insert_extra_fields(resource)
+    nested = Proposable.insert_nested_fields(resource)
 
-    Enum.reduce_while(payload, :ok, fn entry, :ok ->
-      case validate_payload_entry(resource, allowed, entry) do
+    allowed =
+      Proposable.fields(resource) ++ Proposable.insert_extra_fields(resource) ++ Map.keys(nested)
+
+    Enum.reduce_while(payload, :ok, fn {key, value} = entry, :ok ->
+      result =
+        case nested_child(nested, key) do
+          nil -> validate_payload_entry(resource, allowed, entry)
+          child -> validate_nested_entries(child, value)
+        end
+
+      case result do
         :ok -> {:cont, :ok}
         error -> {:halt, error}
       end
     end)
+  end
+
+  # A nested collection (channels/version_events) must be a list, each element
+  # validated as an insert payload against the child resource's own fields.
+  defp validate_nested_entries(_child, value) when not is_list(value) do
+    {:error, field: :proposed_value, message: "must be a list of rows"}
+  end
+
+  defp validate_nested_entries(child, entries) do
+    allowed = Proposable.fields(child) ++ Proposable.insert_extra_fields(child)
+
+    Enum.reduce_while(entries, :ok, fn entry, :ok ->
+      case validate_nested_entry(child, allowed, entry) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_nested_entry(child, allowed, entry) when is_map(entry) do
+    Enum.reduce_while(entry, :ok, fn field_entry, :ok ->
+      case validate_payload_entry(child, allowed, field_entry) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_nested_entry(_child, _allowed, _entry) do
+    {:error, field: :proposed_value, message: "each nested row must be a map of fields"}
+  end
+
+  defp nested_child(nested, key) do
+    field = if is_atom(key), do: key, else: String.to_existing_atom(key)
+    Map.get(nested, field)
+  rescue
+    ArgumentError -> nil
   end
 
   ## --------------------------------------------------- preset insert payloads

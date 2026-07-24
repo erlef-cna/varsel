@@ -18,8 +18,10 @@ defmodule Varsel.Cases.Proposable do
   A test asserts every listed field exists on its resource.
   """
 
+  alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseWeakness
+  alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.VersionEvent
 
   @case_fields [
@@ -72,8 +74,8 @@ defmodule Varsel.Cases.Proposable do
   @doc "Proposable payload fields of a resource (insert payload / edit accept-list)."
   @spec fields(module()) :: [atom()]
   def fields(Varsel.Cases.Case), do: @case_fields
-  def fields(Varsel.Cases.AffectedPackage), do: @affected_package_fields
-  def fields(Varsel.Cases.PackageChannel), do: @package_channel_fields
+  def fields(AffectedPackage), do: @affected_package_fields
+  def fields(PackageChannel), do: @package_channel_fields
   def fields(VersionEvent), do: @version_event_fields
   def fields(Varsel.Cases.CaseReference), do: @reference_fields
   def fields(Varsel.Cases.CaseCredit), do: @credit_fields
@@ -94,4 +96,15 @@ defmodule Varsel.Cases.Proposable do
   @spec insert_extra_fields(module()) :: [atom()]
   def insert_extra_fields(VersionEvent), do: [:package_channel_id]
   def insert_extra_fields(_resource), do: []
+
+  @doc """
+  Child collections an :insert payload may carry inline, mapped to the child
+  resource each array validates against. Lets a package be proposed together
+  with its channels and version boundary facts in one proposal (see
+  `Varsel.Cases.Proposal.ProposeActions.propose_affected_package`).
+  """
+  @spec insert_nested_fields(module()) :: %{atom() => module()}
+  def insert_nested_fields(AffectedPackage), do: %{channels: PackageChannel, version_events: VersionEvent}
+
+  def insert_nested_fields(_resource), do: %{}
 end

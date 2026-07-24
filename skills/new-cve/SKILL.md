@@ -114,10 +114,26 @@ mcp__varsel__propose_otp_affected_package(input: {
 
 ### Hex packages and everything else
 
-For a third-party hex package or any non-preset product, insert an `affected_package` (vendor/product/repo/CPE) with `propose_affected_package`, then add its channels and boundary facts as child proposals (pass the new package's id as `target_id`):
+For a third-party hex package or any non-preset product, propose the whole product in **one** `propose_affected_package` call — the package plus its channels and boundary facts nested inline, so a single acceptance creates all of it:
 
-- `mcp__varsel__propose_package_channel(input: {case_id, target_id: <affected_package-id>, purl_type, name, ...})` — the purl channel(s): `pkg:hex/<name>` plus a `pkg:github/<owner>/<repo>` channel for the source repo.
-- `mcp__varsel__propose_version_event(input: {case_id, target_id: <affected_package-id>, event, commit_sha})` — the boundary **facts**: the introducing commit (`event: "introduced"`) and each fix commit (`event: "fixed"`). State the SHAs; do not write ranges.
+```
+mcp__varsel__propose_affected_package(input: {
+  case_id: <id>,
+  vendor: "...", product: "...", repo_url: "...", cpe: "...",
+  channels: [
+    {purl_type: "hex", name: "<name>"}      // the pkg:github/<owner>/<repo> repo channel is derived from repo_url — do NOT list it
+  ],
+  version_events: [
+    {event: "introduced", commit_sha: "<intro-SHA>"},
+    {event: "fixed", commit_sha: "<fix-SHA>"}   // omit if unpatched
+  ],
+  reasoning: "..."
+})
+```
+
+- State the SHAs as boundary **facts**; do not write version ranges — Varsel derives them.
+- `version_events` here are **package-global**. If different channels genuinely need *different* versions from each other, don't try to model it — stop and ask the user how to proceed.
+- `propose_package_channel` / `propose_version_event` (addressing the package by `target_id`) are only for extending a package that has **already been accepted** — not for the initial insert.
 
 Notes:
 - **npm mirror**: some Elixir libs (eg. Phoenix, …) ship a companion npm package. If the vulnerable file actually ships in the npm tarball (`npm pack --dry-run` to confirm; paths may differ), add a `pkg:npm/<name>` channel with its own program-file paths. If the CVE only touches Elixir/Erlang source, skip it.
