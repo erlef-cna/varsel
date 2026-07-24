@@ -29,6 +29,9 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
     Application.put_env(:varsel, :hex_stub_packages, ["acme_lib"])
     on_exit(fn -> Application.delete_env(:varsel, :hex_stub_packages) end)
 
+    Fixtures.seed_weakness(200, "Exposure of Sensitive Information")
+    Fixtures.seed_attack_pattern(116, "Excavation")
+
     case_record =
       Fixtures.open_case(poc, %{
         title: "Information disclosure in acme_lib",
@@ -81,6 +84,9 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
       },
       actor: poc
     )
+
+    Cases.add_case_weakness!(%{case_id: case_record.id, cwe_id: 200}, actor: poc)
+    Cases.add_case_impact!(%{case_id: case_record.id, capec_id: 116}, actor: poc)
 
     case_record = Cases.assign_case_cve_id!(case_record, %{}, actor: poc)
     # Render reads cached derivations, so refresh them the way the UI and the

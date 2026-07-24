@@ -44,6 +44,16 @@ defmodule Varsel.CVE.CveRecordTest do
           "baseSeverity" => "HIGH"
         }
       }
+    ],
+    "problemTypes" => [
+      %{
+        "descriptions" => [
+          %{"cweId" => "CWE-400", "description" => "CWE-400", "lang" => "en", "type" => "CWE"}
+        ]
+      }
+    ],
+    "impacts" => [
+      %{"capecId" => "CAPEC-125", "descriptions" => [%{"lang" => "en", "value" => "CAPEC-125"}]}
     ]
   }
 

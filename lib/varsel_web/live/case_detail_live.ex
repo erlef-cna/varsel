@@ -2751,7 +2751,9 @@ defmodule VarselWeb.CaseDetailLive do
                      {"references", ~w(E001 E002 E010 E017)},
                      {"affected", ~w(E006 E007 E008 E009 E011 E013 E014 HEX001)},
                      {"summary", ~w(E003 E004 E016 E019 E020 EEF001)},
-                     {"severity", ~w(E005 E018 EEF002)}
+                     {"severity", ~w(E005 E018 EEF002)},
+                     {"weaknesses", ~w(EEF004)},
+                     {"impacts", ~w(EEF005)}
                    ]
                    |> Enum.flat_map(fn {section, codes} -> Enum.map(codes, &{&1, section}) end)
                    |> Map.new()

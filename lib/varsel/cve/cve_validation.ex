@@ -225,8 +225,23 @@ defmodule Varsel.CVE.CveValidation do
         do: [error(:eef, "EEF003", "no CVE ID assigned", "cveMetadata.cveId")],
         else: []
 
-    title_error ++ cvss_error ++ cve_id_error
+    cwe_error =
+      if present?(cna["problemTypes"]),
+        do: [],
+        else: [error(:eef, "EEF004", "no CWE weakness recorded", "containers.cna.problemTypes")]
+
+    capec_error =
+      if present?(cna["impacts"]),
+        do: [],
+        else: [
+          error(:eef, "EEF005", "no CAPEC attack pattern recorded", "containers.cna.impacts")
+        ]
+
+    title_error ++ cvss_error ++ cve_id_error ++ cwe_error ++ capec_error
   end
+
+  defp present?(list) when is_list(list), do: list != []
+  defp present?(_value), do: false
 
   defp blank?(nil), do: true
   defp blank?(value) when is_binary(value), do: String.trim(value) == ""

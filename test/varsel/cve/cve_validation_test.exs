@@ -55,6 +55,19 @@ defmodule Varsel.CVE.CveValidationTest do
               "baseSeverity" => "HIGH"
             }
           }
+        ],
+        "problemTypes" => [
+          %{
+            "descriptions" => [
+              %{"cweId" => "CWE-400", "description" => "CWE-400", "lang" => "en", "type" => "CWE"}
+            ]
+          }
+        ],
+        "impacts" => [
+          %{
+            "capecId" => "CAPEC-125",
+            "descriptions" => [%{"lang" => "en", "value" => "CAPEC-125"}]
+          }
         ]
       }
     }
@@ -76,11 +89,10 @@ defmodule Varsel.CVE.CveValidationTest do
     assert Enum.any?(errors, &(&1.source == :schema))
   end
 
-  test "the EEF policy validator flags a missing title, CVSS v4 and placeholder id" do
+  test "the EEF policy validator flags missing title, CVSS v4, id, CWE and CAPEC" do
     stripped =
       @valid_cve_json
-      |> update_in(["containers", "cna"], &Map.delete(&1, "title"))
-      |> update_in(["containers", "cna"], &Map.delete(&1, "metrics"))
+      |> update_in(["containers", "cna"], &Map.drop(&1, ~w(title metrics problemTypes impacts)))
       |> put_in(["cveMetadata", "cveId"], "CVE-0000-0000")
 
     assert %{valid: false, errors: errors} = CVE.validate_cve_record_eef!(stripped)
@@ -88,6 +100,8 @@ defmodule Varsel.CVE.CveValidationTest do
     assert by_code["EEF001"] == "title is missing"
     assert by_code["EEF002"] == "CVSS v4 vector is missing"
     assert by_code["EEF003"] == "no CVE ID assigned"
+    assert by_code["EEF004"] == "no CWE weakness recorded"
+    assert by_code["EEF005"] == "no CAPEC attack pattern recorded"
   end
 
   test "the EEF policy validator accepts a real CVE ID" do
