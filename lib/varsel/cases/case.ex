@@ -176,7 +176,7 @@ defmodule Varsel.Cases.Case do
     end
 
     update :refresh_derivation do
-      description "Recomputes the derived version data (SHA → version ranges) of every *accepted* affected package. Usually unnecessary — render_preview derives on demand. A case with no accepted affected_package has nothing to derive."
+      description "Recomputes and caches the derived version data (SHA → version ranges) of every *accepted* affected package. Run this after accepting affected-package changes and before rendering the preview — the preview reads the cache and does not recompute it. A case with no accepted affected_package has nothing to derive."
       accept []
       require_atomic? false
 

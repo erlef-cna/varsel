@@ -55,7 +55,11 @@ defmodule Varsel.Cases do
       load [:validation]
     end
 
-    tool :refresh_case_derivation, Case, :refresh_derivation
+    tool :refresh_case_derivation, Case, :refresh_derivation do
+      # Return the freshly derived preview so the caller can confirm the ranges
+      # in one call instead of a follow-up render_case_preview.
+      load [:preview]
+    end
 
     # Proposal workflow: discover → propose → discuss. Deliberately no
     # accept/decline/lifecycle tools — resolving proposals and moving cases

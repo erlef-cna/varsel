@@ -165,16 +165,15 @@ To remove a child row, use `propose_delete` with its `target` (e.g. `"reference"
 
 ⚠️ **Derivation and rendering run on _applied_ (accepted) state, not on open proposals.** Everything you submitted above is an open proposal until a human accepts it in the UI. So this step only works once the affected-package proposal (at minimum) has been **accepted** — before that, there is no `affected_package` row to derive against. If proposals are still open, pause and ask the user to accept them (they may accept just the affected-package one to unblock derivation), then continue.
 
-Once accepted, **refresh the derivation, then** render and inspect the ranges:
+Once accepted, **refresh the derivation** and inspect the ranges it returns:
 
 ```
 mcp__varsel__refresh_case_derivation(id: <case-id>)
-mcp__varsel__render_case_preview(input: {id: <case-id>})
 ```
 
-⚠️ **Refresh before you preview.** `render_case_preview` renders from the *cached* derivation; it does **not** recompute it. If you accepted a boundary fact (or any affected-package change) and skip the refresh, the preview renders stale ranges — often an affected entry with **no versions at all** — and the preview flags this with a `version derivation is out of date` blocker. Always `refresh_case_derivation` first so you don't burn a preview → read blocker → refresh → preview cycle.
+⚠️ **Refresh recomputes; the preview does not.** `render_case_preview` renders from the *cached* derivation and does **not** recompute it, so after accepting any affected-package change you must refresh or the preview shows stale ranges — often an affected entry with **no versions at all**, flagged as a `version derivation is out of date` blocker. `refresh_case_derivation` returns the freshly rendered preview itself (the same CNA container, validation result, overrides, and blockers as `render_case_preview`), so a single refresh both recomputes and shows you the result — no separate preview call needed here.
 
-The preview returns the rendered CNA container, the validation result, applied overrides, and publish blockers — without publishing. Confirm each affected entry's derived `from X before Y` matches the advisory's first-affected / fixed versions. A wrong range means a wrong boundary SHA — fix it with a new proposal (which again needs accepting, then another refresh, before it takes effect).
+Confirm each affected entry's derived `from X before Y` matches the advisory's first-affected / fixed versions. A wrong range means a wrong boundary SHA — fix it with a new proposal (which again needs accepting, then another refresh, before it takes effect).
 
 ## Step 9 — Verify
 

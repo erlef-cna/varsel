@@ -651,6 +651,69 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
     end
 
+    test "refresh_case_derivation returns the fresh preview when loaded", %{poc: poc} do
+      # A package whose derivation has never been cached: refreshing with the
+      # preview loaded must return the derived ranges in one call, so callers
+      # confirm the refresh worked without a follow-up render_case_preview.
+      case_record = Fixtures.open_case(poc, %{title: "Refresh returns preview"})
+
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{
+          vendor: "acme",
+          product: "acme_lib",
+          repo_url: @repo
+        })
+
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: :hex,
+          name: "acme_lib"
+        },
+        actor: poc
+      )
+
+      Cases.add_version_event!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          event: :introduced,
+          version: "0"
+        },
+        actor: poc
+      )
+
+      Cases.add_version_event!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          event: :fixed,
+          commit_sha: @fix_sha
+        },
+        actor: poc
+      )
+
+      {:ok, refreshed} = Cases.refresh_case_derivation(case_record, load: [:preview], actor: poc)
+
+      assert refreshed.preview.blockers == []
+
+      hex =
+        Enum.find(
+          refreshed.preview.cve_record["containers"]["cna"]["affected"],
+          &(&1["packageName"] == "acme_lib")
+        )
+
+      assert hex["versions"] == [
+               %{
+                 "lessThan" => "2.10.0",
+                 "status" => "affected",
+                 "version" => "0",
+                 "versionType" => "semver"
+               }
+             ]
+    end
+
     test "validation reports the schema/cvelint/hex result", %{poc: poc, case: case_record} do
       result = Cases.get_case!(case_record.id, load: [:validation], actor: poc).validation
 
