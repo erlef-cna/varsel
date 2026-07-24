@@ -384,6 +384,55 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     assert result.blockers == []
   end
 
+  test "a derivation left stale by a later fact blocks publish", %{poc: poc, case: case_record} do
+    # The setup already refreshed once. Add another boundary fact afterwards so
+    # the cache predates it, then preview WITHOUT refreshing (as the transcript
+    # did) — the stale cache must surface as a blocker instead of silently
+    # rendering the old ranges.
+    [package] = Ash.load!(case_record, [:affected_packages], authorize?: false).affected_packages
+
+    Cases.add_version_event!(
+      %{
+        case_id: case_record.id,
+        affected_package_id: package.id,
+        event: :fixed,
+        version: "3.0.0"
+      },
+      actor: poc
+    )
+
+    preview = Cases.get_case!(case_record.id, load: [:preview], actor: poc).preview
+
+    assert Enum.any?(preview.blockers, &(&1 =~ "version derivation is out of date"))
+  end
+
+  test "a package that derives no versions blocks publish", %{poc: poc} do
+    # An affected package with an introduced boundary but no channel and no
+    # repo_url: the derivation is fresh but yields nothing renderable.
+    case_record = Fixtures.open_case(poc, %{title: "No derivable versions"})
+
+    package =
+      Fixtures.add_affected_package(poc, case_record, %{
+        vendor: "acme",
+        product: "acme_lib",
+        repo_url: nil
+      })
+
+    Cases.add_version_event!(
+      %{
+        case_id: case_record.id,
+        affected_package_id: package.id,
+        event: :introduced,
+        version: "1.0.0"
+      },
+      actor: poc
+    )
+
+    result = render!(case_record, poc)
+
+    assert Enum.any?(result.blockers, &(&1 =~ "derived no affected versions"))
+  end
+
   test "a pending fix blocks publish unless allowed", %{poc: poc, case: case_record} do
     StubGitBackend.stub_tags(%{{@repo, @fix_sha} => []})
 

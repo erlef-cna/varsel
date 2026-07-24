@@ -15,15 +15,18 @@ Reference: https://cna.erlef.org/cve-criteria
 
 Verify the case specified by the user (or the current working case). Fix any issues **as proposals** (never by editing rendered JSON), then confirm everything passes.
 
-## Step 1 — Render the preview
+## Step 1 — Refresh, then render the preview
 
 ```
+mcp__varsel__refresh_case_derivation(id: <case-id>)
 mcp__varsel__render_case_preview(input: {id: <case-id>})
 ```
 
-This returns the case with a `preview` holding the full CVE record (`preview.cve_record`, using a `CVE-0000-0000` placeholder until an ID is assigned) and **publish blockers** (`preview.blockers`). Any publish blocker is an automatic FAIL — resolve it before anything else. Use the CNA container at `preview.cve_record.containers.cna` as the record under test for the convention checklist.
+Refresh first: the preview renders from the *cached* derivation and does not recompute it, so a stale cache renders stale (often empty) version ranges. If you skip the refresh, the preview reports a `version derivation is out of date` blocker.
 
-Note: the preview reflects **accepted** proposals only. If you (or the user) just submitted fixes as new proposals, they must be accepted before they show up here — re-render after acceptance.
+The preview returns the case with a `preview` holding the full CVE record (`preview.cve_record`, using a `CVE-0000-0000` placeholder until an ID is assigned) and **publish blockers** (`preview.blockers`). Any publish blocker is an automatic FAIL — resolve it before anything else. Use the CNA container at `preview.cve_record.containers.cna` as the record under test for the convention checklist.
+
+Note: the preview reflects **accepted** proposals only. If you (or the user) just submitted fixes as new proposals, they must be accepted before they show up here — accept, refresh, then re-render.
 
 ## Step 2 — Validators
 

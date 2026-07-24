@@ -15,6 +15,7 @@ defmodule Varsel.Cases.Readiness do
   """
 
   alias Varsel.Cases.Case
+  alias Varsel.Cases.DerivationFreshness
 
   @type status :: :ok | :attention | nil
 
@@ -42,7 +43,15 @@ defmodule Varsel.Cases.Readiness do
   defp affected_status(%{affected_packages: []}), do: :attention
 
   defp affected_status(%{affected_packages: packages}) do
-    if Enum.any?(packages, &(derivation_issues(&1) != [])), do: :attention, else: :ok
+    if Enum.any?(packages, &needs_attention?/1), do: :attention, else: :ok
+  end
+
+  # A package needs attention when its cached derivation is out of date, when a
+  # fresh derivation produced no versions, or when it carries derivation issues
+  # — the same conditions the preview reports as publish blockers.
+  defp needs_attention?(package) do
+    DerivationFreshness.stale?(package) or DerivationFreshness.missing_versions?(package) or
+      derivation_issues(package) != []
   end
 
   defp derivation_issues(%{derivation_cache: nil}), do: []

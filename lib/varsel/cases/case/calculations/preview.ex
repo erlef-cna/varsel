@@ -33,6 +33,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
+  alias Varsel.Cases.DerivationFreshness
   alias Varsel.Cases.Markdown
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.VersionEvent
@@ -104,8 +105,9 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     }
   end
 
-  # Cached derivation per affected package, keyed by id (nil caches render as
-  # empty — the "no derivation yet" blockers cover an unrefreshed package).
+  # Cached derivation per affected package, keyed by id. A nil or stale cache
+  # renders as empty ranges; the staleness/missing-versions blockers in
+  # package_blockers/2 (via DerivationFreshness) catch that silent emptiness.
   defp derivations(case_record) do
     Map.new(case_record.affected_packages, fn package ->
       {package.id, package.derivation_cache || %{}}
@@ -327,7 +329,9 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   end
 
   defp package_blockers(package, derivation) do
-    issues = Enum.map(derivation["issues"] || [], &"#{package.product}: #{&1}")
+    issues =
+      freshness_blockers(package) ++
+        Enum.map(derivation["issues"] || [], &"#{package.product}: #{&1}")
 
     git_issues =
       for issue <- (derivation["git"] || %{})["issues"] || [] do
@@ -341,6 +345,24 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       end
 
     issues ++ git_issues ++ channel_issues ++ Enum.uniq(pending_blockers(package, derivation))
+  end
+
+  # A stale cache renders old/empty ranges; a fresh-but-empty derivation renders
+  # an affected entry with no versions. Both are silently wrong, so both block.
+  defp freshness_blockers(package) do
+    cond do
+      DerivationFreshness.stale?(package) ->
+        [
+          "#{package.product}: version derivation is out of date — " <>
+            "run refresh_derivation before publishing"
+        ]
+
+      DerivationFreshness.missing_versions?(package) ->
+        ["#{package.product}: has boundary facts but derived no affected versions"]
+
+      true ->
+        []
+    end
   end
 
   defp pending_blockers(%{allow_unreleased_fix: true}, _derivation), do: []

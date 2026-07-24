@@ -281,7 +281,7 @@ defmodule Varsel.Cases.AffectedPackage do
       description "Internal: caches the latest derivation result for previews."
       accept [:derivation_cache]
       require_atomic? false
-      change set_attribute(:derivation_cached_at, &DateTime.utc_now/0)
+      change Varsel.Cases.AffectedPackage.Changes.StampDerivationCache
     end
   end
 
@@ -388,7 +388,9 @@ defmodule Varsel.Cases.AffectedPackage do
       description "Latest derivation result (per-channel version ranges). Never authoritative."
     end
 
-    attribute :derivation_cached_at, :utc_datetime
+    # Microsecond precision to match the timestamps() columns, so staleness
+    # comparisons against version-event/channel updated_at are exact.
+    attribute :derivation_cached_at, :utc_datetime_usec
 
     timestamps()
   end
