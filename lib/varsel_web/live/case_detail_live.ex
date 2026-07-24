@@ -2390,10 +2390,12 @@ defmodule VarselWeb.CaseDetailLive do
   # absolutely positioned above the track, so without it they collide with
   # the row above / the section label.
   #
-  # The percentage offsets (--tl-pos) and vulnerable-span gradient bounds
-  # (--tl-span-*) are per-render dynamic values. The strict CSP forbids the
-  # inline `style` attribute, so they ride on `data-css-*` attributes and the
-  # CssVars JS hook copies them into the element's CSSOM style at mount/patch.
+  # The percentage offsets (--tl-pos) and the track's gradient stop list
+  # (--tl-gradient-stops, one base-300/warning/warning/base-300 quad per
+  # vulnerable range — see timeline_gradient_stops/1) are per-render dynamic
+  # values. The strict CSP forbids the inline `style` attribute, so they ride
+  # on `data-css-*` attributes and the CssVars JS hook copies them into the
+  # element's CSSOM style at mount/patch.
   defp boundary_timeline_row(assigns) do
     ~H"""
     <div class="flex items-center gap-2.5 pt-6 pb-1">
@@ -2403,16 +2405,15 @@ defmodule VarselWeb.CaseDetailLive do
       <div
         id={"tl-track-#{@package_id}-#{@row.label}"}
         phx-hook="CssVars"
-        class={["timeline-track flex-1", @row.span && "is-vulnerable"]}
-        data-css--tl-span-start={@row.span && "#{@row.span.start}%"}
-        data-css--tl-span-end={@row.span && "#{@row.span.stop}%"}
+        class="timeline-track flex-1"
+        data-css---tl-gradient-stops={timeline_gradient_stops(@row.spans)}
       >
         <div
           :for={{node, index} <- Enum.with_index(@row.nodes)}
           id={"tl-node-#{@package_id}-#{@row.label}-#{index}"}
           phx-hook="CssVars"
           class={["timeline-node", timeline_node_class(node.kind), tag_anchor_class(node.pos)]}
-          data-css--tl-pos={"#{node.pos}%"}
+          data-css---tl-pos={"#{node.pos}%"}
         >
           <span class="timeline-tag font-mono text-base-content/40" title={node.tag}>
             {node.tag}
@@ -3402,135 +3403,140 @@ defmodule VarselWeb.CaseDetailLive do
   defp channel_derivation(cache, channel_id), do: get_in(cache, ["channels", channel_id])
 
   # Board C's boundary timeline, from the same derivation_cache the derived
-  # labels read. The git row carries the raw commit boundaries (intro/fix
-  # SHAs from the git entry's git-SHA range); each channel row carries ITS OWN
-  # derived version boundaries (its ranges' intro/fix versions, its pending
-  # state). Node x-positions are evenly spaced — version numbers have no common
-  # linear scale to place them on honestly. Per the mock, only channel rows tint
-  # their vulnerable span; the git track stays plain.
+  # labels read. Every row (the implicit git row and each explicit channel
+  # row) is built the SAME way: its `versions` list is a sequence of
+  # half-open [from, until) ranges, flattened literally onto the track as
+  # intro/fixed node pairs with tinted vulnerable spans between them and safe
+  # gaps elsewhere. A `versionType: "git"` entry is a commit-SHA chain (a
+  # tree, not a line) and does not fit this linear track, so it's the one
+  # entry type skipped everywhere, including on the git row itself — an OTP
+  # git entry's leading OTP release ranges DO render there.
   defp timeline_rows(%{derivation_cache: nil}), do: []
 
   defp timeline_rows(package) do
     cache = package.derivation_cache
-    pending? = git_pending?(cache)
 
-    git_row =
-      case git_sha_range(cache) do
-        nil ->
-          nil
-
-        range ->
-          fixes =
-            range
-            |> git_fix_shas()
-            |> Enum.map(&{:fix, sha_tag(&1, "fix")})
-            |> Kernel.++(if(pending?, do: [{:pending, "fix unreleased"}], else: []))
-
-          build_timeline_row("git", sha_tag(range["version"], "intro"), fixes, false)
-      end
+    git_row = timeline_row("git", cache["git"])
 
     channel_rows =
       Enum.map(package.channels, fn channel ->
-        channel_timeline_row(channel, cache["channels"][channel.id])
+        timeline_row(channel_row_label(channel), cache["channels"][channel.id])
       end)
 
     Enum.reject([git_row | channel_rows], &is_nil/1)
   end
 
-  # The git-SHA range within the git entry (an OTP git entry also carries an OTP
-  # release block ahead of it; the git-versionType block holds the commit facts).
-  defp git_sha_range(cache) do
-    versions = (cache["git"] || %{})["versions"] || []
-    Enum.find(versions, &(&1["versionType"] == "git"))
-  end
+  @renderable_version_types ~w(semver otp date)
 
-  defp git_pending?(cache), do: ((cache["git"] || %{})["pending"] || []) != []
+  # A row's ranges become an ordered node sequence: each range contributes an
+  # intro node, plus a fixed node unless it's open (`lessThan: "*"`, which
+  # instead tints to the track's open end). A trailing pending fix (declared,
+  # unreleased) appends a hollow node at the very end. Nodes are evenly spread
+  # from 6% to 94% — version numbers have no common linear scale to place them
+  # on honestly. A row with nothing to render (only git-SHA entries, or no
+  # derivation at all) produces no row.
+  defp timeline_row(_label, nil), do: nil
 
-  # Fix SHAs a git range bounds on: a changes[] chain lists several, a bounded
-  # range one, an open range none.
-  defp git_fix_shas(%{"changes" => changes}) when is_list(changes), do: Enum.map(changes, & &1["at"])
+  defp timeline_row(label, derivation) do
+    ranges =
+      derivation["versions"]
+      |> List.wrap()
+      |> Enum.filter(&(&1["versionType"] in @renderable_version_types))
 
-  defp git_fix_shas(%{"lessThan" => fix}) when fix not in [nil, "*"], do: [fix]
-  defp git_fix_shas(_open), do: []
-
-  # A channel row is built from that channel's own derivation result: the
-  # first derived range gives the intro/fix version tags, a non-empty pending
-  # list appends the hollow "fix unreleased" node. Channels with nothing
-  # derived render no row.
-  defp channel_timeline_row(_channel, nil), do: nil
-
-  defp channel_timeline_row(channel, derivation) do
     pending? = (derivation["pending"] || []) != []
 
-    {intro_tag, fixes} = channel_timeline_tags(derivation)
-    fixes = fixes ++ if(pending?, do: [{:pending, "fix unreleased"}], else: [])
-
-    if intro_tag || fixes != [] do
-      build_timeline_row(channel_row_label(channel), intro_tag, fixes, true)
-    end
-  end
-
-  # Each derived range contributes its own intro/fix marker; a bounded range
-  # tints from its `version` to its `< upper`, an open range runs to the row end.
-  # A pending-only channel (no derived range) renders only the pending marker.
-  defp channel_timeline_tags(derivation) do
-    case derivation["versions"] || [] do
-      [range | _rest] -> {shorten(range["version"]), range_fix_markers(range)}
-      [] -> {nil, []}
-    end
-  end
-
-  # A range's fix markers: a changes[] chain renders as one node listing the
-  # fixed versions, a bounded range as its "< upper" boundary, an open range
-  # as none (the vulnerable span then runs to the row's end).
-  defp range_fix_markers(%{"changes" => changes}) when is_list(changes) do
-    [{:fix, "fixed: #{Enum.map_join(changes, ", ", &shorten(&1["at"]))}"}]
-  end
-
-  defp range_fix_markers(%{"lessThan" => upper}) when upper not in [nil, "*"] do
-    [{:fix, "< #{shorten(upper)}"}]
-  end
-
-  defp range_fix_markers(_open_range), do: []
-
-  defp build_timeline_row(label, intro_tag, fixes, tint?) do
-    fix_count = length(fixes)
-    intro_pos = 6
-
-    fix_nodes =
-      fixes
-      |> Enum.with_index(1)
-      |> Enum.map(fn {{kind, tag}, index} ->
-        # Evenly spread with the last fix near the row's end (~90%), so the
-        # track is used and pending fixes read as "at the end", per the mock.
-        %{
-          kind: kind,
-          pos: intro_pos + round(index / fix_count * (90 - intro_pos)),
-          tag: tag
-        }
+    # Each range is a {start_edge, stop_edge} pair. `"0"` (since the beginning)
+    # and `"*"` (never fixed) are OPEN edges — no dot, the vulnerable tint just
+    # runs off that side of the track. Everything else is a placed node.
+    edges =
+      Enum.map(ranges, fn range ->
+        {edge(:intro, range["version"]), edge(:fix, range["lessThan"])}
       end)
 
-    span =
-      if tint? do
-        stop =
-          case List.last(fix_nodes) do
-            nil -> 100
-            %{kind: :pending} -> 100
-            %{pos: pos} -> pos
-          end
+    pending = if pending?, do: [{:pending, "fix unreleased"}], else: []
 
-        %{start: intro_pos, stop: stop}
-      end
-
-    %{
-      label: label,
-      nodes: [%{kind: :intro, pos: intro_pos, tag: intro_tag} | fix_nodes],
-      span: span
-    }
+    if edges == [] and pending == [] do
+      nil
+    else
+      {nodes, spans} = layout(edges, pending)
+      %{label: label, nodes: nodes, spans: spans}
+    end
   end
 
-  defp sha_tag(nil, _kind), do: nil
-  defp sha_tag(sha, kind), do: "#{shorten(sha)} #{kind}"
+  # A range boundary is a placed node {kind, label} or an open edge :start / :end.
+  defp edge(:intro, "0"), do: :start
+  defp edge(:intro, version), do: {:intro, shorten(version)}
+  defp edge(:fix, "*"), do: :end
+  defp edge(:fix, upper), do: {:fix, shorten(upper)}
+
+  # Lay every edge onto one ordered list of boundary points, coalescing a fix
+  # that lands on the same version as the next range's intro into a SINGLE node
+  # (a fix-and-reintroduce boundary — e.g. the `R13B03` where the unknown span
+  # meets the affected one). Placed nodes are evenly spaced across 6%–94%; open
+  # edges (`0` start / `*` end) hold no slot, tinting off the track edge. Nodes
+  # and spans index the same list, so tints always meet their nodes.
+  defp layout(edges, pending) do
+    flat = Enum.flat_map(edges, fn {a, b} -> [a, b] end)
+    points = coalesce(flat) ++ pending
+
+    placed = Enum.filter(points, &match?({_kind, _tag}, &1))
+    count = length(placed)
+
+    positions =
+      placed
+      |> Enum.with_index()
+      |> Map.new(fn {node, i} -> {node, node_pos(i, count)} end)
+
+    nodes =
+      Enum.map(placed, fn {kind, tag} = node -> %{kind: kind, tag: tag, pos: positions[node]} end)
+
+    {nodes, spans(edges, positions)}
+  end
+
+  # Drop a `{:fix, v}` that is immediately followed by `{:intro, v}` for the same
+  # version — they are one point on the timeline (the affected span simply
+  # continues through it). Keeps the intro so the coalesced node reads as a start.
+  defp coalesce([{:fix, v}, {:intro, v} | rest]), do: coalesce([{:intro, v} | rest])
+  defp coalesce([point | rest]), do: [point | coalesce(rest)]
+  defp coalesce([]), do: []
+
+  defp node_pos(_index, 1), do: 6
+  defp node_pos(index, count), do: 6 + round(index / (count - 1) * 88)
+
+  # One tinted span per range: start edge → stop edge. Positions are looked up by
+  # version label, so a fix edge that was coalesced into the next intro (same
+  # version) still resolves to that shared node's percent.
+  defp spans(edges, positions) do
+    by_label = Map.new(positions, fn {{_kind, tag}, pos} -> {tag, pos} end)
+
+    Enum.map(edges, fn {start_edge, stop_edge} ->
+      %{start: edge_pos(start_edge, by_label), stop: edge_pos(stop_edge, by_label)}
+    end)
+  end
+
+  defp edge_pos(:start, _by_label), do: 0
+  defp edge_pos(:end, _by_label), do: 100
+  defp edge_pos({_kind, tag}, by_label), do: Map.fetch!(by_label, tag)
+
+  # The track's whole background as one linear-gradient stop list: a
+  # base-300..warning..base-300 pair per vulnerable span, in ascending order
+  # (adjoining stops need the exact same percent to draw a hard edge, not a
+  # blend). No spans means the CSS's own plain-line fallback applies.
+  defp timeline_gradient_stops([]), do: nil
+
+  defp timeline_gradient_stops(spans) do
+    spans
+    |> Enum.sort_by(& &1.start)
+    |> Enum.flat_map(fn %{start: start, stop: stop} ->
+      [
+        "var(--color-base-300) #{start}%",
+        "var(--color-warning) #{start}%",
+        "var(--color-warning) #{stop}%",
+        "var(--color-base-300) #{stop}%"
+      ]
+    end)
+    |> Enum.join(", ")
+  end
 
   defp range_label(%{"version" => from, "changes" => changes}) when is_list(changes) do
     "≥ #{from} · fixed: #{Enum.map_join(changes, ", ", &shorten(&1["at"]))}"

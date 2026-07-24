@@ -55,8 +55,9 @@ const DragSort = {
 // attribute, which the strict Content-Security-Policy forbids. Every
 // `data-css-*` attribute is written to the element's CSSOM style
 // (`el.style.setProperty`), which CSP does not govern. Property name is the
-// suffix verbatim, so `data-css--tl-pos` sets the `--tl-pos` custom property
-// and `data-css-background` sets `background`. Re-applied on every LiveView
+// suffix verbatim, so `data-css---tl-pos` sets the `--tl-pos` custom property
+// (the `--` of a custom property is preserved after the `data-css-` prefix) and
+// `data-css-background` sets `background`. Re-applied on every LiveView
 // patch so streamed diffs keep their values.
 const CssVars = {
   apply() {

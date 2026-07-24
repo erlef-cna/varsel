@@ -324,26 +324,21 @@
 
 /* ------------------------------------------------------- Boundary timeline */
 /* Board C's "boundary facts -> derived ranges" picture: one row per release
-   line, a full-width track, and positioned nodes/tags. Percent offsets and
-   the vulnerable-span gradient are computed server-side and applied to the
-   --tl-pos / --tl-span-* custom properties by the CssVars JS hook (the strict
-   CSP forbids the inline style attribute the mock used). */
+   line, a full-width track, and positioned nodes/tags. Percent offsets are
+   computed server-side and applied to the --tl-pos custom property by the
+   CssVars JS hook (the strict CSP forbids the inline style attribute the mock
+   used). A row's derived ranges are flattened into an ordered node sequence,
+   which can produce MULTIPLE tinted vulnerable spans per row (not just one) —
+   the track's whole background is therefore a single linear-gradient with a
+   variable number of warning/base-300 color-stop pairs, one pair per range,
+   built server-side into --tl-gradient-stops.
+   var(--tl-gradient-stops, var(--color-base-300)) alone (the fallback) paints
+   a plain, untinted line for rows with no renderable ranges. */
 .timeline-track {
   position: relative;
   height: 2px;
   border-radius: 2px;
-  background-color: var(--color-base-300);
-}
-
-.timeline-track.is-vulnerable {
-  background: linear-gradient(
-    90deg,
-    var(--color-base-300) 0%,
-    var(--color-base-300) var(--tl-span-start, 0%),
-    var(--color-warning) var(--tl-span-start, 0%),
-    var(--color-warning) var(--tl-span-end, 100%),
-    var(--color-base-300) var(--tl-span-end, 100%)
-  );
+  background: linear-gradient(90deg, var(--tl-gradient-stops, var(--color-base-300)));
 }
 
 .timeline-node {
