@@ -34,7 +34,7 @@ Extract and present:
 - Affected package + version range
 - Credits — for each GitHub login in `credits`, look up the real name via `gh api /users/<login>` (`name` field); never guess from the username. Known overrides:
   - `IngelaAndin` → `Ingela Anderton Andin`
-  - `maennchen` (Jonatan Männchen) → `Jonatan Männchen / EEF` (when acting in his EEF capacity, e.g. as analyst/coordinator — append ` / EEF`)
+  - `maennchen` → name `Jonatan Männchen`; when acting in his EEF capacity (e.g. analyst/coordinator) set `organization: "EEF"` — EEF goes in the `organization` field, never in `name` (Varsel renders `name / organization` itself)
   - `u3s` → `Jakub Witczak`
 - CVSS if present (starting point only)
 - Fix commit / patched version if available
@@ -157,7 +157,7 @@ Use correct Unicode everywhere, including full diacritics in names (e.g. `Micha�
 - **Weakness** (`propose_weakness`): use `/find-cwe`.
 - **Impact** (`propose_impact`): use `/find-capec`.
 - **References** (`propose_reference`, `url` + `tags`), in order: vendor advisory (GHSA → `["vendor-advisory", "related"]`), then patch commit(s) (`["patch"]`), then for OTP the version-scheme doc (`["x_version-scheme"]`). Varsel auto-adds the `cna.erlef.org` and `osv.dev` references on ID assignment — do not propose them. If unpatched, use a `/TODO` patch URL and confirm intentional-no-patch with the user.
-- **Credits** (`propose_credit`, `name` + `credit_type` [+ `organization`]): map GHSA roles — reporter → `finder`, remediation_developer → `remediation_developer`, reviewer → `remediation_reviewer`, coordinator → `analyst`. `name` is the full real name only (no handle), spelled with its correct diacritics. Do not skip `pending` credits.
+- **Credits** (`propose_credit`, `name` + `credit_type` [+ `organization`]): map GHSA roles — reporter → `finder`, remediation_developer → `remediation_developer`, reviewer → `remediation_reviewer`, coordinator → `analyst`. `name` is the full real name only — no handle, no affiliation — spelled with its correct diacritics. An affiliation goes in the separate `organization` field (e.g. `name: "Jonatan Männchen", organization: "EEF"`), never appended to `name`; Varsel renders `name / organization` for you. Do not skip `pending` credits.
 
 To remove a child row, use `propose_delete` with its `target` (e.g. `"reference"`) and `target_id`.
 
