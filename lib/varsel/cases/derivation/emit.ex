@@ -34,6 +34,17 @@ defmodule Varsel.Cases.Derivation.Emit do
 
   @type range :: Reachability.range()
 
+  # The root (parent-less) commit of erlang/otp — the R13B03 import that squashed
+  # all pre-R13B03 history. A vulnerability introduced *at* this commit predates
+  # every version our tag set can express, so we prepend an `unknown` sentinel
+  # range for the pre-R13B03 era rather than claiming to have derived it.
+  @otp_root_commit "84adefa331c4159d432d22840663c38f155cd4c1"
+  @first_otp_tag "R13B03"
+
+  @doc "Whether `sha` is the erlang/otp root commit (the pre-R13B03 boundary)."
+  @spec otp_root_commit?(String.t()) :: boolean()
+  def otp_root_commit?(sha), do: sha == @otp_root_commit
+
   @doc """
   The `versions[]` block for a repo-derived channel: `%{"versions" => [...],
   "issues" => [...]}`. `pending` is added by the caller (it is package-level).
@@ -42,18 +53,21 @@ defmodule Varsel.Cases.Derivation.Emit do
           required(String.t()) => [map()]
         }
   def channel(channel, ranges, opts) do
-    case channel.purl_type do
-      :otp ->
-        if Keyword.fetch!(opts, :otp_platform?),
-          do: otp_app_versions(channel.name, ranges),
-          else: %{"versions" => semver_ranges(ranges), "issues" => []}
+    result =
+      case channel.purl_type do
+        :otp ->
+          if Keyword.fetch!(opts, :otp_platform?),
+            do: otp_app_versions(channel.name, ranges),
+            else: %{"versions" => semver_ranges(ranges), "issues" => []}
 
-      :oci ->
-        %{"versions" => oci_ranges(channel, ranges), "issues" => []}
+        :oci ->
+          %{"versions" => oci_ranges(channel, ranges), "issues" => []}
 
-      _semver_like ->
-        %{"versions" => semver_ranges(ranges), "issues" => []}
-    end
+        _semver_like ->
+          %{"versions" => semver_ranges(ranges), "issues" => []}
+      end
+
+    prepend_root_sentinel(result, sentinel_for(channel, opts))
   end
 
   @doc """
@@ -65,12 +79,19 @@ defmodule Varsel.Cases.Derivation.Emit do
           required(String.t()) => [map()]
         }
   def git(intro_shas, fix_shas, ranges, opts) do
-    {git_versions, issues} = git_sha_ranges(intro_shas, fix_shas)
+    {git_sha_versions, issues} = git_sha_ranges(intro_shas, fix_shas)
+
+    # The git block speaks in commit SHAs, so its sentinel bounds the pre-root era
+    # by the root commit itself rather than the R13B03 tag.
+    git_versions = maybe_sentinel(sentinel("git", opts)) ++ git_sha_versions
 
     versions =
-      if Keyword.fetch!(opts, :otp_platform?),
-        do: otp_release_ranges(ranges) ++ git_versions,
-        else: git_versions
+      if Keyword.fetch!(opts, :otp_platform?) do
+        otp_release = maybe_sentinel(sentinel("otp", opts)) ++ otp_release_ranges(ranges)
+        otp_release ++ git_versions
+      else
+        git_versions
+      end
 
     %{"versions" => versions, "issues" => issues}
   end
@@ -157,6 +178,50 @@ defmodule Varsel.Cases.Derivation.Emit do
 
     {[chain], []}
   end
+
+  ## ------------------------------------------------------------ root sentinel
+
+  # The `unknown` range covering the pre-R13B03 era, prepended when the vuln was
+  # introduced at the OTP root commit. `nil` (no sentinel) otherwise.
+  #
+  #   * otp app channel  -> {version:"0", lessThan:<app vsn at R13B03>, unknown}
+  #   * otp release block -> {version:"0", lessThan:"R13B03", unknown}
+  #   * plain semver      -> no sentinel (the root commit only exists in OTP)
+  defp sentinel_for(%{purl_type: :otp, name: app}, opts) do
+    if root_intro?(opts) and Keyword.fetch!(opts, :otp_platform?) do
+      case OtpVersionsTable.app_version(@first_otp_tag, app) do
+        {:ok, version} -> unknown_range(version, "otp")
+        :error -> nil
+      end
+    end
+  end
+
+  defp sentinel_for(_channel, _opts), do: nil
+
+  # The sentinel for the git entry's OTP release block (release-tag versioned)
+  # and its git-SHA block (commit versioned — bounded by the root commit itself).
+  defp sentinel("otp", opts) do
+    if root_intro?(opts), do: unknown_range(@first_otp_tag, "otp")
+  end
+
+  defp sentinel("git", opts) do
+    if root_intro?(opts), do: unknown_range(@otp_root_commit, "git")
+  end
+
+  defp root_intro?(opts), do: Keyword.get(opts, :otp_root_intro?, false)
+
+  defp unknown_range(upper, version_type) do
+    %{"version" => "0", "lessThan" => upper, "status" => "unknown", "versionType" => version_type}
+  end
+
+  defp prepend_root_sentinel(result, nil), do: result
+
+  defp prepend_root_sentinel(%{"versions" => versions} = result, sentinel) do
+    %{result | "versions" => [sentinel | versions]}
+  end
+
+  defp maybe_sentinel(nil), do: []
+  defp maybe_sentinel(sentinel), do: [sentinel]
 
   ## ------------------------------------------------------------ shared
 

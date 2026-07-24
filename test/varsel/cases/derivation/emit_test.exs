@@ -182,4 +182,66 @@ defmodule Varsel.Cases.Derivation.EmitTest do
              ]
     end
   end
+
+  describe "OTP root-commit sentinel (otp_root_intro?: true)" do
+    @root "84adefa331c4159d432d22840663c38f155cd4c1"
+
+    setup do
+      Req.Test.stub(OtpVersionsTable, fn conn ->
+        Plug.Conn.send_resp(conn, 200, """
+        OTP-26.2.5.15 : ssh-5.2.11.9 :
+        OTP-26.0 : ssh-5.0 :
+        """)
+      end)
+
+      on_exit(&OtpVersionsTable.reset/0)
+    end
+
+    test "otp_root_commit?/1 recognises the root import commit" do
+      assert Emit.otp_root_commit?(@root)
+      refute Emit.otp_root_commit?(String.duplicate("a", 40))
+    end
+
+    test "prepends an unknown pre-R13B03 range to an OTP app channel, bounded by the app's R13B03 version" do
+      channel = %PackageChannel{purl_type: :otp, name: "ssh", tag_suffixes: []}
+      # ssh shipped 1.1.7 in R13B03 (from priv/otp_pre17_versions.json).
+      opts = [otp_platform?: true, otp_root_intro?: true]
+
+      assert %{"versions" => [sentinel | _]} =
+               Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], opts)
+
+      assert sentinel == %{
+               "version" => "0",
+               "lessThan" => "1.1.7",
+               "status" => "unknown",
+               "versionType" => "otp"
+             }
+    end
+
+    test "prepends an unknown range bounded by R13B03 to the git entry's OTP release block, and by the root commit to the git-SHA block" do
+      opts = [otp_platform?: true, otp_root_intro?: true]
+
+      assert %{"versions" => versions} =
+               Emit.git([@root], ["fix"], [range("OTP-26.0", "OTP-26.2.5.15")], opts)
+
+      otp_sentinel =
+        Enum.find(versions, &(&1["versionType"] == "otp" and &1["status"] == "unknown"))
+
+      git_sentinel =
+        Enum.find(versions, &(&1["versionType"] == "git" and &1["status"] == "unknown"))
+
+      assert otp_sentinel["lessThan"] == "R13B03"
+      assert git_sentinel["lessThan"] == @root
+    end
+
+    test "no sentinel when the intro is not the root commit" do
+      channel = %PackageChannel{purl_type: :otp, name: "ssh", tag_suffixes: []}
+      opts = [otp_platform?: true, otp_root_intro?: false]
+
+      assert %{"versions" => versions} =
+               Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], opts)
+
+      refute Enum.any?(versions, &(&1["status"] == "unknown"))
+    end
+  end
 end

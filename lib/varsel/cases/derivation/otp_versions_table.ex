@@ -9,14 +9,26 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   (ssh-5.2.3.4, stdlib-6.2.2.1, ...). Needed to resolve `pkg:otp/<app>`
   channel boundaries from OTP release tags.
 
-  The table is fetched from the configured URL and cached in
-  `:persistent_term` for an hour.
+  The official table only covers OTP-17.0 and later. The pre-17 R-series
+  (`OTP_R13B03` … `OTP_R16B03-1`) is filled from `priv/otp_pre17_versions.json`
+  and merged in. That file was generated once by reading every `OTP_R*` tag's
+  `lib/<app>/vsn.mk` (and `erts/vsn.mk`) — this history is immutable, so it is
+  never regenerated.
+
+  The official portion is fetched from the configured URL and cached in
+  `:persistent_term` for an hour; the pre-17 portion is a compile-time constant.
   """
 
   alias Varsel.Cases.Derivation.Platform
 
   @cache_key {__MODULE__, :table}
   @cache_ttl_seconds 3600
+
+  # The pre-17 R-series app versions, baked in at compile time (keyed by the raw
+  # OTP_R* tag name, values %{app => version}).
+  @pre17_path Application.app_dir(:varsel, "priv/otp_pre17_versions.json")
+  @external_resource @pre17_path
+  @pre17_rows @pre17_path |> File.read!() |> Jason.decode!()
 
   @doc "The version of `app` shipped in the given OTP release tag (e.g. \"OTP-27.3.4.1\")."
   @spec app_version(String.t(), String.t()) :: {:ok, String.t()} | :error
@@ -72,24 +84,32 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
     :ok
   end
 
+  # R-series releases are keyed by their raw tag name (OTP_R13B03); modern ones
+  # by OTP-<numeric>. Accept bare (R13B03 / 27.0) and prefixed forms.
+  defp normalize_release("OTP_R" <> _ = release), do: release
+  defp normalize_release("R" <> _ = release), do: "OTP_" <> release
   defp normalize_release("OTP-" <> _ = release), do: release
   defp normalize_release(release), do: "OTP-" <> release
 
   defp strip("OTP-" <> version), do: version
   defp strip(release), do: release
 
+  # The official (fetched, cached) rows merged with the compile-time pre-17 rows.
   defp rows do
     now = System.monotonic_time(:second)
 
-    case :persistent_term.get(@cache_key, nil) do
-      {fetched_at, rows} when now - fetched_at < @cache_ttl_seconds ->
-        rows
+    official =
+      case :persistent_term.get(@cache_key, nil) do
+        {fetched_at, rows} when now - fetched_at < @cache_ttl_seconds ->
+          rows
 
-      _stale ->
-        rows = fetch_and_parse()
-        :persistent_term.put(@cache_key, {now, rows})
-        rows
-    end
+        _stale ->
+          rows = fetch_and_parse()
+          :persistent_term.put(@cache_key, {now, rows})
+          rows
+      end
+
+    Map.merge(@pre17_rows, official)
   end
 
   defp fetch_and_parse do

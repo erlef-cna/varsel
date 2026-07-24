@@ -61,7 +61,13 @@ defmodule Varsel.Cases.Derivation do
 
     reach = reachability(package, platform, global_events)
     pending = reach.pending_fixes
-    emit_opts = [otp_platform?: platform.kind == :otp]
+
+    {intro_shas, _fixes} = boundary_shas(global_events)
+
+    emit_opts = [
+      otp_platform?: platform.kind == :otp,
+      otp_root_intro?: Enum.any?(intro_shas, &Emit.otp_root_commit?/1)
+    ]
 
     channels =
       Map.new(package.channels, fn channel ->
