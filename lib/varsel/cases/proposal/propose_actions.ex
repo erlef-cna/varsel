@@ -151,6 +151,10 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       normal way to add a product; reach for propose_package_channel /
       propose_version_event only to extend a package that is already accepted.
 
+      In channels, list the distribution channels only — the source repo's
+      pkg:github channel is derived from repo_url, so you normally don't add it
+      (do so only for something like a second forge host).
+
       version_events are package-global boundaries. When channels genuinely need
       different versions from each other, don't try to express it here — stop
       and involve a human.
@@ -208,7 +212,14 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
     end
 
     create :propose_package_channel do
-      description "Proposes adding a package channel under an affected package (target_id)."
+      description """
+      Proposes adding a distribution channel to an affected package that is
+      already accepted (target_id); for a new package, author its channels
+      inline on propose_affected_package instead. The source repo's pkg:github
+      channel is derived from the package's repo_url — normally you don't add it
+      here (do so only for something like a second forge host).
+      """
+
       accept [:case_id, :target_id, :reasoning]
       argument :purl_type, Varsel.Cases.PackageChannel.PurlType, allow_nil?: false
       argument :namespace, :string

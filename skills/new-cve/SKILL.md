@@ -121,7 +121,7 @@ mcp__varsel__propose_affected_package(input: {
   case_id: <id>,
   vendor: "...", product: "...", repo_url: "...", cpe: "...",
   channels: [
-    {purl_type: "hex", name: "<name>"}      // the pkg:github/<owner>/<repo> repo channel is derived from repo_url — do NOT list it
+    {purl_type: "hex", name: "<name>"}      // the pkg:github/<owner>/<repo> repo channel is derived from repo_url — normally you don't list it
   ],
   version_events: [
     {event: "introduced", commit_sha: "<intro-SHA>"},

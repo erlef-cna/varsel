@@ -28,7 +28,13 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
 
   attributes do
     attribute :purl_type, PurlType do
-      description "Package URL type of this distribution channel, e.g. :hex, :otp, :oci, :sid, :hosted."
+      description """
+      Package URL type of this distribution channel, e.g. :hex, :otp, :oci,
+      :sid, :hosted. List the distribution channels only — the source repo's
+      pkg:github channel is derived from the package's repo_url, so you normally
+      don't add it here (do so only for something like a second forge host).
+      """
+
       allow_nil? false
       public? true
     end
