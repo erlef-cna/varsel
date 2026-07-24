@@ -479,7 +479,7 @@ defmodule VarselWeb.CveListLive do
               <tr
                 :for={record <- @cve_records.results}
                 class={["group hover:bg-base-300/40", not @poc? && "cursor-pointer"]}
-                phx-click={not @poc? && JS.navigate(~p"/cves/#{record.cve_id}")}
+                phx-click={not @poc? && JS.navigate(~p"/cves/#{record.cve_id <> ".html"}")}
               >
                 <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
                   {record.cve_id || "—"}
@@ -487,7 +487,7 @@ defmodule VarselWeb.CveListLive do
                 <td>
                   <.link
                     :if={record.state == :published and @poc?}
-                    navigate={~p"/cves/#{record.cve_id}"}
+                    navigate={~p"/cves/#{record.cve_id <> ".html"}"}
                     class="link link-hover font-semibold"
                   >
                     {record.title || record.cve_id}

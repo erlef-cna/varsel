@@ -112,6 +112,7 @@ defmodule Varsel.MixProject do
       {:purl, "~> 0.4.0"},
       {:req, "~> 0.5"},
       {:saxy, "~> 1.6"},
+      {:sitemap_builder, "~> 0.1"},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false, warn_if_outdated: true},
       {:sourceror, "~> 1.8", only: [:dev, :test]},
       {:styler, "~> 1.0"},

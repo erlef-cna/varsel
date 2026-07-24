@@ -53,14 +53,62 @@ defmodule VarselWeb.SitePagesTest do
   end
 
   describe "OSV id redirect" do
-    test "GET /osv/EEF-CVE-... redirects to the CVE page", %{conn: conn} do
-      conn = get(conn, "/osv/EEF-CVE-2025-48042")
-      assert redirected_to(conn) == "/cves/CVE-2025-48042"
+    test "GET /osv/EEF-CVE-....html 301-redirects to the canonical CVE .html page", %{conn: conn} do
+      conn = get(conn, "/osv/EEF-CVE-2025-48042.html")
+      assert redirected_to(conn, 301) == "/cves/CVE-2025-48042.html"
     end
 
     test "GET /osv/all.json still serves the feed index", %{conn: conn} do
       conn = get(conn, "/osv/all.json")
       assert json_response(conn, 200) == []
+    end
+  end
+
+  describe "canonical URL contract" do
+    test "GET /scope.html 301-redirects to the clean /scope", %{conn: conn} do
+      conn = get(conn, "/scope.html")
+      assert redirected_to(conn, 301) == "/scope"
+    end
+  end
+
+  describe "GET /sitemap.xml" do
+    setup do
+      # A fresh persistent_term cache per test so a published record shows up.
+      :persistent_term.erase({VarselWeb.SitemapController, :xml})
+      :ok
+    end
+
+    test "lists home, the static pages, and every published CVE at its .html URL", %{conn: conn} do
+      cve_id = "CVE-2025-48042"
+
+      Ash.create!(
+        Varsel.CVE.CveRecord,
+        %{
+          cve_json: %{
+            "dataType" => "CVE_RECORD",
+            "dataVersion" => "5.2",
+            "cveMetadata" => %{
+              "cveId" => cve_id,
+              "state" => "PUBLISHED",
+              "datePublished" => "2025-06-01T00:00:00Z"
+            },
+            "containers" => %{"cna" => %{}}
+          }
+        },
+        action: :import,
+        authorize?: false
+      )
+
+      conn = get(conn, "/sitemap.xml")
+      body = response(conn, 200)
+
+      assert response_content_type(conn, :xml) =~ "text/xml"
+      assert body =~ "<urlset"
+
+      base = VarselWeb.Endpoint.url()
+      assert body =~ "<loc>#{base}/</loc>"
+      assert body =~ "<loc>#{base}/scope</loc>"
+      assert body =~ "<loc>#{base}/cves/#{cve_id}.html</loc>"
     end
   end
 end

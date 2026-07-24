@@ -43,7 +43,7 @@ defmodule VarselWeb.FeedControllerTest do
       assert body =~ "<feed xmlns=\"http://www.w3.org/2005/Atom\">"
       assert body =~ @cve_id
       assert body =~ "Test vulnerability"
-      assert body =~ "/cves/#{@cve_id}"
+      assert body =~ "/cves/#{@cve_id}.html"
     end
   end
 

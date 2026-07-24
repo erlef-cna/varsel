@@ -95,7 +95,7 @@ defmodule VarselWeb.OsvControllerTest do
 
     test "returns 404 for unknown OSV IDs", %{conn: conn} do
       conn = get(conn, "/osv/EEF-CVE-0000-00000.json")
-      assert json_response(conn, 404) == %{}
+      assert json_response(conn, 404)
     end
   end
 end

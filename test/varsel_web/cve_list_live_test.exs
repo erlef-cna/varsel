@@ -72,7 +72,7 @@ defmodule VarselWeb.CveListLiveTest do
       |> element("tbody tr[phx-click]")
       |> render_click()
 
-    assert to == "/cves/CVE-2025-0001"
+    assert to == "/cves/CVE-2025-0001.html"
   end
 
   test "live search narrows the results", %{conn: conn} do

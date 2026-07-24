@@ -150,15 +150,32 @@ defmodule VarselWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
-    get "/scope", PageController, :page, assigns: %{page_id: "scope"}
-    get "/contact", PageController, :page, assigns: %{page_id: "contact"}
-    get "/cve-criteria", PageController, :page, assigns: %{page_id: "cve-criteria"}
-    get "/security-policy", PageController, :page, assigns: %{page_id: "security-policy"}
-    get "/data-licensing", PageController, :page, assigns: %{page_id: "data-licensing"}
-    get "/api-access", PageController, :page, assigns: %{page_id: "api-access"}
-    get "/coordinator-process", PageController, :page, assigns: %{page_id: "coordinator-process"}
-    get "/maintainer-process", PageController, :page, assigns: %{page_id: "maintainer-process"}
+
+    # Content pages moved from the old Jekyll site's `<page>.html` URLs to the
+    # nicer extensionless form. The clean path is canonical (200); the old
+    # `.html` path 301-redirects to it so existing links don't break.
+    for {path, page_id} <- [
+          {"/scope", "scope"},
+          {"/contact", "contact"},
+          {"/cve-criteria", "cve-criteria"},
+          {"/security-policy", "security-policy"},
+          {"/data-licensing", "data-licensing"},
+          {"/api-access", "api-access"},
+          {"/coordinator-process", "coordinator-process"},
+          {"/maintainer-process", "maintainer-process"}
+        ] do
+      get path, PageController, :page, assigns: %{page_id: page_id}
+      get "#{path}.html", PageController, :legacy_redirect, assigns: %{to: path}
+    end
+
+    # The old site's directory index and home `.html`.
+    get "/data-licensing/index.html", PageController, :legacy_redirect, assigns: %{to: "/data-licensing"}
+
+    get "/index.html", PageController, :legacy_redirect, assigns: %{to: "/"}
+
     live "/common-weaknesses", CommonWeaknessesLive, :index
+
+    get "/common-weaknesses.html", PageController, :legacy_redirect, assigns: %{to: "/common-weaknesses"}
 
     # POC-only admin tooling (loads current_user + gates on the POC role).
     # Registered before the public `/cves` scope so `/cves/manage/:id` wins
@@ -329,34 +346,31 @@ defmodule VarselWeb.Router do
       otp_app: :varsel
   end
 
-  # Public HTML surface (browser pipeline: session, root layout, navbar).
-  scope "/", VarselWeb do
-    pipe_through :browser
-
-    # HTML detail. `.json` requests fall through to the JSON scope below since
-    # this matches a single non-".json" segment.
-    get "/cves/:cve_id", CveController, :show_html
-
-    get "/feed.atom", FeedController, :atom
-    get "/feed.rss", FeedController, :rss
-
-    # OSV vulnerability id -> CVE detail page (mirrors the Jekyll redirect).
-    get "/osv/:osv_id", OsvController, :redirect_to_cve
-  end
-
   # Machine-readable JSON API (kept on its own pipeline).
   scope "/cves", VarselWeb do
     pipe_through :api
 
     get "/index.json", CveController, :index
-    get "/*path", CveController, :show_json
   end
 
   scope "/osv", VarselWeb do
     pipe_through :api
 
     get "/all.json", OsvController, :index
-    get "/*path", OsvController, :show
+  end
+
+  # Public HTML surface (browser pipeline: session, root layout, navbar).
+  scope "/", VarselWeb do
+    pipe_through :browser
+
+    # Both OSV and CVE render based on the path extension (.json / .html)
+    # check their respective controllers for detailed routing.
+    get "/osv/:osv_id", OsvController, :show
+    get "/cves/:cve_id", CveController, :show
+
+    get "/feed.atom", FeedController, :atom
+    get "/feed.rss", FeedController, :rss
+    get "/sitemap.xml", SitemapController, :index
   end
 
   defp require_login(conn, _opts) do

@@ -78,7 +78,7 @@ defmodule VarselWeb.FeedController do
   end
 
   defp atom_entry(entry, base) do
-    url = "#{base}/cves/#{entry.cve_id}"
+    url = "#{base}/cves/#{entry.cve_id}.html"
 
     """
       <entry>
@@ -113,7 +113,7 @@ defmodule VarselWeb.FeedController do
   end
 
   defp rss_item(entry, base) do
-    url = "#{base}/cves/#{entry.cve_id}"
+    url = "#{base}/cves/#{entry.cve_id}.html"
 
     """
         <item>

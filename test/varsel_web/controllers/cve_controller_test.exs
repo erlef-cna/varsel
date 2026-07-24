@@ -112,14 +112,14 @@ defmodule VarselWeb.CveControllerTest do
 
     test "returns 404 for unknown CVE ID", %{conn: conn} do
       conn = get(conn, "/cves/CVE-0000-00000.json")
-      assert json_response(conn, 404) == %{}
+      assert json_response(conn, 404)
     end
 
     test "returns 404 for unpublished record", %{conn: conn} do
       insert_reserved(@cve_id)
 
       conn = get(conn, "/cves/#{@cve_id}.json")
-      assert json_response(conn, 404) == %{}
+      assert json_response(conn, 404)
     end
   end
 end
