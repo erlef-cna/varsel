@@ -11,11 +11,17 @@ defmodule Varsel.Cases.DerivationFreshnessTest do
   alias Varsel.Test.StubGitBackend
 
   @repo "https://github.com/x/y"
+  @intro_sha "1111111111111111111111111111111111111111"
   @fix_sha "a3253fb4fc7145aeb403537af1c24d3a8d51ffb1"
 
   setup do
     poc = Fixtures.register_user("freshness_poc", :poc)
-    StubGitBackend.stub_tags(%{{@repo, @fix_sha} => ["v2.10.0"]})
+    # The intro predates every release; the fix lands in v2.10.0.
+    StubGitBackend.stub_tags(%{
+      {@repo, @intro_sha} => ["v1.0.0", "v2.10.0"],
+      {@repo, @fix_sha} => ["v2.10.0"]
+    })
+
     Application.put_env(:varsel, :hex_stub_packages, ["acme_lib"])
     on_exit(fn -> Application.delete_env(:varsel, :hex_stub_packages) end)
 
@@ -37,7 +43,7 @@ defmodule Varsel.Cases.DerivationFreshnessTest do
         case_id: case_record.id,
         affected_package_id: package.id,
         event: :introduced,
-        version: "0"
+        commit_sha: @intro_sha
       },
       actor: poc
     )

@@ -20,6 +20,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
   alias Varsel.Test.StubGitBackend
 
   @repo "https://github.com/team-alembic/ash_authentication_phoenix"
+  @intro_sha "1111111111111111111111111111111111111111"
   @fix_sha "a3253fb4fc7145aeb403537af1c24d3a8d51ffb1"
   @cpe "cpe:2.3:a:team-alembic:ash_authentication_phoenix:*:*:*:*:*:*:*:*"
   @vector "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
@@ -31,7 +32,11 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     Fixtures.seed_weakness(613, "Insufficient Session Expiration")
     Fixtures.seed_attack_pattern(593, "Session Hijacking")
 
-    StubGitBackend.stub_tags(%{{@repo, @fix_sha} => ["v2.10.0"]})
+    # The intro predates every release (v1.0.0 is the earliest); fixed in v2.10.0.
+    StubGitBackend.stub_tags(%{
+      {@repo, @intro_sha} => ["v1.0.0", "v2.10.0"],
+      {@repo, @fix_sha} => ["v2.10.0"]
+    })
 
     Application.put_env(:varsel, :hex_stub_packages, ["ash_authentication_phoenix"])
     on_exit(fn -> Application.delete_env(:varsel, :hex_stub_packages) end)
@@ -73,7 +78,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
         case_id: case_record.id,
         affected_package_id: package.id,
         event: :introduced,
-        version: "0"
+        commit_sha: @intro_sha
       },
       actor: poc
     )
@@ -171,7 +176,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
                  %{
                    "lessThan" => "2.10.0",
                    "status" => "affected",
-                   "version" => "0",
+                   "version" => "1.0.0",
                    "versionType" => "semver"
                  }
                ]
@@ -190,7 +195,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
                  %{
                    "lessThan" => @fix_sha,
                    "status" => "affected",
-                   "version" => "0",
+                   "version" => @intro_sha,
                    "versionType" => "git"
                  }
                ]
@@ -198,10 +203,12 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
            ]
   end
 
-  test "renders cpeApplicability without a lower bound for a \"0\" intro", %{
+  test "renders cpeApplicability with the earliest affected release as the lower bound", %{
     poc: poc,
     case: case_record
   } do
+    # The intro predates every release, so the earliest real tag (v1.0.0) is the
+    # concrete lower bound of the affected range (there is no since-beginning "0").
     result = render!(case_record, poc)
 
     assert cna(result)["cpeApplicability"] == [
@@ -214,6 +221,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
                    "cpeMatch" => [
                      %{
                        "criteria" => @cpe,
+                       "versionStartIncluding" => "1.0.0",
                        "versionEndExcluding" => "2.10.0",
                        "vulnerable" => true
                      }
@@ -679,7 +687,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
           case_id: case_record.id,
           affected_package_id: package.id,
           event: :introduced,
-          version: "0"
+          commit_sha: @intro_sha
         },
         actor: poc
       )
@@ -708,7 +716,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
                %{
                  "lessThan" => "2.10.0",
                  "status" => "affected",
-                 "version" => "0",
+                 "version" => "1.0.0",
                  "versionType" => "semver"
                }
              ]

@@ -3400,52 +3400,66 @@ defmodule VarselWeb.CaseDetailLive do
 
   # Board C's boundary timeline, from the same derivation_cache the derived
   # labels read. The git row carries the raw commit boundaries (intro/fix
-  # SHAs); each channel row carries ITS OWN derived version boundaries (its
-  # ranges' intro/fix versions, its pending state). Node x-positions are
-  # evenly spaced — version numbers have no common linear scale to place
-  # them on honestly. Per the mock, only channel rows tint their vulnerable
-  # span; the git track stays plain.
+  # SHAs from the git entry's git-SHA range); each channel row carries ITS OWN
+  # derived version boundaries (its ranges' intro/fix versions, its pending
+  # state). Node x-positions are evenly spaced — version numbers have no common
+  # linear scale to place them on honestly. Per the mock, only channel rows tint
+  # their vulnerable span; the git track stays plain.
   defp timeline_rows(%{derivation_cache: nil}), do: []
 
   defp timeline_rows(package) do
     cache = package.derivation_cache
-    intro = cache["intro"]
-    lines = Enum.sort_by(cache["lines"] || [], & &1["pending"])
+    pending? = git_pending?(cache)
 
     git_row =
-      if cache["git"] && intro do
-        fixes =
-          Enum.map(lines, fn
-            %{"pending" => true} -> {:pending, "fix unreleased"}
-            line -> {:fix, sha_tag(line["fix_sha"] || line["fix_version"], "fix")}
-          end)
+      case git_sha_range(cache) do
+        nil ->
+          nil
 
-        build_timeline_row(
-          "git",
-          sha_tag(intro["sha"] || intro["version"], "intro"),
-          fixes,
-          false
-        )
+        range ->
+          fixes =
+            range
+            |> git_fix_shas()
+            |> Enum.map(&{:fix, sha_tag(&1, "fix")})
+            |> Kernel.++(if(pending?, do: [{:pending, "fix unreleased"}], else: []))
+
+          build_timeline_row("git", sha_tag(range["version"], "intro"), fixes, false)
       end
 
     channel_rows =
       Enum.map(package.channels, fn channel ->
-        channel_timeline_row(channel, cache["channels"][channel.id], intro)
+        channel_timeline_row(channel, cache["channels"][channel.id])
       end)
 
     Enum.reject([git_row | channel_rows], &is_nil/1)
   end
 
+  # The git-SHA range within the git entry (an OTP git entry also carries an OTP
+  # release block ahead of it; the git-versionType block holds the commit facts).
+  defp git_sha_range(cache) do
+    versions = (cache["git"] || %{})["versions"] || []
+    Enum.find(versions, &(&1["versionType"] == "git"))
+  end
+
+  defp git_pending?(cache), do: ((cache["git"] || %{})["pending"] || []) != []
+
+  # Fix SHAs a git range bounds on: a changes[] chain lists several, a bounded
+  # range one, an open range none.
+  defp git_fix_shas(%{"changes" => changes}) when is_list(changes), do: Enum.map(changes, & &1["at"])
+
+  defp git_fix_shas(%{"lessThan" => fix}) when fix not in [nil, "*"], do: [fix]
+  defp git_fix_shas(_open), do: []
+
   # A channel row is built from that channel's own derivation result: the
   # first derived range gives the intro/fix version tags, a non-empty pending
   # list appends the hollow "fix unreleased" node. Channels with nothing
   # derived render no row.
-  defp channel_timeline_row(_channel, nil, _global_intro), do: nil
+  defp channel_timeline_row(_channel, nil), do: nil
 
-  defp channel_timeline_row(channel, derivation, global_intro) do
+  defp channel_timeline_row(channel, derivation) do
     pending? = (derivation["pending"] || []) != []
 
-    {intro_tag, fixes} = channel_timeline_tags(derivation, global_intro)
+    {intro_tag, fixes} = channel_timeline_tags(derivation)
     fixes = fixes ++ if(pending?, do: [{:pending, "fix unreleased"}], else: [])
 
     if intro_tag || fixes != [] do
@@ -3453,15 +3467,13 @@ defmodule VarselWeb.CaseDetailLive do
     end
   end
 
-  defp channel_timeline_tags(derivation, global_intro) do
+  # Each derived range contributes its own intro/fix marker; a bounded range
+  # tints from its `version` to its `< upper`, an open range runs to the row end.
+  # A pending-only channel (no derived range) renders only the pending marker.
+  defp channel_timeline_tags(derivation) do
     case derivation["versions"] || [] do
-      [range | _rest] ->
-        {shorten(range["version"]), range_fix_markers(range)}
-
-      [] ->
-        # Pending-only channel: no derived range yet, but the unreleased
-        # fix still deserves a row — fall back to the global intro tag.
-        {global_intro && shorten(global_intro["version"] || global_intro["sha"]), []}
+      [range | _rest] -> {shorten(range["version"]), range_fix_markers(range)}
+      [] -> {nil, []}
     end
   end
 

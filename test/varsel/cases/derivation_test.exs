@@ -50,6 +50,8 @@ defmodule Varsel.Cases.DerivationTest do
   end
 
   test "single fix: hex + git channels derive bounded ranges", %{poc: poc, case: case_record} do
+    # intro predates every release, so it is contained by all of them; the fix
+    # only landed in v2.10.0. affected = {0.1.0, 1.0.0} -> one range [0.1.0, 2.10.0).
     StubGitBackend.stub_tags(%{
       {@repo, @intro_sha} => ["v0.1.0", "v1.0.0", "v2.10.0"],
       {@repo, @fix_sha} => ["v2.10.0"]
@@ -68,7 +70,6 @@ defmodule Varsel.Cases.DerivationTest do
 
     assert {:ok, derivation} = Derivation.derive(package)
 
-    assert derivation["intro"] == %{"sha" => @intro_sha, "tag" => "v0.1.0", "version" => "0.1.0"}
     assert derivation["issues"] == []
 
     assert derivation["channels"][channels[:hex].id]["versions"] == [
@@ -95,10 +96,14 @@ defmodule Varsel.Cases.DerivationTest do
            ]
   end
 
-  test "multi-branch fixes derive changes[] chains", %{poc: poc, case: case_record} do
+  test "multi-branch fixes cut two bounded ranges", %{poc: poc, case: case_record} do
+    # The intro predates every release, so it is contained everywhere. The 1.x
+    # branch was fixed at v1.5.3 but that fix was NOT forward-ported, so the 2.x
+    # line is re-affected until v2.1.0 fixes it. On the flat timeline that yields
+    # two separate affected runs: [1.0.0, 1.5.3) and [2.0.0, 2.1.0).
     StubGitBackend.stub_tags(%{
-      {@repo, @intro_sha} => ["v1.0.0"],
-      {@repo, @fix_sha} => ["v2.1.0", "v2.2.0"],
+      {@repo, @intro_sha} => ["v1.0.0", "v1.5.3", "v2.0.0", "v2.1.0"],
+      {@repo, @fix_sha} => ["v2.1.0"],
       {@repo, @fix_sha_backport} => ["v1.5.3"]
     })
 
@@ -116,20 +121,23 @@ defmodule Varsel.Cases.DerivationTest do
 
     assert {:ok, derivation} = Derivation.derive(package)
 
-    # Newest release line first, matching gen-affected's ordering.
+    # Two separate bounded ranges, ascending on the flat timeline.
     assert derivation["channels"][channels[:hex].id]["versions"] == [
              %{
                "version" => "1.0.0",
-               "lessThan" => "*",
+               "lessThan" => "1.5.3",
                "status" => "affected",
-               "versionType" => "semver",
-               "changes" => [
-                 %{"at" => "2.1.0", "status" => "unaffected"},
-                 %{"at" => "1.5.3", "status" => "unaffected"}
-               ]
+               "versionType" => "semver"
+             },
+             %{
+               "version" => "2.0.0",
+               "lessThan" => "2.1.0",
+               "status" => "affected",
+               "versionType" => "semver"
              }
            ]
 
+    # SHAs are not linearly orderable, so multiple fixes stay a changes[] chain.
     assert derivation["git"]["versions"] == [
              %{
                "version" => @intro_sha,
@@ -143,10 +151,9 @@ defmodule Varsel.Cases.DerivationTest do
              }
            ]
 
-    # cpe chain: [1.0.0, 1.5.3) then [1.6.0, 2.1.0).
     assert derivation["cpe_matches"] == [
              %{"versionStartIncluding" => "1.0.0", "versionEndExcluding" => "1.5.3"},
-             %{"versionStartIncluding" => "1.6.0", "versionEndExcluding" => "2.1.0"}
+             %{"versionStartIncluding" => "2.0.0", "versionEndExcluding" => "2.1.0"}
            ]
   end
 
@@ -193,7 +200,10 @@ defmodule Varsel.Cases.DerivationTest do
   end
 
   test "an unresolvable commit becomes an issue", %{poc: poc, case: case_record} do
+    # The intro is not stubbed, so it resolves to no tag; the universe still needs
+    # the fix's release plus an extra tag so the timeline is non-empty.
     StubGitBackend.stub_tags(%{{@repo, @fix_sha} => ["v2.0.0"]})
+    StubGitBackend.stub_all_tags(%{@repo => ["v1.0.0"]})
 
     {package, _channels} =
       package_with_channels(
@@ -208,7 +218,7 @@ defmodule Varsel.Cases.DerivationTest do
 
     assert {:ok, derivation} = Derivation.derive(package)
     assert [issue] = derivation["issues"]
-    assert issue =~ "cannot resolve commit #{@intro_sha}"
+    assert issue =~ "the introducing commit is contained in no release tag"
   end
 
   test "channel-scoped explicit events drive a hosted channel", %{poc: poc, case: case_record} do
@@ -280,8 +290,11 @@ defmodule Varsel.Cases.DerivationTest do
         actor: poc
       )
 
+    # The intro predates every release; the 27.x line is fixed at OTP-27.3.4.1 and
+    # the 26.x line backported to OTP-26.2.5.13. Neither fix is on the other line,
+    # so both maintenance lines stay affected up to their own fix -> two runs.
     StubGitBackend.stub_tags(%{
-      {otp_repo, @intro_sha} => ["OTP-26.0", "OTP-27.0"],
+      {otp_repo, @intro_sha} => ["OTP-26.0", "OTP-26.2.5.13", "OTP-27.0", "OTP-27.3.4.1"],
       {otp_repo, @fix_sha} => ["OTP-27.3.4.1"],
       {otp_repo, @fix_sha_backport} => ["OTP-26.2.5.13"]
     })
@@ -300,32 +313,38 @@ defmodule Varsel.Cases.DerivationTest do
     package = Ash.load!(package, [:channels, :version_events], authorize?: false)
     assert {:ok, derivation} = Derivation.derive(package)
 
-    # ssh's own versions, resolved through otp_versions.table.
+    # ssh's own versions, resolved through otp_versions.table, as bounded ranges.
     assert derivation["channels"][otp_channel.id]["versions"] == [
              %{
                "version" => "5.0",
-               "lessThan" => "*",
+               "lessThan" => "5.1.4.9",
                "status" => "affected",
-               "versionType" => "otp",
-               "changes" => [
-                 %{"at" => "5.2.3.4", "status" => "unaffected"},
-                 %{"at" => "5.1.4.9", "status" => "unaffected"}
-               ]
+               "versionType" => "otp"
+             },
+             %{
+               "version" => "5.2",
+               "lessThan" => "5.2.3.4",
+               "status" => "affected",
+               "versionType" => "otp"
              }
            ]
 
-    # The implicit git entry carries the OTP release block plus the git SHA block.
-    assert [otp_block, git_block] = derivation["git"]["versions"]
+    # The implicit git entry carries the OTP release block (bare, bounded) plus
+    # the git SHA changes[] chain.
+    assert [otp_low, otp_high, git_block] = derivation["git"]["versions"]
 
-    assert otp_block == %{
+    assert otp_low == %{
              "version" => "26.0",
-             "lessThan" => "*",
+             "lessThan" => "26.2.5.13",
              "status" => "affected",
-             "versionType" => "otp",
-             "changes" => [
-               %{"at" => "27.3.4.1", "status" => "unaffected"},
-               %{"at" => "26.2.5.13", "status" => "unaffected"}
-             ]
+             "versionType" => "otp"
+           }
+
+    assert otp_high == %{
+             "version" => "27.0",
+             "lessThan" => "27.3.4.1",
+             "status" => "affected",
+             "versionType" => "otp"
            }
 
     assert git_block["versionType"] == "git"
@@ -338,8 +357,9 @@ defmodule Varsel.Cases.DerivationTest do
   } do
     elixir_repo = "https://github.com/elixir-lang/elixir"
 
+    # Elixir uses semver tags. intro predates every release; fix lands in v1.20.1.
     StubGitBackend.stub_tags(%{
-      {elixir_repo, @intro_sha} => ["v1.5.0", "v1.6.0"],
+      {elixir_repo, @intro_sha} => ["v1.5.0", "v1.6.0", "v1.20.1"],
       {elixir_repo, @fix_sha} => ["v1.20.1"]
     })
 
@@ -393,8 +413,10 @@ defmodule Varsel.Cases.DerivationTest do
   end
 
   test "OCI channels repeat the range per tag flavor", %{poc: poc, case: case_record} do
+    # intro predates every release; fix lands in v1.15.4 -> one range
+    # [1.9.0-rc1, 1.15.4), repeated once per tag flavor.
     StubGitBackend.stub_tags(%{
-      {@repo, @intro_sha} => ["v1.9.0-rc1"],
+      {@repo, @intro_sha} => ["v1.9.0-rc1", "v1.15.4"],
       {@repo, @fix_sha} => ["v1.15.4"]
     })
 

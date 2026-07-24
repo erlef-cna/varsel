@@ -344,7 +344,20 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
         "#{package.product}/#{channel.purl_type}: #{issue}"
       end
 
-    issues ++ git_issues ++ channel_issues ++ Enum.uniq(pending_blockers(package, derivation))
+    issues ++
+      git_issues ++
+      channel_issues ++
+      call_out_blockers(package, derivation) ++
+      Enum.uniq(pending_blockers(package, derivation))
+  end
+
+  # Reachability call-outs (e.g. a pre-release whose affected status contradicts
+  # the surrounding releases) need a human to confirm before publishing. The
+  # cache is jsonb, so keys come back as strings.
+  defp call_out_blockers(package, derivation) do
+    for call_out <- derivation["call_outs"] || [] do
+      "#{package.product}: #{call_out["reason"]} at #{call_out["version"]} — review before publishing"
+    end
   end
 
   # A stale cache renders old/empty ranges; a fresh-but-empty derivation renders

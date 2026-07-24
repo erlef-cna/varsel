@@ -63,7 +63,9 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
       vendor: "Erlang",
       product: "OTP",
       repo_url: "https://github.com/erlang/otp",
-      cpe: ~S(cpe:2.3:a:erlang:erlang\/otp:*:*:*:*:*:*:*:*)
+      cpe: ~S(cpe:2.3:a:erlang:erlang\/otp:*:*:*:*:*:*:*:*),
+      # OTP does not publish pre-releases as affected versions.
+      include_prereleases: false
     }
   end
 

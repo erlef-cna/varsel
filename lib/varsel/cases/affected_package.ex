@@ -382,6 +382,18 @@ defmodule Varsel.Cases.AffectedPackage do
       public? true
     end
 
+    attribute :include_prereleases, :boolean do
+      description """
+      Whether pre-release tags (rc/alpha/beta) bound the derived version ranges.
+      True for the semver ecosystem (GHSAs cover RCs); false for OTP, which does
+      not report pre-releases.
+      """
+
+      allow_nil? false
+      default true
+      public? true
+    end
+
     attribute :position, :integer do
       description "Order of this product's entries within affected[]."
       allow_nil? false

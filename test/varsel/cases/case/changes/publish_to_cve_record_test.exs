@@ -16,6 +16,7 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
   alias Varsel.Test.StubGitBackend
 
   @repo "https://github.com/acme/acme_lib"
+  @intro_sha String.duplicate("a", 40)
   @fix_sha String.duplicate("b", 40)
   @vector "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
 
@@ -25,7 +26,12 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
     cve_id = "CVE-#{year}-31337"
     Fixtures.reserved_cve_record(cve_id)
 
-    StubGitBackend.stub_tags(%{{@repo, @fix_sha} => ["v1.4.0"]})
+    # The intro predates every release; the fix lands in v1.4.0.
+    StubGitBackend.stub_tags(%{
+      {@repo, @intro_sha} => ["v1.0.0", "v1.4.0"],
+      {@repo, @fix_sha} => ["v1.4.0"]
+    })
+
     Application.put_env(:varsel, :hex_stub_packages, ["acme_lib"])
     on_exit(fn -> Application.delete_env(:varsel, :hex_stub_packages) end)
 
@@ -60,7 +66,7 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
         case_id: case_record.id,
         affected_package_id: package.id,
         event: :introduced,
-        version: "0"
+        commit_sha: @intro_sha
       },
       actor: poc
     )

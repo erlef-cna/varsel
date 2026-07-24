@@ -208,30 +208,29 @@ defmodule Varsel.Cases.Reachability do
 
   ## ---------------------------------------------------------------- prereleases
 
-  # When pre-releases are excluded (OTP), an excluded pre-release whose affected
-  # status disagrees with the releases around it on the timeline is surfaced
-  # rather than silently dropped.
+  # When pre-releases are excluded (OTP), flag the surprising case: an excluded
+  # pre-release that is *affected* while its own release is *safe* — i.e. the fix
+  # reached the release but not the pre-release, so anyone on that pre-release is
+  # still exposed but we are not reporting it. The reverse (a pre-release safe
+  # below an affected release) is just the range's lower boundary, not an anomaly.
   defp prerelease_call_outs(_kind, _considered, []), do: []
 
   defp prerelease_call_outs(kind, considered, excluded) do
     considered_sorted = VersionComparator.sort(kind, considered, & &1.version)
 
     for pre <- excluded,
-        neighbor = nearest_release(kind, considered_sorted, pre.version),
-        neighbor.affected? != pre.affected? do
-      %{
-        reason: :prerelease_conflict,
-        version: pre.version,
-        dag_label: if(pre.affected?, do: :affected, else: :safe)
-      }
+        pre.affected?,
+        release = its_release(kind, considered_sorted, pre.version),
+        not release.affected? do
+      %{reason: :prerelease_conflict, version: pre.version, dag_label: :affected}
     end
   end
 
-  # The considered release immediately at-or-below `version` on the timeline.
-  defp nearest_release(kind, considered_sorted, version) do
-    considered_sorted
-    |> Enum.take_while(&(VersionComparator.compare(kind, &1.version, version) != :gt))
-    |> List.last()
-    |> Kernel.||(List.first(considered_sorted))
+  # The release a pre-release belongs to: the first considered release at-or-above
+  # it (a pre-release sorts just below its own `x.y.z` release). `nil` when the
+  # pre-release is newer than every release — then it has no line to conflict
+  # with and is simply excluded.
+  defp its_release(kind, considered_sorted, version) do
+    Enum.find(considered_sorted, &(VersionComparator.compare(kind, &1.version, version) != :lt))
   end
 end
