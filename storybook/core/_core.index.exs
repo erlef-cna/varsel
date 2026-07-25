@@ -25,11 +25,10 @@ defmodule VarselWeb.Storybook.Core do
   def entry("input"), do: [name: "Input", icon: {:local, "hero-pencil-square"}]
   def entry("flash"), do: [name: "Flash", icon: {:local, "hero-bell-alert"}]
 
-  def entry("jump_pagination"), do: [name: "Jump pagination", icon: {:local, "hero-chevron-double-right"}]
+  def entry("pagination"), do: [name: "Pagination", icon: {:local, "hero-chevron-double-right"}]
 
   def entry("list"), do: [name: "List", icon: {:local, "hero-list-bullet"}]
   def entry("list_card"), do: [name: "List card", icon: {:local, "hero-rectangle-stack"}]
-  def entry("pagination"), do: [name: "Pagination", icon: {:local, "hero-chevron-up-down"}]
   def entry("panel"), do: [name: "Panel", icon: {:local, "hero-rectangle-group"}]
 
   def entry("severity_chip"), do: [name: "Severity chip", icon: {:local, "hero-shield-exclamation"}]

@@ -551,7 +551,7 @@ defmodule VarselWeb.CveListLive do
         </div>
 
         <:footer :if={paged?(@cve_records)}>
-          <.jump_pagination page={@cve_records} noun={if @poc?, do: "record", else: "CVE"} />
+          <.pagination page={@cve_records} noun={if @poc?, do: "record", else: "CVE"} />
         </:footer>
       </.list_card>
 

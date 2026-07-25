@@ -91,7 +91,7 @@ defmodule VarselWeb.UserManagementLive do
       <.list_card empty?={@users.results == []}>
         <:empty>No users yet.</:empty>
         <:footer :if={paged?(@users)}>
-          <.jump_pagination page={@users} noun="user" />
+          <.pagination page={@users} noun="user" />
         </:footer>
 
         <div class="overflow-x-auto">

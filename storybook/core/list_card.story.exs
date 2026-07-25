@@ -56,14 +56,23 @@ defmodule VarselWeb.Storybook.Core.ListCard do
     """
   end
 
+  # A list that fits on one page keeps only its total — there is nowhere to
+  # page to, so `pagination/1` drops the page size and the controls.
+  defp count_only(summary), do: "<:footer><span>#{summary}</span></:footer>"
+
   def variations do
     [
       %Variation{
-        id: :rows_and_pager,
+        id: :rows_and_count,
         description:
           "The settings lists: rows, and a footer saying how many there are. " <>
-            "The count lives with the pager, not in a bar above the rows.",
-        slots: [users_table(), pager("25 per page · 4 users")]
+            "One page's worth, so the footer is only the count.",
+        slots: [users_table(), count_only("4 users")]
+      },
+      %Variation{
+        id: :rows_and_pager,
+        description: "More than a page: the size and the controls join the count.",
+        slots: [users_table(), pager("25 per page · 43 users")]
       },
       %Variation{
         id: :tabs,
@@ -98,7 +107,7 @@ defmodule VarselWeb.Storybook.Core.ListCard do
           </:note>
           """,
           cve_table(),
-          pager("2 CVEs")
+          count_only("2 CVEs")
         ]
       },
       %Variation{

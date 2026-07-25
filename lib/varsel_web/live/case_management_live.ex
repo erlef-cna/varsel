@@ -806,15 +806,7 @@ defmodule VarselWeb.CaseManagementLive do
         </div>
       </div>
 
-      <:footer :if={paged?(@cases)} id="archive-pager-wide" class="hidden md:flex">
-        <.jump_pagination page={@cases} />
-      </:footer>
-      <:footer
-        :if={is_integer(@cases.count) and @cases.count > @cases.limit}
-        id="archive-pager-narrow"
-        class="md:hidden"
-      >
-        <span>25 / page</span>
+      <:footer id="archive-pager">
         <.pagination page={@cases} />
       </:footer>
     </.list_card>

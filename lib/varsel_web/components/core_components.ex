@@ -544,55 +544,14 @@ defmodule VarselWeb.CoreComponents do
   defp format_severity_score(score), do: :erlang.float_to_binary(score / 1, decimals: 1)
 
   @doc """
-  Renders prev/next pagination for an `Ash.Page.Offset` (loaded with a
-  count). Clicking pushes `event` with "prev"/"next" as the `page` param —
-  feed that to `VarselWeb.LivePagination.change_page/3`. Renders nothing for
-  a single page.
-  """
-  attr :page, :any, required: true, doc: "an Ash.Page.Offset with count loaded"
-  attr :event, :string, default: "paginate"
-
-  def pagination(assigns) do
-    assigns =
-      assign(assigns,
-        # AshPhoenix's page_number/1 is zero-based for exact-multiple offsets.
-        page_number: div(assigns.page.offset || 0, max(assigns.page.limit, 1)) + 1,
-        last_page: AshLiveView.last_page(assigns.page)
-      )
-
-    ~H"""
-    <div :if={is_integer(@last_page) and @last_page > 1} class="flex items-center gap-1">
-      <button
-        type="button"
-        class="btn btn-ghost btn-xs border border-base-300"
-        disabled={not AshLiveView.prev_page?(@page)}
-        phx-click={@event}
-        phx-value-page="prev"
-      >
-        «
-      </button>
-      <span class="text-xs text-base-content/60 tabular-nums px-2">
-        Page {@page_number} of {@last_page}
-      </span>
-      <button
-        type="button"
-        class="btn btn-ghost btn-xs border border-base-300"
-        disabled={not AshLiveView.next_page?(@page)}
-        phx-click={@event}
-        phx-value-page="next"
-      >
-        »
-      </button>
-    </div>
-    """
-  end
-
-  @doc """
   Renders a table card's footer pager: "N per page · M total" on the left,
   prev/jump-to-page/next on the right. The page number is a numeric input —
   typing a value and pressing Enter pushes `jump_event` with that value as
   the `page` param (feed it to `VarselWeb.LivePagination.jump_to_page/3`);
   prev/next push `page_event` same as `pagination/1`.
+
+  A list that fits on one page keeps only its total — there is nowhere to page
+  to, so the page size and the controls both go.
 
   Belongs in a `list_card/1` `footer` slot, which rules and gutters it. Guard
   that slot with `paged?/1` — at zero results this renders nothing, and an
@@ -603,23 +562,32 @@ defmodule VarselWeb.CoreComponents do
   attr :jump_event, :string, default: "jump_page"
   attr :noun, :string, default: "case", doc: "singular; pluralized with a trailing \"s\""
 
-  def jump_pagination(assigns) do
+  def pagination(assigns) do
+    last_page = AshLiveView.last_page(assigns.page)
+
     assigns =
       assign(assigns,
         page_number: div(assigns.page.offset || 0, max(assigns.page.limit, 1)) + 1,
-        last_page: AshLiveView.last_page(assigns.page)
+        last_page: last_page,
+        # `last_page/1` gives `:unknown` for a page whose total was never
+        # counted; show the pager then rather than hide a way forward.
+        pageable?: last_page == :unknown or last_page > 1
       )
 
     ~H"""
     <div :if={paged?(@page)} class="contents">
+      <%!-- A list that fits on one page has nowhere to page to, so it says
+            only how much it holds — the page size and the pager itself would
+            be answering a question nobody asked. --%>
       <span>
-        {@page.limit} per page · {@page.count} {if @page.count == 1, do: @noun, else: @noun <> "s"}
+        <span :if={@pageable?}>{@page.limit} per page · </span>
+        <.count_label count={@page.count} singular={@noun} />
       </span>
       <%!-- The form wraps the whole pager cluster: a <form> inside a <span>
             is invalid flow-in-phrasing markup that browsers may re-parent,
             detaching the submit binding. The prev/next buttons are
             type="button" so only Enter in the input submits. --%>
-      <form phx-submit={@jump_event} class="inline-flex items-center gap-2">
+      <form :if={@pageable?} phx-submit={@jump_event} class="inline-flex items-center gap-2">
         <button
           type="button"
           class={["px-1.5 rounded border", pbtn_class(AshLiveView.prev_page?(@page))]}

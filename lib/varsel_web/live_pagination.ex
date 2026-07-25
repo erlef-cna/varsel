@@ -5,7 +5,8 @@
 defmodule VarselWeb.LivePagination do
   @moduledoc """
   Page navigation for `AshPhoenix.LiveView.keep_live` offset pages, driven by
-  the `<.pagination>` component's "prev"/"next"/"first"/"last" targets.
+  `VarselWeb.CoreComponents.pagination/1` — its prev/next buttons through
+  `change_page/3`, its page input through `jump_to_page/3`.
 
   Stands in for `AshPhoenix.LiveView.change_page/3`, which crashes on pages
   read through code interfaces: those carry their page opts inside the query,

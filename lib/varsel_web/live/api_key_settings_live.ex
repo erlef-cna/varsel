@@ -189,7 +189,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
       <.list_card empty?={@api_keys.results == []}>
         <:empty>No tokens yet — create one above.</:empty>
         <:footer :if={paged?(@api_keys)}>
-          <.jump_pagination page={@api_keys} noun="token" />
+          <.pagination page={@api_keys} noun="token" />
         </:footer>
 
         <div class="overflow-x-auto">

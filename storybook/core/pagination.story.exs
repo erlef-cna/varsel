@@ -10,14 +10,16 @@ defmodule VarselWeb.Storybook.Core.Pagination do
 
   def layout, do: :one_column
 
-  # Both pagers take an `Ash.Page.Offset`; only offset/limit/count/more? are read.
-  defp page(offset, count, opts \\ []) do
+  # The list card's footer row — full width, with its own top border.
+  def container, do: {:div, class: "w-full"}
+
+  defp page(offset, count, limit \\ 20) do
     %Ash.Page.Offset{
       results: [],
-      limit: Keyword.get(opts, :limit, 20),
+      limit: limit,
       offset: offset,
       count: count,
-      more?: offset + Keyword.get(opts, :limit, 20) < count
+      more?: offset + limit < count
     }
   end
 
@@ -25,22 +27,37 @@ defmodule VarselWeb.Storybook.Core.Pagination do
     [
       %Variation{
         id: :first_page,
-        description: "Previous is disabled on the first page.",
         attributes: %{page: page(0, 128)}
       },
       %Variation{
         id: :middle_page,
+        description: "Typing a page number and pressing Enter pushes `jump_event`.",
         attributes: %{page: page(60, 128)}
       },
       %Variation{
         id: :last_page,
-        description: "Next is disabled on the last page.",
         attributes: %{page: page(120, 128)}
       },
-      %Variation{
+      %VariationGroup{
         id: :single_page,
-        description: "A single page of results renders nothing at all.",
-        attributes: %{page: page(0, 12)}
+        description:
+          "A list that fits on one page has nowhere to page to, so it keeps only its " <>
+            "total — the page size and the controls would answer a question nobody asked.",
+        variations: [
+          %Variation{id: :one_result, attributes: %{page: page(0, 1)}},
+          %Variation{id: :some_results, attributes: %{page: page(0, 12)}},
+          %Variation{id: :exactly_full, attributes: %{page: page(0, 20)}}
+        ]
+      },
+      %Variation{
+        id: :custom_noun,
+        description: "`noun` is pluralised with a trailing \"s\".",
+        attributes: %{page: page(0, 43), noun: "report"}
+      },
+      %Variation{
+        id: :no_results,
+        description: "Zero results render nothing — callers show an empty state instead.",
+        attributes: %{page: page(0, 0)}
       }
     ]
   end

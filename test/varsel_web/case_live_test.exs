@@ -17,6 +17,13 @@ defmodule VarselWeb.CaseLiveTest do
     |> AuthPlug.store_in_session(user)
   end
 
+  # The pager states its page through the value of its jump-to-page input,
+  # not as prose, so which page is showing has to be read off the input.
+  defp page_input_value(html) do
+    [[_match, value]] = Regex.scan(~r/<input[^>]*name="page"[^>]*value="([^"]*)"/, html)
+    value
+  end
+
   setup %{conn: conn} do
     poc = Fixtures.register_user("case_live_poc", :poc)
     supporter = Fixtures.register_user("case_live_supporter", :supporter)
@@ -345,7 +352,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
       assert html =~ "26 cases"
-      assert html =~ "Page 1 of 2"
+      assert html =~ "of 2"
       # The oldest (26th) case is on page two, not page one.
       assert html =~ "Archived 25"
       refute html =~ "Archived 26"
@@ -354,16 +361,16 @@ defmodule VarselWeb.CaseLiveTest do
       # the rows, not just relabel the pager.
       html =
         lv
-        |> element("#archive-pager-wide form[phx-submit=jump_page]")
+        |> element("#archive-pager form[phx-submit=jump_page]")
         |> render_submit(%{"page" => "2"})
 
-      assert html =~ "Page 2 of 2"
+      assert page_input_value(html) == "2"
       assert html =~ "Archived 26"
       refute html =~ "Archived 25"
 
       # Prev returns to page one with page one's rows.
-      html = lv |> element("#archive-pager-wide button[phx-value-page=prev]") |> render_click()
-      assert html =~ "Page 1 of 2"
+      html = lv |> element("#archive-pager button[phx-value-page=prev]") |> render_click()
+      assert page_input_value(html) == "1"
       assert html =~ "Archived 25"
       refute html =~ "Archived 26"
     end
@@ -382,7 +389,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive&page=2")
 
-      assert html =~ "Page 2 of 2"
+      assert page_input_value(html) == "2"
       assert html =~ "Archived 26"
     end
 
