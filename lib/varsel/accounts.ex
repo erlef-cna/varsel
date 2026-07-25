@@ -53,7 +53,9 @@ defmodule Varsel.Accounts do
       define :register_user_with_github, action: :register_with_github
       define :log_out_user_everywhere, action: :log_out_everywhere
 
-      if Application.compile_env(:varsel, :mock_login_enabled?, false) do
+      # The mock sign-in action only exists in dev/test builds; see
+      # Varsel.Accounts.User.
+      if Mix.env() in [:dev, :test] do
         define :mock_sign_in_user, action: :mock_sign_in
       end
     end

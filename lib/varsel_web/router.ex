@@ -110,21 +110,6 @@ defmodule VarselWeb.Router do
     plug :accepts, ["json"]
   end
 
-  # The bundled dev dashboards (LiveDashboard, Oban Web, AshAdmin, Swoosh
-  # mailbox) all rely on inline scripts/styles and eval that the app-wide
-  # strict CSP forbids. They only mount under the `:dev_routes` compile flag
-  # (never in production), so replace the strict header with Phoenix's own
-  # secure-browser default (`base-uri 'self'; frame-ancestors 'self'`) — enough
-  # to keep clickjacking/base-tag protections without constraining these tools.
-  pipeline :dev_tools_relaxed_csp do
-    plug PlugContentSecurityPolicy,
-      nonces_for: [],
-      directives: %{
-        base_uri: ~w('self'),
-        frame_ancestors: ~w('self')
-      }
-  end
-
   scope "/gql" do
     pipe_through [:graphql_playground]
 
@@ -218,16 +203,6 @@ defmodule VarselWeb.Router do
       live "/cases/:id", CaseDetailLive, :view
       live "/cases/:id/edit", CaseDetailLive, :edit
       live "/cases/:id/propose", CaseDetailLive, :propose
-    end
-  end
-
-  # Bypasses GitHub OAuth by signing in a dummy user of the chosen role. Only
-  # mounted in dev builds (see `:mock_login_enabled?` in config/config.exs).
-  if Application.compile_env(:varsel, :mock_login_enabled?, false) do
-    scope "/mock-auth", VarselWeb do
-      pipe_through :browser
-
-      post "/sign-in/:role", MockAuthController, :create
     end
   end
 
@@ -393,28 +368,16 @@ defmodule VarselWeb.Router do
     end
   end
 
-  # Enable LiveDashboard and Swoosh mailbox preview in development
-  if Application.compile_env(:varsel, :dev_routes) do
-    # If you want to use the LiveDashboard in production, you should put
-    # it behind authentication and allow only admins to access it.
-    # If your application does not have an admins-only section yet,
-    # you can use Plug.BasicAuth to set up some basic authentication
-    # as long as you are also using SSL (which you should anyway).
-    import AshAdmin.Router
-    import Oban.Web.Router
-    import Phoenix.LiveDashboard.Router
-
-    scope "/dev" do
-      pipe_through [:browser, :dev_tools_relaxed_csp]
-
-      live_dashboard "/dashboard", metrics: VarselWeb.Telemetry
-      forward "/mailbox", Plug.Swoosh.MailboxPreview
-
-      oban_dashboard("/oban")
-
-      ash_admin "/admin"
-
-      get "/http-error/:status", VarselWeb.DevErrorPreviewController, :show
-    end
+  # The developer tooling (storybook, Oban Web, LiveDashboard, AshAdmin, the
+  # mailbox and error-page previews) lives in VarselWeb.DevRouter, under
+  # `dev/` — a directory only compiled for :dev and :test, which is what keeps
+  # it out of production.
+  #
+  # Forwarded at the root rather than at "/dev": several of those tools build
+  # their own redirects from the path they were mounted at and cannot see a
+  # forward's prefix, so they declare their own full `/dev/...` paths instead.
+  # Registered last so every route above still wins.
+  if Mix.env() in [:dev, :test] do
+    forward "/", VarselWeb.DevRouter
   end
 end

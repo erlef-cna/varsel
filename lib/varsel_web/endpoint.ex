@@ -48,9 +48,14 @@ defmodule VarselWeb.Endpoint do
     plug Phoenix.Ecto.CheckRepoStatus, otp_app: :varsel
   end
 
-  plug Phoenix.LiveDashboard.RequestLogger,
-    param_key: "request_logger",
-    cookie_key: "request_logger"
+  # Feeds the LiveDashboard's request logger. `:phoenix_live_dashboard` is a
+  # dev/test-only dependency, so the plug only exists in those environments —
+  # unlike an `import`, a plug in a discarded branch is not resolved.
+  if Mix.env() in [:dev, :test] do
+    plug Phoenix.LiveDashboard.RequestLogger,
+      param_key: "request_logger",
+      cookie_key: "request_logger"
+  end
 
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]

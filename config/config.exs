@@ -34,7 +34,7 @@ config :esbuild,
   version: "0.25.4",
   varsel: [
     args:
-      ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/* --alias:@=.),
+      ~w(js/app.js js/storybook.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/* --alias:@=.),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
@@ -138,6 +138,14 @@ config :tailwind,
     # Import environment specific config. This must remain at the bottom
     # of this file so it overrides the configuration defined above.
     cd: Path.expand("..", __DIR__)
+  ],
+  # Dev-only bundle for the component storybook (see VarselWeb.Storybook).
+  storybook: [
+    args: ~w(
+      --input=assets/css/storybook.css
+      --output=priv/static/assets/css/storybook.css
+    ),
+    cd: Path.expand("..", __DIR__)
   ]
 
 config :varsel, Oban,
@@ -182,12 +190,6 @@ config :varsel, VarselWeb.Endpoint,
 # The "from" address used for CNA notification emails (e.g. new vulnerability
 # report submissions sent to POCs).
 config :varsel, :cna_email_from, "cna@erlef.org"
-
-# Whether the nav offers a one-click "sign in as a dummy user" dropdown that
-# bypasses GitHub OAuth. Read exclusively through `Application.compile_env/3`,
-# so the mock sign-in resource action, controller, route and nav markup do not
-# even get compiled unless this is true. Never enable it outside dev/test.
-config :varsel, :mock_login_enabled?, false
 
 # Whether this instance is a (non-production) test deployment. When true, the
 # site serves a "disallow everything" robots.txt, sends a blanket

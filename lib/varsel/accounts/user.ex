@@ -19,9 +19,11 @@ defmodule Varsel.Accounts.User do
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.Proposal
 
-  # Gates the mock (GitHub-bypassing) sign-in action at compile time; see
-  # `:mock_login_enabled?` in config/config.exs.
-  @mock_login? Application.compile_env(:varsel, :mock_login_enabled?, false)
+  # Gates the mock (GitHub-bypassing) sign-in action at compile time. Its
+  # changes live under `dev/`, which is only compiled for :dev and :test, so
+  # this must match — `Mix.env/0` is read while compiling, never at runtime
+  # (Mix is not available in a release).
+  @mock_login? Mix.env() in [:dev, :test]
 
   graphql do
     type :user

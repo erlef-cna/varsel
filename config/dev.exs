@@ -80,7 +80,8 @@ config :varsel, VarselWeb.Endpoint,
   secret_key_base: "03e4VyftWvYtYjGop9u2I8Gqe+vY/d5WJxFc41MiX7SRqh7UVgNaE3aAt0Ta1QRS",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:varsel, ~w(--sourcemap=inline --watch)]},
-    tailwind: {Tailwind, :install_and_run, [:varsel, ~w(--watch)]}
+    tailwind: {Tailwind, :install_and_run, [:varsel, ~w(--watch)]},
+    storybook_tailwind: {Tailwind, :install_and_run, [:storybook, ~w(--watch)]}
   ]
 
 # ## SSL Support
@@ -117,14 +118,13 @@ config :varsel, VarselWeb.Endpoint,
       ~r"priv/gettext/.*\.po$",
       # Router, Controllers, LiveViews and LiveComponents
       ~r"lib/varsel_web/router\.ex$",
-      ~r"lib/varsel_web/(controllers|live|components)/.*\.(ex|heex)$"
+      ~r"lib/varsel_web/(controllers|live|components)/.*\.(ex|heex)$",
+      # Storybook stories (see VarselWeb.Storybook)
+      ~r"storybook/.*\.exs$"
     ]
   ]
 
-# Enable dev routes for dashboard and mailbox
 config :varsel,
-  dev_routes: true,
-  mock_login_enabled?: true,
   token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F",
   oauth2_issuer_url: "http://localhost:4000",
   # Audience of minted access tokens and the protected-resource identity

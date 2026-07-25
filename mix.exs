@@ -50,7 +50,15 @@ defmodule Varsel.MixProject do
   end
 
   # Specifies which paths to compile per environment.
-  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  #
+  # `dev/` holds the developer tooling (storybook, Oban Web, LiveDashboard,
+  # AshAdmin and the mailbox/error-page previews) and its router. Several of
+  # those dependencies are `only: [:dev, :test]`, and Elixir resolves an
+  # `import` even inside a branch it discards, so the calls cannot sit in the
+  # main router behind a compile-time flag — they need a directory that is not
+  # compiled at all in production.
+  defp elixirc_paths(:dev), do: ["lib", "dev"]
+  defp elixirc_paths(:test), do: ["lib", "dev", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
   # Specifies your project dependencies.
@@ -99,13 +107,14 @@ defmodule Varsel.MixProject do
       {:mdex, "~> 0.13"},
       {:nimble_publisher, "~> 2.0"},
       {:oban, "~> 2.0"},
-      {:oban_web, "~> 2.0"},
+      {:oban_web, "~> 2.0", only: [:dev, :test]},
       {:phoenix, "~> 1.8.5"},
       {:phoenix_ecto, "~> 4.5"},
       {:phoenix_html, "~> 4.1"},
-      {:phoenix_live_dashboard, "~> 0.8.3"},
+      {:phoenix_live_dashboard, "~> 0.8.3", only: [:dev, :test]},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.1"},
+      {:phoenix_storybook, "~> 1.3", only: [:dev, :test]},
       {:picosat_elixir, "~> 0.2"},
       {:plug_content_security_policy, "~> 0.2"},
       {:postgrex, ">= 0.0.0"},
@@ -153,7 +162,9 @@ defmodule Varsel.MixProject do
         "esbuild.install --if-missing",
         "cmd --cd assets npm install"
       ],
-      "assets.build": ["compile", "tailwind varsel", "esbuild varsel"],
+      # `tailwind storybook` is dev-only (see VarselWeb.Storybook) and so is
+      # deliberately absent from assets.deploy.
+      "assets.build": ["compile", "tailwind varsel", "tailwind storybook", "esbuild varsel"],
       "assets.deploy": [
         "tailwind varsel --minify",
         "esbuild varsel --minify",
