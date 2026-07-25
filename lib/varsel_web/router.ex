@@ -403,6 +403,8 @@ defmodule VarselWeb.Router do
       oban_dashboard("/oban")
 
       ash_admin "/admin"
+
+      get "/http-error/:status", VarselWeb.DevErrorPreviewController, :show
     end
   end
 end

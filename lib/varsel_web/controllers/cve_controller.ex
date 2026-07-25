@@ -13,6 +13,11 @@ defmodule VarselWeb.CveController do
 
   require Ash.Query
 
+  # Shape-only match for the reserved-but-unpublished 404: no CveRecord lookup
+  # is allowed here (see render_404/2) — branching on a DB hit would make the
+  # page an enumeration oracle for embargoed reservations.
+  @cve_id_shape ~r/^CVE-\d{4}-\d{4,19}$/i
+
   # Machine-readable index of all published CVEs.
   def index(conn, _params) do
     records = CVE.list_published_cve_records!(actor: nil)
@@ -36,7 +41,7 @@ defmodule VarselWeb.CveController do
     |> assign(:page_title, cve["cveMetadata"]["cveId"])
     |> render(:show, cve: cve, cna: cna, cwe_names: cwe_names(cna), capec_names: capec_names(cna))
   rescue
-    Invalid -> render_404(conn, :html)
+    Invalid -> render_404(conn, :html, cve_id)
   end
 
   def show_json(conn, %{"cve_id" => cve_id}) do
@@ -88,7 +93,20 @@ defmodule VarselWeb.CveController do
     end
   end
 
-  defp render_404(conn, format) do
+  defp render_404(conn, format, cve_id \\ nil)
+
+  defp render_404(conn, :html, cve_id) when is_binary(cve_id) do
+    if Regex.match?(@cve_id_shape, cve_id) do
+      conn
+      |> put_status(:not_found)
+      |> put_view(html: VarselWeb.ErrorHTML)
+      |> render(:cve_404, cve_id: cve_id)
+    else
+      render_404(conn, :html, nil)
+    end
+  end
+
+  defp render_404(conn, format, _cve_id) do
     conn
     |> put_status(:not_found)
     |> put_view(

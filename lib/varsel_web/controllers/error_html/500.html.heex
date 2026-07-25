@@ -1,0 +1,37 @@
+<%!--
+  SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+  SPDX-License-Identifier: Apache-2.0
+--%>
+
+<.error_page
+  context="Error"
+  status={500}
+  subtitle="Internal server error — your request was not applied."
+>
+  <:title>
+    <span class="block max-w-lg text-pretty [text-wrap:balance]">
+      Something went wrong on our side
+    </span>
+  </:title>
+  <p class="text-base-content/70 leading-relaxed">
+    The server hit an unexpected error while handling this request. Nothing you did caused it, and these problems are usually temporary — retrying in a moment often works.
+  </p>
+  <%= case assigns[:conn] do %>
+    <% %{request_path: request_path} -> %>
+      <div class="mt-6 flex flex-wrap items-center gap-4">
+        <a href={request_path} class="btn btn-primary">
+          <.icon name="hero-arrow-path" class="size-4" /> Try again
+        </a>
+        <a href={~p"/"} class="link link-primary text-sm font-semibold">Back to home →</a>
+      </div>
+    <% _ -> %>
+  <% end %>
+  <p class="mt-6 text-sm text-base-content/50 leading-relaxed">
+    If it keeps happening, tell us via the
+    <a href={~p"/contact"} class="link link-primary">contact page</a>
+    — the address you were visiting and the approximate time help us find it. If you believe you've found a security vulnerability, use the process in our
+    <a href={~p"/security-policy"} class="link link-primary">security policy</a>
+    instead.
+  </p>
+</.error_page>

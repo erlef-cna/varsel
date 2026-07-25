@@ -1,0 +1,26 @@
+<%!--
+  SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+  SPDX-License-Identifier: Apache-2.0
+--%>
+
+<.error_page context="Error" status={403}>
+  <:title>
+    <span class="block max-w-lg text-pretty [text-wrap:balance]">
+      You don't have access to this page
+    </span>
+  </:title>
+  <p class="text-base-content/70 leading-relaxed">
+    The account you're using doesn't have permission to view this page. That can be correct even when you're signed in — some parts of the console are limited to particular CNA roles.
+  </p>
+  <p class="text-base-content/70 leading-relaxed mt-4">
+    If you think you should have access, or you're signed in with the wrong account, <a
+      href={~p"/contact"}
+      class="link link-primary"
+    >contact the CNA team</a>.
+  </p>
+  <div class="mt-6 flex flex-wrap items-center gap-4">
+    <a href={~p"/"} class="btn btn-primary">Back to home</a>
+    <a href={~p"/cves"} class="link link-primary text-sm font-semibold">Browse CVEs →</a>
+  </div>
+</.error_page>

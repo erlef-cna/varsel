@@ -174,7 +174,7 @@ config :varsel, VarselWeb.Endpoint,
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
     formats: [html: VarselWeb.ErrorHTML, json: VarselWeb.ErrorJSON],
-    layout: false
+    layout: {VarselWeb.Layouts, :root}
   ],
   pubsub_server: Varsel.PubSub,
   live_view: [signing_salt: "zOuaRJlV"]

@@ -1,0 +1,16 @@
+<%!--
+  SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+  SPDX-License-Identifier: Apache-2.0
+--%>
+
+<.error_page context="Error" status={@status}>
+  <:title>
+    <span class="block max-w-lg text-pretty [text-wrap:balance]">{@headline}</span>
+  </:title>
+  <p class="text-base-content/70 leading-relaxed">Your request couldn't be completed.</p>
+  <div class="mt-6 flex flex-wrap items-center gap-4">
+    <a href={~p"/"} class="btn btn-primary">Back to home</a>
+    <a href={~p"/cves"} class="link link-primary text-sm font-semibold">Browse CVEs →</a>
+  </div>
+</.error_page>
