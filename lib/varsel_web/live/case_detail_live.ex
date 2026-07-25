@@ -1585,25 +1585,24 @@ defmodule VarselWeb.CaseDetailLive do
   # Channel and boundary child rows still use the shared `child_modal`.
   defp affected_section(assigns) do
     ~H"""
-    <div class="flex items-center justify-between mb-1">
-      <h2 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/60">
-        Affected
-      </h2>
-      <div :if={@mode != :view} class="dropdown dropdown-end">
-        <div tabindex="0" role="button" class="link link-hover text-primary cursor-pointer text-xs">
-          Add package ▾
+    <.card_section_header title="Affected" level={:h2}>
+      <:actions>
+        <div :if={@mode != :view} class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="link link-hover text-primary cursor-pointer text-xs">
+            Add package ▾
+          </div>
+          <ul
+            tabindex="0"
+            class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-10 w-44 p-1 shadow"
+          >
+            <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
+            <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
+            <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
+            <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
+          </ul>
         </div>
-        <ul
-          tabindex="0"
-          class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-10 w-44 p-1 shadow"
-        >
-          <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
-          <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
-          <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
-          <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
-        </ul>
-      </div>
-    </div>
+      </:actions>
+    </.card_section_header>
 
     <div class="space-y-4">
       <.affected_package_card
@@ -1803,20 +1802,19 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp boundary_facts_table(assigns) do
     ~H"""
-    <div class="flex items-center justify-between mb-1">
-      <h4 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50">
-        Boundary facts
-      </h4>
-      <button
-        :if={@mode != :view and @package.id not in @marks.phantom}
-        class="btn btn-ghost btn-xs"
-        phx-click="new_child"
-        phx-value-type="event"
-        phx-value-affected_package_id={@package.id}
-      >
-        Add boundary
-      </button>
-    </div>
+    <.card_section_header title="Boundary facts">
+      <:actions>
+        <button
+          :if={@mode != :view and @package.id not in @marks.phantom}
+          class="btn btn-ghost btn-xs"
+          phx-click="new_child"
+          phx-value-type="event"
+          phx-value-affected_package_id={@package.id}
+        >
+          Add boundary
+        </button>
+      </:actions>
+    </.card_section_header>
     <div :if={@package.version_events != []} class="overflow-x-auto">
       <table class="table table-xs w-full">
         <tbody>
@@ -1873,20 +1871,19 @@ defmodule VarselWeb.CaseDetailLive do
     assigns = assign(assigns, :timeline_rows, timeline_rows(assigns.package))
 
     ~H"""
-    <div class="flex items-center justify-between mb-1">
-      <h4 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50">
-        Boundary facts → derived ranges
-      </h4>
-      <button
-        :if={@mode != :view and @package.id not in @marks.phantom}
-        class="btn btn-ghost btn-xs"
-        phx-click="new_child"
-        phx-value-type="event"
-        phx-value-affected_package_id={@package.id}
-      >
-        Add boundary
-      </button>
-    </div>
+    <.card_section_header title="Boundary facts → derived ranges">
+      <:actions>
+        <button
+          :if={@mode != :view and @package.id not in @marks.phantom}
+          class="btn btn-ghost btn-xs"
+          phx-click="new_child"
+          phx-value-type="event"
+          phx-value-affected_package_id={@package.id}
+        >
+          Add boundary
+        </button>
+      </:actions>
+    </.card_section_header>
 
     <div :if={@timeline_rows != []} class="space-y-2 mb-4">
       <TimelineComponents.version_timeline
@@ -1902,20 +1899,19 @@ defmodule VarselWeb.CaseDetailLive do
       commits or versions are recorded.
     </p>
 
-    <div class="flex items-center justify-between mb-1">
-      <h4 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50">
-        Channels
-      </h4>
-      <button
-        :if={@mode != :view and @package.id not in @marks.phantom}
-        class="btn btn-ghost btn-xs"
-        phx-click="new_child"
-        phx-value-type="channel"
-        phx-value-affected_package_id={@package.id}
-      >
-        Add channel
-      </button>
-    </div>
+    <.card_section_header title="Channels">
+      <:actions>
+        <button
+          :if={@mode != :view and @package.id not in @marks.phantom}
+          class="btn btn-ghost btn-xs"
+          phx-click="new_child"
+          phx-value-type="channel"
+          phx-value-affected_package_id={@package.id}
+        >
+          Add channel
+        </button>
+      </:actions>
+    </.card_section_header>
     <.channel_table
       rows={channel_rows(@package, :full)}
       mode={@mode}

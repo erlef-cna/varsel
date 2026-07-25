@@ -16,6 +16,9 @@ defmodule VarselWeb.Storybook.Case do
   def entry("affected_package_form"), do: [name: "Affected package form", icon: {:local, "hero-cube"}]
 
   def entry("channel_table"), do: [name: "Channel table", icon: {:local, "hero-table-cells"}]
+
+  def entry("card_section_header"), do: [name: "Card section header", icon: {:local, "hero-bars-2"}]
+
   def entry("channel_form"), do: [name: "Channel form", icon: {:local, "hero-truck"}]
   def entry("credit_form"), do: [name: "Credit form", icon: {:local, "hero-user"}]
   def entry("edit_actions"), do: [name: "Edit actions", icon: {:local, "hero-check"}]

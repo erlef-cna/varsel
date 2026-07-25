@@ -854,4 +854,36 @@ defmodule VarselWeb.CaseComponents do
 
   defp channel_span_class(true), do: "col-span-4"
   defp channel_span_class(false), do: "col-span-3"
+
+  @doc """
+  Renders the small heading above a part of a card, with whatever adds to it
+  along the same line.
+
+  The `actions` slot is the caller's — some parts add through a plain button,
+  the affected list through a menu of package kinds.
+  """
+  attr :title, :string, required: true
+  attr :level, :atom, default: :h4, values: [:h2, :h4], doc: "the heading rank it takes"
+
+  slot :actions
+
+  def card_section_header(assigns) do
+    ~H"""
+    <div class="flex items-center justify-between mb-1">
+      <h2
+        :if={@level == :h2}
+        class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/60"
+      >
+        {@title}
+      </h2>
+      <h4
+        :if={@level == :h4}
+        class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50"
+      >
+        {@title}
+      </h4>
+      {render_slot(@actions)}
+    </div>
+    """
+  end
 end
