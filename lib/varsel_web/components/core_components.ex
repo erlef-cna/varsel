@@ -318,6 +318,61 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders one scope tab's contents: a label and its count, styled for whether
+  the scope is the one being looked at.
+
+  How the tab is followed is the caller's — a `<.link patch>` for a scope that
+  lives in the URL, a `<button phx-click>` for one the view holds — so the tab
+  goes inside that element and takes its classes from `scope_tab_class/1`:
+
+      <.link patch={~p"/cases?scope=published"} class={scope_tab_class(@active?)}>
+        <.scope_tab active?={@active?} label="Published" count={@published_count} />
+      </.link>
+
+  `matched?` tints the count — a search reaches every scope, so one you are
+  not looking at says how many of its own the search found.
+  """
+  attr :active?, :boolean, required: true
+  attr :label, :string, required: true
+  attr :count, :integer, default: nil
+
+  attr :matched?, :boolean,
+    default: false,
+    doc: "the count is what a search found here, rather than everything here"
+
+  def scope_tab(assigns) do
+    ~H"""
+    {@label}
+    <span
+      :if={@count}
+      class={[
+        "font-semibold tabular-nums ml-1",
+        cond do
+          @active? -> "text-primary"
+          @matched? -> "text-info"
+          true -> "text-base-content/50"
+        end
+      ]}
+    >
+      {@count}
+    </span>
+    """
+  end
+
+  @doc """
+  The classes for a scope tab's link or button — see `scope_tab/1`.
+  """
+  def scope_tab_class(active?) do
+    [
+      "cursor-pointer pb-1",
+      if(active?,
+        do: "font-bold text-base-content shadow-[inset_0_-2px_0_var(--eef-blue)]",
+        else: "text-base-content/60"
+      )
+    ]
+  end
+
+  @doc """
   Renders a counted noun for the list headers — "1 token", "4 tokens".
 
   Pass `plural` for words that do not simply take an "s", including the verb

@@ -572,31 +572,19 @@ defmodule VarselWeb.CveListLive do
   attr :label, :string, required: true
   attr :count, :integer, required: true
 
-  # A table filter scope, styled like the cases band tabs: label + count,
-  # active = ink + accent count + the inset accent underline ("you are
-  # here" without relying on weight alone). A scope is a filter, not a
-  # resort.
+  # A scope is a filter, not a resort: the table narrows in place, so the
+  # scope lives in the view rather than the URL and this is a button.
   defp scope_button(assigns) do
+    assigns = assign(assigns, :active?, assigns.active == assigns.value)
+
     ~H"""
     <button
       type="button"
       phx-click="filter"
       phx-value-filter={@value}
-      class={[
-        "cursor-pointer pb-1",
-        if(@active == @value,
-          do: "font-bold text-base-content shadow-[inset_0_-2px_0_var(--eef-blue)]",
-          else: nil
-        )
-      ]}
+      class={scope_tab_class(@active?)}
     >
-      {@label}
-      <span class={[
-        "font-semibold tabular-nums ml-1",
-        if(@active == @value, do: "text-primary", else: "text-base-content/50")
-      ]}>
-        {@count}
-      </span>
+      <.scope_tab active?={@active?} label={@label} count={@count} />
     </button>
     """
   end

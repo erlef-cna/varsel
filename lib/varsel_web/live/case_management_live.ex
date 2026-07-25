@@ -382,55 +382,38 @@ defmodule VarselWeb.CaseManagementLive do
   defp face_tabs(assigns) do
     ~H"""
     <div class="flex items-center gap-4 text-sm mt-1.5">
-      <.link
-        patch={pipeline_path(@query)}
-        class={[
-          "pb-1",
-          if(@face == :pipeline,
-            do: "font-bold text-base-content shadow-[inset_0_-2px_0_var(--eef-blue)]",
-            else: "text-base-content/60"
-          )
-        ]}
-      >
-        Pipeline
-        <span class={[
-          "font-bold tabular-nums",
-          cond do
-            @query != "" and @face != :pipeline -> "text-info"
-            @face == :pipeline -> "text-primary"
-            true -> "text-base-content/50"
-          end
-        ]}>
-          {if @query != "" and @face != :pipeline, do: @pipeline_match_count, else: @pipeline_count}
-        </span>
+      <.link patch={pipeline_path(@query)} class={scope_tab_class(@face == :pipeline)}>
+        <.scope_tab
+          active?={@face == :pipeline}
+          label="Pipeline"
+          count={face_count(@face == :pipeline, @query, @pipeline_count, @pipeline_match_count)}
+          matched?={searched_elsewhere?(@face == :pipeline, @query)}
+        />
       </.link>
       <.link
         patch={archive_path(@socket, "all", @query, nil)}
-        class={[
-          "pb-1",
-          if(@face == :archive,
-            do: "font-bold text-base-content shadow-[inset_0_-2px_0_var(--eef-blue)]",
-            else: "text-base-content/60"
-          )
-        ]}
+        class={scope_tab_class(@face == :archive)}
       >
-        Archive
-        <span class={[
-          "font-bold tabular-nums",
-          cond do
-            @query != "" and @face != :archive -> "text-info"
-            @face == :archive -> "text-primary"
-            true -> "text-base-content/50"
-          end
-        ]}>
-          {if @query != "" and @face != :archive, do: @archive_match_count, else: @archive_count}
-        </span>
+        <.scope_tab
+          active?={@face == :archive}
+          label="Archive"
+          count={face_count(@face == :archive, @query, @archive_count, @archive_match_count)}
+          matched?={searched_elsewhere?(@face == :archive, @query)}
+        />
       </.link>
       <span :if={@query != ""} class="text-xs text-base-content/50">
         matches for '{@query}'
       </span>
     </div>
     """
+  end
+
+  # A search reaches both faces, so the face you are not looking at reports
+  # how many of its own cases matched rather than how many it holds.
+  defp searched_elsewhere?(active?, query), do: query != "" and not active?
+
+  defp face_count(active?, query, total, matched) do
+    if searched_elsewhere?(active?, query), do: matched, else: total
   end
 
   @impl Phoenix.LiveView
@@ -834,18 +817,11 @@ defmodule VarselWeb.CaseManagementLive do
   attr :socket, :any, required: true
 
   defp scope_link(assigns) do
+    assigns = assign(assigns, :active?, assigns.scope == assigns.value)
+
     ~H"""
-    <.link
-      patch={archive_path(@socket, @value, @query, nil)}
-      class={if @scope == @value, do: "font-bold text-base-content", else: ""}
-    >
-      {@label}
-      <span class={[
-        "font-semibold tabular-nums ml-1",
-        if(@scope == @value, do: "text-primary", else: "text-base-content/50")
-      ]}>
-        {@count}
-      </span>
+    <.link patch={archive_path(@socket, @value, @query, nil)} class={scope_tab_class(@active?)}>
+      <.scope_tab active?={@active?} label={@label} count={@count} />
     </.link>
     """
   end

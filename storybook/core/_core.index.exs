@@ -31,6 +31,8 @@ defmodule VarselWeb.Storybook.Core do
   def entry("list_card"), do: [name: "List card", icon: {:local, "hero-rectangle-stack"}]
   def entry("panel"), do: [name: "Panel", icon: {:local, "hero-rectangle-group"}]
 
+  def entry("scope_tab"), do: [name: "Scope tab", icon: {:local, "hero-funnel"}]
+
   def entry("severity_chip"), do: [name: "Severity chip", icon: {:local, "hero-shield-exclamation"}]
 
   def entry("stat_tiles"), do: [name: "Stat tiles", icon: {:local, "hero-chart-bar-square"}]
