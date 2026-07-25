@@ -277,6 +277,34 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a titled box over the page, dismissed by clicking the scrim behind
+  it or pressing escape.
+
+  `on_cancel` is the event both of those push. What the box holds, and the
+  buttons that close or commit it, are the caller's.
+  """
+  attr :id, :string, required: true
+  attr :title, :string, required: true
+  attr :on_cancel, :string, required: true, doc: "the event a click-away or escape pushes"
+  attr :class, :any, default: nil, doc: "the box's own class, e.g. a wider measure"
+
+  slot :inner_block, required: true
+  slot :actions, doc: "the row that closes or commits, along the box's foot"
+
+  def modal(assigns) do
+    ~H"""
+    <div class="modal modal-open" id={@id} phx-window-keydown={@on_cancel} phx-key="escape">
+      <div class={["modal-box" | List.wrap(@class || "max-w-lg")]}>
+        <h3 class="font-semibold text-lg mb-3">{@title}</h3>
+        {render_slot(@inner_block)}
+        <div :if={@actions != []} class="modal-action">{render_slot(@actions)}</div>
+      </div>
+      <div class="modal-backdrop" phx-click={@on_cancel}></div>
+    </div>
+    """
+  end
+
+  @doc """
   Renders the card a console list sits in: a bordered box clipping its rows,
   over an optional header bar.
 

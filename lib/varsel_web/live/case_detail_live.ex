@@ -2881,41 +2881,36 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp child_modal(assigns) do
     ~H"""
-    <div class="modal modal-open" id="child-modal">
-      <div class="modal-box max-w-lg">
-        <h3 class="font-semibold text-lg mb-3">{@child_form.title}</h3>
+    <.modal id="child-modal" title={@child_form.title} on_cancel="cancel_child">
+      <.form
+        for={@child_form.form}
+        id="child-form"
+        phx-change="validate_child"
+        phx-submit="submit_child"
+      >
+        <.child_fields
+          type={@child_form.type}
+          form={@child_form.form}
+          catalog_options={@catalog_options}
+          channel_options={@child_form.channel_options}
+        />
 
-        <.form
-          for={@child_form.form}
-          id="child-form"
-          phx-change="validate_child"
-          phx-submit="submit_child"
-        >
-          <.child_fields
-            type={@child_form.type}
-            form={@child_form.form}
-            catalog_options={@catalog_options}
-            channel_options={@child_form.channel_options}
-          />
+        <input
+          :if={@mode == :propose}
+          type="text"
+          name="reasoning"
+          placeholder="Reasoning (attached to proposals, optional)"
+          class="input input-bordered input-sm w-full mt-2"
+        />
 
-          <input
-            :if={@mode == :propose}
-            type="text"
-            name="reasoning"
-            placeholder="Reasoning (attached to proposals, optional)"
-            class="input input-bordered input-sm w-full mt-2"
-          />
-
-          <div class="modal-action">
-            <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_child">Cancel</button>
-            <button type="submit" class="btn btn-primary btn-sm">
-              {if @mode == :propose, do: "Propose", else: "Save"}
-            </button>
-          </div>
-        </.form>
-      </div>
-      <div class="modal-backdrop" phx-click="cancel_child"></div>
-    </div>
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_child">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            {if @mode == :propose, do: "Propose", else: "Save"}
+          </button>
+        </div>
+      </.form>
+    </.modal>
     """
   end
 
