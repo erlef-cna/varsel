@@ -143,7 +143,7 @@ defmodule VarselWeb.Layouts do
   def site_nav(assigns) do
     ~H"""
     <header class="eef-band border-b border-white/10 sticky top-0 z-40">
-      <nav class="container mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-4 h-16">
+      <nav class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl flex items-center gap-4 h-16">
         <a
           href="/"
           class="eef-band-plain flex items-center gap-3 shrink-0 text-white hover:opacity-80 transition-opacity"
@@ -304,7 +304,7 @@ defmodule VarselWeb.Layouts do
   def site_footer(assigns) do
     ~H"""
     <footer class="eef-band mt-16">
-      <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-sm">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-sm">
         <div class="col-span-2 md:col-span-1">
           <div class="flex items-center gap-3 mb-3 text-white">
             <.eef_logo class="h-20" id="eef-logo-footer" type={:footer} />
@@ -347,7 +347,7 @@ defmodule VarselWeb.Layouts do
         </div>
       </div>
       <div class="border-t border-white/10">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 text-xs text-white/50">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-4 text-xs text-white/50">
           © {Date.utc_today().year} Erlang Ecosystem Foundation. CVE data licensed <a href={
             ~p"/data-licensing"
           }>CC-BY 4.0</a>.

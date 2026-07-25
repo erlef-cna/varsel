@@ -203,13 +203,16 @@ defmodule VarselWeb.CoreComponents do
         # The container is the grid itself, so a page without rails passes its
         # children straight through — a `class` like `space-y-4` then spaces
         # the page's own children rather than a wrapper holding all of them.
+        # One track per rail actually present: a grid always fills its columns
+        # in source order, so a spare track would leave the content in the
+        # rail's place and push the rail out past the container.
         (@left != [] or @right != []) &&
-          "lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-8 items-start"
+          ["lg:grid lg:gap-8 items-start", grid_columns(@left, @right)]
       ] ++ List.wrap(@class)
     }>
       <aside
         :for={left <- @left}
-        class={["hidden lg:block order-first", aside_width(left), Map.get(left, :class)]}
+        class={["hidden lg:block min-w-0 order-first", aside_width(left), Map.get(left, :class)]}
       >
         {render_slot(left)}
       </aside>
@@ -220,13 +223,20 @@ defmodule VarselWeb.CoreComponents do
       <% end %>
       <aside
         :for={right <- @right}
-        class={["hidden lg:block order-last", aside_width(right), Map.get(right, :class)]}
+        class={["hidden lg:block min-w-0 order-last", aside_width(right), Map.get(right, :class)]}
       >
         {render_slot(right)}
       </aside>
     </div>
     """
   end
+
+  # Spelled out in full rather than built from the rails: Tailwind scans this
+  # source for literal class names, so an interpolated track would never reach
+  # the stylesheet.
+  defp grid_columns([], [_right]), do: "lg:grid-cols-[minmax(0,1fr)_auto]"
+  defp grid_columns([_left], []), do: "lg:grid-cols-[auto_minmax(0,1fr)]"
+  defp grid_columns([_left], [_right]), do: "lg:grid-cols-[auto_minmax(0,1fr)_auto]"
 
   # The rail carries its own width and the content column takes what is left,
   # so a page declares how wide its rails are without naming a grid track.
