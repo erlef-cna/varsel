@@ -2497,24 +2497,20 @@ defmodule VarselWeb.CaseDetailLive do
               ✕
             </button>
           </div>
-          <div class="mt-2 flex items-center gap-4 border-b border-base-300 text-sm">
-            <.preview_tab_button tab="validation" active={@preview_tab}>
-              Validation
-            </.preview_tab_button>
-            <.preview_tab_button tab="json" active={@preview_tab}>
-              Rendered JSON
-            </.preview_tab_button>
-            <.preview_tab_button :if={@amendment} tab="diff" active={@preview_tab}>
-              Diff to published
-            </.preview_tab_button>
-            <button
-              class="link link-hover ml-auto pb-2 text-xs text-primary"
-              phx-click="preview"
-              disabled={@preview == :loading}
-            >
-              {if @preview == :loading, do: "Rendering…", else: "Re-render"}
-            </button>
-          </div>
+          <.tab_bar select="preview_tab" class="mt-2">
+            <:tab value="validation" active={@preview_tab}>Validation</:tab>
+            <:tab value="json" active={@preview_tab}>Rendered JSON</:tab>
+            <:tab :if={@amendment} value="diff" active={@preview_tab}>Diff to published</:tab>
+            <:actions>
+              <button
+                class="link link-hover pb-2 text-xs text-primary"
+                phx-click="preview"
+                disabled={@preview == :loading}
+              >
+                {if @preview == :loading, do: "Rendering…", else: "Re-render"}
+              </button>
+            </:actions>
+          </.tab_bar>
         </div>
 
         <div class="flex-1 overflow-y-auto px-5 py-4">
@@ -2581,28 +2577,6 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
       </aside>
     </div>
-    """
-  end
-
-  attr :tab, :string, required: true
-  attr :active, :string, required: true
-  slot :inner_block, required: true
-
-  defp preview_tab_button(assigns) do
-    ~H"""
-    <button
-      class={[
-        "pb-2",
-        if(@active == @tab,
-          do: "font-bold text-base-content [box-shadow:inset_0_-2px_0_var(--color-primary)]",
-          else: "text-base-content/60 hover:text-base-content"
-        )
-      ]}
-      phx-click="preview_tab"
-      phx-value-tab={@tab}
-    >
-      {render_slot(@inner_block)}
-    </button>
     """
   end
 

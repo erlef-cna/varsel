@@ -415,6 +415,52 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a row of tabs over a panel, the active one underlined.
+
+  Each `:tab` names the value it selects; clicking one pushes `select` with
+  that value as `tab`, so the caller names its own event:
+
+      <.tab_bar select="preview_tab">
+        <:tab value="validation" active={@preview_tab}>Validation</:tab>
+        <:tab value="json" active={@preview_tab}>Rendered JSON</:tab>
+        <:actions>…</:actions>
+      </.tab_bar>
+
+  `actions` holds anything trailing the tabs, pushed to the far end of the row.
+  """
+  attr :select, :string, required: true, doc: "the event a tab click pushes"
+  attr :class, :any, default: nil, doc: "the row's own spacing, e.g. a margin above"
+
+  slot :tab, required: true do
+    attr :value, :string, required: true, doc: "what this tab selects"
+    attr :active, :string, required: true, doc: "the currently selected value"
+  end
+
+  slot :actions, doc: "controls trailing the tabs, e.g. a re-render link"
+
+  def tab_bar(assigns) do
+    ~H"""
+    <div class={["flex items-center gap-4 border-b border-base-300 text-sm", @class]}>
+      <button
+        :for={tab <- @tab}
+        class={[
+          "pb-2",
+          if(tab.active == tab.value,
+            do: "font-bold text-base-content [box-shadow:inset_0_-2px_0_var(--color-primary)]",
+            else: "text-base-content/60 hover:text-base-content"
+          )
+        ]}
+        phx-click={@select}
+        phx-value-tab={tab.value}
+      >
+        {render_slot(tab)}
+      </button>
+      <div :if={@actions != []} class="ml-auto">{render_slot(@actions)}</div>
+    </div>
+    """
+  end
+
+  @doc """
   Renders the "On this page" rail: links to a page's own headings, sticking
   beside the prose as it scrolls. Belongs in a `page_container/1` `right`
   slot.
