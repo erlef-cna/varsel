@@ -361,14 +361,13 @@ defmodule VarselWeb.CveListLive do
       <:subtitle :if={@poc?}>Reserve, draft, publish, and reject CVE records.</:subtitle>
       <:subtitle :if={not @poc?}>Vulnerabilities assigned and published by the EEF CNA.</:subtitle>
       <:actions>
-        <form id="cve-record-search" phx-change="search" phx-submit="search">
-          <.console_search
-            value={@query}
-            placeholder={
-              if @poc?, do: "Search records…", else: "Search by ID, title, package, description…"
-            }
-          />
-        </form>
+        <.console_search
+          id="cve-record-search"
+          value={@query}
+          placeholder={
+            if @poc?, do: "Search records…", else: "Search by ID, title, package, description…"
+          }
+        />
         <button
           :if={@poc?}
           class="btn btn-sm btn-eef-quiet"

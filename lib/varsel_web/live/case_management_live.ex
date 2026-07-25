@@ -421,9 +421,7 @@ defmodule VarselWeb.CaseManagementLive do
         />
       </:meta>
       <:actions>
-        <form id="case-search" phx-change="search" phx-submit="search">
-          <.console_search value={@query} placeholder="Search all cases…" />
-        </form>
+        <.console_search id="case-search" value={@query} placeholder="Search all cases…" />
         <div :if={poc?(@current_user)} class="relative">
           <button type="button" class="btn btn-sm btn-eef" phx-click="toggle_open_case">
             Open case

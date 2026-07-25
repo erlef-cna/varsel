@@ -8,29 +8,24 @@ defmodule VarselWeb.Storybook.Core.ConsoleSearch do
 
   def function, do: &VarselWeb.CoreComponents.console_search/1
 
-  # The input is named `query` and expects an enclosing phx-change form.
-  def template do
-    """
-    <form phx-change="search" psb-code-hidden>
-      <.psb-variation/>
-    </form>
-    """
-  end
-
   def variations do
     [
       %Variation{
         id: :empty,
-        attributes: %{value: "", placeholder: "Search cases…"}
+        attributes: %{id: "search-empty", value: "", placeholder: "Search cases…"}
       },
       %Variation{
         id: :with_query,
-        attributes: %{value: "CVE-2026-1234", placeholder: "Search cases…"}
+        attributes: %{id: "search-query", value: "CVE-2026-1234", placeholder: "Search cases…"}
       },
       %Variation{
         id: :cve_list,
         description: "The public CVE list's copy.",
-        attributes: %{value: "", placeholder: "Search by CVE ID, package or title…"}
+        attributes: %{
+          id: "search-cve-list",
+          value: "",
+          placeholder: "Search by CVE ID, package or title…"
+        }
       }
     ]
   end

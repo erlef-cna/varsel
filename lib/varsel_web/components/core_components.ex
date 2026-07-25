@@ -963,27 +963,33 @@ defmodule VarselWeb.CoreComponents do
   def paged?(_page), do: false
 
   @doc """
-  Renders the console list card's search input: a magnifier icon inside a
-  rounded field. Wrap it in the page's own `phx-change` form — the input's
-  name is `query`.
+  Renders the console list card's search: a magnifier icon inside a rounded
+  field, in the form that submits it.
+
+  `search` names the event each keystroke pushes, debounced, under the param
+  `query`.
   """
+  attr :id, :string, required: true
   attr :value, :string, required: true
   attr :placeholder, :string, required: true
+  attr :search, :string, default: "search", doc: "the event a keystroke pushes"
 
   def console_search(assigns) do
     ~H"""
-    <label class="input input-sm flex items-center gap-2 w-64 rounded-lg">
-      <.icon name="hero-magnifying-glass-mini" class="size-4 text-base-content/40 shrink-0" />
-      <input
-        type="search"
-        name="query"
-        value={@value}
-        placeholder={@placeholder}
-        autocomplete="off"
-        phx-debounce="200"
-        class="grow min-w-0 bg-transparent focus:outline-none"
-      />
-    </label>
+    <form id={@id} phx-change={@search} phx-submit={@search}>
+      <label class="input input-sm flex items-center gap-2 w-64 rounded-lg">
+        <.icon name="hero-magnifying-glass-mini" class="size-4 text-base-content/40 shrink-0" />
+        <input
+          type="search"
+          name="query"
+          value={@value}
+          placeholder={@placeholder}
+          autocomplete="off"
+          phx-debounce="200"
+          class="grow min-w-0 bg-transparent focus:outline-none"
+        />
+      </label>
+    </form>
     """
   end
 
