@@ -26,7 +26,6 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Accounts
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
-  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Case.Calculations.Preview.Channel
   alias Varsel.Cases.Case.Calculations.Preview.Diff
   alias Varsel.Cases.CaseCredit
@@ -37,7 +36,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Derivation.Display
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Projection
-  alias Varsel.Cases.Proposable
+  alias Varsel.Cases.Proposal.Build
   alias Varsel.Cases.Readiness
   alias Varsel.Cases.VersionEvent
   alias Varsel.Types.CVSS
@@ -702,42 +701,18 @@ defmodule VarselWeb.CaseDetailLive do
     not can_edit?(case_record, actor) and can_propose?(case_record, actor)
   end
 
-  # Splits comma/newline separated list inputs and merges the parent ids.
   ## ------------------------------------------------------ proposal building
 
-  # Content saved in propose mode: one :set proposal per field changed
-  # against the *projection* — untouched proposed values create nothing,
-  # changing one counters the proposal that put it there.
+  # Content saved in propose mode: `Build` diffs the params against the
+  # projection; this only supplies the assigns it needs and files the result.
   defp propose_content_changes(socket, params, reasoning) do
     %{display_case: display_case, projection: projection, case_record: case_record} =
       socket.assigns
 
     proposals =
-      for field <- Proposable.fields(Cases.Case),
-          key = to_string(field),
-          Map.has_key?(params, key),
-          changed_value?(Map.get(display_case, field), params[key]) do
-        %{
-          case_id: case_record.id,
-          target: :case,
-          operation: :set,
-          field_name: key,
-          proposed_value: %{"value" => params[key]},
-          reasoning: reasoning,
-          parent_proposal_id: countered_id(projection, :case, nil, key)
-        }
-      end
+      Build.content_proposals(case_record.id, display_case, projection, params, reasoning)
 
     create_proposals(socket, proposals)
-  end
-
-  defp countered_id(nil, _target, _target_id, _field), do: nil
-
-  defp countered_id(projection, target, target_id, field) do
-    case Projection.countered(projection, target, target_id, field) do
-      nil -> nil
-      proposal -> proposal.id
-    end
   end
 
   # "Propose" in the child modal: an :insert proposal for an add form, one
@@ -760,69 +735,22 @@ defmodule VarselWeb.CaseDetailLive do
 
     proposals =
       case form.source.type do
-        :create -> child_insert_proposals(config, case_id, params, reasoning)
-        :update -> child_set_proposals(socket, config, case_id, form, params, reasoning)
+        :create ->
+          Build.insert_proposals(config, case_id, params, reasoning)
+
+        :update ->
+          Build.set_proposals(
+            config,
+            case_id,
+            form.source.data,
+            socket.assigns.projection,
+            params,
+            reasoning
+          )
       end
 
     socket = assign(socket, child_form: nil)
     create_proposals(socket, proposals)
-  end
-
-  defp child_insert_proposals(config, case_id, params, reasoning) do
-    allowed =
-      case config[:preset] do
-        nil ->
-          Proposable.fields(config.resource) ++ Proposable.insert_extra_fields(config.resource)
-
-        preset ->
-          Preset.payload_fields(preset)
-      end
-
-    payload =
-      params
-      |> Map.take(Enum.map(allowed, &to_string/1))
-      |> Enum.reject(fn {_key, value} -> value in [nil, "", []] end)
-      |> Map.new()
-
-    payload =
-      case config[:preset] do
-        nil -> payload
-        preset -> Map.put(payload, "preset", to_string(preset))
-      end
-
-    [
-      %{
-        case_id: case_id,
-        target: config.target,
-        operation: :insert,
-        target_id: params["affected_package_id"],
-        proposed_value: %{"value" => payload},
-        reasoning: reasoning
-      }
-    ]
-  end
-
-  # The edit form was built from the projected row, so the diff yields only
-  # genuinely new changes; counters link to the countered proposal.
-  defp child_set_proposals(socket, config, case_id, form, params, reasoning) do
-    row = form.source.data
-    projection = socket.assigns.projection
-
-    for field <- Proposable.set_fields(config.resource),
-        key = to_string(field),
-        Map.has_key?(params, key),
-        changed_value?(Map.get(row, field), params[key]) do
-      %{
-        case_id: case_id,
-        target: config.target,
-        operation: :set,
-        target_id: row.id,
-        field_name: key,
-        proposed_value: %{"value" => params[key]},
-        reasoning: reasoning,
-        parent_proposal_id: countered_id(projection, config.target, row.id, key)
-      }
-    end
   end
 
   defp create_proposals(socket, []), do: put_flash(socket, :info, "No changes to propose.")
@@ -850,22 +778,6 @@ defmodule VarselWeb.CaseDetailLive do
         put_flash(socket, :info, "Created #{count} proposal(s).")
     end
   end
-
-  # Loose equality between a stored value and its form-param representation
-  # (enum atoms vs strings, integers vs digits, CVSS structs vs vectors, nil
-  # vs empty input).
-  defp changed_value?(current, param), do: comparable(current) != comparable(param)
-
-  defp comparable(%CVSS{vector: vector}), do: vector
-
-  defp comparable(%Varsel.Cases.AffectedPackage.ProgramFile{} = file) do
-    %{"path" => file.path, "modules" => file.modules, "routines" => file.routines}
-  end
-
-  defp comparable(nil), do: ""
-  defp comparable(value) when is_list(value), do: Enum.map(value, &comparable/1)
-  defp comparable(value) when is_map(value), do: value
-  defp comparable(value), do: to_string(value)
 
   defp decode_override(nil), do: {:ok, nil}
 
