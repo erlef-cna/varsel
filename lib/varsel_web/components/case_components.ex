@@ -715,4 +715,66 @@ defmodule VarselWeb.CaseComponents do
     </div>
     """
   end
+
+  @doc """
+  Renders what a row's proposals have made of it: proposed for a row that only
+  a suggestion puts there, removal proposed for one a suggestion would take
+  away. A row no suggestion touches renders nothing.
+  """
+  attr :id, :any, required: true, doc: "the row's id, looked up in the marks"
+  attr :marks, :map, required: true, doc: "%{phantom: MapSet, deleted: MapSet}"
+
+  def proposal_marks(assigns) do
+    ~H"""
+    <span :if={@id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
+    <span :if={@id in @marks.deleted} class="badge badge-error badge-xs">removal proposed</span>
+    """
+  end
+
+  @doc """
+  Renders what can still be done to a row: edit it, or remove it. A row a
+  suggestion already covers offers neither — its marks say so instead — and
+  neither does a case being read rather than worked on.
+
+  `noun` names the thing in the confirm ("Remove this channel?"), and `edit`
+  labels the way in, which the dense editor spells as a caret. Both buttons
+  push their event with the row's `type` and `id`, for the caller to handle.
+  """
+  attr :id, :any, required: true
+  attr :type, :string, required: true, doc: ~s(the child type, e.g. "channel")
+  attr :noun, :string, required: true, doc: ~s(what the confirm calls it, e.g. "channel")
+  attr :mode, :atom, required: true, values: [:view, :edit, :propose]
+  attr :marks, :map, required: true
+  attr :edit_label, :string, default: "Edit"
+
+  def row_actions(assigns) do
+    ~H"""
+    <span
+      :if={@mode != :view and @id not in @marks.phantom and @id not in @marks.deleted}
+      class="contents"
+    >
+      <button
+        class="link link-hover text-primary text-xs"
+        phx-click="edit_child"
+        phx-value-type={@type}
+        phx-value-id={@id}
+      >
+        {@edit_label}
+      </button>
+      <button
+        class="link link-hover text-xs text-base-content/50 hover:text-error ml-2"
+        phx-click="remove_child"
+        phx-value-type={@type}
+        phx-value-id={@id}
+        data-confirm={
+          if @mode == :propose,
+            do: "Propose removing this #{@noun}?",
+            else: "Remove this #{@noun}?"
+        }
+      >
+        {if @mode == :propose, do: "Propose removal", else: "Remove"}
+      </button>
+    </span>
+    """
+  end
 end

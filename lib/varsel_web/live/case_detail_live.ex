@@ -1647,10 +1647,7 @@ defmodule VarselWeb.CaseDetailLive do
           else: "Affected — #{@package.vendor} / #{@package.product}"}
       </:title>
       <:actions>
-        <span :if={@package.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
-        <span :if={@package.id in @marks.deleted} class="badge badge-error badge-xs">
-          removal proposed
-        </span>
+        <.proposal_marks id={@package.id} marks={@marks} />
         <%!-- Board B: an editing card's header carries no action links. --%>
         <span :if={!@field_form} class="contents">
           <button
@@ -1784,39 +1781,8 @@ defmodule VarselWeb.CaseDetailLive do
           {derived_versions_label(@package, channel.id)}
         </div>
         <div class="whitespace-nowrap text-right">
-          <span :if={channel.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
-          <span :if={channel.id in @marks.deleted} class="badge badge-error badge-xs">
-            removal proposed
-          </span>
-          <button
-            :if={
-              @mode != :view and channel.id not in @marks.phantom and
-                channel.id not in @marks.deleted
-            }
-            class="link link-hover text-primary text-xs"
-            phx-click="edit_child"
-            phx-value-type="channel"
-            phx-value-id={channel.id}
-          >
-            Edit
-          </button>
-          <button
-            :if={
-              @mode != :view and channel.id not in @marks.phantom and
-                channel.id not in @marks.deleted
-            }
-            class="link link-hover text-xs text-base-content/50 hover:text-error ml-2"
-            phx-click="remove_child"
-            phx-value-type="channel"
-            phx-value-id={channel.id}
-            data-confirm={
-              if @mode == :propose,
-                do: "Propose removing this channel?",
-                else: "Remove this channel?"
-            }
-          >
-            {if @mode == :propose, do: "Propose removal", else: "Remove"}
-          </button>
+          <.proposal_marks id={channel.id} marks={@marks} />
+          <.row_actions id={channel.id} type="channel" noun="channel" mode={@mode} marks={@marks} />
         </div>
       </div>
       <div
@@ -1918,33 +1884,14 @@ defmodule VarselWeb.CaseDetailLive do
             </td>
             <td class="text-xs text-base-content/60">{event.note}</td>
             <td :if={@mode != :view} class="text-right whitespace-nowrap">
-              <span :if={event.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
-              <span :if={event.id in @marks.deleted} class="badge badge-error badge-xs">
-                removal proposed
-              </span>
-              <button
-                :if={event.id not in @marks.phantom and event.id not in @marks.deleted}
-                class="link link-hover text-primary text-xs"
-                phx-click="edit_child"
-                phx-value-type="event"
-                phx-value-id={event.id}
-              >
-                Edit
-              </button>
-              <button
-                :if={event.id not in @marks.phantom and event.id not in @marks.deleted}
-                class="link link-hover text-xs text-base-content/50 hover:text-error ml-2"
-                phx-click="remove_child"
-                phx-value-type="event"
-                phx-value-id={event.id}
-                data-confirm={
-                  if @mode == :propose,
-                    do: "Propose removing this boundary?",
-                    else: "Remove this boundary fact?"
-                }
-              >
-                {if @mode == :propose, do: "Propose removal", else: "Remove"}
-              </button>
+              <.proposal_marks id={event.id} marks={@marks} />
+              <.row_actions
+                id={event.id}
+                type="event"
+                noun="boundary fact"
+                mode={@mode}
+                marks={@marks}
+              />
             </td>
           </tr>
         </tbody>
@@ -2061,39 +2008,15 @@ defmodule VarselWeb.CaseDetailLive do
           </span>
         </div>
         <div class="whitespace-nowrap text-right">
-          <span :if={channel.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
-          <span :if={channel.id in @marks.deleted} class="badge badge-error badge-xs">
-            removal proposed
-          </span>
-          <button
-            :if={
-              @mode != :view and channel.id not in @marks.phantom and
-                channel.id not in @marks.deleted
-            }
-            class="link link-hover text-primary text-xs"
-            phx-click="edit_child"
-            phx-value-type="channel"
-            phx-value-id={channel.id}
-          >
-            ▸
-          </button>
-          <button
-            :if={
-              @mode != :view and channel.id not in @marks.phantom and
-                channel.id not in @marks.deleted
-            }
-            class="link link-hover text-xs text-base-content/50 hover:text-error ml-2"
-            phx-click="remove_child"
-            phx-value-type="channel"
-            phx-value-id={channel.id}
-            data-confirm={
-              if @mode == :propose,
-                do: "Propose removing this channel?",
-                else: "Remove this channel?"
-            }
-          >
-            {if @mode == :propose, do: "Propose removal", else: "Remove"}
-          </button>
+          <.proposal_marks id={channel.id} marks={@marks} />
+          <.row_actions
+            id={channel.id}
+            type="channel"
+            noun="channel"
+            mode={@mode}
+            marks={@marks}
+            edit_label="▸"
+          />
         </div>
       </div>
       <div
@@ -2203,8 +2126,7 @@ defmodule VarselWeb.CaseDetailLive do
               ⠿
             </span>
             <div>{render_slot(@row, row)}</div>
-            <span :if={row.id in @marks.phantom} class="badge badge-info badge-xs">proposed</span>
-            <span :if={row.id in @marks.deleted} class="badge badge-error badge-xs">removal proposed</span>
+            <.proposal_marks id={row.id} marks={@marks} />
           </div>
           <div
             :if={@mode != :view and row.id not in @marks.phantom and row.id not in @marks.deleted}

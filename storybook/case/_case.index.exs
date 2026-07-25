@@ -32,6 +32,9 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("resolved_proposal_card"), do: [name: "Resolved proposal card", icon: {:local, "hero-check-badge"}]
 
+  def entry("proposal_marks"), do: [name: "Proposal marks", icon: {:local, "hero-flag"}]
+  def entry("row_actions"), do: [name: "Row actions", icon: {:local, "hero-ellipsis-horizontal"}]
+
   def entry("relative_timestamp"), do: [name: "Relative timestamp", icon: {:local, "hero-calendar-days"}]
 
   def entry("section_nav"), do: [name: "Section nav", icon: {:local, "hero-bars-3-bottom-left"}]
