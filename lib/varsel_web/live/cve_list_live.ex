@@ -403,53 +403,33 @@ defmodule VarselWeb.CveListLive do
         confirming_reject_id={@confirming_reject_id}
       />
 
-      <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">
-        <div
-          :if={@poc?}
-          class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-base-300 text-[0.76rem] text-base-content/60"
-        >
-          <div class="flex flex-wrap items-center gap-3.5">
-            <.scope_button
-              active={@filter}
-              value="all"
-              label="All"
-              count={@record_counts |> Map.values() |> Enum.sum()}
-            />
-            <.scope_button
-              :for={state <- table_states()}
-              active={@filter}
-              value={to_string(state)}
-              label={Phoenix.Naming.humanize(state)}
-              count={Map.get(@record_counts, state, 0)}
-            />
-          </div>
-          <span
-            :if={String.trim(@query) == ""}
-            class="text-xs text-base-content/50 tabular-nums whitespace-nowrap"
-          >
-            <.count_label count={@record_counts |> Map.values() |> Enum.sum()} singular="record" />
-          </span>
-          <span
-            :if={String.trim(@query) != ""}
-            class="text-xs font-semibold text-info tabular-nums whitespace-nowrap"
-          >
+      <.list_card>
+        <:tabs :if={@poc?}>
+          <.scope_button
+            active={@filter}
+            value="all"
+            label="All"
+            count={@record_counts |> Map.values() |> Enum.sum()}
+          />
+          <.scope_button
+            :for={state <- table_states()}
+            active={@filter}
+            value={to_string(state)}
+            label={Phoenix.Naming.humanize(state)}
+            count={Map.get(@record_counts, state, 0)}
+          />
+        </:tabs>
+        <:note :if={@poc? and String.trim(@query) != ""}>
+          <span class="font-semibold text-info tabular-nums">
             {match_summary(@cve_records.count, @query)}
           </span>
-        </div>
-        <div
-          :if={not @poc?}
-          class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-base-300"
-        >
-          <span class="text-sm text-base-content/70 tabular-nums">
-            <.count_label count={@cve_records.count} singular="CVE" />
-          </span>
-          <p class="text-xs text-base-content/50 whitespace-nowrap">
-            Machine-readable: <a href={~p"/cves/index.json"} class="link">JSON</a>
-            · <a href={~p"/osv/all.json"} class="link">OSV</a>
-            · <a href={~p"/feed.atom"} class="link">Atom</a>
-            · <a href={~p"/feed.rss"} class="link">RSS</a>
-          </p>
-        </div>
+        </:note>
+        <:note :if={not @poc?}>
+          Machine-readable: <a href={~p"/cves/index.json"} class="link">JSON</a>
+          · <a href={~p"/osv/all.json"} class="link">OSV</a>
+          · <a href={~p"/feed.atom"} class="link">Atom</a>
+          · <a href={~p"/feed.rss"} class="link">RSS</a>
+        </:note>
 
         <div class="overflow-x-auto">
           <table class="table table-fixed min-w-[60rem]">
@@ -570,18 +550,10 @@ defmodule VarselWeb.CveListLive do
           </.empty_state>
         </div>
 
-        <.jump_pagination :if={@poc?} page={@cve_records} noun="record" />
-
-        <div
-          :if={
-            not @poc? and is_integer(@cve_records.count) and @cve_records.count > @cve_records.limit
-          }
-          class="flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-t border-base-300"
-        >
-          <span class="text-xs text-base-content/60">{@cve_records.limit} per page</span>
-          <.pagination page={@cve_records} event="paginate" />
-        </div>
-      </div>
+        <:footer :if={paged?(@cve_records)}>
+          <.jump_pagination page={@cve_records} noun={if @poc?, do: "record", else: "CVE"} />
+        </:footer>
+      </.list_card>
 
       <.rejected_panel :if={@poc?} rejected={@rejected} open?={@rejected_open?} />
 

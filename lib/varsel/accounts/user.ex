@@ -95,7 +95,16 @@ defmodule Varsel.Accounts.User do
   end
 
   actions do
-    defaults [:read]
+    read :read do
+      primary? true
+      description "Lists users."
+
+      pagination offset?: true,
+                 keyset?: true,
+                 countable: :by_default,
+                 default_limit: 25,
+                 required?: false
+    end
 
     read :get_by_subject do
       description "Get a user by the subject claim in a JWT"
@@ -255,6 +264,19 @@ defmodule Varsel.Accounts.User do
     has_many :valid_api_keys, Varsel.Accounts.ApiKey do
       filter expr(valid)
     end
+  end
+
+  calculations do
+    # The name a user is shown under, and the order the console lists them in.
+    # Both live in the query rather than the LiveView so a page of users is
+    # sorted against the whole table, not just the rows already loaded.
+    calculate :display_name,
+              :string,
+              expr(coalesce([name, github_handle, email, "user"])) do
+      public? true
+    end
+
+    calculate :poc_first, :integer, expr(if role == :poc, do: 0, else: 1)
   end
 
   identities do

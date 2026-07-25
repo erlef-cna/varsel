@@ -12,8 +12,10 @@ defmodule VarselWeb.UserManagementLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
+  import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
 
   alias Varsel.Accounts
+  alias Varsel.Accounts.User
 
   @roles [
     {"POC", :poc},
@@ -26,15 +28,23 @@ defmodule VarselWeb.UserManagementLive do
     socket =
       socket
       |> assign(page_title: "User Management", roles: @roles)
-      |> keep_live(:users, &list_users/1, subscribe: "user:all", results: :lose)
+      |> keep_live(:users, &list_users/2, subscribe: "user:all", results: :lose)
 
     {:ok, socket}
   end
 
   @impl Phoenix.LiveView
+  def handle_event("paginate", %{"page" => target}, socket) do
+    {:noreply, change_page(socket, :users, target)}
+  end
+
+  def handle_event("jump_page", %{"page" => target}, socket) do
+    {:noreply, jump_to_page(socket, :users, target)}
+  end
+
   def handle_event("set_role", %{"user_id" => user_id, "role" => role}, socket) do
     actor = socket.assigns.current_user
-    user = Enum.find(socket.assigns.users, &(&1.id == user_id))
+    user = Enum.find(socket.assigns.users.results, &(&1.id == user_id))
 
     socket =
       case Accounts.set_user_role(user, role, actor: actor) do
@@ -49,10 +59,17 @@ defmodule VarselWeb.UserManagementLive do
     {:noreply, socket}
   end
 
-  defp list_users(socket) do
-    [actor: socket.assigns.current_user]
-    |> Accounts.list_users!()
-    |> Enum.sort_by(&{&1.role != :poc, display_name(&1)})
+  # The keep_live callback: page_opts is nil on the first run and the stored
+  # page's options on a refetch, so a role change keeps the page the user is
+  # on. Points of contact lead the list, then everyone by display name —
+  # sorted in the query, so a page is ordered against the whole table rather
+  # than only the rows it happens to hold.
+  defp list_users(socket, page_opts) do
+    Accounts.list_users!(
+      actor: socket.assigns.current_user,
+      query: Ash.Query.sort(User, poc_first: :asc, display_name: :asc),
+      page: page_opts || [count: true, offset: 0]
+    )
   end
 
   defp role_value(nil), do: ""
@@ -71,10 +88,11 @@ defmodule VarselWeb.UserManagementLive do
     </.page_header>
 
     <.page_container>
-      <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">
-        <div class="px-4 py-2.5 border-b border-base-300 text-sm text-base-content/70 tabular-nums">
-          <.count_label count={length(@users)} singular="user" />
-        </div>
+      <.list_card empty?={@users.results == []}>
+        <:empty>No users yet.</:empty>
+        <:footer :if={paged?(@users)}>
+          <.jump_pagination page={@users} noun="user" />
+        </:footer>
 
         <div class="overflow-x-auto">
           <table class="table">
@@ -87,7 +105,7 @@ defmodule VarselWeb.UserManagementLive do
               </tr>
             </thead>
             <tbody>
-              <tr :for={user <- @users} class="hover:bg-base-300/40">
+              <tr :for={user <- @users.results} class="hover:bg-base-300/40">
                 <td class="font-medium">
                   {user.name || "—"}
                   <span :if={user.id == @current_user.id} class="badge badge-ghost badge-sm ml-1">
@@ -125,7 +143,7 @@ defmodule VarselWeb.UserManagementLive do
             </tbody>
           </table>
         </div>
-      </div>
+      </.list_card>
     </.page_container>
     """
   end

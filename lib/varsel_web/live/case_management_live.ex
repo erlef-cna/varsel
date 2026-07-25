@@ -698,8 +698,8 @@ defmodule VarselWeb.CaseManagementLive do
 
   defp archive_face(assigns) do
     ~H"""
-    <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">
-      <div class="flex items-center gap-3.5 px-3.5 py-2 border-b border-base-300 text-[0.76rem] text-base-content/60">
+    <.list_card empty?={@cases.results == []}>
+      <:tabs>
         <.scope_link
           scope={@scope}
           value="all"
@@ -724,17 +724,14 @@ defmodule VarselWeb.CaseManagementLive do
           query={@query}
           socket={@socket}
         />
-      </div>
+      </:tabs>
+      <:empty>
+        {if @archive_count == 0,
+          do: "Nothing archived yet — cases land here when they are published or closed.",
+          else: "No archived cases match."}
+      </:empty>
 
-      <.empty_state :if={@cases.results == [] and @archive_count == 0}>
-        Nothing archived yet — cases land here when they are published or closed.
-      </.empty_state>
-
-      <.empty_state :if={@cases.results == [] and @archive_count > 0}>
-        No archived cases match.
-      </.empty_state>
-
-      <div :if={@cases.results != []} class="overflow-x-auto hidden md:block">
+      <div class="overflow-x-auto hidden md:block">
         <table class="table w-full">
           <thead>
             <tr class="text-[0.65rem] font-bold uppercase tracking-wider text-base-content/50">
@@ -780,7 +777,7 @@ defmodule VarselWeb.CaseManagementLive do
         </table>
       </div>
 
-      <div :if={@cases.results != []} class="md:hidden">
+      <div class="md:hidden">
         <div
           :for={case_record <- @cases.results}
           class="border-b border-base-300 last:border-0 px-3.5 py-2.5"
@@ -809,20 +806,18 @@ defmodule VarselWeb.CaseManagementLive do
         </div>
       </div>
 
-      <div :if={@cases.results != []} id="archive-pager-wide" class="hidden md:block">
+      <:footer :if={paged?(@cases)} id="archive-pager-wide" class="hidden md:flex">
         <.jump_pagination page={@cases} />
-      </div>
-      <div
-        :if={@cases.results != [] and is_integer(@cases.count) and @cases.count > @cases.limit}
+      </:footer>
+      <:footer
+        :if={is_integer(@cases.count) and @cases.count > @cases.limit}
         id="archive-pager-narrow"
         class="md:hidden"
       >
-        <div class="flex items-center justify-between gap-2 px-3.5 py-2 border-t border-base-300 text-xs text-base-content/60">
-          <span>25 / page</span>
-          <.pagination page={@cases} />
-        </div>
-      </div>
-    </div>
+        <span>25 / page</span>
+        <.pagination page={@cases} />
+      </:footer>
+    </.list_card>
     """
   end
 

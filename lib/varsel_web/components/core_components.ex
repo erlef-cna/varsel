@@ -257,6 +257,67 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders the card a console list sits in: a bordered box clipping its rows,
+  over an optional header bar.
+
+  The bar above the rows holds the scopes a list filters itself by (`tabs`)
+  and a trailing aside (`note`) — feed links, a search summary. The `footer`
+  below them is where the pager goes, and with it how much the list holds:
+  one place says how many there are, rather than the head and the foot of the
+  same card both saying it.
+
+  Give it an `empty` slot and the card shows that in place of its rows when
+  `empty?`.
+  """
+  attr :empty?, :boolean, default: false, doc: "renders the `empty` slot instead of the rows"
+  attr :class, :any, default: nil
+
+  slot :tabs, doc: "the scopes the list filters by"
+  slot :note, doc: "a trailing aside — feed links, a search summary"
+  slot :empty, doc: "shown in place of the rows when `empty?`"
+  slot :inner_block, required: true
+
+  slot :footer, doc: "the pager and other controls below the rows" do
+    attr :id, :string
+    attr :class, :any
+  end
+
+  def list_card(assigns) do
+    ~H"""
+    <div class={["rounded-box border border-base-300 bg-base-200 overflow-hidden" | List.wrap(@class)]}>
+      <div
+        :if={@tabs != [] or @note != []}
+        class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-base-300 text-[0.76rem] text-base-content/60"
+      >
+        <div :if={@tabs != []} class="flex flex-wrap items-center gap-3.5">
+          {render_slot(@tabs)}
+        </div>
+        <%!-- Keeps the note hard right when the tabs are the only thing
+              beside it. --%>
+        <p :if={@note != []} class="ml-auto whitespace-nowrap">{render_slot(@note)}</p>
+      </div>
+
+      <%= if @empty? and @empty != [] do %>
+        <.empty_state>{render_slot(@empty)}</.empty_state>
+      <% else %>
+        {render_slot(@inner_block)}
+      <% end %>
+
+      <div
+        :for={footer <- @footer}
+        id={Map.get(footer, :id)}
+        class={[
+          "flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-t border-base-300 text-xs text-base-content/60",
+          Map.get(footer, :class)
+        ]}
+      >
+        {render_slot(footer)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
   Renders a counted noun for the list headers — "1 token", "4 tokens".
 
   Pass `plural` for words that do not simply take an "s", including the verb
@@ -527,13 +588,15 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
-  Renders a table card's footer pager row: "N per page · M total" on the
-  left, prev/jump-to-page/next on the right. The page number is a numeric
-  input — typing a value and pressing Enter pushes `jump_event` with that
-  value as the `page` param (feed it to
-  `VarselWeb.LivePagination.jump_to_page/3`); prev/next push `page_event`
-  same as `pagination/1`. Renders nothing at zero results (callers show an
-  empty-state message instead).
+  Renders a table card's footer pager: "N per page · M total" on the left,
+  prev/jump-to-page/next on the right. The page number is a numeric input —
+  typing a value and pressing Enter pushes `jump_event` with that value as
+  the `page` param (feed it to `VarselWeb.LivePagination.jump_to_page/3`);
+  prev/next push `page_event` same as `pagination/1`.
+
+  Belongs in a `list_card/1` `footer` slot, which rules and gutters it. Guard
+  that slot with `paged?/1` — at zero results this renders nothing, and an
+  empty footer would still draw its rule.
   """
   attr :page, :any, required: true, doc: "an Ash.Page.Offset with count loaded"
   attr :page_event, :string, default: "paginate"
@@ -548,10 +611,7 @@ defmodule VarselWeb.CoreComponents do
       )
 
     ~H"""
-    <div
-      :if={is_integer(@page.count) and @page.count > 0}
-      class="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2 border-t border-base-300 text-xs text-base-content/60"
-    >
+    <div :if={paged?(@page)} class="contents">
       <span>
         {@page.limit} per page · {@page.count} {if @page.count == 1, do: @noun, else: @noun <> "s"}
       </span>
@@ -593,6 +653,13 @@ defmodule VarselWeb.CoreComponents do
 
   defp pbtn_class(true), do: "border-base-300"
   defp pbtn_class(false), do: "border-base-300/50 text-base-content/40"
+
+  @doc """
+  Whether a page has any results to page through — the guard a `list_card/1`
+  `footer` slot needs, so an empty list does not draw a ruled but empty row.
+  """
+  def paged?(%{count: count}) when is_integer(count) and count > 0, do: true
+  def paged?(_page), do: false
 
   @doc """
   Renders the console list card's search input: a magnifier icon inside a

@@ -39,7 +39,18 @@ defmodule Varsel.Accounts.ApiKey do
   end
 
   actions do
-    defaults [:read, :destroy]
+    defaults [:destroy]
+
+    read :read do
+      primary? true
+      description "Lists the acting user's API keys."
+
+      pagination offset?: true,
+                 keyset?: true,
+                 countable: :by_default,
+                 default_limit: 25,
+                 required?: false
+    end
 
     create :create do
       primary? true

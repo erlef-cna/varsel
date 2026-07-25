@@ -81,7 +81,7 @@ defmodule VarselWeb.CveListLiveTest do
 
     {:ok, lv, _html} = live(conn, ~p"/cves")
 
-    html = lv |> form("form", %{query: "Alpha"}) |> render_change()
+    html = lv |> form("#cve-record-search", %{query: "Alpha"}) |> render_change()
 
     assert html =~ "Alpha"
     refute html =~ "Bravo"
@@ -91,7 +91,7 @@ defmodule VarselWeb.CveListLiveTest do
     published("CVE-2025-0001", "Alpha")
 
     {:ok, lv, _html} = live(conn, ~p"/cves")
-    html = lv |> form("form", %{query: "zzzznotfound"}) |> render_change()
+    html = lv |> form("#cve-record-search", %{query: "zzzznotfound"}) |> render_change()
 
     assert html =~ "No CVEs match"
   end

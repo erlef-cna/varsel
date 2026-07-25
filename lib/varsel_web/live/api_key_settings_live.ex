@@ -13,6 +13,9 @@ defmodule VarselWeb.ApiKeySettingsLive do
   """
   use VarselWeb, :live_view
 
+  import AshPhoenix.LiveView, only: [keep_live: 4]
+  import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
+
   alias Varsel.Accounts
   alias Varsel.Accounts.ApiKey
 
@@ -66,9 +69,17 @@ defmodule VarselWeb.ApiKeySettingsLive do
     end
   end
 
+  def handle_event("paginate", %{"page" => target}, socket) do
+    {:noreply, change_page(socket, :api_keys, target)}
+  end
+
+  def handle_event("jump_page", %{"page" => target}, socket) do
+    {:noreply, jump_to_page(socket, :api_keys, target)}
+  end
+
   def handle_event("revoke", %{"id" => id}, socket) do
     actor = socket.assigns.current_user
-    api_key = Enum.find(socket.assigns.api_keys, &(&1.id == id))
+    api_key = Enum.find(socket.assigns.api_keys.results, &(&1.id == id))
 
     socket =
       case Accounts.revoke_api_key(api_key, actor: actor) do
@@ -94,12 +105,18 @@ defmodule VarselWeb.ApiKeySettingsLive do
   end
 
   defp assign_api_keys(socket) do
-    api_keys =
-      [actor: socket.assigns.current_user, load: [:valid]]
-      |> Accounts.list_api_keys!()
-      |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+    keep_live(socket, :api_keys, &list_api_keys/2, results: :lose)
+  end
 
-    assign(socket, api_keys: api_keys)
+  # The keep_live callback: page_opts is nil on the first run and the stored
+  # page's options on a refetch, so a revoke keeps the page the user is on.
+  defp list_api_keys(socket, page_opts) do
+    Accounts.list_api_keys!(
+      actor: socket.assigns.current_user,
+      query: Ash.Query.sort(ApiKey, inserted_at: :desc),
+      load: [:valid],
+      page: page_opts || [count: true, offset: 0]
+    )
   end
 
   defp form_errors(form) do
@@ -169,12 +186,13 @@ defmodule VarselWeb.ApiKeySettingsLive do
         </div>
       </div>
 
-      <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">
-        <div class="px-4 py-2.5 border-b border-base-300 text-sm text-base-content/70 tabular-nums">
-          <.count_label count={length(@api_keys)} singular="token" />
-        </div>
+      <.list_card empty?={@api_keys.results == []}>
+        <:empty>No tokens yet — create one above.</:empty>
+        <:footer :if={paged?(@api_keys)}>
+          <.jump_pagination page={@api_keys} noun="token" />
+        </:footer>
 
-        <div :if={@api_keys != []} class="overflow-x-auto">
+        <div class="overflow-x-auto">
           <table class="table">
             <thead>
               <tr>
@@ -186,7 +204,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
               </tr>
             </thead>
             <tbody>
-              <tr :for={api_key <- @api_keys} class="hover:bg-base-300/40">
+              <tr :for={api_key <- @api_keys.results} class="hover:bg-base-300/40">
                 <td class="font-medium">{api_key.name}</td>
                 <td>
                   <.state :if={api_key.valid} dot="bg-success">Active</.state>
@@ -212,11 +230,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
             </tbody>
           </table>
         </div>
-
-        <.empty_state :if={@api_keys == []}>
-          No tokens yet — create one above.
-        </.empty_state>
-      </div>
+      </.list_card>
     </.page_container>
     """
   end
