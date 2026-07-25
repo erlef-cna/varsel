@@ -45,12 +45,13 @@ defmodule VarselWeb.PageControllerTest do
       on_exit(fn -> Application.put_env(:varsel, :test_deployment?, previous) end)
     end
 
-    test "GET /robots.txt allows everything", %{conn: conn} do
+    test "GET /robots.txt allows everything and links the sitemap", %{conn: conn} do
       conn = get(conn, "/robots.txt")
 
       body = response(conn, 200)
       assert body =~ "User-agent: *"
       refute body =~ "Disallow: /"
+      assert body =~ "Sitemap: #{VarselWeb.Endpoint.url()}/sitemap.xml"
     end
 
     test "responses do not carry the X-Robots-Tag header", %{conn: conn} do

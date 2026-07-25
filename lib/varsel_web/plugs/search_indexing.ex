@@ -14,36 +14,25 @@ defmodule VarselWeb.Plugs.SearchIndexing do
       crawlers that ignore `robots.txt` (and non-HTML responses like the JSON
       API) are still told not to index or follow.
 
-  Otherwise it serves the normal allow-everything `robots.txt` and adds no
-  header. Runs as an endpoint plug, ahead of the router, so it covers the HTML,
-  JSON, GraphQL and MCP surfaces uniformly.
+  Otherwise it serves the normal allow-everything `robots.txt` (pointing crawlers
+  at `/sitemap.xml`) and adds no header. Runs as an endpoint plug, ahead of the
+  router, so it covers the HTML, JSON, GraphQL and MCP surfaces uniformly.
   """
   @behaviour Plug
 
+  use VarselWeb, :verified_routes
+
   import Plug.Conn
-
-  @robots_disallow """
-  # Test deployment — not for indexing.
-  User-agent: *
-  Disallow: /
-  """
-
-  @robots_allow """
-  User-agent: *
-  Disallow:
-  """
 
   @impl Plug
   def init(opts), do: opts
 
   @impl Plug
   def call(%Plug.Conn{request_path: "/robots.txt", method: method} = conn, _opts) when method in ~w(GET HEAD) do
-    body = if indexing_blocked?(), do: @robots_disallow, else: @robots_allow
-
     conn
     |> maybe_put_robots_tag()
     |> put_resp_content_type("text/plain")
-    |> send_resp(200, body)
+    |> send_resp(200, robots(indexing_blocked?()))
     |> halt()
   end
 
@@ -58,4 +47,23 @@ defmodule VarselWeb.Plugs.SearchIndexing do
   end
 
   defp indexing_blocked?, do: Application.fetch_env!(:varsel, :test_deployment?)
+
+  # Test deployments block everything; production allows everything and points
+  # crawlers at the sitemap.
+  defp robots(true) do
+    """
+    # Test deployment — not for indexing.
+    User-agent: *
+    Disallow: /
+    """
+  end
+
+  defp robots(false) do
+    """
+    User-agent: *
+    Disallow:
+
+    Sitemap: #{url(~p"/sitemap.xml")}
+    """
+  end
 end
