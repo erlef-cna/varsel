@@ -326,9 +326,6 @@ defmodule VarselWeb.CaseManagementLive do
   defp poc?(%{role: :poc}), do: true
   defp poc?(_user), do: false
 
-  defp count_label(1, singular, _plural), do: "1 #{singular}"
-  defp count_label(count, _singular, plural), do: "#{count} #{plural}"
-
   defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d")
 
@@ -525,7 +522,12 @@ defmodule VarselWeb.CaseManagementLive do
 
     ~H"""
     <div :if={@zero_matches?} class="text-center text-sm text-base-content/70 py-8">
-      No active cases match '{@query}' — {count_label(@archive_match_count, "match", "matches")} in
+      No active cases match '{@query}' —
+      <.count_label
+        count={@archive_match_count}
+        singular="match"
+        plural="matches"
+      /> in
       <.link patch={archive_path(@socket, "all", @query, nil)} class="link text-primary">
         Archive →
       </.link>

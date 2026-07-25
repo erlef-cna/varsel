@@ -329,12 +329,6 @@ defmodule VarselWeb.CveListLive do
   defp format_dt(nil), do: "—"
   defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d")
 
-  defp count_label(count, singular) when is_integer(count) do
-    if count == 1, do: "1 #{singular}", else: "#{count} #{singular}s"
-  end
-
-  defp count_label(_count, singular), do: "#{singular}s"
-
   # P3's search feedback reads as a sentence ("14 match “ssh”"), so the
   # verb agrees with the count rather than pluralizing a noun.
   defp match_summary(count, query) do
@@ -433,7 +427,7 @@ defmodule VarselWeb.CveListLive do
             :if={String.trim(@query) == ""}
             class="text-xs text-base-content/50 tabular-nums whitespace-nowrap"
           >
-            {count_label(@record_counts |> Map.values() |> Enum.sum(), "record")}
+            <.count_label count={@record_counts |> Map.values() |> Enum.sum()} singular="record" />
           </span>
           <span
             :if={String.trim(@query) != ""}
@@ -447,7 +441,7 @@ defmodule VarselWeb.CveListLive do
           class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-base-300"
         >
           <span class="text-sm text-base-content/70 tabular-nums">
-            {count_label(@cve_records.count, "CVE")}
+            <.count_label count={@cve_records.count} singular="CVE" />
           </span>
           <p class="text-xs text-base-content/50 whitespace-nowrap">
             Machine-readable: <a href={~p"/cves/index.json"} class="link">JSON</a>

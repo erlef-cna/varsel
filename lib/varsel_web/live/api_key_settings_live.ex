@@ -171,7 +171,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
 
       <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">
         <div class="px-4 py-2.5 border-b border-base-300 text-sm text-base-content/70 tabular-nums">
-          {if length(@api_keys) == 1, do: "1 token", else: "#{length(@api_keys)} tokens"}
+          <.count_label count={length(@api_keys)} singular="token" />
         </div>
 
         <div :if={@api_keys != []} class="overflow-x-auto">

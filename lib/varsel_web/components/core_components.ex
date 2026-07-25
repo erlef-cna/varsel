@@ -174,6 +174,30 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a counted noun for the list headers — "1 token", "4 tokens".
+
+  Pass `plural` for words that do not simply take an "s", including the verb
+  forms the search summaries read with, where the verb agrees with the count
+  rather than the noun ("1 match" / "4 match").
+
+  A `count` that is not an integer — the total Ash leaves unset when it cannot
+  cheaply count a result set — drops out, leaving the bare plural.
+  """
+  attr :count, :any, required: true
+  attr :singular, :string, required: true
+  attr :plural, :string, default: nil, doc: ~s(for nouns that do not take an "s")
+
+  def count_label(assigns) do
+    ~H"{counted(@count, @singular, @plural)}"
+  end
+
+  defp counted(1, singular, _plural), do: "1 #{singular}"
+
+  defp counted(count, singular, plural) when is_integer(count), do: "#{count} #{plural || "#{singular}s"}"
+
+  defp counted(_count, singular, plural), do: plural || "#{singular}s"
+
+  @doc """
   Renders the console's stat-tile row: one clickable tile per queue state,
   count on top, dot + label below — the overview and the filter are the same
   control. Clicking pushes `event` with the tile's value as the `filter`
