@@ -220,7 +220,6 @@ defmodule VarselWeb.Layouts do
           >
             <.icon name="hero-arrow-right-end-on-rectangle" class="size-5" />
           </a>
-          <.mock_login_menu :if={is_nil(@current_user)} />
 
           <%!-- Mobile menu --%>
           <div class="dropdown dropdown-end md:hidden">
@@ -244,44 +243,20 @@ defmodule VarselWeb.Layouts do
     """
   end
 
-  if Application.compile_env(:varsel, :mock_login_enabled?, false) do
-    @mock_roles [{"POC", "poc"}, {"Supporter", "supporter"}, {"No role", "none"}]
+  @doc """
+  The floating dev-tools launcher (`VarselWeb.DevNav`), rendered only in
+  dev/test builds where that module is compiled.
+  """
+  attr :current_user, :any, default: nil
 
-    @doc """
-    Dev-only shortcut for signing in as a dummy user of a chosen role, so local
-    development does not need a configured GitHub OAuth app.
-    """
-    def mock_login_menu(assigns) do
-      assigns = assign(assigns, :roles, @mock_roles)
-
+  if Mix.env() in [:dev, :test] do
+    def dev_nav(assigns) do
       ~H"""
-      <div class="dropdown dropdown-end">
-        <div
-          tabindex="0"
-          role="button"
-          aria-label="Mock sign in"
-          class="btn btn-warning btn-sm gap-1"
-        >
-          <.icon name="hero-beaker" class="size-4" /> Mock login
-        </div>
-        <ul
-          tabindex="0"
-          class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-56 p-2 z-50"
-        >
-          <li class="menu-title">Sign in as</li>
-          <li :for={{label, role} <- @roles}>
-            <.link href={~p"/mock-auth/sign-in/#{role}"} method="post">
-              {label}
-            </.link>
-          </li>
-        </ul>
-      </div>
+      <VarselWeb.DevNav.dev_nav current_user={@current_user} />
       """
     end
   else
-    # Keeps the `<.mock_login_menu />` call site valid in builds where mock
-    # login is compiled out.
-    defp mock_login_menu(assigns), do: ~H""
+    def dev_nav(assigns), do: ~H""
   end
 
   # The nav sections owning path prefixes; a link is active when it is the
