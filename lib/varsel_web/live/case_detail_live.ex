@@ -1180,7 +1180,7 @@ defmodule VarselWeb.CaseDetailLive do
       </div>
 
       <.page_container>
-        <:left width={:narrow} class="lg:sticky lg:top-4">
+        <:left width={:narrow} class="lg:sticky lg:top-24">
           <.section_nav sections={workspace_sections(@display_case, @case_record.proposals)} />
         </:left>
 

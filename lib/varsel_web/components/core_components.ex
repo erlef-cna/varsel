@@ -373,6 +373,41 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders the "On this page" rail: links to a page's own headings, sticking
+  beside the prose as it scrolls. Belongs in a `page_container/1` `right`
+  slot.
+
+  Entries are maps of `:id` — the anchor to jump to — and `:label`. A `:level`
+  past 2 indents under the heading above it; pages whose sections are all one
+  rank can leave it out.
+
+  To keep it in view as the page scrolls, stick the rail it stands in:
+  `<:right class="lg:sticky lg:top-24">`.
+  """
+  attr :entries, :list, required: true, doc: ~s(maps of `:id`, `:label` and an optional `:level`)
+  attr :class, :any, default: nil
+
+  def table_of_contents(assigns) do
+    ~H"""
+    <nav class={List.wrap(@class)} aria-label="Table of contents" data-toc>
+      <p class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-3">
+        On this page
+      </p>
+      <ul class="space-y-1 text-sm border-l border-base-300">
+        <li :for={entry <- @entries} class={[Map.get(entry, :level, 2) > 2 && "ml-3"]}>
+          <a
+            href={"##{entry.id}"}
+            class="block border-l-2 border-transparent -ml-px pl-3 py-0.5 text-base-content/70 hover:text-primary hover:border-primary transition-colors"
+          >
+            {entry.label}
+          </a>
+        </li>
+      </ul>
+    </nav>
+    """
+  end
+
+  @doc """
   Renders a counted noun for the list headers — "1 token", "4 tokens".
 
   Pass `plural` for words that do not simply take an "s", including the verb

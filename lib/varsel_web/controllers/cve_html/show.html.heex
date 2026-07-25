@@ -53,22 +53,10 @@ SPDX-License-Identifier: Apache-2.0
 </div>
 
 <.page_container>
-  <:right>
-    <nav class="sticky top-24" aria-label="Table of contents" data-toc>
-      <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
-        On this page
-      </p>
-      <ul class="space-y-1 border-l border-base-300 text-sm">
-        <li :for={section <- Enum.filter(sections, & &1.present?)}>
-          <a
-            href={"##{section.id}"}
-            class="block border-l-2 border-transparent -ml-px py-0.5 pl-3 text-base-content/70 transition-colors hover:border-primary hover:text-primary"
-          >
-            {section.toc_label}
-          </a>
-        </li>
-      </ul>
-    </nav>
+  <:right class="lg:sticky lg:top-24">
+    <.table_of_contents entries={
+      for section <- sections, section.present?, do: %{id: section.id, label: section.toc_label}
+    } />
   </:right>
 
   <div class="flex min-w-0 flex-col gap-4">
