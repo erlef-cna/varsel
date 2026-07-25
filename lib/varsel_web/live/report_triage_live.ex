@@ -114,13 +114,6 @@ defmodule VarselWeb.ReportTriageLive do
 
   defp presence(value) when is_binary(value), do: if(String.trim(value) == "", do: nil, else: value)
 
-  defp errors_to_string(error) do
-    error
-    |> Ash.Error.to_error_class()
-    |> Map.get(:errors, [])
-    |> Enum.map_join("\n", &Exception.message/1)
-  end
-
   defp state_badge_class(:submitted), do: "badge-warning"
   defp state_badge_class(:triaged), do: "badge-info"
   defp state_badge_class(:accepted), do: "badge-success"
@@ -151,9 +144,6 @@ defmodule VarselWeb.ReportTriageLive do
       }
     end
   end
-
-  defp format_dt(nil), do: "—"
-  defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M")
 
   # Jason, not the stdlib JSON module: only Jason has a pretty printer.
   defp pretty_json(value), do: Jason.encode!(value, pretty: true)
@@ -199,7 +189,7 @@ defmodule VarselWeb.ReportTriageLive do
               <h3 class="font-semibold">{report.summary}</h3>
               <p class="text-xs text-base-content/60">
                 <span :if={@triage?}>by {report.reporter.name || report.reporter.email} · </span>
-                {format_dt(report.inserted_at)}
+                {format_datetime(report.inserted_at)}
               </p>
               <p :if={report.triage_notes} class="text-sm text-base-content/70 mt-1 italic">
                 {report.triage_notes}

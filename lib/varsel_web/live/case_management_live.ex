@@ -324,12 +324,6 @@ defmodule VarselWeb.CaseManagementLive do
 
   # ------------------------------------------------------------------ helpers
 
-  defp poc?(%{role: :poc}), do: true
-  defp poc?(_user), do: false
-
-  defp format_dt(nil), do: "—"
-  defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d")
-
   defp format_short_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %-d")
 
   # "4 d" / "22 h" style age used on pipeline cards, distinct from
@@ -363,13 +357,6 @@ defmodule VarselWeb.CaseManagementLive do
 
   defp needs_owner?(case_record) do
     case_record.state in [:review, :approved] and case_record.assignments == []
-  end
-
-  defp errors_to_string(error) do
-    error
-    |> Ash.Error.to_error_class()
-    |> Map.get(:errors, [])
-    |> Enum.map_join("\n", &Exception.message/1)
   end
 
   attr :socket, :any, required: true
@@ -726,7 +713,7 @@ defmodule VarselWeb.CaseManagementLive do
                 <.archive_state_cell case_record={case_record} />
               </td>
               <td class="font-mono text-xs text-base-content/60">
-                {if case_record.state == :closed, do: "—", else: format_dt(case_record.published_at)}
+                {if case_record.state == :closed, do: "—", else: format_date(case_record.published_at)}
               </td>
             </tr>
           </tbody>
@@ -753,7 +740,7 @@ defmodule VarselWeb.CaseManagementLive do
               <% else %>
                 <.severity_chip :if={case_record.cvss_score} score={case_record.cvss_score} />
                 <span class="font-mono text-xs text-base-content/60">{case_record.cve_id || "—"}</span>
-                <span class="font-mono text-xs text-base-content/60">{format_dt(
+                <span class="font-mono text-xs text-base-content/60">{format_date(
                   case_record.published_at
                 )}</span>
               <% end %>

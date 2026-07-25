@@ -376,9 +376,6 @@ defmodule VarselWeb.Layouts do
     ]
   end
 
-  defp poc?(%{role: :poc}), do: true
-  defp poc?(_user), do: false
-
   @doc """
   Provides dark vs light theme toggle based on themes defined in app.css.
 

@@ -186,7 +186,4 @@ defmodule VarselWeb.CommonWeaknessesLive do
     </.page_container>
     """
   end
-
-  defp format_date(nil), do: "—"
-  defp format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d")
 end

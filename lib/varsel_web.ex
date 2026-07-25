@@ -88,6 +88,7 @@ defmodule VarselWeb do
 
       import Phoenix.HTML
       import VarselWeb.CoreComponents
+      import VarselWeb.ViewHelpers
 
       # HTML escaping functionality
       alias Phoenix.LiveView.JS

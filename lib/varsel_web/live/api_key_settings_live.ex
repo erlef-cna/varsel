@@ -131,9 +131,6 @@ defmodule VarselWeb.ApiKeySettingsLive do
     DateTime.add(DateTime.utc_now(), String.to_integer(days), :day)
   end
 
-  defp format_date(nil), do: "never"
-  defp format_date(datetime), do: Calendar.strftime(datetime, "%Y-%m-%d")
-
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
@@ -213,10 +210,10 @@ defmodule VarselWeb.ApiKeySettingsLive do
                   <.state :if={!api_key.valid} dot="bg-base-content/30">Expired</.state>
                 </td>
                 <td class="whitespace-nowrap tabular-nums text-base-content/70">
-                  {format_date(api_key.inserted_at)}
+                  {format_date(api_key.inserted_at, "never")}
                 </td>
                 <td class="whitespace-nowrap tabular-nums text-base-content/70">
-                  {format_date(api_key.expires_at)}
+                  {format_date(api_key.expires_at, "never")}
                 </td>
                 <td class="text-right">
                   <button

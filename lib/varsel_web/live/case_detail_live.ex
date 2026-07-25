@@ -885,16 +885,6 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp presence(value) when is_binary(value), do: if(String.trim(value) == "", do: nil, else: value)
 
-  defp errors_to_string(error) do
-    error
-    |> Ash.Error.to_error_class()
-    |> Map.get(:errors, [])
-    |> Enum.map_join("\n", &Exception.message/1)
-  end
-
-  defp poc?(%{role: :poc}), do: true
-  defp poc?(_user), do: false
-
   defp assigned?(case_record, %{id: user_id}), do: Enum.any?(case_record.assignments, &(&1.user_id == user_id))
 
   defp editable?(case_record), do: case_record.state in [:draft, :review]

@@ -296,13 +296,6 @@ defmodule VarselWeb.CveListLive do
     end
   end
 
-  defp errors_to_string(error) do
-    error
-    |> Ash.Error.to_error_class()
-    |> Map.get(:errors, [])
-    |> Enum.map_join("\n", &Exception.message/1)
-  end
-
   # P4: the pool confirm sends no "reason" param and keeps its fixed copy —
   # an unused reserved ID has no story worth prompting for. The table
   # confirm's reason input is prefilled with (and defaults to, if blanked)
@@ -319,15 +312,9 @@ defmodule VarselWeb.CveListLive do
   defp default_reject_reason(%{state: :reserved}), do: "Rejected from the reserved pool"
   defp default_reject_reason(_record), do: "Rejected before publication"
 
-  defp poc?(%{role: :poc}), do: true
-  defp poc?(_user), do: false
-
   defp table_states, do: @table_states
 
   defp editable?(state), do: state in @editable
-
-  defp format_dt(nil), do: "—"
-  defp format_dt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d")
 
   # P3's search feedback reads as a sentence ("14 match “ssh”"), so the
   # verb agrees with the count rather than pluralizing a noun.
@@ -491,7 +478,7 @@ defmodule VarselWeb.CveListLive do
                   <.record_state_cell record={record} />
                 </td>
                 <td class="whitespace-nowrap tabular-nums text-xs">
-                  {format_dt(record.date_published)}
+                  {format_date(record.date_published)}
                 </td>
                 <td :if={@poc?} class="relative text-right">
                   <div class="flex flex-col items-end gap-0.5">
@@ -653,7 +640,7 @@ defmodule VarselWeb.CveListLive do
         <.panel_fact
           :if={@oldest}
           label="oldest"
-          value={"#{format_dt(@oldest.reserved_at)} · #{pool_age_days(@oldest.reserved_at)} d"}
+          value={"#{format_date(@oldest.reserved_at)} · #{pool_age_days(@oldest.reserved_at)} d"}
           warn?={@oldest_stale?}
         />
         <button
@@ -733,7 +720,7 @@ defmodule VarselWeb.CveListLive do
     >
       <span class="font-mono text-xs text-base-content/60">{@record.cve_id}</span>
       <span class="text-xs text-base-content/50 tabular-nums">
-        reserved {format_dt(@record.reserved_at)}
+        reserved {format_date(@record.reserved_at)}
       </span>
       <button
         type="button"
@@ -802,7 +789,7 @@ defmodule VarselWeb.CveListLive do
         <span :if={@id_range} class="w-px h-4 bg-base-300 shrink-0"></span>
         <.panel_fact :if={@id_range} label="span" value={@id_range} mono?={true} />
         <span :if={@latest} class="w-px h-4 bg-base-300 shrink-0"></span>
-        <.panel_fact :if={@latest} label="last" value={format_dt(@latest.rejected_at)} />
+        <.panel_fact :if={@latest} label="last" value={format_date(@latest.rejected_at)} />
         <button type="button" class="btn btn-ghost btn-xs ml-auto" phx-click="toggle_rejected">
           {if @open?, do: "Hide IDs ▴", else: "Show IDs ▾"}
         </button>
@@ -819,7 +806,7 @@ defmodule VarselWeb.CveListLive do
         >
           <span class="font-mono text-xs text-base-content/60">{record.cve_id}</span>
           <span class="text-xs text-base-content/50 tabular-nums">
-            rejected {format_dt(record.rejected_at)}
+            rejected {format_date(record.rejected_at)}
           </span>
         </div>
       </div>
