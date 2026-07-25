@@ -163,7 +163,10 @@ defmodule VarselWeb.CommonWeaknessesLive do
             <tbody>
               <tr :for={record <- @selected_cves}>
                 <td>
-                  <.link navigate={~p"/cves/#{record.cve_id}"} class="link link-primary font-medium">
+                  <.link
+                    navigate={~p"/cves/#{record.cve_id <> ".html"}"}
+                    class="link link-primary font-medium"
+                  >
                     {record.title || record.cve_id}
                   </.link>
                 </td>

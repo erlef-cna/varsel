@@ -19,34 +19,31 @@ defmodule VarselWeb.CveController do
     render(conn, :index, records: records)
   end
 
-  # HTML detail page (browser pipeline). A `.json` id (from `/cves/<id>.json`,
-  # which also matches this single-segment route) is delegated to the JSON
-  # renderer so both URLs keep working.
-  def show_html(conn, %{"cve_id" => "index.json"}), do: conn |> put_format(:json) |> index(%{})
+  def show(conn, %{"cve_id" => cve_id} = params) do
+    case Path.extname(cve_id) do
+      ".json" -> show_json(conn, %{params | "cve_id" => Path.rootname(cve_id)})
+      ".html" -> show_html(conn, %{params | "cve_id" => Path.rootname(cve_id)})
+      _ -> render_404(conn, :html)
+    end
+  end
 
   def show_html(conn, %{"cve_id" => cve_id}) do
-    if String.ends_with?(cve_id, ".json") do
-      render_json(conn, String.replace_suffix(cve_id, ".json", ""))
-    else
-      record = CVE.get_published_cve_record!(cve_id, actor: nil)
-      cve = record.cve_json
-      cna = cve["containers"]["cna"] || %{}
+    record = CVE.get_published_cve_record!(cve_id, actor: nil)
+    cve = record.cve_json
+    cna = cve["containers"]["cna"] || %{}
 
-      conn
-      |> assign(:page_title, cve["cveMetadata"]["cveId"])
-      |> render(:show,
-        cve: cve,
-        cna: cna,
-        cwe_names: cwe_names(cna),
-        capec_names: capec_names(cna)
-      )
-    end
+    conn
+    |> assign(:page_title, cve["cveMetadata"]["cveId"])
+    |> render(:show, cve: cve, cna: cna, cwe_names: cwe_names(cna), capec_names: capec_names(cna))
   rescue
-    Invalid ->
-      conn
-      |> put_status(:not_found)
-      |> put_view(html: VarselWeb.ErrorHTML)
-      |> render(:"404")
+    Invalid -> render_404(conn, :html)
+  end
+
+  def show_json(conn, %{"cve_id" => cve_id}) do
+    record = CVE.get_published_cve_record!(cve_id, actor: nil)
+    json(conn, record.cve_json)
+  rescue
+    Invalid -> render_404(conn, :json)
   end
 
   # id -> catalog name maps, one query each regardless of how many
@@ -91,17 +88,15 @@ defmodule VarselWeb.CveController do
     end
   end
 
-  # JSON record (api pipeline), also handles multi-segment wildcard paths.
-  def show_json(conn, %{"path" => path}) do
-    cve_id = path |> Enum.join("/") |> String.replace_suffix(".json", "")
-    render_json(conn, cve_id)
-  end
-
-  defp render_json(conn, cve_id) do
-    record = CVE.get_published_cve_record!(cve_id, actor: nil)
-    json(conn, record.cve_json)
-  rescue
-    Invalid ->
-      conn |> put_status(:not_found) |> json(%{})
+  defp render_404(conn, format) do
+    conn
+    |> put_status(:not_found)
+    |> put_view(
+      case format do
+        :html -> [html: VarselWeb.ErrorHTML]
+        :json -> [json: VarselWeb.ErrorJSON]
+      end
+    )
+    |> render("404.#{format}")
   end
 end

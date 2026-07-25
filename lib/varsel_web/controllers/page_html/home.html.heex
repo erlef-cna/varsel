@@ -92,7 +92,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <.link
         :for={record <- @latest}
-        navigate={~p"/cves/#{record.cve_id}"}
+        navigate={~p"/cves/#{record.cve_id <> ".html"}"}
         class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
       >
         <div class="card-body p-5">

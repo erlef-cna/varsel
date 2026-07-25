@@ -127,7 +127,7 @@ defmodule VarselWeb.CveHtmlTest do
       seed_catalogs()
       publish()
 
-      conn = get(conn, ~p"/cves/#{@cve_id}")
+      conn = get(conn, ~p"/cves/#{@cve_id <> ".html"}")
       body = html_response(conn, 200)
 
       assert body =~ @cve_id
@@ -143,7 +143,7 @@ defmodule VarselWeb.CveHtmlTest do
     test "the Am I affected? card mounts the embedded checker LiveView", %{conn: conn} do
       publish()
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ ~s(id="am-i-affected")
       assert body =~ "data-phx-session"
@@ -154,7 +154,7 @@ defmodule VarselWeb.CveHtmlTest do
       seed_catalogs()
       publish()
 
-      conn = get(conn, ~p"/cves/#{@cve_id}")
+      conn = get(conn, ~p"/cves/#{@cve_id <> ".html"}")
       body = html_response(conn, 200)
 
       toc_order = ~w(am-i-affected description weaknesses affected workarounds configurations
@@ -175,7 +175,7 @@ defmodule VarselWeb.CveHtmlTest do
       seed_catalogs()
       publish()
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "CWE-863"
       assert body =~ "Incorrect Authorization"
@@ -190,7 +190,7 @@ defmodule VarselWeb.CveHtmlTest do
       seed_catalogs()
       publish()
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "CAPEC-180"
       assert body =~ "Exploiting Trust in Client"
@@ -216,7 +216,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       [_band, rest] = String.split(body, ~s(id="weaknesses"), parts: 2)
       [card, _rest] = String.split(rest, "</section>", parts: 2)
@@ -228,7 +228,7 @@ defmodule VarselWeb.CveHtmlTest do
       # CWE-9999 is in the fixture but never seeded into the local catalog.
       publish()
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "CWE-9999"
       refute body =~ "CWE-9999</code>\n      ·"
@@ -238,7 +238,7 @@ defmodule VarselWeb.CveHtmlTest do
     test "multi-branch affected ranges carry semver branch labels", %{conn: conn} do
       publish()
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "1.4 series"
       assert body =~ "3.5 series"
@@ -274,7 +274,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ String.slice(affected_sha, 0, 7)
       # The full sha legitimately appears once, in the range line's `title`
@@ -313,7 +313,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "introduced by"
       assert body =~ "fixed by"
@@ -354,7 +354,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       refute body =~ "introduced by"
       assert body =~ "fixed by"
@@ -385,7 +385,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ ~s(id="am-i-affected")
       assert body =~ "Am I affected?"
@@ -431,7 +431,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ ~s(id="am-i-affected")
       assert body =~ "type your ash version to check"
@@ -479,7 +479,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ ~s(id="am-i-affected")
       assert body =~ "data-phx-session"
@@ -490,7 +490,7 @@ defmodule VarselWeb.CveHtmlTest do
     } do
       publish()
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "https://hex.pm/packages/ash"
       assert body =~ "Hex.pm"
@@ -535,7 +535,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ ~s(id="affected-2")
       refute body =~ ~s(id="affected-3")
@@ -549,7 +549,7 @@ defmodule VarselWeb.CveHtmlTest do
     test "Workarounds, Configurations and Solutions each render their own card", %{conn: conn} do
       publish()
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ ~s(id="workarounds")
       assert body =~ "Disable before-action hooks"
@@ -577,7 +577,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       advisory_pos = pos(body, "GHSA-jj4j-x5ww-cwh9")
       patch_pos = pos(body, "abc123")
@@ -596,7 +596,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       refute body =~ "cna.erlef.org/cves/#{@cve_id}"
       assert body =~ "abc123def"
@@ -611,7 +611,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       refute body =~ ~s(id="references")
       refute body =~ ~s(href="#references")
@@ -632,7 +632,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "github.com/acme/proxy_lib"
       assert body =~ "00aa11b"
@@ -651,7 +651,7 @@ defmodule VarselWeb.CveHtmlTest do
       cve_json = put_in(@cve_json, ["containers", "cna", "metrics"], [])
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       refute body =~ ~s(id="cvss-breakdown")
       assert body =~ "no score"
@@ -661,7 +661,7 @@ defmodule VarselWeb.CveHtmlTest do
          %{conn: conn} do
       publish()
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "CVSS:4.0/<wbr"
       assert body =~ "AV:N/<wbr"
@@ -680,14 +680,21 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id}") |> html_response(200)
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "cpe:2.3:a:erlang:erlang/otp:"
       refute body =~ "erlang\\/otp"
     end
 
     test "returns 404 for an unknown id", %{conn: conn} do
-      conn = get(conn, ~p"/cves/CVE-0000-00000")
+      conn = get(conn, ~p"/cves/#{"CVE-0000-00000" <> ".html"}")
+      assert html_response(conn, 404)
+    end
+
+    test "the extensionless clean URL 404s — .html is the only canonical page", %{conn: conn} do
+      publish()
+
+      conn = get(conn, ~p"/cves/#{@cve_id}")
       assert html_response(conn, 404)
     end
   end
