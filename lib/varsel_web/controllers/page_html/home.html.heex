@@ -1,3 +1,9 @@
+<%!--
+  SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+  SPDX-License-Identifier: Apache-2.0
+--%>
+
 <%!-- Test deployment warning: only rendered when indexing is blocked. --%>
 <div
   :if={Application.fetch_env!(:varsel, :test_deployment?)}
