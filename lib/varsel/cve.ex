@@ -70,15 +70,12 @@ defmodule Varsel.CVE do
       get CveRecord, :get_published_cve, :get_published, identity: false
       list CveRecord, :search_cves, :search
       list CveRecord, :list_cves_by_purl, :list_by_purl
-
-      # POC-only (policy-gated; anonymous callers see published records only).
       list CveRecord, :list_all_cves, :list_all
       list CveRecord, :available_cve_ids, :available
 
       list OsvRecord, :list_osv_records, :read
       read_one OsvRecord, :get_osv_record, :get
 
-      # POC-only report triage (policy-gated).
       list VulnerabilityReport, :list_vulnerability_reports, :list_reports
 
       action CveValidation, :validate_cve, :validate
@@ -90,14 +87,11 @@ defmodule Varsel.CVE do
 
     mutations do
       create VulnerabilityReport, :submit_vulnerability_report, :submit
-
-      # POC-only report triage (policy-gated). Accepting without a case_id
-      # opens a fresh draft case titled from the report summary.
       update VulnerabilityReport, :triage_vulnerability_report, :triage
       update VulnerabilityReport, :accept_vulnerability_report, :accept
       update VulnerabilityReport, :reject_vulnerability_report, :reject
+      update VulnerabilityReport, :withdraw_vulnerability_report, :withdraw
 
-      # POC-only lifecycle transitions (policy-gated).
       update CveRecord, :assign_cve, :assign
       update CveRecord, :update_cve, :update
       update CveRecord, :request_publish_cve, :request_publish
@@ -157,13 +151,12 @@ defmodule Varsel.CVE do
 
     resource VulnerabilityReport do
       define :submit_vulnerability_report, action: :submit
-
-      # POC-only triage, used by the (future) report-management LiveView.
       define :list_vulnerability_reports, action: :list_reports
       define :get_vulnerability_report, action: :read, get_by: [:id]
       define :triage_vulnerability_report, action: :triage
       define :accept_vulnerability_report, action: :accept
       define :reject_vulnerability_report, action: :reject
+      define :withdraw_vulnerability_report, action: :withdraw
       define :notify_pocs_of_vulnerability_report, action: :notify_pocs
     end
   end

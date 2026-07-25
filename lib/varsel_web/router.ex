@@ -187,7 +187,6 @@ defmodule VarselWeb.Router do
       ] do
       live "/users", UserManagementLive, :index
       live "/cves/manage/:id", VarselEditLive, :edit
-      live "/reports", ReportTriageLive, :index
     end
 
     # Public pages that adapt to a signed-in user: the CVE list doubles as
@@ -213,6 +212,7 @@ defmodule VarselWeb.Router do
         {VarselWeb.LiveNotifications, :default}
       ] do
       live "/report", VulnerabilityReportLive, :new
+      live "/reports", ReportTriageLive, :index
       live "/settings/tokens", ApiKeySettingsLive, :index
       live "/cases", CaseManagementLive, :index
       live "/cases/:id", CaseDetailLive, :view
