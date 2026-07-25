@@ -21,6 +21,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
   import VarselWeb.CaseComponents
+  import VarselWeb.CaseFormComponents
 
   alias Varsel.Accounts
   alias Varsel.Cases
@@ -1922,25 +1923,30 @@ defmodule VarselWeb.CaseDetailLive do
     <div class="flex justify-end mb-2">
       <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
     </div>
-    <.form for={@form} id="child-form" phx-change="validate_child" phx-submit="submit_child">
-      <.child_fields type="package" form={@form} catalog_options={nil} channel_options={[]} />
-
-      <div class="flex items-end gap-2 mt-4">
-        <button type="submit" class={["btn btn-sm", save_button_class(@mode)]}>
-          {if @mode == :propose, do: "Suggest changes", else: "Save changes"}
-        </button>
-        <button type="button" class="btn btn-eef-quiet btn-sm" phx-click="cancel_child">
-          Cancel
-        </button>
-        <input
-          :if={@mode == :propose}
-          type="text"
-          name="reasoning"
-          placeholder="Reasoning (attached to the suggestion, optional)"
-          class="input input-bordered input-sm flex-1"
-        />
-      </div>
-    </.form>
+    <.affected_package_form
+      form={@form}
+      id="child-form"
+      phx-change="validate_child"
+      phx-submit="submit_child"
+    >
+      <:actions>
+        <div class="flex items-end gap-2 mt-4">
+          <button type="submit" class={["btn btn-sm", save_button_class(@mode)]}>
+            {if @mode == :propose, do: "Suggest changes", else: "Save changes"}
+          </button>
+          <button type="button" class="btn btn-eef-quiet btn-sm" phx-click="cancel_child">
+            Cancel
+          </button>
+          <input
+            :if={@mode == :propose}
+            type="text"
+            name="reasoning"
+            placeholder="Reasoning (attached to the suggestion, optional)"
+            class="input input-bordered input-sm flex-1"
+          />
+        </div>
+      </:actions>
+    </.affected_package_form>
     """
   end
 
@@ -2882,338 +2888,120 @@ defmodule VarselWeb.CaseDetailLive do
   defp child_modal(assigns) do
     ~H"""
     <.modal id="child-modal" title={@child_form.title} on_cancel="cancel_child">
-      <.form
-        for={@child_form.form}
+      <.child_form
+        child_form={@child_form}
+        mode={@mode}
+        catalog_options={@catalog_options}
         id="child-form"
         phx-change="validate_child"
         phx-submit="submit_child"
       >
-        <.child_fields
-          type={@child_form.type}
-          form={@child_form.form}
-          catalog_options={@catalog_options}
-          channel_options={@child_form.channel_options}
-        />
-
-        <input
-          :if={@mode == :propose}
-          type="text"
-          name="reasoning"
-          placeholder="Reasoning (attached to proposals, optional)"
-          class="input input-bordered input-sm w-full mt-2"
-        />
-
-        <div class="modal-action">
-          <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_child">Cancel</button>
-          <button type="submit" class="btn btn-primary btn-sm">
-            {if @mode == :propose, do: "Propose", else: "Save"}
-          </button>
-        </div>
-      </.form>
+        <:actions>
+          <div class="modal-action">
+            <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_child">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary btn-sm">
+              {if @mode == :propose, do: "Propose", else: "Save"}
+            </button>
+          </div>
+        </:actions>
+      </.child_form>
     </.modal>
     """
   end
 
-  defp child_fields(%{type: "package"} = assigns) do
+  # Which of the named forms a child row opens, and what each of them needs
+  # beyond the changeset itself.
+  attr :child_form, :map, required: true
+  attr :mode, :atom, required: true
+  attr :catalog_options, :any, required: true
+  attr :rest, :global
+  slot :actions
+
+  defp child_form(%{child_form: %{type: "package"}} = assigns) do
     ~H"""
-    <div class="grid sm:grid-cols-2 gap-x-4">
-      <.input field={@form[:vendor]} type="text">
-        <:label>Vendor</:label>
-      </.input>
-      <.input field={@form[:product]} type="text">
-        <:label>Product</:label>
-      </.input>
-    </div>
-    <.input field={@form[:repo_url]} type="text" placeholder="https://github.com/owner/repo">
-      <:label>Repository URL (empty for hosted services)</:label>
-    </.input>
-    <.input
-      field={@form[:default_status]}
-      type="select"
-      options={enum_options(AffectedPackage.DefaultStatus)}
-    >
-      <:label>Default status</:label>
-    </.input>
-    <.program_files_field form={@form} />
-    <.input
-      field={@form[:cpe]}
-      type="text"
-      placeholder="derived from vendor/product when empty"
-      class="w-full input font-mono"
-    >
-      <:label>CPE 2.3 (optional override)</:label>
-    </.input>
-    <.input field={@form[:allow_unreleased_fix]} type="checkbox">
-      <:label>Allow publishing while a fix has no containing release</:label>
-    </.input>
-    <.input field={@form[:include_prereleases]} type="checkbox">
-      <:label>Include pre-release versions (rc/alpha/beta) in the affected ranges</:label>
-    </.input>
+    <.affected_package_form form={@child_form.form} propose?={@mode == :propose} {@rest}>
+      <:actions>{render_slot(@actions)}</:actions>
+    </.affected_package_form>
     """
   end
 
-  # The preset forms: vendor/product/repo/CPE and channels are prefilled;
-  # only the boundary facts and content lists remain.
-  defp child_fields(%{type: "package_" <> _preset} = assigns) do
+  defp child_form(%{child_form: %{type: "package_" <> preset}} = assigns) do
+    assigns = assign(assigns, :preset, String.to_existing_atom(preset))
+
     ~H"""
-    <.input
-      :if={@type != "package_gleam"}
-      field={@form[:applications]}
-      type="text"
-      value={list_value(@form[:applications])}
-      placeholder={if @type == "package_elixir", do: "e.g. elixir, mix", else: "e.g. ssh, stdlib"}
+    <.preset_package_form
+      form={@child_form.form}
+      preset={@preset}
+      propose?={@mode == :propose}
+      {@rest}
     >
-      <:label>Affected applications (comma separated)</:label>
-    </.input>
-    <.input
-      field={@form[:introduced_commit]}
-      type="text"
-      placeholder="40-char commit SHA"
-      class="w-full input font-mono"
-    >
-      <:label>Introducing commit</:label>
-    </.input>
-    <.input
-      field={@form[:fixed_commits]}
-      type="text"
-      value={list_value(@form[:fixed_commits])}
-      class="w-full input font-mono"
-    >
-      <:label>Fix commits (comma separated, one per release branch)</:label>
-    </.input>
-    <.program_files_field form={@form} />
+      <:actions>{render_slot(@actions)}</:actions>
+    </.preset_package_form>
     """
   end
 
-  defp child_fields(%{type: "channel"} = assigns) do
+  defp child_form(%{child_form: %{type: "channel"}} = assigns) do
     ~H"""
-    <.input field={@form[:purl_type]} type="select" options={enum_options(PackageChannel.PurlType)}>
-      <:label>Purl type (the git/forge entry is added automatically)</:label>
-    </.input>
-    <div class="grid sm:grid-cols-2 gap-x-4">
-      <.input field={@form[:namespace]} type="text" placeholder="e.g. gleam.run">
-        <:label>Namespace (optional)</:label>
-      </.input>
-      <.input field={@form[:name]} type="text" placeholder="e.g. my_package">
-        <:label>Name (empty for hosted)</:label>
-      </.input>
-    </div>
-    <.input
-      type="text"
-      name="child[qualifiers]"
-      value={qualifiers_value(@form[:qualifiers])}
-      placeholder="repository_url=ghcr.io/owner"
-    >
-      <:label>Qualifiers (key=value, comma separated)</:label>
-      <:description>
-        Only overrides are stored here — otp channels derive repository_url and
-        vcs_url from the package's repository automatically at render time.
-      </:description>
-    </.input>
-    <.input
-      field={@form[:subpath]}
-      type="text"
-      placeholder="e.g. lib/ssh"
-      class="w-full input font-mono"
-    >
-      <:label>Subpath (optional)</:label>
-      <:description>
-        Repository directory this channel distributes. Program files scope to
-        it, paths relative to it — e.g. lib/ssh for pkg:otp/ssh. Empty
-        distributes the whole repository.
-      </:description>
-    </.input>
-    <.input field={@form[:tag_suffixes]} type="text" value={list_value(@form[:tag_suffixes])}>
-      <:label>OCI tag suffixes (comma separated)</:label>
-    </.input>
-    <.input field={@form[:position]} type="number">
-      <:label>Position</:label>
-    </.input>
+    <.channel_form form={@child_form.form} propose?={@mode == :propose} {@rest}>
+      <:actions>{render_slot(@actions)}</:actions>
+    </.channel_form>
     """
   end
 
-  defp child_fields(%{type: "event"} = assigns) do
+  defp child_form(%{child_form: %{type: "event"}} = assigns) do
     ~H"""
-    <.input field={@form[:event]} type="select" options={enum_options(VersionEvent.Event)}>
-      <:label>Boundary</:label>
-    </.input>
-    <.input
-      :if={@form.source.type == :create and @channel_options != []}
-      field={@form[:package_channel_id]}
-      type="select"
-      options={@channel_options}
-      prompt="All channels (package-wide)"
+    <.version_event_form
+      form={@child_form.form}
+      channel_options={@child_form.channel_options}
+      propose?={@mode == :propose}
+      {@rest}
     >
-      <:label>Channel scope</:label>
-      <:description>
-        Scoping records an explicit boundary for that channel only — e.g. bounding
-        the former application when functionality moved between applications.
-      </:description>
-    </.input>
-    <.input
-      field={@form[:commit_sha]}
-      type="text"
-      placeholder="40-char commit SHA"
-      class="w-full input font-mono"
-    >
-      <:label>Commit SHA (preferred)</:label>
-    </.input>
-    <.input field={@form[:version]} type="text" placeholder={~s(e.g. "0", "1.4.2" or "2026-01-19")}>
-      <:label>Explicit version (when no commit applies)</:label>
-    </.input>
-    <.input field={@form[:note]} type="text">
-      <:label>Note (which release branch, why)</:label>
-    </.input>
+      <:actions>{render_slot(@actions)}</:actions>
+    </.version_event_form>
     """
   end
 
-  defp child_fields(%{type: "reference"} = assigns) do
+  defp child_form(%{child_form: %{type: "reference"}} = assigns) do
     ~H"""
-    <.input field={@form[:url]} type="text" class="w-full input font-mono">
-      <:label>URL</:label>
-    </.input>
+    <.reference_form form={@child_form.form} propose?={@mode == :propose} {@rest}>
+      <:actions>{render_slot(@actions)}</:actions>
+    </.reference_form>
+    """
+  end
 
-    <fieldset class="fieldset mb-2">
-      <label class="label">Tags</label>
-      <%!-- Sentinel so unchecking every box still submits (and clears) tags. --%>
-      <input type="hidden" name="child[tags][]" value="" />
-      <div class="grid grid-cols-2 gap-x-4 gap-y-1">
-        <label
-          :for={tag <- CaseReference.standard_tags()}
-          class="flex items-center gap-2 text-sm cursor-pointer"
-        >
-          <input
-            type="checkbox"
-            name="child[tags][]"
-            value={tag}
-            checked={tag in selected_tags(@form)}
-            class="checkbox checkbox-xs"
-          />
-          {tag}
-        </label>
-      </div>
-    </fieldset>
+  defp child_form(%{child_form: %{type: "credit"}} = assigns) do
+    ~H"""
+    <.credit_form form={@child_form.form} propose?={@mode == :propose} {@rest}>
+      <:actions>{render_slot(@actions)}</:actions>
+    </.credit_form>
+    """
+  end
 
-    <.input
-      type="text"
-      name="child[custom_tags]"
-      value={custom_tags_value(@form)}
-      placeholder="x_version-scheme"
+  defp child_form(%{child_form: %{type: "weakness"}} = assigns) do
+    ~H"""
+    <.weakness_form
+      form={@child_form.form}
+      catalog_options={@catalog_options}
+      propose?={@mode == :propose}
+      {@rest}
     >
-      <:label>Custom tags (x_ prefixed, comma separated)</:label>
-    </.input>
-    <%!-- No position field: new references append; the list is drag-sortable. --%>
+      <:actions>{render_slot(@actions)}</:actions>
+    </.weakness_form>
     """
   end
 
-  defp child_fields(%{type: "credit"} = assigns) do
+  defp child_form(%{child_form: %{type: "impact"}} = assigns) do
     ~H"""
-    <.input field={@form[:name]} type="text">
-      <:label>Name</:label>
-    </.input>
-    <.input field={@form[:organization]} type="text">
-      <:label>Organization (optional)</:label>
-    </.input>
-    <.input field={@form[:credit_type]} type="select" options={enum_options(CaseCredit.CreditType)}>
-      <:label>Credit type</:label>
-    </.input>
-    <%!-- No position field: new credits append; the list is drag-sortable. --%>
-    """
-  end
-
-  defp child_fields(%{type: "weakness"} = assigns) do
-    ~H"""
-    <.input
-      field={@form[:cwe_id]}
-      type="text"
-      list="cwe-options"
-      placeholder="Type a CWE number or name…"
-      autocomplete="off"
+    <.impact_form
+      form={@child_form.form}
+      catalog_options={@catalog_options}
+      propose?={@mode == :propose}
+      {@rest}
     >
-      <:label>CWE</:label>
-    </.input>
-    <datalist id="cwe-options">
-      <option :for={{id, name} <- @catalog_options.cwe} value={"CWE-#{id} #{name}"}></option>
-    </datalist>
-    """
-  end
-
-  defp child_fields(%{type: "impact"} = assigns) do
-    ~H"""
-    <.input
-      field={@form[:capec_id]}
-      type="text"
-      list="capec-options"
-      placeholder="Type a CAPEC number or name…"
-      autocomplete="off"
-    >
-      <:label>CAPEC</:label>
-    </.input>
-    <datalist id="capec-options">
-      <option :for={{id, name} <- @catalog_options.capec} value={"CAPEC-#{id} #{name}"}></option>
-    </datalist>
-    """
-  end
-
-  defp program_files_field(assigns) do
-    ~H"""
-    <fieldset class="fieldset mb-2">
-      <span class="label mb-1">Program files</span>
-      <p class="text-xs text-base-content/60 mb-1">
-        Repository-root-relative paths plus the modules and routines each file
-        contributes. Channels with a subpath render only the files under it,
-        paths relative to it (e.g. lib/ssh/… only on the pkg:otp/ssh channel).
-      </p>
-      <.inputs_for :let={file_form} field={@form[:program_files]}>
-        <div class="rounded-box border border-base-300 p-3 mb-2">
-          <div class="flex items-end gap-2">
-            <div class="grow">
-              <.input
-                field={file_form[:path]}
-                type="text"
-                placeholder="lib/ssh/src/ssh_sftpd.erl"
-                class="w-full input input-sm font-mono"
-              >
-                <:label>Path</:label>
-              </.input>
-            </div>
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs text-error mb-2"
-              phx-click="remove_program_file"
-              phx-value-path={file_form.name}
-            >
-              Remove
-            </button>
-          </div>
-          <div class="grid sm:grid-cols-2 gap-x-4">
-            <.input
-              field={file_form[:modules]}
-              type="text"
-              value={list_value(file_form[:modules])}
-              placeholder="ssh_sftpd"
-              class="w-full input input-sm font-mono"
-            >
-              <:label>Modules (comma separated)</:label>
-            </.input>
-            <.input
-              field={file_form[:routines]}
-              type="text"
-              value={list_value(file_form[:routines])}
-              placeholder="ssh_sftpd:handle_op/4"
-              class="w-full input input-sm font-mono"
-            >
-              <:label>Routines (comma separated)</:label>
-            </.input>
-          </div>
-        </div>
-      </.inputs_for>
-      <div>
-        <button type="button" class="btn btn-ghost btn-xs" phx-click="add_program_file">
-          Add file
-        </button>
-      </div>
-    </fieldset>
+      <:actions>{render_slot(@actions)}</:actions>
+    </.impact_form>
     """
   end
 
@@ -3502,26 +3290,6 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp shorten(value), do: value
 
-  # Renders an {:array, :string} form value back into its comma-separated
-  # text-input representation.
-  defp list_value(field) do
-    case field.value do
-      values when is_list(values) -> Enum.join(values, ", ")
-      value -> value
-    end
-  end
-
-  # Renders a qualifiers map back into its "key=value, key=value" input form.
-  defp qualifiers_value(field) do
-    case field.value do
-      %{} = qualifiers ->
-        Enum.map_join(qualifiers, ", ", fn {key, value} -> "#{key}=#{value}" end)
-
-      value ->
-        value
-    end
-  end
-
   # The CWE/CAPEC catalogs back the classification datalists; load them once
   # per LiveView, only when a weakness/impact modal first opens.
   defp ensure_catalog_options(socket, type) when type in ["weakness", "impact"] do
@@ -3637,16 +3405,5 @@ defmodule VarselWeb.CaseDetailLive do
       end
 
     Enum.find(rows, &(&1.id == id)) || raise "row #{id} not found in projection"
-  end
-
-  defp selected_tags(form), do: List.wrap(form[:tags].value)
-
-  # Custom (x_-prefixed) tags live in their own text input next to the
-  # standard-vocabulary checkboxes.
-  defp custom_tags_value(form) do
-    form
-    |> selected_tags()
-    |> Enum.filter(&String.starts_with?(&1, "x_"))
-    |> Enum.join(", ")
   end
 end

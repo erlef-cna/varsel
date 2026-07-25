@@ -12,9 +12,19 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("activity_feed"), do: [name: "Activity feed", icon: {:local, "hero-clock"}]
   def entry("avatar_disc"), do: [name: "Avatar disc", icon: {:local, "hero-user-circle"}]
+
+  def entry("affected_package_form"), do: [name: "Affected package form", icon: {:local, "hero-cube"}]
+
+  def entry("channel_form"), do: [name: "Channel form", icon: {:local, "hero-truck"}]
+  def entry("credit_form"), do: [name: "Credit form", icon: {:local, "hero-user"}]
+  def entry("impact_form"), do: [name: "Impact form", icon: {:local, "hero-tag"}]
   def entry("lifecycle_stepper"), do: [name: "Lifecycle stepper", icon: {:local, "hero-flag"}]
   def entry("markdown"), do: [name: "Markdown", icon: {:local, "hero-document-text"}]
   def entry("mode_pill"), do: [name: "Mode pill", icon: {:local, "hero-pencil"}]
+
+  def entry("preset_package_form"), do: [name: "Preset package form", icon: {:local, "hero-sparkles"}]
+
+  def entry("reference_form"), do: [name: "Reference form", icon: {:local, "hero-link"}]
 
   def entry("relative_timestamp"), do: [name: "Relative timestamp", icon: {:local, "hero-calendar-days"}]
 
@@ -23,5 +33,9 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("suggestion_diff"), do: [name: "Suggestion diff", icon: {:local, "hero-arrows-right-left"}]
 
+  def entry("version_event_form"), do: [name: "Version event form", icon: {:local, "hero-flag"}]
+
   def entry("version_timeline"), do: [name: "Version timeline", icon: {:local, "hero-variable"}]
+
+  def entry("weakness_form"), do: [name: "Weakness form", icon: {:local, "hero-shield-exclamation"}]
 end
