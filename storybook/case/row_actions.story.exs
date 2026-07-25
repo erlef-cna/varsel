@@ -21,7 +21,7 @@ defmodule VarselWeb.Storybook.Case.RowActions do
         id: :edit,
         description: "Editing directly: the confirm asks plainly.",
         attributes: %{
-          id: "row-1",
+          row_id: "row-1",
           type: "channel",
           noun: "channel",
           mode: :edit,
@@ -32,7 +32,7 @@ defmodule VarselWeb.Storybook.Case.RowActions do
         id: :propose,
         description: "Suggesting: removal becomes something to propose.",
         attributes: %{
-          id: "row-1",
+          row_id: "row-1",
           type: "channel",
           noun: "channel",
           mode: :propose,
@@ -43,7 +43,7 @@ defmodule VarselWeb.Storybook.Case.RowActions do
         id: :caret,
         description: "The dense editor spells the way in as a caret.",
         attributes: %{
-          id: "row-1",
+          row_id: "row-1",
           type: "channel",
           noun: "channel",
           mode: :edit,
@@ -55,7 +55,7 @@ defmodule VarselWeb.Storybook.Case.RowActions do
         id: :already_proposed,
         description: "A row a suggestion already puts there offers nothing.",
         attributes: %{
-          id: "row-1",
+          row_id: "row-1",
           type: "channel",
           noun: "channel",
           mode: :edit,
@@ -66,7 +66,7 @@ defmodule VarselWeb.Storybook.Case.RowActions do
         id: :view,
         description: "A case being read rather than worked on offers nothing either.",
         attributes: %{
-          id: "row-1",
+          row_id: "row-1",
           type: "channel",
           noun: "channel",
           mode: :view,

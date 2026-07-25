@@ -1647,7 +1647,7 @@ defmodule VarselWeb.CaseDetailLive do
           else: "Affected — #{@package.vendor} / #{@package.product}"}
       </:title>
       <:actions>
-        <.proposal_marks id={@package.id} marks={@marks} />
+        <.proposal_marks row_id={@package.id} marks={@marks} />
         <%!-- Board B: an editing card's header carries no action links. --%>
         <span :if={!@field_form} class="contents">
           <button
@@ -1781,8 +1781,8 @@ defmodule VarselWeb.CaseDetailLive do
           {derived_versions_label(@package, channel.id)}
         </div>
         <div class="whitespace-nowrap text-right">
-          <.proposal_marks id={channel.id} marks={@marks} />
-          <.row_actions id={channel.id} type="channel" noun="channel" mode={@mode} marks={@marks} />
+          <.proposal_marks row_id={channel.id} marks={@marks} />
+          <.row_actions row_id={channel.id} type="channel" noun="channel" mode={@mode} marks={@marks} />
         </div>
       </div>
       <div
@@ -1884,9 +1884,9 @@ defmodule VarselWeb.CaseDetailLive do
             </td>
             <td class="text-xs text-base-content/60">{event.note}</td>
             <td :if={@mode != :view} class="text-right whitespace-nowrap">
-              <.proposal_marks id={event.id} marks={@marks} />
+              <.proposal_marks row_id={event.id} marks={@marks} />
               <.row_actions
-                id={event.id}
+                row_id={event.id}
                 type="event"
                 noun="boundary fact"
                 mode={@mode}
@@ -2008,9 +2008,9 @@ defmodule VarselWeb.CaseDetailLive do
           </span>
         </div>
         <div class="whitespace-nowrap text-right">
-          <.proposal_marks id={channel.id} marks={@marks} />
+          <.proposal_marks row_id={channel.id} marks={@marks} />
           <.row_actions
-            id={channel.id}
+            row_id={channel.id}
             type="channel"
             noun="channel"
             mode={@mode}
@@ -2126,7 +2126,7 @@ defmodule VarselWeb.CaseDetailLive do
               ⠿
             </span>
             <div>{render_slot(@row, row)}</div>
-            <.proposal_marks id={row.id} marks={@marks} />
+            <.proposal_marks row_id={row.id} marks={@marks} />
           </div>
           <div
             :if={@mode != :view and row.id not in @marks.phantom and row.id not in @marks.deleted}

@@ -18,23 +18,30 @@ defmodule VarselWeb.Storybook.Case.ProposalMarks do
         id: :phantom,
         description: "A row only a suggestion puts there.",
         attributes: %{
-          id: "row-1",
-          marks: %{phantom: MapSet.new(["row-1"]), deleted: MapSet.new()}
+          row_id: "row-1",
+          marks: marks(phantom: ["row-1"])
         }
       },
       %Variation{
         id: :deleted,
         description: "A row a suggestion would take away.",
         attributes: %{
-          id: "row-1",
-          marks: %{phantom: MapSet.new(), deleted: MapSet.new(["row-1"])}
+          row_id: "row-1",
+          marks: marks(deleted: ["row-1"])
         }
       },
       %Variation{
         id: :untouched,
         description: "A row no suggestion touches says nothing.",
-        attributes: %{id: "row-1", marks: %{phantom: MapSet.new(), deleted: MapSet.new()}}
+        attributes: %{row_id: "row-1", marks: marks([])}
       }
     ]
+  end
+
+  defp marks(opts) do
+    %{
+      phantom: MapSet.new(Keyword.get(opts, :phantom, [])),
+      deleted: MapSet.new(Keyword.get(opts, :deleted, []))
+    }
   end
 end
