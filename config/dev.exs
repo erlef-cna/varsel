@@ -124,6 +124,7 @@ config :varsel, VarselWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :varsel,
   dev_routes: true,
+  mock_login_enabled?: true,
   token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F",
   oauth2_issuer_url: "http://localhost:4000",
   # Audience of minted access tokens and the protected-resource identity

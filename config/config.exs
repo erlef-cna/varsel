@@ -183,6 +183,12 @@ config :varsel, VarselWeb.Endpoint,
 # report submissions sent to POCs).
 config :varsel, :cna_email_from, "cna@erlef.org"
 
+# Whether the nav offers a one-click "sign in as a dummy user" dropdown that
+# bypasses GitHub OAuth. Read exclusively through `Application.compile_env/3`,
+# so the mock sign-in resource action, controller, route and nav markup do not
+# even get compiled unless this is true. Never enable it outside dev/test.
+config :varsel, :mock_login_enabled?, false
+
 # Whether this instance is a (non-production) test deployment. When true, the
 # site serves a "disallow everything" robots.txt, sends a blanket
 # `X-Robots-Tag: noindex, nofollow, noarchive` header, and shows a banner on the

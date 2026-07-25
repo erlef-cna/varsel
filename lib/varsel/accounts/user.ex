@@ -19,6 +19,10 @@ defmodule Varsel.Accounts.User do
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.Proposal
 
+  # Gates the mock (GitHub-bypassing) sign-in action at compile time; see
+  # `:mock_login_enabled?` in config/config.exs.
+  @mock_login? Application.compile_env(:varsel, :mock_login_enabled?, false)
+
   graphql do
     type :user
   end
@@ -106,6 +110,10 @@ defmodule Varsel.Accounts.User do
 
     create :register_with_github do
       description "Registers or updates a user from a GitHub OAuth sign-in."
+      # GitHub OAuth is the only way a real user comes into being, so it stays
+      # the primary create even in dev builds, where :mock_sign_in adds a
+      # second one.
+      primary? true
       argument :user_info, :map, allow_nil?: false
       argument :oauth_tokens, :map, allow_nil?: false
       upsert? true
@@ -131,6 +139,24 @@ defmodule Varsel.Accounts.User do
     update :set_role do
       description "Sets a user's role. Restricted to POCs."
       accept [:role]
+    end
+
+    if @mock_login? do
+      create :mock_sign_in do
+        description "Dev-only: upserts a dummy user for the given role and signs it in."
+        accept [:role]
+        upsert? true
+        upsert_identity :unique_github_id
+
+        # Re-signing in as the same role must reuse the same row, so the
+        # synthetic github_id is derived from the role rather than random.
+        change Varsel.Accounts.User.Changes.ApplyMockProfile
+        change Varsel.Accounts.User.Changes.MockGenerateToken
+
+        metadata :token, :string do
+          allow_nil? false
+        end
+      end
     end
   end
 
@@ -167,6 +193,14 @@ defmodule Varsel.Accounts.User do
 
     policy action(:set_role) do
       authorize_if actor_attribute_equals(:role, :poc)
+    end
+
+    if @mock_login? do
+      # The mock sign-in is the caller's way of *becoming* an actor, so there is
+      # none to authorize against. It only exists in dev builds.
+      policy action(:mock_sign_in) do
+        authorize_if always()
+      end
     end
   end
 

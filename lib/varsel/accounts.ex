@@ -52,6 +52,10 @@ defmodule Varsel.Accounts do
       define :sign_in_user_with_api_key, action: :sign_in_with_api_key, args: [:api_key]
       define :register_user_with_github, action: :register_with_github
       define :log_out_user_everywhere, action: :log_out_everywhere
+
+      if Application.compile_env(:varsel, :mock_login_enabled?, false) do
+        define :mock_sign_in_user, action: :mock_sign_in
+      end
     end
 
     resource Varsel.Accounts.UserIdentity
