@@ -7,7 +7,7 @@ defmodule VarselWeb.Storybook.Case do
   use PhoenixStorybook.Index
 
   def folder_icon, do: {:local, "hero-folder-open"}
-  def folder_index, do: 2
+  def folder_index, do: 3
   def folder_name, do: "Case workspace"
 
   def entry("activity_feed"), do: [name: "Activity feed", icon: {:local, "hero-clock"}]

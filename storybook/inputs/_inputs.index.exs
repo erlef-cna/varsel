@@ -7,7 +7,7 @@ defmodule VarselWeb.Storybook.Inputs do
   use PhoenixStorybook.Index
 
   def folder_icon, do: {:local, "hero-pencil-square"}
-  def folder_index, do: 3
+  def folder_index, do: 4
   def folder_name, do: "Inputs"
 
   def entry("cvss_input"), do: [name: "CVSS input", icon: {:local, "hero-calculator"}]

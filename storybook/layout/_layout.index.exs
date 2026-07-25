@@ -7,7 +7,7 @@ defmodule VarselWeb.Storybook.Layout do
   use PhoenixStorybook.Index
 
   def folder_icon, do: {:local, "hero-window"}
-  def folder_index, do: 4
+  def folder_index, do: 5
   def folder_name, do: "Layout"
 
   def entry("eef_logo"), do: [name: "EEF logo", icon: {:local, "hero-identification"}]

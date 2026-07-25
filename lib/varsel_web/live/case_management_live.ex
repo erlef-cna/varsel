@@ -25,6 +25,7 @@ defmodule VarselWeb.CaseManagementLive do
 
   alias Varsel.Cases
   alias Varsel.Cases.Case
+  alias VarselWeb.BoardComponents
 
   require Ash.Query
   require Ash.Sort
@@ -511,13 +512,13 @@ defmodule VarselWeb.CaseManagementLive do
       </.link>
     </div>
 
-    <div :if={!@zero_matches?} class="grid grid-cols-1 md:grid-cols-4 gap-3 items-start">
+    <BoardComponents.board :if={!@zero_matches?}>
       <.lane
         :for={lane <- @lanes}
         lane={lane}
         expanded?={MapSet.member?(@expanded_lanes, lane.state)}
       />
-    </div>
+    </BoardComponents.board>
 
     <p :if={@all_empty? and @query == ""} class="text-center text-sm text-base-content/60 mt-4">
       No active cases.
@@ -549,49 +550,35 @@ defmodule VarselWeb.CaseManagementLive do
       )
 
     ~H"""
-    <div id={"lane-#{@lane.state}"} class="rounded-box border border-base-300 bg-base-200">
-      <div class={[
-        "flex items-center gap-2 px-3.5 py-2.5 text-[0.7rem] font-bold uppercase tracking-wider text-base-content/60",
-        if(@collapsed?,
-          do: "max-md:border-b-0 border-b border-base-300",
-          else: "border-b border-base-300"
-        )
-      ]}>
-        <span class={["size-1.5 rounded-full shrink-0", @lane.dot]}></span>
-        {@lane.label}
-        <span class="ml-auto text-base-content/50 tabular-nums font-bold">
-          {@lane.display_count}
-        </span>
-      </div>
+    <BoardComponents.lane
+      id={"lane-#{@lane.state}"}
+      label={@lane.label}
+      dot={@lane.dot}
+      count={@lane.display_count}
+      cards?={@visible_cards != []}
+      quiet?={@collapsed?}
+    >
+      <.pipeline_card
+        :for={case_record <- @visible_cards}
+        case_record={case_record}
+        lane_state={@lane.state}
+      />
 
-      <div :if={@visible_cards != []} class="flex flex-col gap-2.5 p-2.5 min-h-12">
-        <.pipeline_card
-          :for={case_record <- @visible_cards}
-          case_record={case_record}
-          lane_state={@lane.state}
-        />
-      </div>
-      <div
-        :if={@visible_cards == []}
-        class={[@collapsed? && "max-md:hidden", "text-center text-sm text-base-content/40 py-3"]}
-      >
-        —
-      </div>
-
-      <button
-        :if={@overflowing?}
-        type="button"
-        phx-click="toggle_lane"
-        phx-value-lane={@lane.state}
-        class="w-full text-center border-t border-base-300 py-2 text-[0.74rem] font-semibold text-primary cursor-pointer"
-      >
-        <%= if @expanded? do %>
-          Show fewer ▴
-        <% else %>
-          Show all {length(@lane.cards)} ▾
-        <% end %>
-      </button>
-    </div>
+      <:footer :if={@overflowing?}>
+        <button
+          type="button"
+          phx-click="toggle_lane"
+          phx-value-lane={@lane.state}
+          class="w-full py-2 cursor-pointer"
+        >
+          <%= if @expanded? do %>
+            Show fewer ▴
+          <% else %>
+            Show all {length(@lane.cards)} ▾
+          <% end %>
+        </button>
+      </:footer>
+    </BoardComponents.lane>
     """
   end
 
@@ -600,68 +587,59 @@ defmodule VarselWeb.CaseManagementLive do
 
   defp pipeline_card(assigns) do
     ~H"""
-    <.link
-      navigate={~p"/cases/#{@case_record.id}"}
-      class="lane-card block rounded-lg border border-base-300 p-2.5 hover:border-[color:var(--eef-blue)] cursor-pointer"
-    >
-      <div class="text-[0.8rem] font-semibold leading-snug">{@case_record.title || "Untitled"}</div>
+    <.link navigate={~p"/cases/#{@case_record.id}"}>
+      <BoardComponents.card>
+        <:title>{@case_record.title || "Untitled"}</:title>
 
-      <div class="flex flex-wrap gap-1.5 mt-2">
-        <.severity_chip score={@case_record.cvss_score} />
-        <span
-          :for={product <- package_chips(@case_record)}
-          class="font-mono text-[0.71rem] text-base-content/60 bg-base-200 border border-base-300 rounded px-1.5 py-0.5 whitespace-nowrap"
-        >
-          {product}
-        </span>
-      </div>
+        <:chips>
+          <.severity_chip score={@case_record.cvss_score} />
+          <BoardComponents.card_chip :for={product <- package_chips(@case_record)}>
+            {product}
+          </BoardComponents.card_chip>
+        </:chips>
 
-      <div class="flex items-center justify-between gap-2 mt-2.5">
-        <span class="font-mono text-[0.68rem] text-base-content/50">
-          {@case_record.cve_id || "no CVE yet"}
-        </span>
-        <span class="flex items-center gap-1.5">
-          <span class={[
-            "text-[0.68rem] whitespace-nowrap",
-            if(
-              stale?(
-                DateTime.diff(DateTime.utc_now(), @case_record.updated_at, :second),
-                @lane_state
-              ),
-              do: "text-warning",
-              else: "text-base-content/50"
-            )
-          ]}>
-            {lane_age(@case_record.updated_at, @lane_state)}
+        <:footer>
+          <span class="font-mono text-[0.68rem] text-base-content/50">
+            {@case_record.cve_id || "no CVE yet"}
           </span>
-          <%= cond do %>
-            <% @case_record.assignments != [] -> %>
-              <span class="flex items-center -space-x-1">
-                <.avatar_disc
-                  :for={
-                    {assignment, index} <- Enum.with_index(Enum.take(@case_record.assignments, 2))
-                  }
-                  user={assignment.user}
-                  variant={if rem(index, 2) == 0, do: :a, else: :b}
-                />
-                <span
-                  :if={length(@case_record.assignments) > 2}
-                  class="text-[0.62rem] text-base-content/50 pl-1"
-                >
-                  +{length(@case_record.assignments) - 2}
+          <span class="flex items-center gap-1.5">
+            <span class={[
+              "text-[0.68rem] whitespace-nowrap",
+              if(
+                stale?(
+                  DateTime.diff(DateTime.utc_now(), @case_record.updated_at, :second),
+                  @lane_state
+                ),
+                do: "text-warning",
+                else: "text-base-content/50"
+              )
+            ]}>
+              {lane_age(@case_record.updated_at, @lane_state)}
+            </span>
+            <%= cond do %>
+              <% @case_record.assignments != [] -> %>
+                <span class="flex items-center -space-x-1">
+                  <.avatar_disc
+                    :for={
+                      {assignment, index} <- Enum.with_index(Enum.take(@case_record.assignments, 2))
+                    }
+                    user={assignment.user}
+                    variant={if rem(index, 2) == 0, do: :a, else: :b}
+                  />
+                  <span
+                    :if={length(@case_record.assignments) > 2}
+                    class="text-[0.62rem] text-base-content/50 pl-1"
+                  >
+                    +{length(@case_record.assignments) - 2}
+                  </span>
                 </span>
-              </span>
-            <% needs_owner?(@case_record) -> %>
-              <span
-                class="inline-flex size-[21px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-dashed border-base-content/40 text-base-content/40 text-xs"
-                title="Needs an owner"
-              >
-                –
-              </span>
-            <% true -> %>
-          <% end %>
-        </span>
-      </div>
+              <% needs_owner?(@case_record) -> %>
+                <BoardComponents.unclaimed_disc />
+              <% true -> %>
+            <% end %>
+          </span>
+        </:footer>
+      </BoardComponents.card>
     </.link>
     """
   end
