@@ -24,20 +24,37 @@ defmodule VarselWeb.ErrorHTML do
 
   attr :status, :integer, required: true
   attr :subtitle, :string, default: nil
-  slot :title, required: true
+
+  slot :title, required: true do
+    attr :mono?, :boolean, doc: "the title is an identifier, e.g. a CVE ID"
+  end
+
   slot :inner_block, required: true
+  slot :actions, doc: "the row of ways on from here, along the body's foot"
 
   def error_page(assigns) do
+    assigns = assign(assigns, :title_entry, hd(assigns.title))
+
     ~H"""
     <.page_header>
       <:eyebrow>{@context} · HTTP {@status}</:eyebrow>
       <:subtitle>{@subtitle}</:subtitle>
-      <:title>{render_slot(@title)}</:title>
+      <:title>
+        <span class={[
+          "block max-w-lg text-pretty [text-wrap:balance]",
+          Map.get(@title_entry, :mono?) && "font-mono"
+        ]}>
+          {render_slot(@title_entry)}
+        </span>
+      </:title>
     </.page_header>
 
     <.page_container>
       <div class="max-w-2xl">
         {render_slot(@inner_block)}
+        <div :if={@actions != []} class="mt-6 flex flex-wrap items-center gap-4">
+          {render_slot(@actions)}
+        </div>
       </div>
     </.page_container>
     """

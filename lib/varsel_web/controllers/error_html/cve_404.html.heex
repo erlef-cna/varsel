@@ -9,8 +9,8 @@
   status={404}
   subtitle="No published EEF CNA record for this identifier."
 >
-  <:title>
-    <span class="block max-w-lg text-pretty [text-wrap:balance] font-mono">{@cve_id}</span>
+  <:title mono?={true}>
+    {@cve_id}
   </:title>
   <p class="text-base-content/70 leading-relaxed">
     This CVE ID may be
@@ -22,7 +22,7 @@
     <.link href={~p"/contact"} class="link link-primary">contact us</.link>
     and mention the ID — we'll check.
   </p>
-  <div class="mt-6 flex flex-wrap items-center gap-4">
+  <:actions>
     <.link
       href={"https://www.cve.org/CVERecord?id=#{@cve_id}"}
       target="_blank"
@@ -34,5 +34,5 @@
     <.link navigate={~p"/cves"} class="link link-primary text-sm font-semibold">
       Browse published CVEs →
     </.link>
-  </div>
+  </:actions>
 </.error_page>

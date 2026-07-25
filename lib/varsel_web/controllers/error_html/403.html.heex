@@ -6,9 +6,7 @@
 
 <.error_page context="Error" status={403}>
   <:title>
-    <span class="block max-w-lg text-pretty [text-wrap:balance]">
-      You don't have access to this page
-    </span>
+    You don't have access to this page
   </:title>
   <p class="text-base-content/70 leading-relaxed">
     The account you're using doesn't have permission to view this page. That can be correct even when you're signed in — some parts of the console are limited to particular CNA roles.
@@ -19,8 +17,8 @@
       class="link link-primary"
     >contact the CNA team</.link>.
   </p>
-  <div class="mt-6 flex flex-wrap items-center gap-4">
+  <:actions>
     <.link href={~p"/"} class="btn btn-primary">Back to home</.link>
     <.link navigate={~p"/cves"} class="link link-primary text-sm font-semibold">Browse CVEs →</.link>
-  </div>
+  </:actions>
 </.error_page>
