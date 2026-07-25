@@ -94,9 +94,15 @@ in
     credo.enable = true;
     detect-private-keys.enable = true;
     dialyzer.enable = true;
-    mix-format.enable = true;
     reuse.enable = true;
     zizmor.enable = true;
+
+    # The built-in mix-format hook only matches `\.exs?$`, which skips the HEEX
+    # templates that .formatter.exs formats via Phoenix.LiveView.HTMLFormatter.
+    mix-format = {
+      enable = true;
+      files = "\\.(heex|exs?)$";
+    };
 
     # git-hooks.nix has no built-in sobelow hook. Run it as a project-wide
     # security scan (fails on findings via `exit: :low` in .sobelow-conf).
