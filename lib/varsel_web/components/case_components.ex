@@ -914,4 +914,38 @@ defmodule VarselWeb.CaseComponents do
     </ul>
     """
   end
+
+  @doc """
+  Renders a case's written content at rest: what the vulnerability is,
+  followed by the sections that say what to do about it.
+
+  Each of `configurations`, `workarounds` and `solutions` appears only when
+  the case has something to say there, under its own heading.
+  """
+  attr :description, :string, default: nil
+  attr :configurations, :string, default: nil
+  attr :workarounds, :string, default: nil
+  attr :solutions, :string, default: nil
+
+  def case_content(assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <.markdown :if={@description} content={@description} />
+      <p :if={is_nil(@description)} class="text-base-content/60">No description yet.</p>
+
+      <div :for={
+        {label, content} <- [
+          {"Configurations", @configurations},
+          {"Workarounds", @workarounds},
+          {"Solutions", @solutions}
+        ]
+      }>
+        <div :if={content}>
+          <h3 class="text-sm font-semibold text-base-content/70 mb-1">{label}</h3>
+          <.markdown content={content} />
+        </div>
+      </div>
+    </div>
+    """
+  end
 end

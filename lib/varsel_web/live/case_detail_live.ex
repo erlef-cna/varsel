@@ -1406,25 +1406,13 @@ defmodule VarselWeb.CaseDetailLive do
         <.edit_actions mode={@mode} cancel="cancel_edit" />
       </.form>
 
-      <div :if={!@content_form} class="space-y-4">
-        <.markdown :if={@case_record.description_md} content={@case_record.description_md} />
-        <p :if={is_nil(@case_record.description_md)} class="text-base-content/60">
-          No description yet.
-        </p>
-
-        <div :for={
-          {label, content} <- [
-            {"Configurations", @case_record.configurations_md},
-            {"Workarounds", @case_record.workarounds_md},
-            {"Solutions", @case_record.solutions_md}
-          ]
-        }>
-          <div :if={content}>
-            <h3 class="text-sm font-semibold text-base-content/70 mb-1">{label}</h3>
-            <.markdown content={content} />
-          </div>
-        </div>
-      </div>
+      <.case_content
+        :if={!@content_form}
+        description={@case_record.description_md}
+        configurations={@case_record.configurations_md}
+        workarounds={@case_record.workarounds_md}
+        solutions={@case_record.solutions_md}
+      />
 
       <.inline_suggestions
         case_record={@raw_case_record}
