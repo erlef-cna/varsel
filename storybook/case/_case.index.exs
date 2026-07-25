@@ -46,6 +46,8 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("suggestion_diff"), do: [name: "Suggestion diff", icon: {:local, "hero-arrows-right-left"}]
 
+  def entry("validation_checklist"), do: [name: "Validation checklist", icon: {:local, "hero-check-circle"}]
+
   def entry("version_event_form"), do: [name: "Version event form", icon: {:local, "hero-flag"}]
 
   def entry("version_timeline"), do: [name: "Version timeline", icon: {:local, "hero-variable"}]

@@ -886,4 +886,32 @@ defmodule VarselWeb.CaseComponents do
     </div>
     """
   end
+
+  @doc """
+  Renders the record's readiness as a checklist: one row per check that
+  passed, one per finding that has not.
+
+  Each row is a map of `:ok`, `:text` and an optional `:section` — the part of
+  the workspace that fixes it. The `jump` slot renders per row that names one,
+  since where the link goes and what dismissing the preview does are both the
+  caller's.
+  """
+  attr :rows, :list, required: true
+
+  slot :jump, doc: "the way to the section a finding points at" do
+    attr :section, :string
+  end
+
+  def validation_checklist(assigns) do
+    ~H"""
+    <ul class="text-[0.79rem]">
+      <li :for={row <- @rows} class="flex items-center gap-2 py-1 text-base-content/70">
+        <span :if={row.ok} class="shrink-0 font-bold text-success">✓</span>
+        <span :if={!row.ok} class="shrink-0 font-bold text-warning">✗</span>
+        <span class="min-w-0">{row.text}</span>
+        <span :if={row.section} class="ml-auto shrink-0">{render_slot(@jump, row)}</span>
+      </li>
+    </ul>
+    """
+  end
 end

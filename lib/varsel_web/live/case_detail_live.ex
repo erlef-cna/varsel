@@ -2038,24 +2038,17 @@ defmodule VarselWeb.CaseDetailLive do
           <div :if={@preview_tab == "validation"}>
             <p :if={@preview == :loading} class="text-sm text-base-content/60">Rendering…</p>
             <div :if={is_map(@preview)}>
-              <ul class="text-[0.79rem]">
-                <li
-                  :for={row <- validation_rows(@preview, @validation)}
-                  class="flex items-center gap-2 py-1 text-base-content/70"
-                >
-                  <span :if={row.ok} class="shrink-0 font-bold text-success">✓</span>
-                  <span :if={!row.ok} class="shrink-0 font-bold text-warning">✗</span>
-                  <span class="min-w-0">{row.text}</span>
+              <.validation_checklist rows={validation_rows(@preview, @validation)}>
+                <:jump :let={row}>
                   <.link
-                    :if={row.section}
                     href={"##{row.section}"}
                     phx-click="close_preview"
-                    class="link link-hover ml-auto shrink-0 text-xs text-primary"
+                    class="link link-hover text-xs text-primary"
                   >
                     Go to {row.section}
                   </.link>
-                </li>
-              </ul>
+                </:jump>
+              </.validation_checklist>
               <p :if={@preview.overrides_applied != []} class="mt-3 text-xs text-base-content/50">
                 Overrides applied: {Enum.join(@preview.overrides_applied, ", ")}
               </p>
