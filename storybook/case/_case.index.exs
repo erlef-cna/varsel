@@ -22,4 +22,6 @@ defmodule VarselWeb.Storybook.Case do
   def entry("suggestion_card"), do: [name: "Suggestion card", icon: {:local, "hero-light-bulb"}]
 
   def entry("suggestion_diff"), do: [name: "Suggestion diff", icon: {:local, "hero-arrows-right-left"}]
+
+  def entry("version_timeline"), do: [name: "Version timeline", icon: {:local, "hero-variable"}]
 end

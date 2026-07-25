@@ -38,6 +38,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Readiness
   alias Varsel.Cases.VersionEvent
   alias Varsel.Types.CVSS
+  alias VarselWeb.TimelineComponents
 
   @case_loads [
     :cve_id,
@@ -2217,7 +2218,13 @@ defmodule VarselWeb.CaseDetailLive do
     </div>
 
     <div :if={@timeline_rows != []} class="space-y-2 mb-4">
-      <.boundary_timeline_row :for={row <- @timeline_rows} row={row} package_id={@package.id} />
+      <TimelineComponents.version_timeline
+        :for={row <- @timeline_rows}
+        id={"#{@package.id}-#{row.label}"}
+        label={row.label}
+        nodes={row.nodes}
+        spans={row.spans}
+      />
     </div>
     <p :if={@timeline_rows == []} class="text-sm text-base-content/60 mb-4">
       No boundary facts yet — the timeline fills in once introduced/fixed
@@ -2373,57 +2380,6 @@ defmodule VarselWeb.CaseDetailLive do
     </div>
     """
   end
-
-  attr :row, :map, required: true
-  attr :package_id, :string, required: true
-
-  # Each row reserves headroom (pt) for its own node tags — the tags are
-  # absolutely positioned above the track, so without it they collide with
-  # the row above / the section label.
-  #
-  # The percentage offsets (--tl-pos) and the track's gradient stop list
-  # (--tl-gradient-stops, one base-300/warning/warning/base-300 quad per
-  # vulnerable range — see timeline_gradient_stops/1) are per-render dynamic
-  # values. The strict CSP forbids the inline `style` attribute, so they ride
-  # on `data-css-*` attributes and the CssVars JS hook copies them into the
-  # element's CSSOM style at mount/patch.
-  defp boundary_timeline_row(assigns) do
-    ~H"""
-    <div class="flex items-center gap-2.5 pt-6 pb-1">
-      <span class="w-24 shrink-0 truncate text-right font-mono text-[0.68rem] text-base-content/50">
-        {@row.label}
-      </span>
-      <div
-        id={"tl-track-#{@package_id}-#{@row.label}"}
-        phx-hook="CssVars"
-        class="timeline-track flex-1"
-        data-css---tl-gradient-stops={timeline_gradient_stops(@row.spans)}
-      >
-        <div
-          :for={{node, index} <- Enum.with_index(@row.nodes)}
-          id={"tl-node-#{@package_id}-#{@row.label}-#{index}"}
-          phx-hook="CssVars"
-          class={["timeline-node", timeline_node_class(node.kind), tag_anchor_class(node.pos)]}
-          data-css---tl-pos={"#{node.pos}%"}
-        >
-          <span class="timeline-tag font-mono text-base-content/40" title={node.tag}>
-            {node.tag}
-          </span>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  defp timeline_node_class(:intro), do: "is-intro"
-  defp timeline_node_class(:fix), do: "is-fix"
-  defp timeline_node_class(:pending), do: "is-pending"
-
-  # Tags on nodes near either track end anchor inward so they can't spill
-  # out of the card.
-  defp tag_anchor_class(pos) when pos <= 10, do: "tag-left"
-  defp tag_anchor_class(pos) when pos >= 85, do: "tag-right"
-  defp tag_anchor_class(_centered), do: nil
 
   attr :id, :string, required: true
   attr :heading, :string, required: true
@@ -3513,22 +3469,6 @@ defmodule VarselWeb.CaseDetailLive do
   # base-300..warning..base-300 pair per vulnerable span, in ascending order
   # (adjoining stops need the exact same percent to draw a hard edge, not a
   # blend). No spans means the CSS's own plain-line fallback applies.
-  defp timeline_gradient_stops([]), do: nil
-
-  defp timeline_gradient_stops(spans) do
-    spans
-    |> Enum.sort_by(& &1.start)
-    |> Enum.flat_map(fn %{start: start, stop: stop} ->
-      [
-        "var(--color-base-300) #{start}%",
-        "var(--color-warning) #{start}%",
-        "var(--color-warning) #{stop}%",
-        "var(--color-base-300) #{stop}%"
-      ]
-    end)
-    |> Enum.join(", ")
-  end
-
   defp range_label(%{"version" => from, "changes" => changes}) when is_list(changes) do
     "≥ #{from} · fixed: #{Enum.map_join(changes, ", ", &shorten(&1["at"]))}"
   end
