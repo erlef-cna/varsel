@@ -664,4 +664,55 @@ defmodule VarselWeb.CaseComponents do
   defp proposal_badge_class(:accepted), do: "badge-success"
   defp proposal_badge_class(:declined), do: "badge-error"
   defp proposal_badge_class(_other), do: "badge-ghost"
+
+  @doc """
+  Renders the row that closes an edit: commit, abandon, and — while
+  suggesting — the reasoning carried onto the suggestion.
+
+  What the buttons say and how the commit is styled follow `mode`, since a
+  suggestion is a different act from an edit. `cancel` names the event
+  abandoning it, which is the caller's to handle.
+  """
+  attr :mode, :atom, required: true, values: [:view, :edit, :propose]
+  attr :cancel, :string, required: true, doc: "the event abandoning the edit"
+
+  def edit_actions(assigns) do
+    ~H"""
+    <div class="flex items-end gap-2 mt-4">
+      <button
+        type="submit"
+        class={[
+          "btn btn-sm",
+          if(@mode == :propose, do: "btn-info text-info-content", else: "btn-primary")
+        ]}
+      >
+        {if @mode == :propose, do: "Suggest changes", else: "Save changes"}
+      </button>
+      <button type="button" class="btn btn-eef-quiet btn-sm" phx-click={@cancel}>
+        Cancel
+      </button>
+      <input
+        :if={@mode == :propose}
+        type="text"
+        name="reasoning"
+        placeholder="Reasoning (attached to the suggestion, optional)"
+        class="input input-bordered input-sm flex-1"
+      />
+    </div>
+    """
+  end
+
+  @doc """
+  Renders the rider above an open editor saying the edits will become
+  suggestions. Renders nothing outside propose mode.
+  """
+  attr :mode, :atom, required: true, values: [:view, :edit, :propose]
+
+  def edit_mode_notice(assigns) do
+    ~H"""
+    <div class="flex justify-end mb-2">
+      <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
+    </div>
+    """
+  end
 end

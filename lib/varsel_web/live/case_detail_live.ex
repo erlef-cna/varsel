@@ -1423,9 +1423,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp content_section(assigns) do
     ~H"""
-    <div :if={@content_form} class="flex justify-end mb-2">
-      <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
-    </div>
+    <.edit_mode_notice :if={@content_form} mode={@mode} />
     <.panel editing?={!!@content_form}>
       <:title>{if @content_form, do: "Summary — editing", else: "Summary"}</:title>
       <:actions>
@@ -1502,21 +1500,7 @@ defmodule VarselWeb.CaseDetailLive do
           <textarea name="cna_override_json" rows="4" class="w-full textarea font-mono text-sm">{pretty_json(@case_record.cna_override)}</textarea>
         </details>
 
-        <div class="flex items-end gap-2 mt-4">
-          <button type="submit" class={["btn btn-sm", save_button_class(@mode)]}>
-            {if @mode == :propose, do: "Suggest changes", else: "Save changes"}
-          </button>
-          <button type="button" class="btn btn-eef-quiet btn-sm" phx-click="cancel_edit">
-            Cancel
-          </button>
-          <input
-            :if={@mode == :propose}
-            type="text"
-            name="reasoning"
-            placeholder="Reasoning (attached to the suggestion, optional)"
-            class="input input-bordered input-sm flex-1"
-          />
-        </div>
+        <.edit_actions mode={@mode} cancel="cancel_edit" />
       </.form>
 
       <div :if={!@content_form} class="space-y-4">
@@ -1552,18 +1536,13 @@ defmodule VarselWeb.CaseDetailLive do
   # The editor footer's save button: primary for a direct save, info-colored
   # (with dark text, per the mock) when the same click files a proposal
   # instead — the ONE control the suggest toggle changes about the form.
-  defp save_button_class(:propose), do: "btn-info text-info-content"
-  defp save_button_class(_edit), do: "btn-primary"
-
   # The Severity card: at rest one severity chip (rating + score) beside the
   # truncated CVSS vector; "Open calculator" swaps the body for the CVSS
   # calculator as this card's own editor, with the same save-vs-suggest
   # semantics as the summary editor.
   defp severity_section(assigns) do
     ~H"""
-    <div :if={@form} class="flex justify-end mb-2">
-      <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
-    </div>
+    <.edit_mode_notice :if={@form} mode={@mode} />
     <.panel editing?={!!@form}>
       <:title>{if @form, do: "Severity — editing", else: "Severity"}</:title>
       <:actions>
@@ -1584,21 +1563,7 @@ defmodule VarselWeb.CaseDetailLive do
           field={@form[:cvss_v4]}
           label="CVSS v4.0"
         />
-        <div class="flex items-end gap-2 mt-4">
-          <button type="submit" class={["btn btn-sm", save_button_class(@mode)]}>
-            {if @mode == :propose, do: "Suggest changes", else: "Save changes"}
-          </button>
-          <button type="button" class="btn btn-eef-quiet btn-sm" phx-click="cancel_edit">
-            Cancel
-          </button>
-          <input
-            :if={@mode == :propose}
-            type="text"
-            name="reasoning"
-            placeholder="Reasoning (attached to the suggestion, optional)"
-            class="input input-bordered input-sm flex-1"
-          />
-        </div>
+        <.edit_actions mode={@mode} cancel="cancel_edit" />
       </.form>
 
       <div :if={!@form}>
@@ -1781,9 +1746,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp affected_field_form(assigns) do
     ~H"""
-    <div class="flex justify-end mb-2">
-      <.mode_pill :if={@mode == :propose} on?={true} explain={true} />
-    </div>
+    <.edit_mode_notice mode={@mode} />
     <.affected_package_form
       form={@form}
       id="child-form"
@@ -1791,21 +1754,7 @@ defmodule VarselWeb.CaseDetailLive do
       phx-submit="submit_child"
     >
       <:actions>
-        <div class="flex items-end gap-2 mt-4">
-          <button type="submit" class={["btn btn-sm", save_button_class(@mode)]}>
-            {if @mode == :propose, do: "Suggest changes", else: "Save changes"}
-          </button>
-          <button type="button" class="btn btn-eef-quiet btn-sm" phx-click="cancel_child">
-            Cancel
-          </button>
-          <input
-            :if={@mode == :propose}
-            type="text"
-            name="reasoning"
-            placeholder="Reasoning (attached to the suggestion, optional)"
-            class="input input-bordered input-sm flex-1"
-          />
-        </div>
+        <.edit_actions mode={@mode} cancel="cancel_child" />
       </:actions>
     </.affected_package_form>
     """

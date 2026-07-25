@@ -17,6 +17,8 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("channel_form"), do: [name: "Channel form", icon: {:local, "hero-truck"}]
   def entry("credit_form"), do: [name: "Credit form", icon: {:local, "hero-user"}]
+  def entry("edit_actions"), do: [name: "Edit actions", icon: {:local, "hero-check"}]
+  def entry("edit_mode_notice"), do: [name: "Edit mode notice", icon: {:local, "hero-pencil"}]
   def entry("impact_form"), do: [name: "Impact form", icon: {:local, "hero-tag"}]
   def entry("lifecycle_stepper"), do: [name: "Lifecycle stepper", icon: {:local, "hero-flag"}]
   def entry("markdown"), do: [name: "Markdown", icon: {:local, "hero-document-text"}]
