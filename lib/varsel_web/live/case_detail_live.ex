@@ -1179,189 +1179,186 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
       </div>
 
-      <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
-        <div class="grid lg:grid-cols-[9.5rem_minmax(0,1fr)_18.5rem] gap-6 items-start">
-          <.section_nav
-            sections={workspace_sections(@display_case, @case_record.proposals)}
-            class="hidden lg:block lg:sticky lg:top-4"
+      <.page_container>
+        <:left width={:narrow} class="lg:sticky lg:top-4">
+          <.section_nav sections={workspace_sections(@display_case, @case_record.proposals)} />
+        </:left>
+
+        <div class="space-y-8 min-w-0">
+          <div id="summary">
+            <.content_section
+              case_record={@display_case}
+              raw_case_record={@case_record}
+              content_form={@editing_section == "summary" && @content_form}
+              mode={@mode}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
+            />
+          </div>
+          <div id="severity">
+            <.severity_section
+              case_record={@display_case}
+              raw_case_record={@case_record}
+              form={@editing_section == "severity" && @content_form}
+              mode={@mode}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
+            />
+          </div>
+          <div id="affected">
+            <.affected_section
+              case_record={@display_case}
+              raw_case_record={@case_record}
+              mode={@mode}
+              marks={marks(@projection)}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
+              expanded_package_id={@expanded_package_id}
+              child_form={@child_form}
+            />
+          </div>
+          <.rows_section
+            id="references"
+            heading="References"
+            type="reference"
+            add_label="Add reference"
+            rows={@display_case.references}
+            mode={@mode}
+            marks={marks(@projection)}
+            sort_event="reorder_references"
+            raw_case_record={@case_record}
+            current_user={@current_user}
+            can_resolve={can_edit?(@case_record, @current_user)}
+          >
+            <:row :let={reference}>
+              <span class="font-mono text-sm break-all">{reference.url}</span>
+              <span :for={tag <- reference.tags} class="badge badge-ghost badge-xs ml-1">{tag}</span>
+            </:row>
+          </.rows_section>
+          <.rows_section
+            id="credits"
+            heading="Credits"
+            type="credit"
+            add_label="Add credit"
+            rows={@display_case.credits}
+            mode={@mode}
+            marks={marks(@projection)}
+            sort_event="reorder_credits"
+            raw_case_record={@case_record}
+            current_user={@current_user}
+            can_resolve={can_edit?(@case_record, @current_user)}
+          >
+            <:row :let={credit}>
+              {credit.name}{if credit.organization, do: " / #{credit.organization}"}
+              <span class="badge badge-ghost badge-xs ml-1">
+                {credit.credit_type |> to_string() |> String.replace("_", " ")}
+              </span>
+            </:row>
+          </.rows_section>
+          <.rows_section
+            id="weaknesses"
+            heading="Weaknesses (CWE)"
+            type="weakness"
+            add_label="Add CWE"
+            rows={@display_case.weaknesses}
+            mode={@mode}
+            marks={marks(@projection)}
+            raw_case_record={@case_record}
+            current_user={@current_user}
+            can_resolve={can_edit?(@case_record, @current_user)}
+          >
+            <:row :let={weakness}>
+              <a
+                href={"https://cwe.mitre.org/data/definitions/#{weakness.cwe_id}.html"}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="link font-mono"
+              >
+                CWE-{weakness.cwe_id}
+              </a>
+              {weakness.weakness.name}
+            </:row>
+          </.rows_section>
+          <.rows_section
+            id="impacts"
+            heading="Impacts (CAPEC)"
+            type="impact"
+            add_label="Add CAPEC"
+            rows={@display_case.impacts}
+            mode={@mode}
+            marks={marks(@projection)}
+            raw_case_record={@case_record}
+            current_user={@current_user}
+            can_resolve={can_edit?(@case_record, @current_user)}
+          >
+            <:row :let={impact}>
+              <a
+                href={"https://capec.mitre.org/data/definitions/#{impact.capec_id}.html"}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="link font-mono"
+              >
+                CAPEC-{impact.capec_id}
+              </a>
+              {impact.attack_pattern.name}
+            </:row>
+          </.rows_section>
+
+          <.resolved_suggestions_disclosure
+            :if={resolved_proposals(@case_record) != []}
+            case_record={@case_record}
+            current_user={@current_user}
+            can_resolve={can_edit?(@case_record, @current_user)}
           />
-
-          <div class="space-y-8 min-w-0">
-            <div id="summary">
-              <.content_section
-                case_record={@display_case}
-                raw_case_record={@case_record}
-                content_form={@editing_section == "summary" && @content_form}
-                mode={@mode}
-                current_user={@current_user}
-                can_resolve={can_edit?(@case_record, @current_user)}
-              />
-            </div>
-            <div id="severity">
-              <.severity_section
-                case_record={@display_case}
-                raw_case_record={@case_record}
-                form={@editing_section == "severity" && @content_form}
-                mode={@mode}
-                current_user={@current_user}
-                can_resolve={can_edit?(@case_record, @current_user)}
-              />
-            </div>
-            <div id="affected">
-              <.affected_section
-                case_record={@display_case}
-                raw_case_record={@case_record}
-                mode={@mode}
-                marks={marks(@projection)}
-                current_user={@current_user}
-                can_resolve={can_edit?(@case_record, @current_user)}
-                expanded_package_id={@expanded_package_id}
-                child_form={@child_form}
-              />
-            </div>
-            <.rows_section
-              id="references"
-              heading="References"
-              type="reference"
-              add_label="Add reference"
-              rows={@display_case.references}
-              mode={@mode}
-              marks={marks(@projection)}
-              sort_event="reorder_references"
-              raw_case_record={@case_record}
-              current_user={@current_user}
-              can_resolve={can_edit?(@case_record, @current_user)}
-            >
-              <:row :let={reference}>
-                <span class="font-mono text-sm break-all">{reference.url}</span>
-                <span :for={tag <- reference.tags} class="badge badge-ghost badge-xs ml-1">{tag}</span>
-              </:row>
-            </.rows_section>
-            <.rows_section
-              id="credits"
-              heading="Credits"
-              type="credit"
-              add_label="Add credit"
-              rows={@display_case.credits}
-              mode={@mode}
-              marks={marks(@projection)}
-              sort_event="reorder_credits"
-              raw_case_record={@case_record}
-              current_user={@current_user}
-              can_resolve={can_edit?(@case_record, @current_user)}
-            >
-              <:row :let={credit}>
-                {credit.name}{if credit.organization, do: " / #{credit.organization}"}
-                <span class="badge badge-ghost badge-xs ml-1">
-                  {credit.credit_type |> to_string() |> String.replace("_", " ")}
-                </span>
-              </:row>
-            </.rows_section>
-            <.rows_section
-              id="weaknesses"
-              heading="Weaknesses (CWE)"
-              type="weakness"
-              add_label="Add CWE"
-              rows={@display_case.weaknesses}
-              mode={@mode}
-              marks={marks(@projection)}
-              raw_case_record={@case_record}
-              current_user={@current_user}
-              can_resolve={can_edit?(@case_record, @current_user)}
-            >
-              <:row :let={weakness}>
-                <a
-                  href={"https://cwe.mitre.org/data/definitions/#{weakness.cwe_id}.html"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="link font-mono"
-                >
-                  CWE-{weakness.cwe_id}
-                </a>
-                {weakness.weakness.name}
-              </:row>
-            </.rows_section>
-            <.rows_section
-              id="impacts"
-              heading="Impacts (CAPEC)"
-              type="impact"
-              add_label="Add CAPEC"
-              rows={@display_case.impacts}
-              mode={@mode}
-              marks={marks(@projection)}
-              raw_case_record={@case_record}
-              current_user={@current_user}
-              can_resolve={can_edit?(@case_record, @current_user)}
-            >
-              <:row :let={impact}>
-                <a
-                  href={"https://capec.mitre.org/data/definitions/#{impact.capec_id}.html"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="link font-mono"
-                >
-                  CAPEC-{impact.capec_id}
-                </a>
-                {impact.attack_pattern.name}
-              </:row>
-            </.rows_section>
-
-            <.resolved_suggestions_disclosure
-              :if={resolved_proposals(@case_record) != []}
-              case_record={@case_record}
-              current_user={@current_user}
-              can_resolve={can_edit?(@case_record, @current_user)}
-            />
-          </div>
-
-          <div class="space-y-4">
-            <.panel id="suggestions">
-              <:title>Suggestions</:title>
-              <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
-                <li :for={proposal <- open_proposals(@case_record)} class="flex items-center gap-2">
-                  <span class="text-info font-bold shrink-0">◆</span>
-                  <span class="truncate text-base-content/80">
-                    {proposal_field_ref(proposal)}
-                    <span class="text-base-content/50">— {display_name(proposal.author)}</span>
-                  </span>
-                  <a
-                    href={"#suggestion-#{proposal.id}"}
-                    class="link link-hover text-primary text-xs ml-auto shrink-0"
-                  >
-                    Jump
-                  </a>
-                </li>
-              </ul>
-              <p :if={open_proposals(@case_record) == []} class="text-sm text-base-content/60">
-                No open suggestions.
-              </p>
-            </.panel>
-            <.panel>
-              <:title>Activity</:title>
-              <form phx-submit="post_comment" class="mb-4">
-                <textarea
-                  name="body"
-                  rows="2"
-                  required
-                  placeholder="Write a comment…"
-                  class="w-full textarea text-sm"
-                ></textarea>
-                <button type="submit" class="btn btn-outline btn-xs mt-1">Comment</button>
-              </form>
-              <.activity_feed entries={activity_entries(@case_record)} />
-            </.panel>
-            <.assignments_section :if={poc?(@current_user)} case_record={@case_record} users={@users} />
-            <.reports_section
-              :if={@case_record.vulnerability_reports != []}
-              case_record={@case_record}
-              poc={poc?(@current_user)}
-            />
-            <.close_link
-              :if={poc?(@current_user) and editable?(@case_record)}
-              case_record={@case_record}
-            />
-          </div>
         </div>
+
+        <:right width={:wide} class="space-y-4">
+          <.panel id="suggestions">
+            <:title>Suggestions</:title>
+            <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
+              <li :for={proposal <- open_proposals(@case_record)} class="flex items-center gap-2">
+                <span class="text-info font-bold shrink-0">◆</span>
+                <span class="truncate text-base-content/80">
+                  {proposal_field_ref(proposal)}
+                  <span class="text-base-content/50">— {display_name(proposal.author)}</span>
+                </span>
+                <a
+                  href={"#suggestion-#{proposal.id}"}
+                  class="link link-hover text-primary text-xs ml-auto shrink-0"
+                >
+                  Jump
+                </a>
+              </li>
+            </ul>
+            <p :if={open_proposals(@case_record) == []} class="text-sm text-base-content/60">
+              No open suggestions.
+            </p>
+          </.panel>
+          <.panel>
+            <:title>Activity</:title>
+            <form phx-submit="post_comment" class="mb-4">
+              <textarea
+                name="body"
+                rows="2"
+                required
+                placeholder="Write a comment…"
+                class="w-full textarea text-sm"
+              ></textarea>
+              <button type="submit" class="btn btn-outline btn-xs mt-1">Comment</button>
+            </form>
+            <.activity_feed entries={activity_entries(@case_record)} />
+          </.panel>
+          <.assignments_section :if={poc?(@current_user)} case_record={@case_record} users={@users} />
+          <.reports_section
+            :if={@case_record.vulnerability_reports != []}
+            case_record={@case_record}
+            poc={poc?(@current_user)}
+          />
+          <.close_link
+            :if={poc?(@current_user) and editable?(@case_record)}
+            case_record={@case_record}
+          />
+        </:right>
 
         <.child_modal
           :if={@child_form && not package_field_form?(@child_form)}
@@ -1369,7 +1366,7 @@ defmodule VarselWeb.CaseDetailLive do
           catalog_options={@catalog_options}
           mode={@mode}
         />
-      </div>
+      </.page_container>
     </div>
 
     <.preview_overlay

@@ -34,11 +34,11 @@ defmodule VarselWeb.ErrorHTML do
       <:title>{render_slot(@title)}</:title>
     </.page_header>
 
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-10">
+    <.page_container>
       <div class="max-w-2xl">
         {render_slot(@inner_block)}
       </div>
-    </div>
+    </.page_container>
     """
   end
 

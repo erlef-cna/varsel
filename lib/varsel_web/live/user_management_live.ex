@@ -70,7 +70,7 @@ defmodule VarselWeb.UserManagementLive do
       <:subtitle>Manage who can access the CNA tooling and their role.</:subtitle>
     </.page_header>
 
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+    <.page_container>
       <div class="rounded-box border border-base-300 bg-base-200 overflow-hidden">
         <div class="px-4 py-2.5 border-b border-base-300 text-sm text-base-content/70 tabular-nums">
           <.count_label count={length(@users)} singular="user" />
@@ -126,7 +126,7 @@ defmodule VarselWeb.UserManagementLive do
           </table>
         </div>
       </div>
-    </div>
+    </.page_container>
     """
   end
 end

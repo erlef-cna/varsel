@@ -486,7 +486,7 @@ defmodule VarselWeb.CaseManagementLive do
       </div>
     </div>
 
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+    <.page_container>
       <.pipeline_face
         :if={@face == :pipeline}
         lanes={@lanes}
@@ -505,7 +505,7 @@ defmodule VarselWeb.CaseManagementLive do
         archive_count={@archive_count}
         socket={@socket}
       />
-    </div>
+    </.page_container>
     """
   end
 

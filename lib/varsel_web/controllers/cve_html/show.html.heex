@@ -13,7 +13,7 @@ SPDX-License-Identifier: Apache-2.0
 <% present = Map.new(sections, &{&1.id, &1.present?}) %>
 
 <div class="console-band">
-  <div class="container mx-auto max-w-5xl px-4 py-5 sm:px-6 lg:px-8">
+  <div class="container mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
     <div class="flex flex-col items-start justify-between gap-4 lg:flex-row">
       <div class="min-w-0">
         <p class="eef-eyebrow">
@@ -52,278 +52,272 @@ SPDX-License-Identifier: Apache-2.0
   </div>
 </div>
 
-<div class="container mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
-  <div class="lg:grid lg:grid-cols-[1fr_15rem] lg:gap-12">
-    <div class="flex min-w-0 flex-col gap-4">
-      <.panel :if={present["am-i-affected"]} id="am-i-affected">
-        <:title>Am I affected?</:title>
-        {live_render(@conn, VarselWeb.AffectedCheckerLive,
-          id: "affected-checker",
-          session: %{"packages" => checker_packages(affected)}
-        )}
-      </.panel>
+<.page_container>
+  <:right>
+    <nav class="sticky top-24" aria-label="Table of contents" data-toc>
+      <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+        On this page
+      </p>
+      <ul class="space-y-1 border-l border-base-300 text-sm">
+        <li :for={section <- Enum.filter(sections, & &1.present?)}>
+          <a
+            href={"##{section.id}"}
+            class="block border-l-2 border-transparent -ml-px py-0.5 pl-3 text-base-content/70 transition-colors hover:border-primary hover:text-primary"
+          >
+            {section.toc_label}
+          </a>
+        </li>
+      </ul>
+    </nav>
+  </:right>
 
-      <.panel :if={present["description"]} id="description">
-        <:title>Description</:title>
-        <div class="prose max-w-none text-sm">{description}</div>
-      </.panel>
+  <div class="flex min-w-0 flex-col gap-4">
+    <.panel :if={present["am-i-affected"]} id="am-i-affected">
+      <:title>Am I affected?</:title>
+      {live_render(@conn, VarselWeb.AffectedCheckerLive,
+        id: "affected-checker",
+        session: %{"packages" => checker_packages(affected)}
+      )}
+    </.panel>
 
-      <.panel :if={present["weaknesses"]} id="weaknesses">
-        <:title>Weaknesses &amp; attack patterns</:title>
-        <div :if={weaknesses != []}>
-          <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
-            Weakness
-          </p>
-          <div :for={cwe <- weaknesses} class="flex flex-wrap items-start gap-2 py-0.5">
+    <.panel :if={present["description"]} id="description">
+      <:title>Description</:title>
+      <div class="prose max-w-none text-sm">{description}</div>
+    </.panel>
+
+    <.panel :if={present["weaknesses"]} id="weaknesses">
+      <:title>Weaknesses &amp; attack patterns</:title>
+      <div :if={weaknesses != []}>
+        <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+          Weakness
+        </p>
+        <div :for={cwe <- weaknesses} class="flex flex-wrap items-start gap-2 py-0.5">
+          <.id_name_chip
+            id={cwe["cweId"]}
+            name={Map.get(@cwe_names, cwe_id_number(cwe["cweId"]))}
+            class="flex-1"
+            truncate?={false}
+          />
+          <span class="ml-auto flex flex-shrink-0 items-center gap-3">
+            <.link
+              :if={Map.get(@cwe_names, cwe_id_number(cwe["cweId"]))}
+              navigate={~p"/common-weaknesses?cwe=#{cwe["cweId"]}"}
+              class="text-xs text-primary hover:underline"
+            >
+              in catalog →
+            </.link>
+            <a
+              href={cwe_url(cwe["cweId"])}
+              target="_blank"
+              rel="noopener"
+              class="text-xs text-primary hover:underline"
+            >
+              MITRE ↗
+            </a>
+          </span>
+        </div>
+      </div>
+      <div :if={attack_patterns != []} class={weaknesses != [] && "mt-3"}>
+        <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+          Attack patterns
+        </p>
+        <div :for={capec <- attack_patterns} class="py-0.5">
+          <div class="flex flex-wrap items-start gap-2">
             <.id_name_chip
-              id={cwe["cweId"]}
-              name={Map.get(@cwe_names, cwe_id_number(cwe["cweId"]))}
+              id={capec["capecId"]}
+              name={Map.get(@capec_names, capec_id_number(capec["capecId"]))}
               class="flex-1"
               truncate?={false}
             />
-            <span class="ml-auto flex flex-shrink-0 items-center gap-3">
-              <.link
-                :if={Map.get(@cwe_names, cwe_id_number(cwe["cweId"]))}
-                navigate={~p"/common-weaknesses?cwe=#{cwe["cweId"]}"}
-                class="text-xs text-primary hover:underline"
-              >
-                in catalog →
-              </.link>
-              <a
-                href={cwe_url(cwe["cweId"])}
-                target="_blank"
-                rel="noopener"
-                class="text-xs text-primary hover:underline"
-              >
-                MITRE ↗
-              </a>
-            </span>
-          </div>
-        </div>
-        <div :if={attack_patterns != []} class={weaknesses != [] && "mt-3"}>
-          <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
-            Attack patterns
-          </p>
-          <div :for={capec <- attack_patterns} class="py-0.5">
-            <div class="flex flex-wrap items-start gap-2">
-              <.id_name_chip
-                id={capec["capecId"]}
-                name={Map.get(@capec_names, capec_id_number(capec["capecId"]))}
-                class="flex-1"
-                truncate?={false}
-              />
-              <a
-                href={capec_url(capec["capecId"])}
-                target="_blank"
-                rel="noopener"
-                class="ml-auto flex-shrink-0 text-xs text-primary hover:underline"
-              >
-                MITRE ↗
-              </a>
-            </div>
-            <p
-              :if={capec_text(capec, Map.get(@capec_names, capec_id_number(capec["capecId"])))}
-              class="mt-0.5 pl-0.5 text-xs text-base-content/60"
-            >
-              {capec_text(capec, Map.get(@capec_names, capec_id_number(capec["capecId"])))}
-            </p>
-          </div>
-        </div>
-      </.panel>
-
-      <.panel :for={{entry, index} <- Enum.with_index(affected)} id={affected_card_id(index)}>
-        <:title>
-          Affected — <.package_ref entry={entry} />
-        </:title>
-        <:actions :if={registry_link(entry)}>
-          <a href={elem(registry_link(entry), 1)} target="_blank" rel="noopener">
-            {elem(registry_link(entry), 0)} ↗
-          </a>
-        </:actions>
-        <:actions :if={entry["repo"]}>
-          <a href={entry["repo"]} target="_blank" rel="noopener">Repository ↗</a>
-        </:actions>
-
-        <p
-          :if={(entry["versions"] || []) == [] and entry["defaultStatus"] == "affected"}
-          class="text-sm"
-        >
-          All versions affected.
-        </p>
-
-        <div :if={affected_ranges(entry) != []} class="flex flex-col gap-1 font-mono text-sm">
-          <div :for={range <- affected_ranges(entry)}>
-            <%= if range.kind == :git do %>
-              <span :if={range.intro_sha} class="font-sans text-sm text-base-content/60">
-                introduced by
-              </span>
-              <code :if={range.intro_sha} title={range.intro_sha_title}>{range.intro_sha}</code>
-              <span
-                :if={range.intro_sha && range.fix_sha}
-                class="font-sans text-sm text-base-content/60"
-              >
-                ·
-              </span>
-              <span :if={range.fix_sha} class="font-sans text-sm text-base-content/60">
-                fixed by
-              </span>
-              <code :if={range.fix_sha} title={range.fix_sha_title}>{range.fix_sha}</code>
-              <span class="font-sans text-sm text-base-content/60">· {range.note}</span>
-            <% else %>
-              <span :if={range.branch_label} class="mr-2 font-sans text-xs text-base-content/50">
-                {range.branch_label}
-              </span>
-              <span :if={range.lower}>
-                ≥ <span title={range.lower_title}>{range.lower}</span>
-              </span>
-              <span :if={range.fix}>
-                &lt; <span title={range.fix_title}>{range.fix}</span>
-              </span>
-              <span class="font-sans text-sm text-base-content/60">
-                · {range.note}<span :if={range.fix_paren_label}> ({range.fix_paren_label})</span>
-              </span>
-            <% end %>
-          </div>
-        </div>
-
-        <div class="mt-2 flex flex-col gap-0.5">
-          <div class="flex items-baseline gap-3 py-0.5">
-            <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
-              default status
-            </span>
-            <span class="text-xs text-base-content/70">{entry["defaultStatus"]}</span>
-          </div>
-          <div :if={cpe_line(entry)} class="flex items-baseline gap-3 py-0.5">
-            <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
-              cpe
-            </span>
-            <span class="break-all font-mono text-xs text-base-content/70">{cpe_line(entry)}</span>
-          </div>
-        </div>
-
-        <details :if={has_components?(entry)} class="mt-2">
-          <summary class="cursor-pointer text-xs text-base-content/50">
-            {components_summary(entry)}
-          </summary>
-          <div class="mt-2 flex flex-col gap-0.5 border-t border-dashed border-base-300 pt-2">
-            <div
-              :for={{label, value} <- component_field_rows(entry)}
-              class="flex items-baseline gap-3 py-0.5"
-            >
-              <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
-                {label}
-              </span>
-              <span class="break-all font-mono text-xs text-base-content/70">{value}</span>
-            </div>
-          </div>
-        </details>
-      </.panel>
-
-      <.panel :if={present["workarounds"]} id="workarounds">
-        <:title>Workarounds</:title>
-        <div class="prose max-w-none text-sm">
-          {prose(@cna["workarounds"], @cna["references"] || [])}
-        </div>
-      </.panel>
-
-      <.panel :if={present["configurations"]} id="configurations">
-        <:title>Configurations</:title>
-        <div class="prose max-w-none text-sm">
-          {prose(@cna["configurations"], @cna["references"] || [])}
-        </div>
-      </.panel>
-
-      <.panel :if={present["solutions"]} id="solutions">
-        <:title>Solutions</:title>
-        <div class="prose max-w-none text-sm">
-          {prose(@cna["solutions"], @cna["references"] || [])}
-        </div>
-      </.panel>
-
-      <.panel :if={present["references"]} id="references">
-        <:title>References</:title>
-        <div class="flex flex-col gap-1.5 text-sm">
-          <div
-            :for={row <- Enum.map(sort_references(references), &reference_row/1)}
-            class="flex items-center gap-2"
-          >
-            <span
-              aria-hidden="true"
-              class="h-[5px] w-[5px] flex-shrink-0 rounded-[1px] bg-base-content/35"
-            ></span>
-            <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              <.reference_body row={row} />
-            </span>
-            <span
-              :if={row.tag}
-              class={[
-                "flex-shrink-0 rounded-[5px] border px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap",
-                if(row.tone == :warn,
-                  do: "border-warning/40 text-warning",
-                  else: "border-base-300/70 text-base-content/50"
-                )
-              ]}
-            >
-              {row.tag}
-            </span>
-          </div>
-        </div>
-      </.panel>
-
-      <.panel :if={present["credits"]} id="credits">
-        <:title>Credits</:title>
-        <div class="flex flex-col gap-1.5 text-sm">
-          <div :for={credit <- @cna["credits"]} class="flex items-center gap-2">
-            <span>{credit["value"]}</span>
-            <span class="rounded-[5px] border border-base-300/70 px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-base-content/50">
-              {humanize_credit(credit["type"] || "")}
-            </span>
-          </div>
-        </div>
-      </.panel>
-
-      <.panel :if={present["cvss-breakdown"]} id="cvss-breakdown">
-        <:title>CVSS breakdown</:title>
-        <div class="flex flex-wrap items-center gap-3">
-          <.severity_chip score={cvss["baseScore"] / 1} variant={:full} />
-          <a
-            :if={cvss_calculator_url(cvss)}
-            href={cvss_calculator_url(cvss)}
-            target="_blank"
-            rel="noopener"
-            class="ml-auto text-xs text-primary hover:underline"
-          >
-            open in calculator →
-          </a>
-        </div>
-        <.cvss_vector vector={cvss["vectorString"]} />
-      </.panel>
-
-      <.link navigate={~p"/cves"} class="text-sm text-primary hover:underline">
-        &laquo; All CVEs
-      </.link>
-    </div>
-
-    <nav
-      class="order-first hidden lg:order-last lg:block"
-      aria-label="Table of contents"
-      data-toc
-    >
-      <div class="sticky top-24">
-        <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
-          On this page
-        </p>
-        <ul class="space-y-1 border-l border-base-300 text-sm">
-          <li :for={section <- Enum.filter(sections, & &1.present?)}>
             <a
-              href={"##{section.id}"}
-              class="block border-l-2 border-transparent -ml-px py-0.5 pl-3 text-base-content/70 transition-colors hover:border-primary hover:text-primary"
+              href={capec_url(capec["capecId"])}
+              target="_blank"
+              rel="noopener"
+              class="ml-auto flex-shrink-0 text-xs text-primary hover:underline"
             >
-              {section.toc_label}
+              MITRE ↗
             </a>
-          </li>
-        </ul>
+          </div>
+          <p
+            :if={capec_text(capec, Map.get(@capec_names, capec_id_number(capec["capecId"])))}
+            class="mt-0.5 pl-0.5 text-xs text-base-content/60"
+          >
+            {capec_text(capec, Map.get(@capec_names, capec_id_number(capec["capecId"])))}
+          </p>
+        </div>
       </div>
-    </nav>
+    </.panel>
+
+    <.panel :for={{entry, index} <- Enum.with_index(affected)} id={affected_card_id(index)}>
+      <:title>
+        Affected — <.package_ref entry={entry} />
+      </:title>
+      <:actions :if={registry_link(entry)}>
+        <a href={elem(registry_link(entry), 1)} target="_blank" rel="noopener">
+          {elem(registry_link(entry), 0)} ↗
+        </a>
+      </:actions>
+      <:actions :if={entry["repo"]}>
+        <a href={entry["repo"]} target="_blank" rel="noopener">Repository ↗</a>
+      </:actions>
+
+      <p
+        :if={(entry["versions"] || []) == [] and entry["defaultStatus"] == "affected"}
+        class="text-sm"
+      >
+        All versions affected.
+      </p>
+
+      <div :if={affected_ranges(entry) != []} class="flex flex-col gap-1 font-mono text-sm">
+        <div :for={range <- affected_ranges(entry)}>
+          <%= if range.kind == :git do %>
+            <span :if={range.intro_sha} class="font-sans text-sm text-base-content/60">
+              introduced by
+            </span>
+            <code :if={range.intro_sha} title={range.intro_sha_title}>{range.intro_sha}</code>
+            <span
+              :if={range.intro_sha && range.fix_sha}
+              class="font-sans text-sm text-base-content/60"
+            >
+              ·
+            </span>
+            <span :if={range.fix_sha} class="font-sans text-sm text-base-content/60">
+              fixed by
+            </span>
+            <code :if={range.fix_sha} title={range.fix_sha_title}>{range.fix_sha}</code>
+            <span class="font-sans text-sm text-base-content/60">· {range.note}</span>
+          <% else %>
+            <span :if={range.branch_label} class="mr-2 font-sans text-xs text-base-content/50">
+              {range.branch_label}
+            </span>
+            <span :if={range.lower}>
+              ≥ <span title={range.lower_title}>{range.lower}</span>
+            </span>
+            <span :if={range.fix}>
+              &lt; <span title={range.fix_title}>{range.fix}</span>
+            </span>
+            <span class="font-sans text-sm text-base-content/60">
+              · {range.note}<span :if={range.fix_paren_label}> ({range.fix_paren_label})</span>
+            </span>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="mt-2 flex flex-col gap-0.5">
+        <div class="flex items-baseline gap-3 py-0.5">
+          <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+            default status
+          </span>
+          <span class="text-xs text-base-content/70">{entry["defaultStatus"]}</span>
+        </div>
+        <div :if={cpe_line(entry)} class="flex items-baseline gap-3 py-0.5">
+          <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+            cpe
+          </span>
+          <span class="break-all font-mono text-xs text-base-content/70">{cpe_line(entry)}</span>
+        </div>
+      </div>
+
+      <details :if={has_components?(entry)} class="mt-2">
+        <summary class="cursor-pointer text-xs text-base-content/50">
+          {components_summary(entry)}
+        </summary>
+        <div class="mt-2 flex flex-col gap-0.5 border-t border-dashed border-base-300 pt-2">
+          <div
+            :for={{label, value} <- component_field_rows(entry)}
+            class="flex items-baseline gap-3 py-0.5"
+          >
+            <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+              {label}
+            </span>
+            <span class="break-all font-mono text-xs text-base-content/70">{value}</span>
+          </div>
+        </div>
+      </details>
+    </.panel>
+
+    <.panel :if={present["workarounds"]} id="workarounds">
+      <:title>Workarounds</:title>
+      <div class="prose max-w-none text-sm">
+        {prose(@cna["workarounds"], @cna["references"] || [])}
+      </div>
+    </.panel>
+
+    <.panel :if={present["configurations"]} id="configurations">
+      <:title>Configurations</:title>
+      <div class="prose max-w-none text-sm">
+        {prose(@cna["configurations"], @cna["references"] || [])}
+      </div>
+    </.panel>
+
+    <.panel :if={present["solutions"]} id="solutions">
+      <:title>Solutions</:title>
+      <div class="prose max-w-none text-sm">
+        {prose(@cna["solutions"], @cna["references"] || [])}
+      </div>
+    </.panel>
+
+    <.panel :if={present["references"]} id="references">
+      <:title>References</:title>
+      <div class="flex flex-col gap-1.5 text-sm">
+        <div
+          :for={row <- Enum.map(sort_references(references), &reference_row/1)}
+          class="flex items-center gap-2"
+        >
+          <span
+            aria-hidden="true"
+            class="h-[5px] w-[5px] flex-shrink-0 rounded-[1px] bg-base-content/35"
+          ></span>
+          <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+            <.reference_body row={row} />
+          </span>
+          <span
+            :if={row.tag}
+            class={[
+              "flex-shrink-0 rounded-[5px] border px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap",
+              if(row.tone == :warn,
+                do: "border-warning/40 text-warning",
+                else: "border-base-300/70 text-base-content/50"
+              )
+            ]}
+          >
+            {row.tag}
+          </span>
+        </div>
+      </div>
+    </.panel>
+
+    <.panel :if={present["credits"]} id="credits">
+      <:title>Credits</:title>
+      <div class="flex flex-col gap-1.5 text-sm">
+        <div :for={credit <- @cna["credits"]} class="flex items-center gap-2">
+          <span>{credit["value"]}</span>
+          <span class="rounded-[5px] border border-base-300/70 px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-base-content/50">
+            {humanize_credit(credit["type"] || "")}
+          </span>
+        </div>
+      </div>
+    </.panel>
+
+    <.panel :if={present["cvss-breakdown"]} id="cvss-breakdown">
+      <:title>CVSS breakdown</:title>
+      <div class="flex flex-wrap items-center gap-3">
+        <.severity_chip score={cvss["baseScore"] / 1} variant={:full} />
+        <a
+          :if={cvss_calculator_url(cvss)}
+          href={cvss_calculator_url(cvss)}
+          target="_blank"
+          rel="noopener"
+          class="ml-auto text-xs text-primary hover:underline"
+        >
+          open in calculator →
+        </a>
+      </div>
+      <.cvss_vector vector={cvss["vectorString"]} />
+    </.panel>
+
+    <.link navigate={~p"/cves"} class="text-sm text-primary hover:underline">
+      &laquo; All CVEs
+    </.link>
   </div>
-</div>
+</.page_container>

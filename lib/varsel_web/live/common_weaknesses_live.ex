@@ -112,7 +112,7 @@ defmodule VarselWeb.CommonWeaknessesLive do
       <:title>{@page.title}</:title>
     </.page_header>
 
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+    <.page_container>
       <div class="prose prose-base max-w-none mb-6">{raw(@page.body)}</div>
 
       <%!-- Breadcrumb / drill-down controls --%>
@@ -182,7 +182,7 @@ defmodule VarselWeb.CommonWeaknessesLive do
           </table>
         </div>
       </section>
-    </div>
+    </.page_container>
     """
   end
 

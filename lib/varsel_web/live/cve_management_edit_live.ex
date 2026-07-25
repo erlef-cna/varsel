@@ -89,17 +89,17 @@ defmodule VarselWeb.VarselEditLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl py-10">
-      <Layouts.flash_group flash={@flash} />
+    <Layouts.flash_group flash={@flash} />
 
-      <.header class="mb-6">
-        Edit {@record.cve_id || "CVE"}
-        <:subtitle>
-          State: <span class="font-mono">{@record.state}</span>. Saving runs validation and
-          enqueues the MITRE push.
-        </:subtitle>
-      </.header>
+    <.page_header eyebrow="CNA Console">
+      <:title>Edit <span class="font-mono">{@record.cve_id || "CVE"}</span></:title>
+      <:subtitle>
+        State: <span class="font-mono">{@record.state}</span>. Saving runs validation and
+        enqueues the MITRE push.
+      </:subtitle>
+    </.page_header>
 
+    <.page_container>
       <div :if={!@editable?} class="alert alert-warning">
         A record in state <span class="font-mono">{@record.state}</span> cannot be edited.
       </div>
@@ -119,7 +119,7 @@ defmodule VarselWeb.VarselEditLive do
           <.link navigate={~p"/cves/manage"} class="btn btn-ghost">Cancel</.link>
         </div>
       </.form>
-    </div>
+    </.page_container>
     """
   end
 end

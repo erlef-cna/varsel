@@ -156,6 +156,89 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a page's content column: the centered, gutter-padded container that
+  holds everything below the `page_header/1` band.
+
+  Every column shares one measure and one set of gutters, so the bands and the
+  content below them line up. `padding` covers the vertical rhythm — a landing
+  hero breathes where a notice bar sits tight; `class` takes the smaller
+  deviations, like a page that wants its children spaced.
+
+  The `left` and `right` slots put a rail beside the content — a table of
+  contents, a section nav, a workspace's side panels. A rail is `:narrow`,
+  `:normal` or `:wide`; the content column takes whatever is left. Rails drop
+  away below `lg`, where they would leave the content too little room to read.
+
+      <.page_container>
+        <:left width={:narrow}>...</:left>
+        main content
+        <:right width={:wide}>...</:right>
+      </.page_container>
+  """
+  attr :padding, :atom, default: :normal, values: [:tight, :normal, :hero]
+  attr :class, :any, default: nil
+
+  slot :left, doc: "a rail left of the content" do
+    attr :width, :atom, values: [:narrow, :normal, :wide]
+    attr :class, :any
+  end
+
+  slot :right, doc: "a rail right of the content" do
+    attr :width, :atom, values: [:narrow, :normal, :wide]
+    attr :class, :any
+  end
+
+  slot :inner_block, required: true
+
+  def page_container(assigns) do
+    ~H"""
+    <div class={
+      [
+        "container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl",
+        case @padding do
+          :tight -> "py-3"
+          :normal -> "py-6"
+          :hero -> "py-16 lg:py-24"
+        end,
+        # The container is the grid itself, so a page without rails passes its
+        # children straight through — a `class` like `space-y-4` then spaces
+        # the page's own children rather than a wrapper holding all of them.
+        (@left != [] or @right != []) &&
+          "lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-8 items-start"
+      ] ++ List.wrap(@class)
+    }>
+      <aside
+        :for={left <- @left}
+        class={["hidden lg:block order-first", aside_width(left), Map.get(left, :class)]}
+      >
+        {render_slot(left)}
+      </aside>
+      <%= if @left == [] and @right == [] do %>
+        {render_slot(@inner_block)}
+      <% else %>
+        <div class="min-w-0">{render_slot(@inner_block)}</div>
+      <% end %>
+      <aside
+        :for={right <- @right}
+        class={["hidden lg:block order-last", aside_width(right), Map.get(right, :class)]}
+      >
+        {render_slot(right)}
+      </aside>
+    </div>
+    """
+  end
+
+  # The rail carries its own width and the content column takes what is left,
+  # so a page declares how wide its rails are without naming a grid track.
+  defp aside_width(aside) do
+    case Map.get(aside, :width, :normal) do
+      :narrow -> "w-40"
+      :normal -> "w-60"
+      :wide -> "w-80"
+    end
+  end
+
+  @doc """
   Renders the centered, muted line a list shows in place of its rows.
 
   An empty collection and a search that matched nothing read differently, so
@@ -167,7 +250,7 @@ defmodule VarselWeb.CoreComponents do
 
   def empty_state(assigns) do
     ~H"""
-    <p class={["text-center text-base-content/60 py-8", @class]}>
+    <p class={["text-center text-base-content/60 py-8" | List.wrap(@class)]}>
       {render_slot(@inner_block)}
     </p>
     """

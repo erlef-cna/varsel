@@ -7,33 +7,26 @@ SPDX-License-Identifier: Apache-2.0
   <:title>{@page.title}</:title>
 </.page_header>
 
-<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-6xl">
-  <div class={[@page.toc != [] && "lg:grid lg:grid-cols-[1fr_15rem] lg:gap-12"]}>
-    <article class="prose prose-base max-w-none min-w-0">
-      {raw(@page.body)}
-    </article>
-
-    <nav
-      :if={@page.toc != []}
-      class="hidden lg:block order-first lg:order-last"
-      aria-label="Table of contents"
-      data-toc
-    >
-      <div class="sticky top-24">
-        <p class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-3">
-          On this page
-        </p>
-        <ul class="space-y-1 text-sm border-l border-base-300">
-          <li :for={item <- @page.toc} class={[item.level == 3 && "ml-3"]}>
-            <a
-              href={"##{item.id}"}
-              class="block border-l-2 border-transparent -ml-px pl-3 py-0.5 text-base-content/70 hover:text-primary hover:border-primary transition-colors"
-            >
-              {item.text}
-            </a>
-          </li>
-        </ul>
-      </div>
+<.page_container>
+  <:right :if={@page.toc != []}>
+    <nav class="sticky top-24" aria-label="Table of contents" data-toc>
+      <p class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-3">
+        On this page
+      </p>
+      <ul class="space-y-1 text-sm border-l border-base-300">
+        <li :for={item <- @page.toc} class={[item.level == 3 && "ml-3"]}>
+          <a
+            href={"##{item.id}"}
+            class="block border-l-2 border-transparent -ml-px pl-3 py-0.5 text-base-content/70 hover:text-primary hover:border-primary transition-colors"
+          >
+            {item.text}
+          </a>
+        </li>
+      </ul>
     </nav>
-  </div>
-</div>
+  </:right>
+
+  <article class="prose prose-base max-w-none min-w-0">
+    {raw(@page.body)}
+  </article>
+</.page_container>

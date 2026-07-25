@@ -183,7 +183,7 @@ defmodule VarselWeb.ReportTriageLive do
       </:actions>
     </.page_header>
 
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+    <.page_container>
       <div :if={@triage?} class="mb-4">
         <.stat_tiles active={@filter} options={tile_options(@reports)} />
       </div>
@@ -301,7 +301,7 @@ defmodule VarselWeb.ReportTriageLive do
       <.empty_state :if={@triage? and @reports != [] and visible_reports(@reports, @filter) == []}>
         {if @filter == "open", do: "No reports waiting for triage.", else: "No reports here."}
       </.empty_state>
-    </div>
+    </.page_container>
     """
   end
 end

@@ -395,7 +395,7 @@ defmodule VarselWeb.CveListLive do
       </:actions>
     </.page_header>
 
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+    <.page_container>
       <.pool_panel
         :if={@poc?}
         pool={@pool}
@@ -591,7 +591,7 @@ defmodule VarselWeb.CveListLive do
         · <a href={~p"/feed.atom"} class="link">Atom</a>
         · <a href={~p"/feed.rss"} class="link">RSS</a>
       </p>
-    </div>
+    </.page_container>
     """
   end
 

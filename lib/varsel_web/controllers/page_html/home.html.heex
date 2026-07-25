@@ -8,16 +8,18 @@
 <div
   :if={Application.fetch_env!(:varsel, :test_deployment?)}
   role="alert"
-  class="bg-warning text-warning-content px-4 py-3 text-center text-sm font-medium"
+  class="bg-warning text-warning-content font-medium"
 >
-  <.icon name="hero-exclamation-triangle" class="size-5 align-text-bottom mr-1" />
-  This is a <strong>test deployment</strong>. Data may be incomplete or reset at any time,
-  and this site is not indexed by search engines. Do not rely on it for production use.
+  <.page_container padding={:tight} class="text-xs">
+    <.icon name="hero-exclamation-triangle" class="size-4 align-text-bottom mr-1" />
+    This is a <strong>test deployment</strong>. Data may be incomplete or reset at any time,
+    and this site is not indexed by search engines. Do not rely on it for production use.
+  </.page_container>
 </div>
 
 <%!-- Hero band: text on the left, ecosystem logos on the right (below on mobile) --%>
 <section class="eef-band">
-  <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24 max-w-5xl">
+  <.page_container padding={:hero}>
     <div class="grid lg:grid-cols-[1fr_auto] gap-12 lg:gap-16 items-center">
       <div>
         <p class="eef-eyebrow mb-3">Erlang Ecosystem Foundation</p>
@@ -61,10 +63,10 @@
         </a>
       </div>
     </div>
-  </div>
+  </.page_container>
 </section>
 
-<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 max-w-5xl">
+<.page_container>
   <p class="mb-10">
     As a <a href="https://www.cve.org/programorganization/cnas" class="link link-primary">CNA (CVE Numbering Authority)</a>,
     we assign CVE IDs for vulnerabilities in active packages hosted on
@@ -229,4 +231,4 @@
       </div>
     </a>
   </div>
-</div>
+</.page_container>

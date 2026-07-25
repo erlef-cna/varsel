@@ -127,7 +127,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
       <:subtitle>Personal access tokens for the GraphQL and MCP endpoints.</:subtitle>
     </.page_header>
 
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6 space-y-4">
+    <.page_container class="space-y-4">
       <div class="rounded-box border border-base-300 p-4">
         <h2 class="font-semibold">Create a token</h2>
         <p class="text-sm text-base-content/60 mt-0.5 mb-3">
@@ -217,7 +217,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
           No tokens yet — create one above.
         </.empty_state>
       </div>
-    </div>
+    </.page_container>
     """
   end
 end
