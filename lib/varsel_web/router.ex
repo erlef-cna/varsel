@@ -221,6 +221,16 @@ defmodule VarselWeb.Router do
     end
   end
 
+  # Bypasses GitHub OAuth by signing in a dummy user of the chosen role. Only
+  # mounted in dev builds (see `:mock_login_enabled?` in config/config.exs).
+  if Application.compile_env(:varsel, :mock_login_enabled?, false) do
+    scope "/mock-auth", VarselWeb do
+      pipe_through :browser
+
+      post "/sign-in/:role", MockAuthController, :create
+    end
+  end
+
   # Authentication pages — bare, centered layout (no site nav/footer).
   scope "/", VarselWeb do
     pipe_through :auth_browser
