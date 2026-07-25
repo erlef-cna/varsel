@@ -724,19 +724,13 @@ defmodule VarselWeb.CaseManagementLive do
         />
       </div>
 
-      <div
-        :if={@cases.results == [] and @archive_count == 0}
-        class="text-center text-sm text-base-content/60 py-10"
-      >
+      <.empty_state :if={@cases.results == [] and @archive_count == 0}>
         Nothing archived yet — cases land here when they are published or closed.
-      </div>
+      </.empty_state>
 
-      <div
-        :if={@cases.results == [] and @archive_count > 0}
-        class="text-center text-sm text-base-content/60 py-10"
-      >
+      <.empty_state :if={@cases.results == [] and @archive_count > 0}>
         No archived cases match.
-      </div>
+      </.empty_state>
 
       <div :if={@cases.results != []} class="overflow-x-auto hidden md:block">
         <table class="table w-full">

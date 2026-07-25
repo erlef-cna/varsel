@@ -294,16 +294,13 @@ defmodule VarselWeb.ReportTriageLive do
         </div>
       </div>
 
-      <p :if={@reports == []} class="text-center text-base-content/60 py-8">
+      <.empty_state :if={@reports == []}>
         {if @triage?, do: "No reports here.", else: "You have not submitted any reports yet."}
-      </p>
+      </.empty_state>
 
-      <p
-        :if={@triage? and @reports != [] and visible_reports(@reports, @filter) == []}
-        class="text-center text-base-content/60 py-8"
-      >
+      <.empty_state :if={@triage? and @reports != [] and visible_reports(@reports, @filter) == []}>
         {if @filter == "open", do: "No reports waiting for triage.", else: "No reports here."}
-      </p>
+      </.empty_state>
     </div>
     """
   end

@@ -213,9 +213,9 @@ defmodule VarselWeb.ApiKeySettingsLive do
           </table>
         </div>
 
-        <p :if={@api_keys == []} class="text-center text-base-content/60 py-8">
+        <.empty_state :if={@api_keys == []}>
           No tokens yet — create one above.
-        </p>
+        </.empty_state>
       </div>
     </div>
     """

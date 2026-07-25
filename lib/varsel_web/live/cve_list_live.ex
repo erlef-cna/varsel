@@ -571,9 +571,9 @@ defmodule VarselWeb.CveListLive do
             </tbody>
           </table>
 
-          <p :if={@cve_records.results == []} class="text-center text-base-content/60 py-8">
+          <.empty_state :if={@cve_records.results == []}>
             No CVEs match your search.
-          </p>
+          </.empty_state>
         </div>
 
         <.jump_pagination :if={@poc?} page={@cve_records} noun="record" />

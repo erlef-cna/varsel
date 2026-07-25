@@ -156,6 +156,24 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders the centered, muted line a list shows in place of its rows.
+
+  An empty collection and a search that matched nothing read differently, so
+  the sentence is the caller's: "No tokens yet — create one above." beats a
+  generic "Nothing here". `class` is for placement extras.
+  """
+  attr :class, :any, default: nil
+  slot :inner_block, required: true
+
+  def empty_state(assigns) do
+    ~H"""
+    <p class={["text-center text-base-content/60 py-8", @class]}>
+      {render_slot(@inner_block)}
+    </p>
+    """
+  end
+
+  @doc """
   Renders the console's stat-tile row: one clickable tile per queue state,
   count on top, dot + label below — the overview and the filter are the same
   control. Clicking pushes `event` with the tile's value as the `filter`
