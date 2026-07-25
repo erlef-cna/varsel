@@ -29,6 +29,7 @@ defmodule VarselWeb.Storybook.Core do
 
   def entry("pagination"), do: [name: "Pagination", icon: {:local, "hero-chevron-double-right"}]
 
+  def entry("link_tile"), do: [name: "Link tile", icon: {:local, "hero-squares-plus"}]
   def entry("list"), do: [name: "List", icon: {:local, "hero-list-bullet"}]
   def entry("list_card"), do: [name: "List card", icon: {:local, "hero-rectangle-stack"}]
   def entry("panel"), do: [name: "Panel", icon: {:local, "hero-rectangle-group"}]

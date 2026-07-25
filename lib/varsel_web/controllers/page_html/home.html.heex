@@ -125,113 +125,18 @@
     <h2 class="text-2xl font-bold mb-4">Learn more</h2>
   </section>
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    <.link
-      href={~p"/scope"}
-      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
-    >
-      <div class="card-body p-5">
-        <div class="text-primary mb-2">
-          <.icon name="hero-viewfinder-circle" class="size-7" />
-        </div>
-        <h2 class="card-title text-base">CNA Scope</h2>
-        <p class="text-sm text-base-content/70">What projects we cover</p>
-      </div>
-    </.link>
-    <.link
-      href={~p"/contact"}
-      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
-    >
-      <div class="card-body p-5">
-        <div class="text-primary mb-2">
-          <.icon name="hero-envelope" class="size-7" />
-        </div>
-        <h2 class="card-title text-base">Contact</h2>
-        <p class="text-sm text-base-content/70">Report a vulnerability</p>
-      </div>
-    </.link>
-    <.link
-      href={~p"/cve-criteria"}
-      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
-    >
-      <div class="card-body p-5">
-        <div class="text-primary mb-2">
-          <.icon name="hero-clipboard-document-check" class="size-7" />
-        </div>
-        <h2 class="card-title text-base">CVE Criteria</h2>
-        <p class="text-sm text-base-content/70">Assignment guidelines</p>
-      </div>
-    </.link>
-    <.link
-      href={~p"/security-policy"}
-      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
-    >
-      <div class="card-body p-5">
-        <div class="text-primary mb-2">
-          <.icon name="hero-book-open" class="size-7" />
-        </div>
-        <h2 class="card-title text-base">Security Policy</h2>
-        <p class="text-sm text-base-content/70">Disclosure process</p>
-      </div>
-    </.link>
-    <.link
-      navigate={~p"/common-weaknesses"}
-      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
-    >
-      <div class="card-body p-5">
-        <div class="text-primary mb-2">
-          <.icon name="hero-chart-pie" class="size-7" />
-        </div>
-        <h2 class="card-title text-base">Common Weaknesses</h2>
-        <p class="text-sm text-base-content/70">CWE distribution</p>
-      </div>
-    </.link>
-    <.link
+    <.link_tile href={~p"/scope"} icon="hero-viewfinder-circle" title="CNA Scope">What projects we cover</.link_tile>
+    <.link_tile href={~p"/contact"} icon="hero-envelope" title="Contact">Report a vulnerability</.link_tile>
+    <.link_tile href={~p"/cve-criteria"} icon="hero-clipboard-document-check" title="CVE Criteria">Assignment guidelines</.link_tile>
+    <.link_tile href={~p"/security-policy"} icon="hero-book-open" title="Security Policy">Disclosure process</.link_tile>
+    <.link_tile navigate={~p"/common-weaknesses"} icon="hero-chart-pie" title="Common Weaknesses">CWE distribution</.link_tile>
+    <.link_tile
       href={~p"/maintainer-process"}
-      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
-    >
-      <div class="card-body p-5">
-        <div class="text-primary mb-2">
-          <.icon name="hero-wrench-screwdriver" class="size-7" />
-        </div>
-        <h2 class="card-title text-base">Maintainer Process</h2>
-        <p class="text-sm text-base-content/70">Coordinated disclosure guide</p>
-      </div>
-    </.link>
-    <.link
-      href={~p"/coordinator-process"}
-      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
-    >
-      <div class="card-body p-5">
-        <div class="text-primary mb-2">
-          <.icon name="hero-users" class="size-7" />
-        </div>
-        <h2 class="card-title text-base">Coordinator Process</h2>
-        <p class="text-sm text-base-content/70">For CNA volunteers</p>
-      </div>
-    </.link>
-    <.link
-      href={~p"/data-licensing"}
-      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
-    >
-      <div class="card-body p-5">
-        <div class="text-primary mb-2">
-          <.icon name="hero-scale" class="size-7" />
-        </div>
-        <h2 class="card-title text-base">Data Licensing</h2>
-        <p class="text-sm text-base-content/70">CC-BY 4.0 terms</p>
-      </div>
-    </.link>
-    <.link
-      navigate={~p"/cves"}
-      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
-    >
-      <div class="card-body p-5">
-        <div class="text-primary mb-2">
-          <.icon name="hero-list-bullet" class="size-7" />
-        </div>
-        <h2 class="card-title text-base">All CVEs</h2>
-        <p class="text-sm text-base-content/70">Browse published records</p>
-      </div>
-    </.link>
+      icon="hero-wrench-screwdriver"
+      title="Maintainer Process"
+    >Coordinated disclosure guide</.link_tile>
+    <.link_tile href={~p"/coordinator-process"} icon="hero-users" title="Coordinator Process">For CNA volunteers</.link_tile>
+    <.link_tile href={~p"/data-licensing"} icon="hero-scale" title="Data Licensing">CC-BY 4.0 terms</.link_tile>
+    <.link_tile navigate={~p"/cves"} icon="hero-list-bullet" title="All CVEs">Browse published records</.link_tile>
   </div>
 </.page_container>

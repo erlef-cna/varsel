@@ -647,6 +647,53 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a link tile: an icon, what the page is, and a line on what it holds.
+
+  `layout: :stacked` (default) sets the icon above the title, for a grid given
+  room to breathe. `:inline` sets it beside, for a denser list of somewhere-
+  else-to-go. Pass `navigate` for a LiveView route and `href` for anything
+  else, exactly as `link/1` takes them.
+  """
+  attr :icon, :string, required: true, doc: "a hero icon name"
+  attr :title, :string, required: true
+  attr :layout, :atom, default: :stacked, values: [:stacked, :inline]
+  attr :rest, :global, include: ~w(href navigate patch method download target rel)
+
+  slot :inner_block, required: true, doc: "the line under the title"
+
+  def link_tile(%{layout: :inline} = assigns) do
+    ~H"""
+    <.link
+      class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 hover:bg-base-300 transition-colors px-4 py-3"
+      {@rest}
+    >
+      <.icon name={@icon} class="size-5 text-primary shrink-0" />
+      <span>
+        <span class="block text-sm font-medium">{@title}</span>
+        <span class="block text-xs text-base-content/60">{render_slot(@inner_block)}</span>
+      </span>
+    </.link>
+    """
+  end
+
+  def link_tile(assigns) do
+    ~H"""
+    <.link
+      class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
+      {@rest}
+    >
+      <div class="card-body p-5">
+        <div class="text-primary mb-2">
+          <.icon name={@icon} class="size-7" />
+        </div>
+        <h2 class="card-title text-base">{@title}</h2>
+        <p class="text-sm text-base-content/70">{render_slot(@inner_block)}</p>
+      </div>
+    </.link>
+    """
+  end
+
+  @doc """
   Renders a bordered chip around a monospace fragment — a purl, a module, a
   routine, a path.
 

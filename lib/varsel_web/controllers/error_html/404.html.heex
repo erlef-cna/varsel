@@ -16,65 +16,26 @@
     Useful places
   </p>
   <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-4xl">
-    <.link
-      href={~p"/"}
-      class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 hover:bg-base-300 transition-colors px-4 py-3"
-    >
-      <.icon name="hero-home" class="size-5 text-primary shrink-0" />
-      <span>
-        <span class="block text-sm font-medium">Home</span>
-        <span class="block text-xs text-base-content/60">Overview and latest CVEs</span>
-      </span>
-    </.link>
-    <.link
-      navigate={~p"/cves"}
-      class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 hover:bg-base-300 transition-colors px-4 py-3"
-    >
-      <.icon name="hero-list-bullet" class="size-5 text-primary shrink-0" />
-      <span>
-        <span class="block text-sm font-medium">All CVEs</span>
-        <span class="block text-xs text-base-content/60">Browse published records</span>
-      </span>
-    </.link>
-    <.link
+    <.link_tile href={~p"/"} icon="hero-home" title="Home" layout={:inline}>Overview and latest CVEs</.link_tile>
+    <.link_tile navigate={~p"/cves"} icon="hero-list-bullet" title="All CVEs" layout={:inline}>Browse published records</.link_tile>
+    <.link_tile
       navigate={~p"/common-weaknesses"}
-      class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 hover:bg-base-300 transition-colors px-4 py-3"
-    >
-      <.icon name="hero-chart-pie" class="size-5 text-primary shrink-0" />
-      <span>
-        <span class="block text-sm font-medium">Common Weaknesses</span>
-        <span class="block text-xs text-base-content/60">CWE distribution</span>
-      </span>
-    </.link>
-    <.link
+      icon="hero-chart-pie"
+      title="Common Weaknesses"
+      layout={:inline}
+    >CWE distribution</.link_tile>
+    <.link_tile
       navigate={~p"/report"}
-      class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 hover:bg-base-300 transition-colors px-4 py-3"
-    >
-      <.icon name="hero-shield-exclamation" class="size-5 text-primary shrink-0" />
-      <span>
-        <span class="block text-sm font-medium">Report a Vulnerability</span>
-        <span class="block text-xs text-base-content/60">Coordinated disclosure intake</span>
-      </span>
-    </.link>
-    <.link
-      href={~p"/contact"}
-      class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 hover:bg-base-300 transition-colors px-4 py-3"
-    >
-      <.icon name="hero-envelope" class="size-5 text-primary shrink-0" />
-      <span>
-        <span class="block text-sm font-medium">Contact</span>
-        <span class="block text-xs text-base-content/60">Reach the CNA team</span>
-      </span>
-    </.link>
-    <.link
+      icon="hero-shield-exclamation"
+      title="Report a Vulnerability"
+      layout={:inline}
+    >Coordinated disclosure intake</.link_tile>
+    <.link_tile href={~p"/contact"} icon="hero-envelope" title="Contact" layout={:inline}>Reach the CNA team</.link_tile>
+    <.link_tile
       href={~p"/security-policy"}
-      class="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 hover:bg-base-300 transition-colors px-4 py-3"
-    >
-      <.icon name="hero-book-open" class="size-5 text-primary shrink-0" />
-      <span>
-        <span class="block text-sm font-medium">Security Policy</span>
-        <span class="block text-xs text-base-content/60">Disclosure process</span>
-      </span>
-    </.link>
+      icon="hero-book-open"
+      title="Security Policy"
+      layout={:inline}
+    >Disclosure process</.link_tile>
   </div>
 </.error_page>
