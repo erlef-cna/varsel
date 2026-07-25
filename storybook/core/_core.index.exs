@@ -13,7 +13,7 @@ defmodule VarselWeb.Storybook.Core do
 
   def entry("button"), do: [name: "Button", icon: {:local, "hero-cursor-arrow-rays"}]
   def entry("code_block"), do: [name: "Code block", icon: {:local, "hero-code-bracket"}]
-  def entry("console_header"), do: [name: "Console header", icon: {:local, "hero-window"}]
+  def entry("page_header"), do: [name: "Page header", icon: {:local, "hero-window"}]
 
   def entry("console_search"), do: [name: "Console search", icon: {:local, "hero-magnifying-glass"}]
 

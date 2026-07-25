@@ -124,23 +124,28 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
-  Renders the full-width console page header: a tinted band under the navbar
-  with eyebrow, title and subtitle on the left and the page's actions on the
+  Renders the full-width page header: a tinted band under the navbar with
+  eyebrow, title and subtitle on the left and the page's actions on the
   right. Content below it lays out its own container.
   """
-  attr :subtitle, :string, default: nil
-  attr :eyebrow, :string, default: "CNA Console"
+  attr :eyebrow, :string,
+    required: true,
+    doc: ~s(context line above the title, e.g. "CNA Console")
+
   slot :title, required: true, doc: "heading content — plain text or rich"
+  slot :subtitle, doc: "one-line description under the title — plain text or rich"
   slot :actions
 
-  def console_header(assigns) do
+  def page_header(assigns) do
     ~H"""
     <div class="console-band">
       <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div>
           <p class="eef-eyebrow mb-1">{@eyebrow}</p>
           <h1 class="text-2xl font-bold leading-tight">{render_slot(@title)}</h1>
-          <p :if={@subtitle} class="text-sm text-base-content/60 mt-0.5">{@subtitle}</p>
+          <p :if={@subtitle != []} class="text-sm text-base-content/60 mt-0.5">
+            {render_slot(@subtitle)}
+          </p>
         </div>
         <div :if={@actions != []} class="flex flex-wrap items-center gap-2 pb-0.5">
           {render_slot(@actions)}

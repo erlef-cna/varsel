@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule VarselWeb.Storybook.Core.ConsoleHeader do
+defmodule VarselWeb.Storybook.Core.PageHeader do
   @moduledoc false
   use PhoenixStorybook.Story, :component
 
-  def function, do: &VarselWeb.CoreComponents.console_header/1
+  def function, do: &VarselWeb.CoreComponents.page_header/1
 
   # Full-bleed band — the two-column layout would squash it.
   def layout, do: :one_column
@@ -18,18 +18,23 @@ defmodule VarselWeb.Storybook.Core.ConsoleHeader do
     [
       %Variation{
         id: :default,
+        attributes: %{eyebrow: "CNA Console"},
         slots: ["<:title>Cases</:title>"]
       },
       %Variation{
         id: :with_subtitle,
-        attributes: %{subtitle: "Everything assigned to you, newest first."},
-        slots: ["<:title>My queue</:title>"]
+        attributes: %{eyebrow: "CNA Console"},
+        slots: [
+          "<:title>My queue</:title>",
+          "<:subtitle>Everything assigned to you, newest first.</:subtitle>"
+        ]
       },
       %Variation{
         id: :with_actions,
-        attributes: %{subtitle: "Draft · opened 3 days ago"},
+        attributes: %{eyebrow: "CNA Console"},
         slots: [
           "<:title>CASE-2026-0042</:title>",
+          "<:subtitle>Draft · opened 3 days ago</:subtitle>",
           """
           <:actions>
             <button class="btn btn-eef-quiet btn-sm">Preview</button>
@@ -39,15 +44,29 @@ defmodule VarselWeb.Storybook.Core.ConsoleHeader do
         ]
       },
       %Variation{
-        id: :rich_title,
-        description: "The title slot takes markup, not just text.",
-        attributes: %{eyebrow: "Public record", subtitle: "Published 12 June 2026"},
+        id: :public_page,
+        description: "The public face — documentation, error and report pages pass their own eyebrow.",
+        attributes: %{eyebrow: "Documentation"},
+        slots: [
+          "<:title>Scope</:title>",
+          "<:subtitle>What the EEF CNA covers, and what it does not.</:subtitle>"
+        ]
+      },
+      %Variation{
+        id: :rich_slots,
+        description: "Both `title` and `subtitle` take markup, not just text.",
+        attributes: %{eyebrow: "Public record"},
         slots: [
           """
           <:title>
             <span class="font-mono">CVE-2026-1234</span>
             <span class="text-base-content/50 font-normal text-lg">· heap overflow in parser</span>
           </:title>
+          """,
+          """
+          <:subtitle>
+            Published 12 June 2026 · <a href="#" class="link">CVE record</a>
+          </:subtitle>
           """
         ]
       }

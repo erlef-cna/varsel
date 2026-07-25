@@ -169,17 +169,19 @@ defmodule VarselWeb.ReportTriageLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <.console_header subtitle={
-      if @triage?,
-        do: "Inbound vulnerability reports: triage, accept into a case, or reject.",
-        else:
-          "Reports you submitted. The CNA team triages every report and follows up with you once it has been reviewed."
-    }>
+    <.page_header eyebrow="CNA Console">
       <:title>{if @triage?, do: "Report Triage", else: "My Reports"}</:title>
+      <:subtitle :if={@triage?}>
+        Inbound vulnerability reports: triage, accept into a case, or reject.
+      </:subtitle>
+      <:subtitle :if={not @triage?}>
+        Reports you submitted. The CNA team triages every report and follows up with you once it
+        has been reviewed.
+      </:subtitle>
       <:actions>
         <.link navigate={~p"/report"} class="btn btn-sm btn-eef">Submit a report</.link>
       </:actions>
-    </.console_header>
+    </.page_header>
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
       <div :if={@triage?} class="mb-4">

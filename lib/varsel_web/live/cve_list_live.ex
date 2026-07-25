@@ -374,15 +374,10 @@ defmodule VarselWeb.CveListLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <.console_header
-      eyebrow={if @poc?, do: "CNA Console", else: "EEF CNA"}
-      subtitle={
-        if @poc?,
-          do: "Reserve, draft, publish, and reject CVE records.",
-          else: "Vulnerabilities assigned and published by the EEF CNA."
-      }
-    >
+    <.page_header eyebrow={if @poc?, do: "CNA Console", else: "EEF CNA"}>
       <:title>{if @poc?, do: "CVE records", else: "Issued CVEs"}</:title>
+      <:subtitle :if={@poc?}>Reserve, draft, publish, and reject CVE records.</:subtitle>
+      <:subtitle :if={not @poc?}>Vulnerabilities assigned and published by the EEF CNA.</:subtitle>
       <:actions>
         <form id="cve-record-search" phx-change="search" phx-submit="search">
           <.console_search
@@ -404,7 +399,7 @@ defmodule VarselWeb.CveListLive do
           Reserve a new one
         </button>
       </:actions>
-    </.console_header>
+    </.page_header>
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
       <.pool_panel

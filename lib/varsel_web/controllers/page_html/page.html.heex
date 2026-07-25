@@ -2,9 +2,10 @@
 SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
 SPDX-License-Identifier: Apache-2.0
 --%>
-<.console_header eyebrow="Documentation" subtitle={@page.description}>
+<.page_header eyebrow="Documentation">
+  <:subtitle>{@page.description}</:subtitle>
   <:title>{@page.title}</:title>
-</.console_header>
+</.page_header>
 
 <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-6xl">
   <div class={[@page.toc != [] && "lg:grid lg:grid-cols-[1fr_15rem] lg:gap-12"]}>

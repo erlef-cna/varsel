@@ -29,9 +29,10 @@ defmodule VarselWeb.ErrorHTML do
 
   def error_page(assigns) do
     ~H"""
-    <.console_header eyebrow={"#{@context} · HTTP #{@status}"} subtitle={@subtitle}>
+    <.page_header eyebrow={"#{@context} · HTTP #{@status}"}>
+      <:subtitle>{@subtitle}</:subtitle>
       <:title>{render_slot(@title)}</:title>
-    </.console_header>
+    </.page_header>
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-10">
       <div class="max-w-2xl">

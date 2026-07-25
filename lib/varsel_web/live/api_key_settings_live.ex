@@ -122,9 +122,10 @@ defmodule VarselWeb.ApiKeySettingsLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <.console_header subtitle="Personal access tokens for the GraphQL and MCP endpoints.">
+    <.page_header eyebrow="CNA Console">
       <:title>API Tokens</:title>
-    </.console_header>
+      <:subtitle>Personal access tokens for the GraphQL and MCP endpoints.</:subtitle>
+    </.page_header>
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6 space-y-4">
       <div class="rounded-box border border-base-300 p-4">
