@@ -23,7 +23,8 @@ config :ash,
   bulk_actions_default_to_errors?: true,
   transaction_rollback_on_error?: true,
   redact_sensitive_values_in_errors?: true,
-  known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec, Varsel.Types.CVSS]
+  known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec, Varsel.Types.CVSS],
+  custom_expressions: [Varsel.Expr.Coalesce]
 
 config :ash_graphql, authorize_update_destroy_with_error?: true, json_type: :json
 
