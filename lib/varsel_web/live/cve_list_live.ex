@@ -630,71 +630,28 @@ defmodule VarselWeb.CveListLive do
       )
 
     ~H"""
-    <div class="rounded-box border border-base-300 bg-base-200 mb-4">
-      <div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
-        <.panel_summary_label dot="bg-base-content/30">Reserved pool</.panel_summary_label>
-        <span class="text-[0.95rem] font-bold tabular-nums -ml-1">{@count}</span>
-        <span :if={@id_range} class="w-px h-4 bg-base-300 shrink-0"></span>
-        <.panel_fact :if={@id_range} label="span" value={@id_range} mono?={true} />
-        <span :if={@oldest} class="w-px h-4 bg-base-300 shrink-0"></span>
-        <.panel_fact
-          :if={@oldest}
-          label="oldest"
-          value={"#{format_date(@oldest.reserved_at)} · #{pool_age_days(@oldest.reserved_at)} d"}
-          warn?={@oldest_stale?}
-        />
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs ml-auto"
-          phx-click="toggle_pool"
-          disabled={@count == 0}
-        >
-          {if @open?, do: "Hide IDs ▴", else: "Show IDs ▾"}
-        </button>
-      </div>
-
-      <div
-        :if={@open? and @count > 0}
-        id="pool-ids"
-        class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 px-4 pb-3 pt-1 border-t border-base-300"
-      >
-        <.pool_row
-          :for={record <- @records}
-          record={record}
-          confirming?={@confirming_reject_id == record.id}
-        />
-      </div>
-    </div>
-    """
-  end
-
-  attr :dot, :string, required: true
-  slot :inner_block, required: true
-
-  defp panel_summary_label(assigns) do
-    ~H"""
-    <span class="flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-wider text-base-content/60 whitespace-nowrap">
-      <span class={["size-1.5 rounded-full shrink-0", @dot]}></span> {render_slot(@inner_block)}
-    </span>
-    """
-  end
-
-  attr :label, :string, required: true
-  attr :value, :string, required: true
-  attr :mono?, :boolean, default: false
-  attr :warn?, :boolean, default: false
-
-  defp panel_fact(assigns) do
-    ~H"""
-    <span class="inline-flex items-baseline gap-[0.45rem] whitespace-nowrap">
-      <span class="text-[0.66rem] font-semibold text-base-content/50">{@label}</span>
-      <span class={[
-        if(@mono?, do: "font-mono text-xs", else: "text-[0.76rem] tabular-nums"),
-        if(@warn?, do: "font-semibold text-warning", else: "text-base-content/60")
-      ]}>
-        {@value}
-      </span>
-    </span>
+    <.summary_panel
+      label="Reserved pool"
+      dot="bg-base-content/30"
+      count={@count}
+      open?={@open?}
+      toggle="toggle_pool"
+      records_id="pool-ids"
+      class="mb-4"
+    >
+      <:fact :if={@id_range} label="span" value={@id_range} mono?={true} />
+      <:fact
+        :if={@oldest}
+        label="oldest"
+        value={"#{format_date(@oldest.reserved_at)} · #{pool_age_days(@oldest.reserved_at)} d"}
+        warn?={@oldest_stale?}
+      />
+      <.pool_row
+        :for={record <- @records}
+        record={record}
+        confirming?={@confirming_reject_id == record.id}
+      />
+    </.summary_panel>
     """
   end
 
@@ -778,39 +735,29 @@ defmodule VarselWeb.CveListLive do
       )
 
     ~H"""
-    <div
+    <.summary_panel
       :if={@count > 0}
       id="rejected-panel"
-      class="rounded-box border border-base-300 bg-base-200 mt-4"
+      label="Rejected"
+      dot="bg-error/60"
+      count={@count}
+      open?={@open?}
+      toggle="toggle_rejected"
+      records_id="rejected-ids"
+      class="mt-4"
     >
-      <div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
-        <.panel_summary_label dot="bg-error/60">Rejected</.panel_summary_label>
-        <span class="text-[0.95rem] font-bold tabular-nums -ml-1">{@count}</span>
-        <span :if={@id_range} class="w-px h-4 bg-base-300 shrink-0"></span>
-        <.panel_fact :if={@id_range} label="span" value={@id_range} mono?={true} />
-        <span :if={@latest} class="w-px h-4 bg-base-300 shrink-0"></span>
-        <.panel_fact :if={@latest} label="last" value={format_date(@latest.rejected_at)} />
-        <button type="button" class="btn btn-ghost btn-xs ml-auto" phx-click="toggle_rejected">
-          {if @open?, do: "Hide IDs ▴", else: "Show IDs ▾"}
-        </button>
-      </div>
-
+      <:fact :if={@id_range} label="span" value={@id_range} mono?={true} />
+      <:fact :if={@latest} label="last" value={format_date(@latest.rejected_at)} />
       <div
-        :if={@open?}
-        id="rejected-ids"
-        class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 px-4 pb-3 pt-1 border-t border-base-300"
+        :for={record <- @records}
+        class="grid grid-cols-[10rem_1fr] items-center gap-3 py-1 text-sm"
       >
-        <div
-          :for={record <- @records}
-          class="grid grid-cols-[10rem_1fr] items-center gap-3 py-1 text-sm"
-        >
-          <span class="font-mono text-xs text-base-content/60">{record.cve_id}</span>
-          <span class="text-xs text-base-content/50 tabular-nums">
-            rejected {format_date(record.rejected_at)}
-          </span>
-        </div>
+        <span class="font-mono text-xs text-base-content/60">{record.cve_id}</span>
+        <span class="text-xs text-base-content/50 tabular-nums">
+          rejected {format_date(record.rejected_at)}
+        </span>
       </div>
-    </div>
+    </.summary_panel>
     """
   end
 end

@@ -41,6 +41,7 @@ defmodule VarselWeb.Storybook.Core do
   def entry("stat_tiles"), do: [name: "Stat tiles", icon: {:local, "hero-chart-bar-square"}]
   def entry("state"), do: [name: "State", icon: {:local, "hero-signal"}]
   def entry("tab_bar"), do: [name: "Tab bar", icon: {:local, "hero-rectangle-stack"}]
+  def entry("summary_panel"), do: [name: "Summary panel", icon: {:local, "hero-chevron-down"}]
   def entry("table"), do: [name: "Table", icon: {:local, "hero-table-cells"}]
 
   def entry("table_of_contents"), do: [name: "Table of contents", icon: {:local, "hero-bars-3"}]

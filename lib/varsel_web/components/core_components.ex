@@ -647,6 +647,80 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a collapsible summary panel: a headline row of facts about a set of
+  records, and the records themselves behind a disclosure.
+
+  `toggle` names the event the disclosure button pushes, so opening and
+  closing stay the caller's. `facts` holds what the row says between the count
+  and the button, each fact separated by a hairline.
+  """
+  attr :label, :string, required: true, doc: "what the set is, e.g. \"Reserved pool\""
+  attr :dot, :string, required: true, doc: "the class tinting the label's disc"
+  attr :count, :integer, required: true
+  attr :open?, :boolean, required: true
+  attr :toggle, :string, required: true, doc: "the event the disclosure pushes"
+  attr :class, :any, default: nil, doc: "the panel's own spacing"
+
+  attr :records_id, :string,
+    default: nil,
+    doc: "the disclosure's own id, for linking or testing straight to it"
+
+  attr :rest, :global, include: ~w(id)
+
+  slot :fact, doc: "one fact about the set, hairline-separated" do
+    attr :label, :string, required: true
+    attr :value, :string, required: true
+    attr :mono?, :boolean
+    attr :warn?, :boolean
+  end
+
+  slot :inner_block, required: true, doc: "the records, revealed while open"
+
+  def summary_panel(assigns) do
+    ~H"""
+    <div class={["rounded-box border border-base-300 bg-base-200", @class]} {@rest}>
+      <div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
+        <span class="flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-wider text-base-content/60 whitespace-nowrap">
+          <span class={["size-1.5 rounded-full shrink-0", @dot]}></span> {@label}
+        </span>
+        <span class="text-[0.95rem] font-bold tabular-nums -ml-1">{@count}</span>
+        <span :for={fact <- @fact} class="contents">
+          <span class="w-px h-4 bg-base-300 shrink-0"></span>
+          <span class="inline-flex items-baseline gap-[0.45rem] whitespace-nowrap">
+            <span class="text-[0.66rem] font-semibold text-base-content/50">{fact.label}</span>
+            <span class={[
+              if(Map.get(fact, :mono?), do: "font-mono text-xs", else: "text-[0.76rem] tabular-nums"),
+              if(Map.get(fact, :warn?),
+                do: "font-semibold text-warning",
+                else: "text-base-content/60"
+              )
+            ]}>
+              {fact.value}
+            </span>
+          </span>
+        </span>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs ml-auto"
+          phx-click={@toggle}
+          disabled={@count == 0}
+        >
+          {if @open?, do: "Hide IDs ▴", else: "Show IDs ▾"}
+        </button>
+      </div>
+
+      <div
+        :if={@open? and @count > 0}
+        id={@records_id}
+        class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 px-4 pb-3 pt-1 border-t border-base-300"
+      >
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
   Renders a link tile: an icon, what the page is, and a line on what it holds.
 
   `layout: :stacked` (default) sets the icon above the title, for a grid given
