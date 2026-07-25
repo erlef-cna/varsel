@@ -12,6 +12,7 @@ defmodule VarselWeb.CaseComponents do
   use Phoenix.Component
 
   import Phoenix.HTML, only: [raw: 1]
+  import VarselWeb.CoreComponents, only: [mono_chip: 1]
 
   alias Phoenix.LiveView.JS
   alias Varsel.Cases.Markdown
@@ -577,6 +578,34 @@ defmodule VarselWeb.CaseComponents do
       ✎ Suggest: {if @on?, do: "on", else: "off"}
       <span :if={@explain and @on?} class="font-normal">— your edits become proposals</span>
     </span>
+    """
+  end
+
+  @doc """
+  Renders the affected source files of a package, each path followed by the
+  modules and routines it contributes.
+  """
+  attr :files, :list, required: true, doc: "the package's `%ProgramFile{}` list"
+
+  def program_files(assigns) do
+    ~H"""
+    <div class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50 mb-1.5">
+      Program files
+    </div>
+    <%!-- Inline text flow (not a flex row): path and chips wrap as one line
+          of text, so every row breaks the same way regardless of path
+          length. --%>
+    <div :if={@files != []} class="space-y-1">
+      <div :for={file <- @files} class="min-w-0 text-xs leading-6">
+        <span class="font-mono text-base-content/70 break-all">{file.path}</span>
+        <.mono_chip :for={name <- file.modules ++ file.routines} size={:small} class="ml-1">
+          {name}
+        </.mono_chip>
+      </div>
+    </div>
+    <p :if={@files == []} class="text-sm text-base-content/60">
+      No program files recorded.
+    </p>
     """
   end
 end

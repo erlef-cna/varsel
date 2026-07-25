@@ -2068,7 +2068,7 @@ defmodule VarselWeb.CaseDetailLive do
       <.boundary_facts_table package={@package} mode={@mode} marks={@marks} />
     </div>
     <div id={"affected-files-#{@package.id}"} class="hidden mt-3 pt-3 border-t border-base-300">
-      <.program_files_rows package={@package} />
+      <.program_files files={@package.program_files} />
     </div>
     """
   end
@@ -2158,31 +2158,6 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp boundary_badge_class(:fixed), do: "text-success bg-success/15"
   defp boundary_badge_class(_introduced), do: "text-warning bg-warning/15"
-
-  attr :package, :map, required: true
-
-  defp program_files_rows(assigns) do
-    ~H"""
-    <div class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50 mb-1.5">
-      Program files
-    </div>
-    <%!-- Inline text flow (not a flex row): path and chips wrap as one line
-          of text, so every row breaks the same way regardless of path
-          length. --%>
-    <div :if={@package.program_files != []} class="space-y-1">
-      <div :for={file <- @package.program_files} class="min-w-0 text-xs leading-6">
-        <span class="font-mono text-base-content/70 break-all">{file.path}</span>
-        <.mono_chip :for={mod <- file.modules} size={:small} class="ml-1">{mod}</.mono_chip>
-        <.mono_chip :for={routine <- file.routines} size={:small} class="ml-1">
-          {routine}
-        </.mono_chip>
-      </div>
-    </div>
-    <p :if={@package.program_files == []} class="text-sm text-base-content/60">
-      No program files recorded.
-    </p>
-    """
-  end
 
   # Board C: the boundary timeline (read-only picture of derivation_cache),
   # channels with per-row disclosure for their machinery, and program files —
@@ -2351,7 +2326,7 @@ defmodule VarselWeb.CaseDetailLive do
       </div>
     </div>
 
-    <.program_files_rows package={@package} />
+    <.program_files files={@package.program_files} />
 
     <div class="flex items-center gap-3 mt-3 pt-3 border-t border-base-300 text-xs text-base-content/50">
       <span :if={derivation_issues(@package) != []} class="text-warning">

@@ -22,6 +22,8 @@ defmodule VarselWeb.Storybook.Case do
   def entry("markdown"), do: [name: "Markdown", icon: {:local, "hero-document-text"}]
   def entry("mode_pill"), do: [name: "Mode pill", icon: {:local, "hero-pencil"}]
 
+  def entry("program_files"), do: [name: "Program files", icon: {:local, "hero-document-text"}]
+
   def entry("preset_package_form"), do: [name: "Preset package form", icon: {:local, "hero-sparkles"}]
 
   def entry("reference_form"), do: [name: "Reference form", icon: {:local, "hero-link"}]
