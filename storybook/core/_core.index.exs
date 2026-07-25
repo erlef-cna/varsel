@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
+defmodule VarselWeb.Storybook.Core do
+  @moduledoc false
+  use PhoenixStorybook.Index
+
+  def folder_icon, do: {:local, "hero-squares-2x2"}
+  def folder_index, do: 1
+  def folder_name, do: "Core"
+  def folder_open?, do: true
+
+  def entry("button"), do: [name: "Button", icon: {:local, "hero-cursor-arrow-rays"}]
+  def entry("code_block"), do: [name: "Code block", icon: {:local, "hero-code-bracket"}]
+  def entry("console_header"), do: [name: "Console header", icon: {:local, "hero-window"}]
+
+  def entry("console_search"), do: [name: "Console search", icon: {:local, "hero-magnifying-glass"}]
+
+  def entry("header"), do: [name: "Header", icon: {:local, "hero-bars-3-bottom-left"}]
+  def entry("icon"), do: [name: "Icon", icon: {:local, "hero-sparkles"}]
+  def entry("input"), do: [name: "Input", icon: {:local, "hero-pencil-square"}]
+  def entry("flash"), do: [name: "Flash", icon: {:local, "hero-bell-alert"}]
+
+  def entry("jump_pagination"), do: [name: "Jump pagination", icon: {:local, "hero-chevron-double-right"}]
+
+  def entry("list"), do: [name: "List", icon: {:local, "hero-list-bullet"}]
+  def entry("pagination"), do: [name: "Pagination", icon: {:local, "hero-chevron-up-down"}]
+  def entry("panel"), do: [name: "Panel", icon: {:local, "hero-rectangle-group"}]
+
+  def entry("severity_chip"), do: [name: "Severity chip", icon: {:local, "hero-shield-exclamation"}]
+
+  def entry("stat_tiles"), do: [name: "Stat tiles", icon: {:local, "hero-chart-bar-square"}]
+  def entry("state"), do: [name: "State", icon: {:local, "hero-signal"}]
+  def entry("table"), do: [name: "Table", icon: {:local, "hero-table-cells"}]
+end

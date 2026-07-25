@@ -1,0 +1,80 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* The storybook loads this bundle instead of app.css, so it imports app.css
+   wholesale rather than restating the theme: one source of truth for the
+   daisyUI themes, the EEF brand tokens, the severity scale and the component
+   styles, so a story can never drift from the real page.
+
+   Only the extra `@source` is storybook-specific — the story scripts hold
+   utility classes (in variation attributes and slot markup) that Tailwind
+   would otherwise not scan, since app.css only knows about lib/varsel_web. */
+@import "./app.css";
+
+@source "../../storybook";
+
+/* Tailwind's preflight puts the app's font on `html`, and the app's own body
+   sets the base text color — neither of which the storybook page has, since
+   its `html`/`body` belong to the storybook shell. Components inherit from
+   the sandbox instead, so the sandbox has to re-establish what the app's
+   document root would have given them: the Montserrat sans stack, the theme's
+   ink color, and the base font size/leading. Without this, every story renders
+   in the storybook's own font. */
+.varsel {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-base-content);
+}
+
+.varsel :is(code, pre, kbd, samp, .font-mono) {
+  font-family: var(--font-mono);
+}
+
+/* app.css pairs each `[data-theme="dark"]` override with a
+   `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) }`
+   fallback, for visitors who never touched the theme toggle. In the app that
+   guard works because the theme lands on `<html>`. Here the theme lands on the
+   SANDBOX, so `:root` never carries it: on a dark-preferring machine the
+   fallback fires for every story and drags the dark values into the light
+   sandbox — a navy console band under dark ink, unreadable.
+
+   The sandbox's own `data-theme` is always explicit and therefore always
+   authoritative, so restate the light values for a light sandbox at a
+   specificity the `:root`-scoped fallback cannot beat. Keep this in sync with
+   the `:root` blocks in app.css. */
+@media (prefers-color-scheme: dark) {
+  .varsel[data-theme="light"] {
+    --violet: #7c5cbf;
+    --lane-card-bg: var(--color-base-100);
+    --sev-high: #b3312c;
+    --sev-high-tint: color-mix(in oklab, var(--sev-high) 13%, transparent);
+    --sev-medium: #a1520d;
+    --sev-medium-tint: color-mix(in oklab, var(--sev-medium) 13%, transparent);
+    --sev-low: #715c04;
+    --sev-low-tint: color-mix(in oklab, #e8cf4e 30%, transparent);
+    --sev-none: #5b6b7a;
+    --sev-none-tint: color-mix(in oklab, var(--sev-none) 13%, transparent);
+    --sev-critical-fill: #1c2733;
+    --sev-critical-line: transparent;
+    --sev-critical-text: #ffffff;
+  }
+
+  .varsel[data-theme="light"] .console-band {
+    background-color: var(--color-base-200);
+  }
+}
+
+/* Flash toasts are daisyUI `.toast`, i.e. `position: fixed`, so in a story
+   they escape their variation and pile up in the page's top-right corner —
+   every variation drawn on top of the last, over the storybook's own chrome.
+   A `transform` makes an element the containing block for fixed-position
+   descendants, so this pins each toast inside its own variation box without
+   touching the component or the app. Opt-in per story via the container class
+   (see the Flash story), so no other story pays for it. */
+.psb-fixed-contained {
+  transform: translate(0);
+}

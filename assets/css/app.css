@@ -29,6 +29,10 @@
 @source "../css";
 @source "../js";
 @source "../../lib/varsel_web";
+/* Dev-only components (the dev-tools launcher). Scanned unconditionally: the
+   handful of extra utilities is harmless, and dropping it would leave the
+   launcher unstyled in the very builds that have it. */
+@source "../../dev";
 
 /* A Tailwind plugin that makes "hero-#{ICON}" classes available.
    The heroicons installation itself is managed by your mix.exs */
