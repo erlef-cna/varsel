@@ -28,6 +28,8 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("reference_form"), do: [name: "Reference form", icon: {:local, "hero-link"}]
 
+  def entry("resolved_proposal_card"), do: [name: "Resolved proposal card", icon: {:local, "hero-check-badge"}]
+
   def entry("relative_timestamp"), do: [name: "Relative timestamp", icon: {:local, "hero-calendar-days"}]
 
   def entry("section_nav"), do: [name: "Section nav", icon: {:local, "hero-bars-3-bottom-left"}]

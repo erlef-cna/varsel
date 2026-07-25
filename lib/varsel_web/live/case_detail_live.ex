@@ -1057,11 +1057,6 @@ defmodule VarselWeb.CaseDetailLive do
   defp diff_line_text({:eq, line}), do: "  " <> line
   defp diff_line_text({:skip, count}), do: "  ⋯ #{count} unchanged lines"
 
-  defp proposal_badge_class(:open), do: "badge-warning"
-  defp proposal_badge_class(:accepted), do: "badge-success"
-  defp proposal_badge_class(:declined), do: "badge-error"
-  defp proposal_badge_class(_other), do: "badge-ghost"
-
   defp humanize_action(action), do: String.replace(action, "_", " ")
 
   defp pretty_json(nil), do: ""
@@ -1116,16 +1111,6 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   defp format_proposal_value(value), do: pretty_json(value)
-
-  defp proposal_summary(proposal) do
-    target = proposal.target |> to_string() |> String.replace("_", " ")
-
-    case proposal.operation do
-      :set -> "set #{target}.#{proposal.field_name}"
-      :insert -> "add #{target}"
-      :delete -> "remove #{target}"
-    end
-  end
 
   ## ------------------------------------------------------------------ render
 
@@ -2712,40 +2697,6 @@ defmodule VarselWeb.CaseDetailLive do
         />
       </div>
     </details>
-    """
-  end
-
-  defp resolved_proposal_card(assigns) do
-    ~H"""
-    <div class="rounded-lg border border-base-300 bg-base-300/30 p-3 text-sm">
-      <div class="flex items-center justify-between gap-2">
-        <span class="font-semibold truncate">{proposal_summary(@proposal)}</span>
-        <span class={["badge badge-sm shrink-0", proposal_badge_class(@proposal.state)]}>
-          {@proposal.state}
-        </span>
-      </div>
-
-      <.code_block
-        :if={@proposal.operation != :set and @proposal.proposed_value}
-        source={pretty_json(@proposal.proposed_value["value"])}
-        class="mt-1 max-h-40"
-      />
-
-      <div :if={@proposal.reasoning} class="mt-1 text-base-content/80">
-        <.markdown content={@proposal.reasoning} class="prose-xs" />
-      </div>
-
-      <p class="mt-1 text-xs text-base-content/60">
-        by {display_name(@proposal.author)} · {relative_time(@proposal.inserted_at)}
-        <span :if={@proposal.resolved_by}>
-          · resolved by {display_name(@proposal.resolved_by)}
-        </span>
-      </p>
-
-      <p :if={@proposal.resolution_note} class="mt-1 text-xs text-base-content/60 italic">
-        {@proposal.resolution_note}
-      </p>
-    </div>
     """
   end
 
