@@ -29,7 +29,8 @@ defmodule VarselWeb.ErrorHTML do
 
   def error_page(assigns) do
     ~H"""
-    <.page_header eyebrow={"#{@context} · HTTP #{@status}"}>
+    <.page_header>
+      <:eyebrow>{@context} · HTTP {@status}</:eyebrow>
       <:subtitle>{@subtitle}</:subtitle>
       <:title>{render_slot(@title)}</:title>
     </.page_header>

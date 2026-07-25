@@ -382,7 +382,7 @@ defmodule VarselWeb.CaseManagementLive do
   defp face_tabs(assigns) do
     ~H"""
     <div class="flex items-center gap-4 text-sm mt-1.5">
-      <.link patch={pipeline_path(@query)} class={scope_tab_class(@face == :pipeline)}>
+      <.link patch={pipeline_path(@query)}>
         <.scope_tab
           active?={@face == :pipeline}
           label="Pipeline"
@@ -390,10 +390,7 @@ defmodule VarselWeb.CaseManagementLive do
           matched?={searched_elsewhere?(@face == :pipeline, @query)}
         />
       </.link>
-      <.link
-        patch={archive_path(@socket, "all", @query, nil)}
-        class={scope_tab_class(@face == :archive)}
-      >
+      <.link patch={archive_path(@socket, "all", @query, nil)}>
         <.scope_tab
           active?={@face == :archive}
           label="Archive"
@@ -421,53 +418,51 @@ defmodule VarselWeb.CaseManagementLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <div class="console-band">
-      <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-        <div>
-          <p class="eef-eyebrow mb-1">CNA Console</p>
-          <h1 class="text-2xl font-bold leading-tight">Cases</h1>
-          <.face_tabs
-            socket={@socket}
-            face={@face}
-            query={@query}
-            pipeline_count={@pipeline_count}
-            archive_count={@archive_count}
-            pipeline_match_count={@pipeline_match_count}
-            archive_match_count={@archive_match_count}
-          />
-        </div>
-        <div class="flex flex-wrap items-center gap-2 pb-0.5">
-          <form id="case-search" phx-change="search" phx-submit="search">
-            <.console_search value={@query} placeholder="Search all cases…" />
-          </form>
-          <div :if={poc?(@current_user)} class="relative">
-            <button type="button" class="btn btn-sm btn-eef" phx-click="toggle_open_case">
-              Open case
-            </button>
-            <div
-              :if={@open_case_open?}
-              class="absolute right-0 top-full mt-2 z-20 rounded-box border border-base-300 bg-base-200 p-3 shadow-lg"
-              phx-click-away="close_open_case"
-              phx-window-keydown="close_open_case"
-              phx-key="escape"
-            >
-              <form phx-submit="open_case" class="flex items-center gap-2">
-                <input
-                  id="open-case-title"
-                  type="text"
-                  name="title"
-                  placeholder="Working title"
-                  required
-                  class="input input-bordered input-sm w-56"
-                  phx-mounted={JS.focus()}
-                />
-                <button type="submit" class="btn btn-sm btn-eef">Open</button>
-              </form>
-            </div>
+    <.page_header>
+      <:eyebrow>CNA Console</:eyebrow>
+      <:title>Cases</:title>
+      <:meta>
+        <.face_tabs
+          socket={@socket}
+          face={@face}
+          query={@query}
+          pipeline_count={@pipeline_count}
+          archive_count={@archive_count}
+          pipeline_match_count={@pipeline_match_count}
+          archive_match_count={@archive_match_count}
+        />
+      </:meta>
+      <:actions>
+        <form id="case-search" phx-change="search" phx-submit="search">
+          <.console_search value={@query} placeholder="Search all cases…" />
+        </form>
+        <div :if={poc?(@current_user)} class="relative">
+          <button type="button" class="btn btn-sm btn-eef" phx-click="toggle_open_case">
+            Open case
+          </button>
+          <div
+            :if={@open_case_open?}
+            class="absolute right-0 top-full mt-2 z-20 rounded-box border border-base-300 bg-base-200 p-3 shadow-lg"
+            phx-click-away="close_open_case"
+            phx-window-keydown="close_open_case"
+            phx-key="escape"
+          >
+            <form phx-submit="open_case" class="flex items-center gap-2">
+              <input
+                id="open-case-title"
+                type="text"
+                name="title"
+                placeholder="Working title"
+                required
+                class="input input-bordered input-sm w-56"
+                phx-mounted={JS.focus()}
+              />
+              <button type="submit" class="btn btn-sm btn-eef">Open</button>
+            </form>
           </div>
         </div>
-      </div>
-    </div>
+      </:actions>
+    </.page_header>
 
     <.page_container>
       <.pipeline_face
@@ -820,7 +815,7 @@ defmodule VarselWeb.CaseManagementLive do
     assigns = assign(assigns, :active?, assigns.scope == assigns.value)
 
     ~H"""
-    <.link patch={archive_path(@socket, @value, @query, nil)} class={scope_tab_class(@active?)}>
+    <.link patch={archive_path(@socket, @value, @query, nil)}>
       <.scope_tab active?={@active?} label={@label} count={@count} />
     </.link>
     """

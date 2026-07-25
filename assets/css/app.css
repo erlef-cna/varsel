@@ -277,6 +277,65 @@
   }
 }
 
+/* The page header's rows name the page in turn — eyebrow, title, subtitle,
+   meta — with the actions beside them, settled against the band's foot. On a
+   narrow screen the areas collapse into one column and the actions come last.
+   Rows are `auto` so an absent slot takes no space. */
+.page-header {
+  display: grid;
+  grid-template-areas:
+    "eyebrow"
+    "title"
+    "subtitle"
+    "meta"
+    "actions";
+  gap: 0.25rem 2rem;
+}
+
+.page-header-eyebrow {
+  grid-area: eyebrow;
+}
+.page-header-title {
+  grid-area: title;
+}
+.page-header-subtitle {
+  grid-area: subtitle;
+}
+.page-header-meta {
+  grid-area: meta;
+}
+
+.page-header-actions {
+  grid-area: actions;
+  margin-top: 0.75rem;
+}
+
+/* Beside the naming rows, but sharing the width with them: a long row of
+   actions wraps rather than sizing its own column to a single line. */
+@media (width >= 40rem) {
+  .page-header {
+    grid-template-areas:
+      "eyebrow  actions"
+      "title    actions"
+      "subtitle actions"
+      "meta     actions";
+    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  }
+
+  .page-header-actions {
+    align-self: end;
+    margin-top: 0;
+  }
+}
+
+/* Past the page's own measure there is room to spare, so the actions take
+   what they need on one line and the naming rows keep the rest. */
+@media (width >= 72rem) {
+  .page-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
 /* Console buttons: solid EEF brand blue, and a quiet outline variant. */
 .btn-eef {
   --btn-color: var(--eef-blue);

@@ -1133,51 +1133,45 @@ defmodule VarselWeb.CaseDetailLive do
     <Layouts.flash_group flash={@flash} />
 
     <div class={@preview_open? && "opacity-45"}>
-      <div class="console-band">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-5 flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
-          <div class="min-w-0">
-            <p class="eef-eyebrow mb-1">
-              Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
-              <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
-              <span class="text-base-content/50">
-                · draft opened {Calendar.strftime(@case_record.inserted_at, "%b %-d, %Y")}
-              </span>
-            </p>
-            <h1 class="text-xl sm:text-2xl font-bold leading-tight">
-              {@case_record.title || "Untitled case"}
-            </h1>
-            <.lifecycle_stepper state={@case_record.state} />
-          </div>
-          <div class="flex flex-wrap items-center justify-end gap-2 pt-1.5">
-            <button
-              :if={@mode != :view and can_propose?(@case_record, @current_user)}
-              phx-click="toggle_suggest"
-              disabled={suggest_forced?(@case_record, @current_user)}
-              title={
-                if suggest_forced?(@case_record, @current_user),
-                  do: "The case is frozen — edits become suggestions",
-                  else: "Route your edits through suggestions instead of applying them"
-              }
-              class={[
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold",
-                if(@mode == :propose,
-                  do: "border-info bg-info/15 text-info",
-                  else: "border-info/40 text-info"
-                )
-              ]}
-            >
-              ✎ Suggest: {if @mode == :propose, do: "on", else: "off"}
-            </button>
-            <button class="btn btn-sm btn-eef-quiet" phx-click="preview">Preview</button>
-            <.lifecycle_buttons
-              case_record={@case_record}
-              current_user={@current_user}
-              include_publish={false}
-              publish_blocked={false}
-            />
-          </div>
-        </div>
-      </div>
+      <.page_header>
+        <:eyebrow>
+          Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
+          <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
+          <span class="text-base-content/50">
+            · draft opened {Calendar.strftime(@case_record.inserted_at, "%b %-d, %Y")}
+          </span>
+        </:eyebrow>
+        <:title>{@case_record.title || "Untitled case"}</:title>
+        <:meta><.lifecycle_stepper state={@case_record.state} /></:meta>
+        <:actions>
+          <button
+            :if={@mode != :view and can_propose?(@case_record, @current_user)}
+            phx-click="toggle_suggest"
+            disabled={suggest_forced?(@case_record, @current_user)}
+            title={
+              if suggest_forced?(@case_record, @current_user),
+                do: "The case is frozen — edits become suggestions",
+                else: "Route your edits through suggestions instead of applying them"
+            }
+            class={[
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold",
+              if(@mode == :propose,
+                do: "border-info bg-info/15 text-info",
+                else: "border-info/40 text-info"
+              )
+            ]}
+          >
+            ✎ Suggest: {if @mode == :propose, do: "on", else: "off"}
+          </button>
+          <button class="btn btn-sm btn-eef-quiet" phx-click="preview">Preview</button>
+          <.lifecycle_buttons
+            case_record={@case_record}
+            current_user={@current_user}
+            include_publish={false}
+            publish_blocked={false}
+          />
+        </:actions>
+      </.page_header>
 
       <.page_container>
         <:left width={:narrow} class="lg:sticky lg:top-24">

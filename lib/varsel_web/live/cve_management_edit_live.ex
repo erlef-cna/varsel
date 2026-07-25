@@ -91,7 +91,8 @@ defmodule VarselWeb.VarselEditLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <.page_header eyebrow="CNA Console">
+    <.page_header>
+      <:eyebrow>CNA Console</:eyebrow>
       <:title>Edit <span class="font-mono">{@record.cve_id || "CVE"}</span></:title>
       <:subtitle>
         State: <span class="font-mono">{@record.state}</span>. Saving runs validation and

@@ -124,30 +124,40 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
-  Renders the full-width page header: a tinted band under the navbar with
-  eyebrow, title and subtitle on the left and the page's actions on the
-  right. Content below it lays out its own container.
-  """
-  attr :eyebrow, :string,
-    required: true,
-    doc: ~s(context line above the title, e.g. "CNA Console")
+  Renders the full-width page header: a tinted band under the navbar naming
+  the page, with its actions alongside. Content below it lays out its own
+  container.
 
+  A `subtitle` says what the page is in prose. A `meta` slot instead carries
+  what the page *has* — the scopes it can be seen through, where it stands in
+  a lifecycle — and sits under the subtitle.
+
+  Each row names the page in turn, with the actions beside them from `sm` up,
+  settled against the foot of the band. Below that everything stacks in one
+  column and the actions come last.
+  """
+  slot :eyebrow, required: true, doc: ~s(context line above the title, e.g. "CNA Console")
   slot :title, required: true, doc: "heading content — plain text or rich"
   slot :subtitle, doc: "one-line description under the title — plain text or rich"
+  slot :meta, doc: "tabs, state, chips — what the page holds rather than what it is"
   slot :actions
 
   def page_header(assigns) do
     ~H"""
     <div class="console-band">
-      <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-        <div>
-          <p class="eef-eyebrow mb-1">{@eyebrow}</p>
-          <h1 class="text-2xl font-bold leading-tight">{render_slot(@title)}</h1>
-          <p :if={@subtitle != []} class="text-sm text-base-content/60 mt-0.5">
-            {render_slot(@subtitle)}
-          </p>
-        </div>
-        <div :if={@actions != []} class="flex flex-wrap items-center gap-2 pb-0.5">
+      <div class="page-header container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+        <p class="page-header-eyebrow eef-eyebrow">{render_slot(@eyebrow)}</p>
+        <h1 class="page-header-title text-2xl font-bold leading-tight">
+          {render_slot(@title)}
+        </h1>
+        <p :if={@subtitle != []} class="page-header-subtitle text-sm text-base-content/60">
+          {render_slot(@subtitle)}
+        </p>
+        <div :if={@meta != []} class="page-header-meta">{render_slot(@meta)}</div>
+        <div
+          :if={@actions != []}
+          class="page-header-actions flex flex-wrap items-center gap-2 sm:justify-end"
+        >
           {render_slot(@actions)}
         </div>
       </div>
@@ -328,14 +338,13 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
-  Renders one scope tab's contents: a label and its count, styled for whether
-  the scope is the one being looked at.
+  Renders one scope tab: a label and its count, underlined while active.
 
   How the tab is followed is the caller's — a `<.link patch>` for a scope that
-  lives in the URL, a `<button phx-click>` for one the view holds — so the tab
-  goes inside that element and takes its classes from `scope_tab_class/1`:
+  lives in the URL, a `<button phx-click>` for one the view holds — so it
+  wraps this in whichever of those it needs:
 
-      <.link patch={~p"/cases?scope=published"} class={scope_tab_class(@active?)}>
+      <.link patch={~p"/cases?scope=published"}>
         <.scope_tab active?={@active?} label="Published" count={@published_count} />
       </.link>
 
@@ -352,34 +361,29 @@ defmodule VarselWeb.CoreComponents do
 
   def scope_tab(assigns) do
     ~H"""
-    {@label}
-    <span
-      :if={@count}
-      class={[
-        "font-semibold tabular-nums ml-1",
-        cond do
-          @active? -> "text-primary"
-          @matched? -> "text-info"
-          true -> "text-base-content/50"
-        end
-      ]}
-    >
-      {@count}
-    </span>
-    """
-  end
-
-  @doc """
-  The classes for a scope tab's link or button — see `scope_tab/1`.
-  """
-  def scope_tab_class(active?) do
-    [
-      "cursor-pointer pb-1",
-      if(active?,
+    <span class={[
+      "inline-block cursor-pointer pb-1",
+      if(@active?,
         do: "font-bold text-base-content shadow-[inset_0_-2px_0_var(--eef-blue)]",
         else: "text-base-content/60"
       )
-    ]
+    ]}>
+      {@label}
+      <span
+        :if={@count}
+        class={[
+          "font-semibold tabular-nums ml-1",
+          cond do
+            @active? -> "text-primary"
+            @matched? -> "text-info"
+            true -> "text-base-content/50"
+          end
+        ]}
+      >
+        {@count}
+      </span>
+    </span>
+    """
   end
 
   @doc """

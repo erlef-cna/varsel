@@ -368,7 +368,8 @@ defmodule VarselWeb.CveListLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <.page_header eyebrow={if @poc?, do: "CNA Console", else: "EEF CNA"}>
+    <.page_header>
+      <:eyebrow>{if @poc?, do: "CNA Console", else: "EEF CNA"}</:eyebrow>
       <:title>{if @poc?, do: "CVE records", else: "Issued CVEs"}</:title>
       <:subtitle :if={@poc?}>Reserve, draft, publish, and reject CVE records.</:subtitle>
       <:subtitle :if={not @poc?}>Vulnerabilities assigned and published by the EEF CNA.</:subtitle>
@@ -581,12 +582,7 @@ defmodule VarselWeb.CveListLive do
     assigns = assign(assigns, :active?, assigns.active == assigns.value)
 
     ~H"""
-    <button
-      type="button"
-      phx-click="filter"
-      phx-value-filter={@value}
-      class={scope_tab_class(@active?)}
-    >
+    <button type="button" phx-click="filter" phx-value-filter={@value}>
       <.scope_tab active?={@active?} label={@label} count={@count} />
     </button>
     """

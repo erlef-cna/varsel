@@ -108,7 +108,8 @@ defmodule VarselWeb.CommonWeaknessesLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <.page_header eyebrow="Analysis">
+    <.page_header>
+      <:eyebrow>Analysis</:eyebrow>
       <:title>{@page.title}</:title>
     </.page_header>
 

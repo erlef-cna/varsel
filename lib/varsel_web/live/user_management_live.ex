@@ -82,7 +82,8 @@ defmodule VarselWeb.UserManagementLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <.page_header eyebrow="CNA Console">
+    <.page_header>
+      <:eyebrow>CNA Console</:eyebrow>
       <:title>Users</:title>
       <:subtitle>Manage who can access the CNA tooling and their role.</:subtitle>
     </.page_header>
