@@ -779,4 +779,79 @@ defmodule VarselWeb.CaseComponents do
     </span>
     """
   end
+
+  @doc """
+  Renders a package's channels as a table: where each one ships, and the
+  version range derived for it.
+
+  Each row is a map of `:id`, `:name` and `:title` (the purl, short and full),
+  `:derived` (the range text), and optionally `:subpath` and `:note`. The
+  implicit git row a package with a repository gets is just another row, one
+  whose `:id` is nil — it carries no actions, since there is no channel record
+  behind it to edit.
+
+  `subpath?` adds the column naming the part of the repository a channel
+  covers; the editor asks for it, the card at rest does not.
+  """
+  attr :rows, :list, required: true, doc: "the channels, already resolved for display"
+  attr :mode, :atom, required: true
+  attr :marks, :map, required: true
+  attr :subpath?, :boolean, default: false
+  attr :edit_label, :string, default: "Edit"
+
+  def channel_table(assigns) do
+    ~H"""
+    <div :if={@rows != []} class={["grid items-center gap-x-3", channel_track_class(@subpath?)]}>
+      <div class="contents text-[0.65rem] font-bold uppercase tracking-wider text-base-content/50">
+        <div class="py-1">Channel</div>
+        <div :if={@subpath?} class="py-1">Subpath</div>
+        <div class="py-1">{if @subpath?, do: "Derived", else: "Derived range"}</div>
+        <div></div>
+      </div>
+      <div
+        :for={row <- @rows}
+        class={[
+          "grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5",
+          channel_span_class(@subpath?)
+        ]}
+      >
+        <div class="min-w-0">
+          <.mono_chip title={row[:title]}>{row.name}</.mono_chip>
+        </div>
+        <div :if={@subpath?} class="min-w-0 truncate font-mono text-xs text-base-content/60">
+          {row[:subpath] || "—"}
+        </div>
+        <div
+          class="min-w-0 truncate font-mono text-xs text-base-content/60"
+          title={row[:derived_title] || row.derived}
+        >
+          {row.derived}
+          <span :if={row[:note]} class="text-base-content/40">· {row[:note]}</span>
+        </div>
+        <div class="whitespace-nowrap text-right">
+          <span :if={row.id} class="contents">
+            <.proposal_marks row_id={row.id} marks={@marks} />
+            <.row_actions
+              row_id={row.id}
+              type="channel"
+              noun="channel"
+              mode={@mode}
+              marks={@marks}
+              edit_label={@edit_label}
+            />
+          </span>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  # Tailwind only generates the classes it finds spelled out, so both track
+  # layouts are written literally rather than built from the flag.
+  defp channel_track_class(true), do: "grid-cols-[minmax(0,1fr)_minmax(0,0.4fr)_minmax(0,1.6fr)_auto]"
+
+  defp channel_track_class(false), do: "grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]"
+
+  defp channel_span_class(true), do: "col-span-4"
+  defp channel_span_class(false), do: "col-span-3"
 end

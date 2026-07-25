@@ -1756,51 +1756,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp affected_card_at_rest(assigns) do
     ~H"""
-    <div
-      :if={@package.channels != [] or @package.repo_url}
-      class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] items-center gap-x-3"
-    >
-      <div class="contents text-[0.65rem] font-bold uppercase tracking-wider text-base-content/50">
-        <div class="py-1">Channel</div>
-        <div class="py-1">Derived range</div>
-        <div></div>
-      </div>
-      <div
-        :for={channel <- @package.channels}
-        class="col-span-3 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
-      >
-        <div class="min-w-0">
-          <.mono_chip title={Channel.purl_string(@package, channel)}>
-            {channel_label(@package, channel) || "—"}
-          </.mono_chip>
-        </div>
-        <div
-          class="min-w-0 truncate font-mono text-xs text-base-content/60"
-          title={derived_versions_label(@package, channel.id)}
-        >
-          {derived_versions_label(@package, channel.id)}
-        </div>
-        <div class="whitespace-nowrap text-right">
-          <.proposal_marks row_id={channel.id} marks={@marks} />
-          <.row_actions row_id={channel.id} type="channel" noun="channel" mode={@mode} marks={@marks} />
-        </div>
-      </div>
-      <div
-        :if={@package.repo_url}
-        class="col-span-3 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
-      >
-        <div class="min-w-0">
-          <.mono_chip>github (implicit)</.mono_chip>
-        </div>
-        <div
-          class="min-w-0 truncate font-mono text-xs text-base-content/60"
-          title={derived_versions_label(@package, "git")}
-        >
-          {git_compact_label(@package)}
-        </div>
-        <div></div>
-      </div>
-    </div>
+    <.channel_table rows={channel_rows(@package, :compact)} mode={@mode} marks={@marks} />
     <p :if={@package.channels == [] and !@package.repo_url} class="text-sm text-base-content/60">
       No channels yet.
     </p>
@@ -1960,94 +1916,13 @@ defmodule VarselWeb.CaseDetailLive do
         Add channel
       </button>
     </div>
-    <div
-      :if={@package.channels != [] or @package.repo_url}
-      class={[
-        "grid items-center gap-x-3",
-        if(any_channel_subpath?(@package),
-          do: "grid-cols-[minmax(0,1fr)_minmax(0,0.4fr)_minmax(0,1.6fr)_auto]",
-          else: "grid-cols-[minmax(0,1fr)_auto_minmax(0,1.6fr)_auto]"
-        )
-      ]}
-    >
-      <div class="contents text-[0.65rem] font-bold uppercase tracking-wider text-base-content/50">
-        <div class="py-1">Channel</div>
-        <div class="py-1">Subpath</div>
-        <div class="py-1">Derived</div>
-        <div></div>
-      </div>
-      <div
-        :for={channel <- @package.channels}
-        class="col-span-4 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
-      >
-        <div class="min-w-0">
-          <.mono_chip title={Channel.purl_string(@package, channel)}>
-            {channel_label(@package, channel) || "—"}
-          </.mono_chip>
-        </div>
-        <div
-          :if={any_channel_subpath?(@package)}
-          class="min-w-0 truncate font-mono text-xs text-base-content/60"
-        >
-          {channel.subpath || "—"}
-        </div>
-        <div
-          :if={!any_channel_subpath?(@package)}
-          class="text-xs text-base-content/30"
-          title="No subpath"
-        >
-          —
-        </div>
-        <div
-          class="min-w-0 truncate font-mono text-xs text-base-content/60"
-          title={derived_versions_label(@package, channel.id)}
-        >
-          {derived_versions_label(@package, channel.id)}
-          <span :if={overridden_note(channel) != ""} class="text-base-content/40">
-            · {overridden_note(channel)}
-          </span>
-        </div>
-        <div class="whitespace-nowrap text-right">
-          <.proposal_marks row_id={channel.id} marks={@marks} />
-          <.row_actions
-            row_id={channel.id}
-            type="channel"
-            noun="channel"
-            mode={@mode}
-            marks={@marks}
-            edit_label="▸"
-          />
-        </div>
-      </div>
-      <div
-        :if={@package.repo_url}
-        class="col-span-4 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
-      >
-        <div class="min-w-0">
-          <.mono_chip>github (implicit)</.mono_chip>
-        </div>
-        <div
-          :if={any_channel_subpath?(@package)}
-          class="min-w-0 truncate font-mono text-xs text-base-content/60"
-        >
-          —
-        </div>
-        <div
-          :if={!any_channel_subpath?(@package)}
-          class="text-xs text-base-content/30"
-          title="No subpath"
-        >
-          —
-        </div>
-        <div
-          class="min-w-0 truncate font-mono text-xs text-base-content/60"
-          title={derived_versions_label(@package, "git")}
-        >
-          {derived_versions_label(@package, "git")}
-        </div>
-        <div></div>
-      </div>
-    </div>
+    <.channel_table
+      rows={channel_rows(@package, :full)}
+      mode={@mode}
+      marks={@marks}
+      subpath?={any_channel_subpath?(@package)}
+      edit_label="▸"
+    />
 
     <.program_files files={@package.program_files} />
 
@@ -2760,6 +2635,44 @@ defmodule VarselWeb.CaseDetailLive do
   # tree, not a line) and does not fit this linear track, so it's the one
   # entry type skipped everywhere, including on the git row itself — an OTP
   # git entry's leading OTP release ranges DO render there.
+  # A package's channels as the table renders them, plus the implicit git row
+  # a package with a repository gets. `:compact` words the git range the way
+  # the resting card does; `:full` the way the editor does, where there is
+  # room for the whole list.
+  defp channel_rows(package, git_detail) do
+    rows =
+      Enum.map(package.channels, fn channel ->
+        %{
+          id: channel.id,
+          name: channel_label(package, channel) || "—",
+          title: Channel.purl_string(package, channel),
+          subpath: channel.subpath,
+          derived: derived_versions_label(package, channel.id),
+          note: presence(overridden_note(channel))
+        }
+      end)
+
+    if package.repo_url do
+      git =
+        case git_detail do
+          :compact -> git_compact_label(package)
+          :full -> derived_versions_label(package, "git")
+        end
+
+      rows ++
+        [
+          %{
+            id: nil,
+            name: "github (implicit)",
+            derived: git,
+            derived_title: derived_versions_label(package, "git")
+          }
+        ]
+    else
+      rows
+    end
+  end
+
   defp timeline_rows(%{derivation_cache: nil}), do: []
 
   defp timeline_rows(package) do
