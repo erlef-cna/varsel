@@ -19,20 +19,20 @@
   </p>
   <p class="text-base-content/70 leading-relaxed mt-4">
     If you believe a published EEF CNA record should exist for this ID,
-    <a href={~p"/contact"} class="link link-primary">contact us</a>
+    <.link href={~p"/contact"} class="link link-primary">contact us</.link>
     and mention the ID — we'll check.
   </p>
   <div class="mt-6 flex flex-wrap items-center gap-4">
-    <a
+    <.link
       href={"https://www.cve.org/CVERecord?id=#{@cve_id}"}
       target="_blank"
       rel="noopener"
       class="btn btn-primary"
     >
       Look it up on cve.org <.icon name="hero-arrow-top-right-on-square" class="size-4" />
-    </a>
-    <a href={~p"/cves"} class="link link-primary text-sm font-semibold">
+    </.link>
+    <.link navigate={~p"/cves"} class="link link-primary text-sm font-semibold">
       Browse published CVEs →
-    </a>
+    </.link>
   </div>
 </.error_page>

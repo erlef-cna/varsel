@@ -163,7 +163,7 @@ defmodule VarselWeb.AffectedCheckerLive do
       <p :if={@package["fix_sha"]} class="mt-1.5 text-xs text-base-content/60">
         If your checkout includes <code>{@package["fix_sha"]}</code>
         you have the fix.
-        <a href="#affected" class="text-primary hover:underline">See the full range ↓</a>
+        <.link href="#affected" class="text-primary hover:underline">See the full range ↓</.link>
       </p>
     </div>
     """
@@ -176,7 +176,7 @@ defmodule VarselWeb.AffectedCheckerLive do
     ~H"""
     <p class="text-sm">
       Version checking isn't available for this record — its versions can't be compared automatically.
-      <a href="#affected" class="text-primary hover:underline">See the affected ranges ↓</a>
+      <.link href="#affected" class="text-primary hover:underline">See the affected ranges ↓</.link>
     </p>
     """
   end

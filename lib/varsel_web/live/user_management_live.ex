@@ -115,7 +115,7 @@ defmodule VarselWeb.UserManagementLive do
                 </td>
                 <td class="text-base-content/70">{user.email || "—"}</td>
                 <td>
-                  <a
+                  <.link
                     :if={user.github_handle}
                     href={"https://github.com/#{user.github_handle}"}
                     class="link link-hover text-primary"
@@ -123,7 +123,7 @@ defmodule VarselWeb.UserManagementLive do
                     rel="noopener"
                   >
                     @{user.github_handle}
-                  </a>
+                  </.link>
                   <span :if={is_nil(user.github_handle)} class="text-base-content/50">—</span>
                 </td>
                 <td class="text-right">

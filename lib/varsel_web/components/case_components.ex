@@ -106,7 +106,7 @@ defmodule VarselWeb.CaseComponents do
   def section_nav(assigns) do
     ~H"""
     <nav id={@id} phx-hook="SectionRail" class={["text-sm", @class]}>
-      <a
+      <.link
         :for={section <- @sections}
         href={"##{section.id}"}
         class={[
@@ -136,7 +136,7 @@ defmodule VarselWeb.CaseComponents do
         >
           ●
         </span>
-      </a>
+      </.link>
     </nav>
     """
   end

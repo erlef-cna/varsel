@@ -144,15 +144,15 @@ defmodule VarselWeb.Layouts do
     ~H"""
     <header class="eef-band border-b border-white/10 sticky top-0 z-40">
       <nav class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl flex items-center gap-4 h-16">
-        <a
-          href="/"
+        <.link
+          href={~p"/"}
           class="eef-band-plain flex items-center gap-3 shrink-0 text-white hover:opacity-80 transition-opacity"
         >
           <.eef_logo class="h-7" id="eef-logo-nav" />
           <span class="italic font-black text-white text-lg border-l border-white/20 pl-3 hidden sm:block">
             CNA
           </span>
-        </a>
+        </.link>
 
         <%!-- Desktop menu --%>
         <ul class="hidden md:flex items-center gap-1 ml-2 text-sm text-white">
@@ -171,9 +171,12 @@ defmodule VarselWeb.Layouts do
             <div class="invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-opacity absolute left-0 top-full pt-1 w-60">
               <ul class="bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 p-2 space-y-0.5">
                 <li :for={{label, path} <- doc_links()}>
-                  <a href={path} class="block px-3 py-1.5 rounded hover:bg-base-200 transition-colors">
+                  <.link
+                    href={path}
+                    class="block px-3 py-1.5 rounded hover:bg-base-200 transition-colors"
+                  >
                     {label}
-                  </a>
+                  </.link>
                 </li>
               </ul>
             </div>
@@ -207,19 +210,19 @@ defmodule VarselWeb.Layouts do
               <li class="menu-title truncate">
                 {@current_user.name || @current_user.email}
               </li>
-              <li><a href={~p"/settings/tokens"}>API Tokens</a></li>
-              <li><a href="/sign-out" data-method="delete">Sign out</a></li>
+              <li><.link navigate={~p"/settings/tokens"}>API Tokens</.link></li>
+              <li><.link href={~p"/sign-out"} method="delete">Sign out</.link></li>
             </ul>
           </div>
-          <a
+          <.link
             :if={is_nil(@current_user)}
-            href="/sign-in"
+            navigate={~p"/sign-in"}
             aria-label="Sign in"
             data-tip="Sign in"
             class="btn btn-ghost btn-sm btn-circle text-white hover:bg-white/10 tooltip tooltip-bottom"
           >
             <.icon name="hero-arrow-right-end-on-rectangle" class="size-5" />
-          </a>
+          </.link>
 
           <%!-- Mobile menu --%>
           <div class="dropdown dropdown-end md:hidden">
@@ -230,11 +233,11 @@ defmodule VarselWeb.Layouts do
               tabindex="0"
               class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-60 p-2 z-50"
             >
-              <li><a href={~p"/cves"}>CVEs</a></li>
-              <li><a href={~p"/common-weaknesses"}>Weaknesses</a></li>
+              <li><.link navigate={~p"/cves"}>CVEs</.link></li>
+              <li><.link navigate={~p"/common-weaknesses"}>Weaknesses</.link></li>
               <li class="menu-title mt-1">Documentation</li>
-              <li :for={{label, path} <- doc_links()}><a href={path}>{label}</a></li>
-              <li :if={@current_user}><a href={~p"/cases"}>Cases</a></li>
+              <li :for={{label, path} <- doc_links()}><.link href={path}>{label}</.link></li>
+              <li :if={@current_user}><.link navigate={~p"/cases"}>Cases</.link></li>
             </ul>
           </div>
         </div>
@@ -271,21 +274,24 @@ defmodule VarselWeb.Layouts do
     "/settings/tokens"
   ]
 
-  attr :href, :string, required: true
+  attr :href, :string,
+    required: true,
+    doc: "a LiveView route — the nav navigates rather than reloads"
+
   attr :current_path, :string, default: nil
   slot :inner_block, required: true
 
   defp nav_link(assigns) do
     ~H"""
-    <a
-      href={@href}
+    <.link
+      navigate={@href}
       class={[
         "eef-band-plain px-3 py-2 rounded hover:bg-white/10 transition-colors block",
         nav_active?(@current_path, @href) && "bg-white/10 font-semibold"
       ]}
     >
       {render_slot(@inner_block)}
-    </a>
+    </.link>
     """
   end
 
@@ -318,39 +324,39 @@ defmodule VarselWeb.Layouts do
         <div>
           <p class="eef-eyebrow mb-3">Records</p>
           <ul class="space-y-2">
-            <li><a href={~p"/cves"}>All CVEs</a></li>
-            <li><a href={~p"/common-weaknesses"}>Common Weaknesses</a></li>
-            <li><a href={~p"/cves/index.json"}>CVE index (JSON)</a></li>
-            <li><a href={~p"/osv/all.json"}>OSV feed (JSON)</a></li>
+            <li><.link navigate={~p"/cves"}>All CVEs</.link></li>
+            <li><.link navigate={~p"/common-weaknesses"}>Common Weaknesses</.link></li>
+            <li><.link href={~p"/cves/index.json"}>CVE index (JSON)</.link></li>
+            <li><.link href={~p"/osv/all.json"}>OSV feed (JSON)</.link></li>
           </ul>
         </div>
 
         <div>
           <p class="eef-eyebrow mb-3">Process</p>
           <ul class="space-y-2">
-            <li><a href={~p"/scope"}>Scope</a></li>
-            <li><a href={~p"/cve-criteria"}>CVE Criteria</a></li>
-            <li><a href={~p"/maintainer-process"}>Maintainer Process</a></li>
-            <li><a href={~p"/coordinator-process"}>Coordinator Process</a></li>
+            <li><.link href={~p"/scope"}>Scope</.link></li>
+            <li><.link href={~p"/cve-criteria"}>CVE Criteria</.link></li>
+            <li><.link href={~p"/maintainer-process"}>Maintainer Process</.link></li>
+            <li><.link href={~p"/coordinator-process"}>Coordinator Process</.link></li>
           </ul>
         </div>
 
         <div>
           <p class="eef-eyebrow mb-3">More</p>
           <ul class="space-y-2">
-            <li><a href={~p"/report"}>Report a Vulnerability</a></li>
-            <li><a href={~p"/contact"}>Contact</a></li>
-            <li><a href={~p"/security-policy"}>Security Policy</a></li>
-            <li><a href={~p"/data-licensing"}>Data Licensing</a></li>
-            <li><a href="https://erlef.org/" target="_blank" rel="noopener">erlef.org</a></li>
+            <li><.link navigate={~p"/report"}>Report a Vulnerability</.link></li>
+            <li><.link href={~p"/contact"}>Contact</.link></li>
+            <li><.link href={~p"/security-policy"}>Security Policy</.link></li>
+            <li><.link href={~p"/data-licensing"}>Data Licensing</.link></li>
+            <li><.link href="https://erlef.org/" target="_blank" rel="noopener">erlef.org</.link></li>
           </ul>
         </div>
       </div>
       <div class="border-t border-white/10">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-4 text-xs text-white/50">
-          © {Date.utc_today().year} Erlang Ecosystem Foundation. CVE data licensed <a href={
+          © {Date.utc_today().year} Erlang Ecosystem Foundation. CVE data licensed <.link href={
             ~p"/data-licensing"
-          }>CC-BY 4.0</a>.
+          }>CC-BY 4.0</.link>.
         </div>
       </div>
     </footer>
@@ -359,14 +365,14 @@ defmodule VarselWeb.Layouts do
 
   defp doc_links do
     [
-      {"Scope", "/scope"},
-      {"CVE Criteria", "/cve-criteria"},
-      {"Security Policy", "/security-policy"},
-      {"Maintainer Process", "/maintainer-process"},
-      {"Coordinator Process", "/coordinator-process"},
-      {"Data Licensing", "/data-licensing"},
-      {"API Access", "/api-access"},
-      {"Contact", "/contact"}
+      {"Scope", ~p"/scope"},
+      {"CVE Criteria", ~p"/cve-criteria"},
+      {"Security Policy", ~p"/security-policy"},
+      {"Maintainer Process", ~p"/maintainer-process"},
+      {"Coordinator Process", ~p"/coordinator-process"},
+      {"Data Licensing", ~p"/data-licensing"},
+      {"API Access", ~p"/api-access"},
+      {"Contact", ~p"/contact"}
     ]
   end
 

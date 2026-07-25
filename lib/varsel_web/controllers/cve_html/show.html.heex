@@ -32,15 +32,15 @@ SPDX-License-Identifier: Apache-2.0
     </div>
   </:meta>
   <:actions>
-    <a
+    <.link
       href={"https://osv.dev/vulnerability/EEF-#{cve_id}"}
       target="_blank"
       rel="noopener"
       class="btn btn-eef-quiet btn-sm"
     >
       OSV.dev
-    </a>
-    <.link navigate={~p"/cves/#{cve_id <> ".json"}"} class="btn btn-eef-quiet btn-sm">
+    </.link>
+    <.link href={~p"/cves/#{cve_id <> ".json"}"} class="btn btn-eef-quiet btn-sm">
       JSON
     </.link>
   </:actions>
@@ -88,14 +88,14 @@ SPDX-License-Identifier: Apache-2.0
             >
               in catalog →
             </.link>
-            <a
+            <.link
               href={cwe_url(cwe["cweId"])}
               target="_blank"
               rel="noopener"
               class="text-xs text-primary hover:underline"
             >
               MITRE ↗
-            </a>
+            </.link>
           </span>
         </div>
       </div>
@@ -111,14 +111,14 @@ SPDX-License-Identifier: Apache-2.0
               class="flex-1"
               truncate?={false}
             />
-            <a
+            <.link
               href={capec_url(capec["capecId"])}
               target="_blank"
               rel="noopener"
               class="ml-auto flex-shrink-0 text-xs text-primary hover:underline"
             >
               MITRE ↗
-            </a>
+            </.link>
           </div>
           <p
             :if={capec_text(capec, Map.get(@capec_names, capec_id_number(capec["capecId"])))}
@@ -135,12 +135,12 @@ SPDX-License-Identifier: Apache-2.0
         Affected — <.package_ref entry={entry} />
       </:title>
       <:actions :if={registry_link(entry)}>
-        <a href={elem(registry_link(entry), 1)} target="_blank" rel="noopener">
+        <.link href={elem(registry_link(entry), 1)} target="_blank" rel="noopener">
           {elem(registry_link(entry), 0)} ↗
-        </a>
+        </.link>
       </:actions>
       <:actions :if={entry["repo"]}>
-        <a href={entry["repo"]} target="_blank" rel="noopener">Repository ↗</a>
+        <.link href={entry["repo"]} target="_blank" rel="noopener">Repository ↗</.link>
       </:actions>
 
       <p
@@ -285,7 +285,7 @@ SPDX-License-Identifier: Apache-2.0
       <:title>CVSS breakdown</:title>
       <div class="flex flex-wrap items-center gap-3">
         <.severity_chip score={cvss["baseScore"] / 1} variant={:full} />
-        <a
+        <.link
           :if={cvss_calculator_url(cvss)}
           href={cvss_calculator_url(cvss)}
           target="_blank"
@@ -293,7 +293,7 @@ SPDX-License-Identifier: Apache-2.0
           class="ml-auto text-xs text-primary hover:underline"
         >
           open in calculator →
-        </a>
+        </.link>
       </div>
       <.cvss_vector vector={cvss["vectorString"]} />
     </.panel>

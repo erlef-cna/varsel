@@ -426,10 +426,10 @@ defmodule VarselWeb.CveListLive do
           </span>
         </:note>
         <:note :if={not @poc?}>
-          Machine-readable: <a href={~p"/cves/index.json"} class="link">JSON</a>
-          · <a href={~p"/osv/all.json"} class="link">OSV</a>
-          · <a href={~p"/feed.atom"} class="link">Atom</a>
-          · <a href={~p"/feed.rss"} class="link">RSS</a>
+          Machine-readable: <.link href={~p"/cves/index.json"} class="link">JSON</.link>
+          · <.link href={~p"/osv/all.json"} class="link">OSV</.link>
+          · <.link href={~p"/feed.atom"} class="link">Atom</.link>
+          · <.link href={~p"/feed.rss"} class="link">RSS</.link>
         </:note>
 
         <div class="overflow-x-auto">
@@ -457,7 +457,7 @@ defmodule VarselWeb.CveListLive do
                 <td>
                   <.link
                     :if={record.state == :published and @poc?}
-                    navigate={~p"/cves/#{record.cve_id <> ".html"}"}
+                    href={~p"/cves/#{record.cve_id <> ".html"}"}
                     class="link link-hover font-semibold"
                   >
                     {record.title || record.cve_id}
@@ -562,10 +562,10 @@ defmodule VarselWeb.CveListLive do
       <.rejected_panel :if={@poc?} rejected={@rejected} open?={@rejected_open?} />
 
       <p :if={@poc?} class="mt-6 text-sm text-base-content/60">
-        Machine-readable: <a href={~p"/cves/index.json"} class="link">CVE index (JSON)</a>
-        · <a href={~p"/osv/all.json"} class="link">OSV feed (JSON)</a>
-        · <a href={~p"/feed.atom"} class="link">Atom</a>
-        · <a href={~p"/feed.rss"} class="link">RSS</a>
+        Machine-readable: <.link href={~p"/cves/index.json"} class="link">CVE index (JSON)</.link>
+        · <.link href={~p"/osv/all.json"} class="link">OSV feed (JSON)</.link>
+        · <.link href={~p"/feed.atom"} class="link">Atom</.link>
+        · <.link href={~p"/feed.rss"} class="link">RSS</.link>
       </p>
     </.page_container>
     """

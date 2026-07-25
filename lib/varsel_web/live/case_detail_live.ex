@@ -1262,14 +1262,14 @@ defmodule VarselWeb.CaseDetailLive do
             can_resolve={can_edit?(@case_record, @current_user)}
           >
             <:row :let={weakness}>
-              <a
+              <.link
                 href={"https://cwe.mitre.org/data/definitions/#{weakness.cwe_id}.html"}
                 target="_blank"
                 rel="noopener noreferrer"
                 class="link font-mono"
               >
                 CWE-{weakness.cwe_id}
-              </a>
+              </.link>
               {weakness.weakness.name}
             </:row>
           </.rows_section>
@@ -1286,14 +1286,14 @@ defmodule VarselWeb.CaseDetailLive do
             can_resolve={can_edit?(@case_record, @current_user)}
           >
             <:row :let={impact}>
-              <a
+              <.link
                 href={"https://capec.mitre.org/data/definitions/#{impact.capec_id}.html"}
                 target="_blank"
                 rel="noopener noreferrer"
                 class="link font-mono"
               >
                 CAPEC-{impact.capec_id}
-              </a>
+              </.link>
               {impact.attack_pattern.name}
             </:row>
           </.rows_section>
@@ -1316,12 +1316,12 @@ defmodule VarselWeb.CaseDetailLive do
                   {proposal_field_ref(proposal)}
                   <span class="text-base-content/50">— {display_name(proposal.author)}</span>
                 </span>
-                <a
+                <.link
                   href={"#suggestion-#{proposal.id}"}
                   class="link link-hover text-primary text-xs ml-auto shrink-0"
                 >
                   Jump
-                </a>
+                </.link>
               </li>
             </ul>
             <p :if={open_proposals(@case_record) == []} class="text-sm text-base-content/60">
@@ -2625,14 +2625,14 @@ defmodule VarselWeb.CaseDetailLive do
                   <span :if={row.ok} class="shrink-0 font-bold text-success">✓</span>
                   <span :if={!row.ok} class="shrink-0 font-bold text-warning">✗</span>
                   <span class="min-w-0">{row.text}</span>
-                  <a
+                  <.link
                     :if={row.section}
                     href={"##{row.section}"}
                     phx-click="close_preview"
                     class="link link-hover ml-auto shrink-0 text-xs text-primary"
                   >
                     Go to {row.section}
-                  </a>
+                  </.link>
                 </li>
               </ul>
               <p :if={@preview.overrides_applied != []} class="mt-3 text-xs text-base-content/50">

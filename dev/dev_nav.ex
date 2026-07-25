@@ -58,13 +58,13 @@ defmodule VarselWeb.DevNav do
           </p>
           <ul class="space-y-0.5 text-sm">
             <li :for={{label, path, icon} <- @tools}>
-              <a
+              <.link
                 href={path}
                 class="flex items-center gap-2 rounded px-2 py-1.5 text-base-content hover:bg-base-200"
               >
                 <.icon name={icon} class="size-4 shrink-0 text-base-content/50" />
                 {label}
-              </a>
+              </.link>
             </li>
           </ul>
 

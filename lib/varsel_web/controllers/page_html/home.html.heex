@@ -32,19 +32,19 @@
           reporting, documenting, and mitigating security vulnerabilities.
         </p>
         <div class="mt-8 flex flex-wrap gap-3">
-          <a href={~p"/cves"} class="btn btn-primary">Browse CVEs →</a>
-          <a
-            href={~p"/report"}
+          <.link navigate={~p"/cves"} class="btn btn-primary">Browse CVEs →</.link>
+          <.link
+            navigate={~p"/report"}
             class="btn btn-outline text-white border-white/30 hover:bg-white/10 hover:border-white/50"
           >
             Report a vulnerability
-          </a>
+          </.link>
         </div>
       </div>
 
       <%!-- Ecosystem logos --%>
       <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-2 gap-3 justify-items-center lg:w-72">
-        <a
+        <.link
           :for={
             {href, src, alt} <- [
               {"https://www.erlang.org/", ~p"/images/erlang-logo.svg", "Erlang"},
@@ -60,7 +60,7 @@
           class="flex items-center justify-center h-14 w-full max-w-[8rem] bg-white rounded-lg px-3 hover:shadow-md transition-shadow"
         >
           <img src={src} alt={alt} class="max-h-9 max-w-full object-contain" />
-        </a>
+        </.link>
       </div>
     </div>
   </.page_container>
@@ -68,15 +68,18 @@
 
 <.page_container>
   <p class="mb-10">
-    As a <a href="https://www.cve.org/programorganization/cnas" class="link link-primary">CNA (CVE Numbering Authority)</a>,
+    As a <.link href="https://www.cve.org/programorganization/cnas" class="link link-primary">CNA (CVE Numbering Authority)</.link>,
     we assign CVE IDs for vulnerabilities in active packages hosted on
-    <a href="https://hex.pm/" class="link link-primary">Hex.pm</a>
+    <.link href="https://hex.pm/" class="link link-primary">Hex.pm</.link>
     and in projects under the GitHub organizations listed
-    in our <a href={~p"/scope"} class="link link-primary">scope</a>. All CVEs are also published to <a
+    in our <.link href={~p"/scope"} class="link link-primary">scope</.link>. All CVEs are also published to <.link
       href="https://osv.dev/"
       class="link link-primary"
-    >OSV.dev</a>.
-    This CNA is hosted by the <a href="https://erlef.org/wg/security" class="link link-primary">Erlang Ecosystem Foundation's Security Working Group</a>.
+    >OSV.dev</.link>.
+    This CNA is hosted by the <.link
+      href="https://erlef.org/wg/security"
+      class="link link-primary"
+    >Erlang Ecosystem Foundation's Security Working Group</.link>.
   </p>
 
   <%!-- CVE activity chart --%>
@@ -100,7 +103,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <.link
         :for={record <- @latest}
-        navigate={~p"/cves/#{record.cve_id <> ".html"}"}
+        href={~p"/cves/#{record.cve_id <> ".html"}"}
         class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
       >
         <div class="card-body p-5">
@@ -122,7 +125,7 @@
     <h2 class="text-2xl font-bold mb-4">Learn more</h2>
   </section>
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    <a
+    <.link
       href={~p"/scope"}
       class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
     >
@@ -133,8 +136,8 @@
         <h2 class="card-title text-base">CNA Scope</h2>
         <p class="text-sm text-base-content/70">What projects we cover</p>
       </div>
-    </a>
-    <a
+    </.link>
+    <.link
       href={~p"/contact"}
       class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
     >
@@ -145,8 +148,8 @@
         <h2 class="card-title text-base">Contact</h2>
         <p class="text-sm text-base-content/70">Report a vulnerability</p>
       </div>
-    </a>
-    <a
+    </.link>
+    <.link
       href={~p"/cve-criteria"}
       class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
     >
@@ -157,8 +160,8 @@
         <h2 class="card-title text-base">CVE Criteria</h2>
         <p class="text-sm text-base-content/70">Assignment guidelines</p>
       </div>
-    </a>
-    <a
+    </.link>
+    <.link
       href={~p"/security-policy"}
       class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
     >
@@ -169,9 +172,9 @@
         <h2 class="card-title text-base">Security Policy</h2>
         <p class="text-sm text-base-content/70">Disclosure process</p>
       </div>
-    </a>
-    <a
-      href={~p"/common-weaknesses"}
+    </.link>
+    <.link
+      navigate={~p"/common-weaknesses"}
       class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
     >
       <div class="card-body p-5">
@@ -181,8 +184,8 @@
         <h2 class="card-title text-base">Common Weaknesses</h2>
         <p class="text-sm text-base-content/70">CWE distribution</p>
       </div>
-    </a>
-    <a
+    </.link>
+    <.link
       href={~p"/maintainer-process"}
       class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
     >
@@ -193,8 +196,8 @@
         <h2 class="card-title text-base">Maintainer Process</h2>
         <p class="text-sm text-base-content/70">Coordinated disclosure guide</p>
       </div>
-    </a>
-    <a
+    </.link>
+    <.link
       href={~p"/coordinator-process"}
       class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
     >
@@ -205,8 +208,8 @@
         <h2 class="card-title text-base">Coordinator Process</h2>
         <p class="text-sm text-base-content/70">For CNA volunteers</p>
       </div>
-    </a>
-    <a
+    </.link>
+    <.link
       href={~p"/data-licensing"}
       class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
     >
@@ -217,9 +220,9 @@
         <h2 class="card-title text-base">Data Licensing</h2>
         <p class="text-sm text-base-content/70">CC-BY 4.0 terms</p>
       </div>
-    </a>
-    <a
-      href={~p"/cves"}
+    </.link>
+    <.link
+      navigate={~p"/cves"}
       class="card bg-base-200 hover:bg-base-300 transition-colors border border-base-300"
     >
       <div class="card-body p-5">
@@ -229,6 +232,6 @@
         <h2 class="card-title text-base">All CVEs</h2>
         <p class="text-sm text-base-content/70">Browse published records</p>
       </div>
-    </a>
+    </.link>
   </div>
 </.page_container>

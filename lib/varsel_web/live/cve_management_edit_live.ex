@@ -117,7 +117,7 @@ defmodule VarselWeb.VarselEditLive do
 
         <div class="flex items-center gap-2 mt-4">
           <button type="submit" class="btn btn-primary">Save</button>
-          <.link navigate={~p"/cves/manage"} class="btn btn-ghost">Cancel</.link>
+          <.link href={~p"/cves/manage"} class="btn btn-ghost">Cancel</.link>
         </div>
       </.form>
     </.page_container>

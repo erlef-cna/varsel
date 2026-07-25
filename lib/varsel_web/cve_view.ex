@@ -266,9 +266,9 @@ defmodule VarselWeb.CveView do
     assigns = assign(assigns, label: label, url: url, linked?: linked?)
 
     ~H"""
-    <a :if={@linked?} href={@url} target="_blank" rel="noopener">
+    <.link :if={@linked?} href={@url} target="_blank" rel="noopener">
       <code>{@label}</code>
-    </a>
+    </.link>
     <code :if={not @linked?}>{@label}</code>
     """
   end
@@ -430,7 +430,7 @@ defmodule VarselWeb.CveView do
 
     ~H"""
     <em :if={@no_fix?}>no fix available</em>
-    <a :if={@linked?} href={@url} target="_blank" rel="noopener"><code>{@label}</code></a>
+    <.link :if={@linked?} href={@url} target="_blank" rel="noopener"><code>{@label}</code></.link>
     <code :if={not @no_fix? and not @linked?}>{@label}</code>
     """
   end
@@ -609,7 +609,7 @@ defmodule VarselWeb.CveView do
 
   def reference_body(%{row: %{kind: :commit}} = assigns) do
     ~H"""
-    <a
+    <.link
       href={@row.url}
       title={@row.url}
       target="_blank"
@@ -617,20 +617,20 @@ defmodule VarselWeb.CveView do
       class={["truncate", @row.faint? && "text-base-content/40"]}
     >
       github.com/{@row.owner_repo} · <code>{short_sha7(@row.sha)}</code> ↗
-    </a>
+    </.link>
     """
   end
 
   def reference_body(%{row: %{kind: :link}} = assigns) do
     ~H"""
-    <a
+    <.link
       href={@row.url}
       target="_blank"
       rel="noopener"
       class={["truncate", @row.faint? && "text-base-content/40"]}
     >
       {@row.name}
-    </a>
+    </.link>
     """
   end
 

@@ -93,7 +93,7 @@ defmodule VarselWeb.CoreComponents do
 
       <.button>Send!</.button>
       <.button phx-click="go" variant="primary">Send!</.button>
-      <.button navigate={~p"/"}>Home</.button>
+      <.button navigate={~p"/cves"}>All CVEs</.button>
   """
   attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
   attr :class, :any
@@ -409,12 +409,12 @@ defmodule VarselWeb.CoreComponents do
       </p>
       <ul class="space-y-1 text-sm border-l border-base-300">
         <li :for={entry <- @entries} class={[Map.get(entry, :level, 2) > 2 && "ml-3"]}>
-          <a
+          <.link
             href={"##{entry.id}"}
             class="block border-l-2 border-transparent -ml-px pl-3 py-0.5 text-base-content/70 hover:text-primary hover:border-primary transition-colors"
           >
             {entry.label}
-          </a>
+          </.link>
         </li>
       </ul>
     </nav>
