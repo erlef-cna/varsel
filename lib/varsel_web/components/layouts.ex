@@ -181,7 +181,7 @@ defmodule VarselWeb.Layouts do
           <li :if={@current_user}>
             <.nav_link href={~p"/cases"} current_path={@current_path}>Cases</.nav_link>
           </li>
-          <li :if={poc?(@current_user)}>
+          <li :if={@current_user}>
             <.nav_link href={~p"/reports"} current_path={@current_path}>Reports</.nav_link>
           </li>
           <li :if={poc?(@current_user)}>

@@ -37,8 +37,66 @@ defmodule VarselWeb.ReportTriageLiveTest do
     %{conn: conn, poc: poc, reporter: reporter}
   end
 
-  test "requires the POC role", %{conn: conn, reporter: reporter} do
-    assert {:error, {:redirect, %{to: "/"}}} = conn |> log_in(reporter) |> live(~p"/reports")
+  test "requires a signed-in user", %{conn: conn} do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/reports")
+  end
+
+  describe "reporter view" do
+    test "shows only the reporter's own reports, without triage tooling", %{
+      conn: conn,
+      poc: poc,
+      reporter: reporter
+    } do
+      submit_report(reporter, "my own report")
+      other = Fixtures.register_user("triage_live_bystander")
+      submit_report(other, "somebody else's report")
+      # POC-submitted reports are equally invisible to a plain reporter.
+      submit_report(poc, "a poc report")
+
+      {:ok, lv, html} = conn |> log_in(reporter) |> live(~p"/reports")
+
+      assert has_element?(lv, "h3", "my own report")
+      refute has_element?(lv, "h3", "somebody else's report")
+      refute has_element?(lv, "h3", "a poc report")
+
+      assert html =~ "My Reports"
+      assert html =~ "The CNA team triages every report"
+      # The submit call-to-action stays; triage tooling does not.
+      assert has_element?(lv, "a[href='/report']")
+      refute has_element?(lv, "button[phx-value-filter]")
+      refute has_element?(lv, "summary", "Report payload")
+    end
+
+    test "withdrawing a submitted report rejects it and records the withdrawal", %{
+      conn: conn,
+      reporter: reporter
+    } do
+      report = submit_report(reporter, "never mind this one")
+
+      {:ok, lv, _html} = conn |> log_in(reporter) |> live(~p"/reports")
+
+      lv |> element("button[phx-value-report_id='#{report.id}']") |> render_click()
+
+      report = Ash.get!(CVE.VulnerabilityReport, report.id, authorize?: false)
+      assert report.state == :rejected
+      assert report.triage_notes =~ "Withdrawn by the reporter"
+
+      refute has_element?(lv, "button[phx-value-report_id='#{report.id}']")
+    end
+
+    test "a report already under triage can no longer be withdrawn", %{
+      conn: conn,
+      poc: poc,
+      reporter: reporter
+    } do
+      report = submit_report(reporter, "already being looked at")
+      CVE.triage_vulnerability_report!(report, %{}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(reporter) |> live(~p"/reports")
+
+      assert has_element?(lv, "h3", "already being looked at")
+      refute has_element?(lv, "button[phx-value-report_id='#{report.id}']")
+    end
   end
 
   test "resolved reports leave the default queue but stay reachable", %{

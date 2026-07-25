@@ -4,11 +4,17 @@
 
 defmodule VarselWeb.ReportTriageLive do
   @moduledoc """
-  POC report triage: list inbound vulnerability reports, mark them under
+  Vulnerability reports, in the two shapes the same route serves.
+
+  For a POC this is the triage queue: list inbound reports, mark them under
   triage, reject them, or accept them into a case — either a fresh draft case
   (titled from the report summary) or an existing open case, completing the
   report → case intake path. Accepting navigates straight to the case
   workspace.
+
+  For any other reporter it is a simplified list of their own reports (summary
+  and current status only) — the `:list_reports` read policy does the scoping.
+  They cannot triage, but may withdraw a report the CNA has not picked up yet.
   """
   use VarselWeb, :live_view
 
@@ -19,16 +25,21 @@ defmodule VarselWeb.ReportTriageLive do
 
   @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
+    triage? = socket.assigns.current_user.role == :poc
+
     socket =
       socket
-      |> assign(page_title: "Report Triage", filter: "open")
+      |> assign(
+        page_title: if(triage?, do: "Report Triage", else: "My Reports"),
+        triage?: triage?,
+        filter: "open"
+      )
       |> keep_live(:reports, &list_reports/1,
         subscribe: "vulnerability_report:all",
         results: :lose
       )
-      |> assign_open_cases()
 
-    {:ok, socket}
+    {:ok, if(triage?, do: assign_open_cases(socket), else: socket)}
   end
 
   @impl Phoenix.LiveView
@@ -62,6 +73,12 @@ defmodule VarselWeb.ReportTriageLive do
       {:error, error} ->
         {:noreply, put_flash(socket, :error, errors_to_string(error))}
     end
+  end
+
+  def handle_event("withdraw", %{"report_id" => report_id}, socket) do
+    act(socket, report_id, "withdrawn", fn report, actor ->
+      CVE.withdraw_vulnerability_report(report, actor: actor)
+    end)
   end
 
   defp act(socket, report_id, verb, fun) do
@@ -152,49 +169,70 @@ defmodule VarselWeb.ReportTriageLive do
     ~H"""
     <Layouts.flash_group flash={@flash} />
 
-    <.console_header subtitle="Inbound vulnerability reports: triage, accept into a case, or reject.">
-      <:title>Report Triage</:title>
+    <.console_header subtitle={
+      if @triage?,
+        do: "Inbound vulnerability reports: triage, accept into a case, or reject.",
+        else:
+          "Reports you submitted. The CNA team triages every report and follows up with you once it has been reviewed."
+    }>
+      <:title>{if @triage?, do: "Report Triage", else: "My Reports"}</:title>
       <:actions>
         <.link navigate={~p"/report"} class="btn btn-sm btn-eef">Submit a report</.link>
       </:actions>
     </.console_header>
 
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
-      <div class="mb-4">
+      <div :if={@triage?} class="mb-4">
         <.stat_tiles active={@filter} options={tile_options(@reports)} />
       </div>
 
-      <div :for={report <- visible_reports(@reports, @filter)} class="card bg-base-200 mb-4">
+      <div
+        :for={report <- visible_reports(@reports, if(@triage?, do: @filter, else: "all"))}
+        class="card bg-base-200 mb-4"
+      >
         <div class="card-body p-4">
           <div class="flex items-start justify-between gap-4">
             <div>
               <h3 class="font-semibold">{report.summary}</h3>
               <p class="text-xs text-base-content/60">
-                by {report.reporter.name || report.reporter.email} · {format_dt(report.inserted_at)}
+                <span :if={@triage?}>by {report.reporter.name || report.reporter.email} · </span>
+                {format_dt(report.inserted_at)}
               </p>
               <p :if={report.triage_notes} class="text-sm text-base-content/70 mt-1 italic">
                 {report.triage_notes}
               </p>
             </div>
-            <span class={["badge badge-sm shrink-0", state_badge_class(report.state)]}>
-              {report.state}
-            </span>
+            <div class="flex items-center gap-3 shrink-0">
+              <span class={["badge badge-sm", state_badge_class(report.state)]}>
+                {report.state}
+              </span>
+              <button
+                :if={not @triage? and report.state == :submitted}
+                type="button"
+                phx-click="withdraw"
+                phx-value-report_id={report.id}
+                class="btn btn-outline btn-error btn-sm"
+                data-confirm="Withdraw this report? The CNA team will stop triaging it."
+              >
+                Withdraw
+              </button>
+            </div>
           </div>
 
-          <details class="mt-1">
+          <details :if={@triage?} class="mt-1">
             <summary class="cursor-pointer text-sm text-base-content/60">Report payload</summary>
             <.code_block source={pretty_json(report.report_json)} class="mt-1 max-h-72" />
           </details>
 
           <.link
-            :if={report.case_id}
+            :if={@triage? and report.case_id}
             navigate={~p"/cases/#{report.case_id}"}
             class="link text-sm self-start"
           >
             View the case this report became
           </.link>
 
-          <div :if={actionable?(report.state)} class="mt-2 space-y-2">
+          <div :if={@triage? and actionable?(report.state)} class="mt-2 space-y-2">
             <form
               id={"accept-#{report.id}"}
               phx-submit="accept"
@@ -254,8 +292,12 @@ defmodule VarselWeb.ReportTriageLive do
         </div>
       </div>
 
+      <p :if={@reports == []} class="text-center text-base-content/60 py-8">
+        {if @triage?, do: "No reports here.", else: "You have not submitted any reports yet."}
+      </p>
+
       <p
-        :if={visible_reports(@reports, @filter) == []}
+        :if={@triage? and @reports != [] and visible_reports(@reports, @filter) == []}
         class="text-center text-base-content/60 py-8"
       >
         {if @filter == "open", do: "No reports waiting for triage.", else: "No reports here."}
