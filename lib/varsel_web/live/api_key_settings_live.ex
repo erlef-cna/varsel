@@ -158,21 +158,22 @@ defmodule VarselWeb.ApiKeySettingsLive do
           id="api-key-form"
           phx-submit="create"
           phx-change="validate"
-          class="flex flex-wrap items-center gap-2"
+          class="flex flex-wrap items-start gap-2 [&_.fieldset]:mb-0"
         >
-          <input
+          <.input
+            field={@form[:name]}
             type="text"
-            name={@form[:name].name}
-            value={@form[:name].value}
             required
             placeholder="Token name, e.g. CI pipeline"
             class="input input-bordered input-sm w-64"
           />
-          <select name="expiry" class="select select-bordered select-sm w-32">
-            <option :for={{label, value} <- @expiry_presets} value={value} selected={value == @expiry}>
-              {label}
-            </option>
-          </select>
+          <.input
+            name="expiry"
+            type="select"
+            value={@expiry}
+            options={@expiry_presets}
+            class="select select-bordered select-sm w-32"
+          />
           <button type="submit" class="btn btn-sm btn-eef">Create token</button>
         </.form>
       </div>
