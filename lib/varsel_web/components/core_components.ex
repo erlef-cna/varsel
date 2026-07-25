@@ -601,6 +601,40 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders a bordered chip around a monospace fragment — a purl, a module, a
+  routine, a path.
+
+  `size: :normal` (default) fills the width it is given and truncates, for a
+  chip that sits alone in a column. `:small` shrinks to its content, for chips
+  that ride along a line of text. Spacing between a chip and its neighbours
+  belongs to the caller's layout, so pass it through `class`.
+  """
+  attr :size, :atom, default: :normal, values: [:normal, :small]
+  attr :class, :any, default: nil
+  attr :rest, :global, doc: "the chip's own attributes, e.g. a title tooltip"
+
+  slot :inner_block, required: true
+
+  def mono_chip(assigns) do
+    ~H"""
+    <span
+      class={[
+        "rounded-[5px] border border-base-300 bg-base-100 font-mono",
+        mono_chip_size_class(@size),
+        @class
+      ]}
+      {@rest}
+    >
+      {render_slot(@inner_block)}
+    </span>
+    """
+  end
+
+  defp mono_chip_size_class(:small), do: "px-1 py-0.5 text-[0.68rem]"
+
+  defp mono_chip_size_class(:normal), do: "inline-block max-w-full truncate align-bottom px-1.5 py-0.5 text-xs"
+
+  @doc """
   Renders a CVSS severity chip: rating word/initial + score in one chip,
   bucketed from `score` alone (none = exactly 0.0, low 0.1–3.9, medium
   4.0–6.9, high 7.0–8.9, critical 9.0–10.0 — the same thresholds

@@ -1973,12 +1973,9 @@ defmodule VarselWeb.CaseDetailLive do
         class="col-span-3 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
       >
         <div class="min-w-0">
-          <span
-            class="inline-block max-w-full truncate align-bottom rounded-[5px] border border-base-300 bg-base-100 px-1.5 py-0.5 font-mono text-xs"
-            title={Channel.purl_string(@package, channel)}
-          >
+          <.mono_chip title={Channel.purl_string(@package, channel)}>
             {channel_label(@package, channel) || "—"}
-          </span>
+          </.mono_chip>
         </div>
         <div
           class="min-w-0 truncate font-mono text-xs text-base-content/60"
@@ -2027,9 +2024,7 @@ defmodule VarselWeb.CaseDetailLive do
         class="col-span-3 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
       >
         <div class="min-w-0">
-          <span class="inline-block max-w-full truncate align-bottom rounded-[5px] border border-base-300 bg-base-100 px-1.5 py-0.5 font-mono text-xs">
-            github (implicit)
-          </span>
+          <.mono_chip>github (implicit)</.mono_chip>
         </div>
         <div
           class="min-w-0 truncate font-mono text-xs text-base-content/60"
@@ -2177,18 +2172,10 @@ defmodule VarselWeb.CaseDetailLive do
     <div :if={@package.program_files != []} class="space-y-1">
       <div :for={file <- @package.program_files} class="min-w-0 text-xs leading-6">
         <span class="font-mono text-base-content/70 break-all">{file.path}</span>
-        <span
-          :for={mod <- file.modules}
-          class="ml-1 rounded-[5px] border border-base-300 bg-base-100 font-mono px-1 py-0.5 text-[0.68rem]"
-        >
-          {mod}
-        </span>
-        <span
-          :for={routine <- file.routines}
-          class="ml-1 rounded-[5px] border border-base-300 bg-base-100 font-mono px-1 py-0.5 text-[0.68rem]"
-        >
+        <.mono_chip :for={mod <- file.modules} size={:small} class="ml-1">{mod}</.mono_chip>
+        <.mono_chip :for={routine <- file.routines} size={:small} class="ml-1">
           {routine}
-        </span>
+        </.mono_chip>
       </div>
     </div>
     <p :if={@package.program_files == []} class="text-sm text-base-content/60">
@@ -2272,12 +2259,9 @@ defmodule VarselWeb.CaseDetailLive do
         class="col-span-4 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
       >
         <div class="min-w-0">
-          <span
-            class="inline-block max-w-full truncate align-bottom rounded-[5px] border border-base-300 bg-base-100 px-1.5 py-0.5 font-mono text-xs"
-            title={Channel.purl_string(@package, channel)}
-          >
+          <.mono_chip title={Channel.purl_string(@package, channel)}>
             {channel_label(@package, channel) || "—"}
-          </span>
+          </.mono_chip>
         </div>
         <div
           :if={any_channel_subpath?(@package)}
@@ -2342,9 +2326,7 @@ defmodule VarselWeb.CaseDetailLive do
         class="col-span-4 grid grid-cols-subgrid items-center border-t border-base-300/60 py-1.5"
       >
         <div class="min-w-0">
-          <span class="inline-block max-w-full truncate align-bottom rounded-[5px] border border-base-300 bg-base-100 px-1.5 py-0.5 font-mono text-xs">
-            github (implicit)
-          </span>
+          <.mono_chip>github (implicit)</.mono_chip>
         </div>
         <div
           :if={any_channel_subpath?(@package)}
