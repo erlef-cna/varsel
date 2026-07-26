@@ -151,6 +151,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
           header. It is shown exactly once, right after creation.
         </p>
         <.form
+          :if={Accounts.can_create_api_key?(@current_user, %{})}
           for={@form}
           id="api-key-form"
           phx-submit="create"
@@ -217,6 +218,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
                 </td>
                 <td class="text-right">
                   <button
+                    :if={Accounts.can_revoke_api_key?(@current_user, api_key)}
                     phx-click="revoke"
                     phx-value-id={api_key.id}
                     data-confirm="Revoke this token? Applications using it will stop working."

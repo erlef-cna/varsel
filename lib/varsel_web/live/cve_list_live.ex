@@ -388,6 +388,7 @@ defmodule VarselWeb.CveListLive do
         pool={@pool}
         open?={@pool_open?}
         confirming_reject_id={@confirming_reject_id}
+        current_user={@current_user}
       />
 
       <.list_card>
@@ -489,7 +490,10 @@ defmodule VarselWeb.CveListLive do
                       Edit
                     </.link>
                     <button
-                      :if={record.state == :draft and @confirming_reject_id != record.id}
+                      :if={
+                        CVE.can_reject_cve_record?(@current_user, record) and
+                          @confirming_reject_id != record.id
+                      }
                       type="button"
                       class="text-xs font-semibold text-error/85"
                       phx-click="reject_prompt"
@@ -610,6 +614,7 @@ defmodule VarselWeb.CveListLive do
   attr :pool, :list, required: true
   attr :open?, :boolean, required: true
   attr :confirming_reject_id, :string, default: nil
+  attr :current_user, :any, required: true
 
   # P2: count joins the label ("Reserved pool 12", no redundant "IDs"), the
   # facts become labeled pairs behind hairline separators (span, oldest),
@@ -649,6 +654,7 @@ defmodule VarselWeb.CveListLive do
         :for={record <- @records}
         record={record}
         confirming?={@confirming_reject_id == record.id}
+        can_reject?={CVE.can_reject_cve_record?(@current_user, record)}
       />
     </.summary_panel>
     """
@@ -667,6 +673,7 @@ defmodule VarselWeb.CveListLive do
 
   attr :record, :any, required: true
   attr :confirming?, :boolean, required: true
+  attr :can_reject?, :boolean, required: true
 
   defp pool_row(assigns) do
     ~H"""
@@ -679,6 +686,7 @@ defmodule VarselWeb.CveListLive do
         reserved {format_date(@record.reserved_at)}
       </span>
       <button
+        :if={@can_reject?}
         type="button"
         class="text-xs font-semibold text-error/85"
         phx-click="reject_prompt"
