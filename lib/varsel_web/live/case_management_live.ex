@@ -83,7 +83,7 @@ defmodule VarselWeb.CaseManagementLive do
         :cve_id,
         :cvss_score,
         :severity_bucket,
-        assignments: [:user],
+        assignments: [user: [:avatar_url]],
         affected_packages: Ash.Query.select(Varsel.Cases.AffectedPackage, [:product, :vendor, :position])
       ],
       query: Ash.Query.filter(Case, state in ^@lane_states)

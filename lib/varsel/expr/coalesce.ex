@@ -6,7 +6,7 @@ defmodule Varsel.Expr.Coalesce do
   @moduledoc """
   `coalesce([a, b, c])` — the first element that is not `nil`.
 
-      calculate :display_name, :string, expr(coalesce([name, github_handle, email, "user"]))
+      calculate :display_name, :string, expr(coalesce([name, hex_username, "user"]))
   """
   use Ash.CustomExpression,
     name: :coalesce,

@@ -24,7 +24,7 @@ config :ash,
   transaction_rollback_on_error?: true,
   redact_sensitive_values_in_errors?: true,
   known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec, Varsel.Types.CVSS],
-  custom_expressions: [Varsel.Expr.Coalesce]
+  custom_expressions: [Varsel.Expr.Coalesce, Varsel.Expr.Md5]
 
 config :ash_graphql, authorize_update_destroy_with_error?: true, json_type: :json
 
@@ -72,7 +72,8 @@ config :phoenix, :json_library, Jason
 #     inline styles and style-src needs no nonce or `'unsafe-inline'`.
 #   * img-src allows `data:` for the daisyUI/heroicons SVG masks inlined in
 #     the CSS, plus github.com + *.githubusercontent.com for the console's
-#     GitHub avatar thumbnails (github.com/<handle>.png redirects there).
+#     GitHub avatar thumbnails (github.com/<handle>.png redirects there) and
+#     gravatar.com for the fallback when no GitHub account is linked.
 #   * connect-src 'self' covers the LiveView WebSocket (same origin).
 config :plug_content_security_policy,
   nonces_for: [:script_src],
@@ -80,7 +81,7 @@ config :plug_content_security_policy,
     default_src: ~w('none'),
     script_src: ~w('self'),
     style_src: ~w('self'),
-    img_src: ~w('self' data: https://github.com https://*.githubusercontent.com),
+    img_src: ~w('self' data: https://github.com https://*.githubusercontent.com https://www.gravatar.com),
     font_src: ~w('self'),
     connect_src: ~w('self'),
     manifest_src: ~w('self'),

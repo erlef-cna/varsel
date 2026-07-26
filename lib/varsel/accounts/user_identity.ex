@@ -57,7 +57,7 @@ defmodule Varsel.Accounts.UserIdentity do
       description "Creates or refreshes the identity row for an OAuth sign-in."
       upsert? true
       upsert_identity :unique_on_strategy_and_uid
-      upsert_fields [:access_token, :access_token_expires_at, :refresh_token, :email]
+      upsert_fields [:access_token, :access_token_expires_at, :refresh_token, :email, :username]
       accept [:strategy]
 
       argument :user_info, :map, allow_nil?: false
@@ -65,13 +65,20 @@ defmodule Varsel.Accounts.UserIdentity do
       argument :user_id, :uuid, allow_nil?: false
 
       change AshAuthentication.UserIdentity.UpsertIdentityChange
-      change Varsel.Accounts.UserIdentity.Changes.ApplyProviderEmail
+      change Varsel.Accounts.UserIdentity.Changes.ApplyProviderFields
     end
   end
 
   policies do
     bypass AshAuthentication.Checks.AshAuthenticationInteraction do
       authorize_if always()
+    end
+
+    # Identities are only ever read through the user they belong to, whose own
+    # policy already decided whether that row is visible. The OAuth tokens stay
+    # private attributes, so they are never readable through the API at all.
+    policy action_type(:read) do
+      authorize_if accessing_from(User, :identities)
     end
   end
 
@@ -82,7 +89,13 @@ defmodule Varsel.Accounts.UserIdentity do
     # addresses verified, hex.pm does not expose that at all, and hex only
     # returns an opt-in *public* address, so this is frequently nil.
     attribute :email, :string do
-      public? true
+      public? false
+      allow_nil? true
+    end
+
+    # The username this provider reported at the last sign-in, kept per identity.
+    attribute :username, :string do
+      public? false
       allow_nil? true
     end
   end

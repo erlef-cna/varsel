@@ -23,6 +23,7 @@ defmodule Varsel.Accounts.User do
   alias AshAuthentication.Checks.AshAuthenticationInteraction
   alias AshAuthentication.Strategy.OAuth2.IdentityChange
   alias AshOban.Checks.AshObanInteraction
+  alias Varsel.Accounts.User.Changes.ApplyProviderProfile
   alias Varsel.Accounts.User.Changes.PromoteFirstUserToPoc
   alias Varsel.Accounts.UserIdentity
   alias Varsel.Cases.Proposal
@@ -53,12 +54,12 @@ defmodule Varsel.Accounts.User do
     end
 
     # Whoever can read the row may see the display name.
-    field_policy [:name, :github_handle, :display_name] do
+    field_policy [:name, :github_username, :hex_username, :display_name, :avatar_url] do
       authorize_if always()
     end
 
     # Everything else is POC-or-self only.
-    field_policy [:notification_email, :github_id, :role] do
+    field_policy [:notification_email, :role] do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
     end
@@ -160,15 +161,18 @@ defmodule Varsel.Accounts.User do
       argument :user_info, :map, allow_nil?: false
       argument :oauth_tokens, :map, allow_nil?: false
       upsert? true
-      upsert_identity :unique_github_id
+      # Which account a sign-in belongs to is settled by the provider's iss/sub
+      # on the identity row; this only resolves a pre-existing local account,
+      # and never links on its own (see `trust_email_verified? false`).
+      upsert_identity :unique_notification_email
       # Not :notification_email — that address is the user's choice (see
       # :set_notification_email) and a later sign-in must not re-point it.
-      upsert_fields [:github_handle, :name]
+      upsert_fields [:name]
 
       change AshAuthentication.GenerateTokenChange
       change IdentityChange
 
-      change Varsel.Accounts.User.Changes.ApplyOauthUserInfo
+      change ApplyProviderProfile
       change PromoteFirstUserToPoc
     end
 
@@ -177,9 +181,8 @@ defmodule Varsel.Accounts.User do
       argument :user_info, :map, allow_nil?: false
       argument :oauth_tokens, :map, allow_nil?: false
       upsert? true
-      # Hex.pm accounts carry no github_id, so an existing local account is
-      # resolved by email. Matching never *links* on its own: hex.pm asserts no
-      # verified email, so `on_untrusted_email_match :reject` refuses the
+      # As above: matching an address never *links* on its own. Hex.pm asserts
+      # no verified email, so `on_untrusted_email_match :reject` refuses the
       # sign-in and the user links hex from an authenticated session instead.
       upsert_identity :unique_notification_email
       upsert_fields [:name]
@@ -187,7 +190,7 @@ defmodule Varsel.Accounts.User do
       change AshAuthentication.GenerateTokenChange
       change IdentityChange
 
-      change Varsel.Accounts.User.Changes.ApplyHexUserInfo
+      change ApplyProviderProfile
       change PromoteFirstUserToPoc
     end
 
@@ -219,10 +222,10 @@ defmodule Varsel.Accounts.User do
         description "Dev-only: upserts a dummy user for the given role and signs it in."
         accept [:role]
         upsert? true
-        upsert_identity :unique_github_id
+        upsert_identity :unique_notification_email
 
         # Re-signing in as the same role must reuse the same row, so the
-        # synthetic github_id is derived from the role rather than random.
+        # synthetic address is derived from the role rather than random.
         change Varsel.Accounts.User.Changes.ApplyMockProfile
         change Varsel.Accounts.User.Changes.MockGenerateToken
 
@@ -319,16 +322,6 @@ defmodule Varsel.Accounts.User do
       allow_nil? true
     end
 
-    attribute :github_id, :string do
-      public? true
-      allow_nil? true
-    end
-
-    attribute :github_handle, :string do
-      public? true
-      allow_nil? true
-    end
-
     attribute :name, :string do
       public? true
       allow_nil? true
@@ -351,7 +344,7 @@ defmodule Varsel.Accounts.User do
     # The linked OAuth providers. Their emails are the candidates a user may
     # choose their primary email from.
     has_many :identities, UserIdentity do
-      public? true
+      public? false
       destination_attribute :user_id
     end
   end
@@ -362,16 +355,48 @@ defmodule Varsel.Accounts.User do
     # sorted against the whole table, not just the rows already loaded.
     calculate :display_name,
               :string,
-              expr(coalesce([name, github_handle, notification_email, "user"])) do
+              expr(coalesce([name, hex_username, github_username, "user"])) do
       public? true
     end
 
     calculate :poc_first, :integer, expr(if role == :poc, do: 0, else: 1)
+
+    calculate :hex_username,
+              :string,
+              expr(min(identities, field: :username, filter: expr(strategy == "hex"))) do
+      public? true
+    end
+
+    calculate :github_username,
+              :string,
+              expr(min(identities, field: :username, filter: expr(strategy == "github"))) do
+      public? true
+    end
+
+    calculate :identity_emails, {:array, :string}, expr(list(identities, field: :email)) do
+      public? true
+    end
+
+    # GitHub serves an avatar straight off the profile URL, so a linked GitHub
+    # account is the best picture we have. Otherwise fall back to Gravatar,
+    # keyed on the notification address — which is what hex.pm itself does, and
+    # hex publishes no avatar of its own. `d=mp` yields a neutral silhouette
+    # rather than a 404 when the address has no Gravatar, so the <img> always
+    # resolves.
+    calculate :avatar_url,
+              :string,
+              expr(
+                coalesce([
+                  "https://github.com/" <> github_username <> ".png",
+                  "https://www.gravatar.com/avatar/" <>
+                    md5(string_downcase(string_trim(notification_email))) <> "?d=mp"
+                ])
+              ) do
+      public? true
+    end
   end
 
   identities do
-    identity :unique_github_id, [:github_id]
-
     # Resolves an OAuth sign-in to an existing local account. Postgres allows
     # many NULLs in a unique index, so accounts whose providers reported no
     # address (common on hex.pm, where it is opt-in) do not collide.

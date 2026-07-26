@@ -47,10 +47,10 @@ defmodule VarselWeb.UserManagementLive do
       case Accounts.set_user_role(user, role, actor: actor) do
         {:ok, _updated} ->
           # The list refreshes via the pub_sub notification handled above.
-          put_flash(socket, :info, "Updated #{display_name(user)}.")
+          put_flash(socket, :info, "Updated #{user.display_name}.")
 
         {:error, _error} ->
-          put_flash(socket, :error, "Could not update #{display_name(user)}.")
+          put_flash(socket, :error, "Could not update #{user.display_name}.")
       end
 
     {:noreply, socket}
@@ -65,14 +65,24 @@ defmodule VarselWeb.UserManagementLive do
     Accounts.list_users!(
       actor: socket.assigns.current_user,
       query: Ash.Query.sort(User, poc_first: :asc, display_name: :asc),
-      page: page_opts || [count: true, offset: 0]
+      page: page_opts || [count: true, offset: 0],
+      load: [:display_name, :github_username, :hex_username]
     )
   end
 
   defp role_value(nil), do: ""
   defp role_value(role), do: to_string(role)
 
-  defp display_name(user), do: user.name || user.github_handle || user.notification_email || "user"
+  # Links to whichever hex instance we authenticate against, defaulting to
+  # public hex.pm — a self-hosted one is the exception, and it sets base_url.
+  defp hex_profile_url(username) do
+    base_url =
+      :varsel
+      |> Application.get_env(:hex, [])
+      |> Keyword.get(:base_url, "https://hex.pm")
+
+    "#{String.trim_trailing(base_url, "/")}/users/#{username}"
+  end
 
   @impl Phoenix.LiveView
   def render(assigns) do
@@ -99,6 +109,7 @@ defmodule VarselWeb.UserManagementLive do
                 <th>Name</th>
                 <th>Email</th>
                 <th>GitHub</th>
+                <th>Hex.pm</th>
                 <th class="text-right">Role</th>
               </tr>
             </thead>
@@ -113,15 +124,27 @@ defmodule VarselWeb.UserManagementLive do
                 <td class="text-base-content/70">{user.notification_email || "—"}</td>
                 <td>
                   <.link
-                    :if={user.github_handle}
-                    href={"https://github.com/#{user.github_handle}"}
+                    :if={user.github_username}
+                    href={"https://github.com/#{user.github_username}"}
                     class="link link-hover text-primary"
                     target="_blank"
                     rel="noopener"
                   >
-                    @{user.github_handle}
+                    @{user.github_username}
                   </.link>
-                  <span :if={is_nil(user.github_handle)} class="text-base-content/50">—</span>
+                  <span :if={is_nil(user.github_username)} class="text-base-content/50">—</span>
+                </td>
+                <td>
+                  <.link
+                    :if={user.hex_username}
+                    href={hex_profile_url(user.hex_username)}
+                    class="link link-hover text-primary"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    @{user.hex_username}
+                  </.link>
+                  <span :if={is_nil(user.hex_username)} class="text-base-content/50">—</span>
                 </td>
                 <td class="text-right">
                   <form

@@ -46,13 +46,14 @@ defmodule VarselWeb.CaseDetailLive do
   @case_loads [
     :cve_id,
     :cve_record,
-    assignments: [:user],
+    # :avatar_url wherever a user is drawn as an avatar disc.
+    assignments: [user: [:avatar_url]],
     references: [],
     credits: [],
     weaknesses: [:weakness],
     impacts: [:attack_pattern],
+    proposals: [author: [:avatar_url], resolved_by: []],
     affected_packages: [:channels, :version_events],
-    proposals: [:author, :resolved_by],
     comments: [:author],
     # The report read policy is POC-only; supporters get an empty list here.
     vulnerability_reports: [:reporter]

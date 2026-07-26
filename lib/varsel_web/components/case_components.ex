@@ -364,9 +364,10 @@ defmodule VarselWeb.CaseComponents do
   end
 
   @doc """
-  Renders a user identity as a small filled circle: their GitHub avatar when
-  a handle is on record, otherwise a 2-letter initials disc. Users
-  authenticate via GitHub, so the handle is the only avatar source we have.
+  Renders a user identity as a small filled circle: their picture when one can
+  be reached, otherwise a 2-letter initials disc.
+
+  Callers must load `:avatar_url`.
   """
   attr :user, :any, required: true
   attr :variant, :atom, default: :a, values: [:a, :b], doc: "the mock's two avatar color variants"
@@ -375,13 +376,13 @@ defmodule VarselWeb.CaseComponents do
   def avatar_disc(assigns) do
     ~H"""
     <img
-      :if={Map.get(@user, :github_handle)}
-      src={"https://github.com/#{@user.github_handle}.png"}
+      :if={@user.avatar_url}
+      src={@user.avatar_url}
       alt=""
       class={["size-[21px] shrink-0 rounded-full object-cover", @class]}
     />
     <span
-      :if={!Map.get(@user, :github_handle)}
+      :if={!@user.avatar_url}
       class={[
         "inline-flex size-[21px] shrink-0 items-center justify-center rounded-full text-[0.6rem] font-bold",
         avatar_variant_class(@variant),

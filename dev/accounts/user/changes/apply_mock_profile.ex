@@ -6,8 +6,8 @@ defmodule Varsel.Accounts.User.Changes.ApplyMockProfile do
   @moduledoc """
   Fills in a mock user's profile from the role it is signing in as.
 
-  The synthetic `github_id` is derived from the role so that repeated mock
-  sign-ins upsert the same row instead of piling up dummy users.
+  The synthetic address is derived from the role so that repeated mock sign-ins
+  upsert the same row instead of piling up dummy users.
 
   Lives under `dev/`, which is only compiled for `:dev` and `:test`.
   """
@@ -23,8 +23,6 @@ defmodule Varsel.Accounts.User.Changes.ApplyMockProfile do
       end
 
     changeset
-    |> Ash.Changeset.force_change_attribute(:github_id, "mock-#{slug}")
-    |> Ash.Changeset.force_change_attribute(:github_handle, "mock-#{slug}")
     |> Ash.Changeset.force_change_attribute(:name, "Mock #{label(slug)}")
     |> Ash.Changeset.force_change_attribute(:notification_email, "mock-#{slug}@example.com")
   end

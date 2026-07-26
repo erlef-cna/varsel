@@ -86,4 +86,55 @@ defmodule Varsel.Accounts.UserTest do
       assert only.id == supporter.id
     end
   end
+
+  describe "avatar_url" do
+    test "prefers the linked GitHub account's picture" do
+      user = "octocat" |> register_user() |> Ash.load!([:avatar_url], authorize?: false)
+
+      assert user.avatar_url == "https://github.com/octocat.png"
+    end
+
+    test "falls back to a Gravatar of the notification email" do
+      user =
+        User
+        |> Ash.Changeset.for_create(
+          :register_with_hex,
+          %{
+            user_info: %{
+              "sub" => "hexer",
+              "preferred_username" => "hexer",
+              "name" => "Hexer",
+              # Gravatar keys on the lowercased, trimmed address, so this must
+              # hash the same as "hexer@example.com".
+              "email" => "  Hexer@Example.COM  "
+            },
+            oauth_tokens: %{"access_token" => "token"}
+          },
+          authorize?: false
+        )
+        |> Ash.create!()
+        |> Ash.load!([:avatar_url], authorize?: false)
+
+      digest = :md5 |> :crypto.hash("hexer@example.com") |> Base.encode16(case: :lower)
+
+      assert user.avatar_url == "https://www.gravatar.com/avatar/#{digest}?d=mp"
+    end
+
+    test "is nil with neither a GitHub account nor an address to key on" do
+      user =
+        User
+        |> Ash.Changeset.for_create(
+          :register_with_hex,
+          %{
+            user_info: %{"sub" => "ghost", "preferred_username" => "ghost", "name" => "Ghost"},
+            oauth_tokens: %{"access_token" => "token"}
+          },
+          authorize?: false
+        )
+        |> Ash.create!()
+        |> Ash.load!([:avatar_url], authorize?: false)
+
+      assert user.avatar_url == nil
+    end
+  end
 end
