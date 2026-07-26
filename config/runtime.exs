@@ -34,6 +34,31 @@ with {:ok, value} <- System.fetch_env("TEST_DEPLOYMENT") do
   config :varsel, :test_deployment?, value in ~w(true 1)
 end
 
+# Reads one OAuth login provider's three variables under a common prefix.
+# Returns `[]` when none are set (provider disabled) and raises when only some
+# are — a half-configured provider is an error, not an opt-out.
+oauth_provider_config = fn prefix ->
+  keys = [client_id: "CLIENT_ID", client_secret: "CLIENT_SECRET", redirect_uri: "REDIRECT_URI"]
+  values = Enum.map(keys, fn {key, var} -> {key, var, System.get_env("#{prefix}_#{var}")} end)
+
+  case Enum.split_with(values, fn {_key, _var, value} -> is_nil(value) end) do
+    {_missing, []} ->
+      []
+
+    {[], set} ->
+      Enum.map(set, fn {key, _var, value} -> {key, value} end)
+
+    {missing, _set} ->
+      raise """
+      Incomplete OAuth configuration for #{prefix}.
+
+      Set all of #{Enum.map_join(keys, ", ", fn {_key, var} -> "#{prefix}_#{var}" end)}, or
+      none of them to disable the provider. Missing: \
+      #{Enum.map_join(missing, ", ", fn {_key, var, _value} -> "#{prefix}_#{var}" end)}
+      """
+  end
+end
+
 if config_env() != :test do
   config :varsel, Varsel.Vault,
     ciphers: [
@@ -52,6 +77,12 @@ if config_env() != :test do
          :cna_email_from,
          System.get_env("CNA_EMAIL_FROM", "cna@erlef.org")
 
+  # OAuth login providers are opt-in: a provider is only offered when all three
+  # of its variables are set. Partial configuration is a mistake rather than a
+  # choice, so it raises instead of silently disabling the provider. With none
+  # set, local development falls back to the mock login.
+  config :varsel, :github, oauth_provider_config.("GITHUB")
+
   config :varsel,
     mitre_cve_api: [
       base_url:
@@ -66,17 +97,6 @@ if config_env() != :test do
       api_key:
         System.get_env("MITRE_CVE_API_KEY") ||
           raise("Missing environment variable `MITRE_CVE_API_KEY`!")
-    ],
-    github: [
-      client_id:
-        System.get_env("GITHUB_CLIENT_ID") ||
-          raise("Missing environment variable `GITHUB_CLIENT_ID`!"),
-      client_secret:
-        System.get_env("GITHUB_CLIENT_SECRET") ||
-          raise("Missing environment variable `GITHUB_CLIENT_SECRET`!"),
-      redirect_uri:
-        System.get_env("GITHUB_REDIRECT_URI") ||
-          raise("Missing environment variable `GITHUB_REDIRECT_URI`!")
     ]
 end
 

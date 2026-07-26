@@ -11,6 +11,9 @@ defmodule VarselWeb.AuthOverrides do
   # No banner/logo on the auth pages.
   override Components.SignIn do
     set :show_banner, false
+    # Providers whose credentials are unset are hidden rather than offered as
+    # links that would fail on the callback.
+    set :filter_strategy, &Varsel.Secrets.strategy_enabled?/1
   end
 
   override Components.Confirm do
