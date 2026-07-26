@@ -679,6 +679,8 @@ defmodule VarselWeb.CaseDetailLive do
       projection: projection,
       mode: mode,
       content_form: content_form,
+      can_comment: can_comment?(case_record, actor),
+      can_refresh: Cases.can_refresh_case_derivation?(actor, case_record, validate?: true),
       users: users,
       page_title: case_record.title || "Case"
     )
@@ -815,6 +817,12 @@ defmodule VarselWeb.CaseDetailLive do
 
   # Proposals stay possible while the content is frozen (approved/published) —
   # that is the post-publish enrichment flow; only closed cases refuse them.
+  # Commenting is the one thing a frozen or closed case still allows, so it
+  # asks who rather than when. `Ash.can?` cannot answer for it: the comment
+  # does not exist yet, and the policy reaches the case through the row being
+  # created, which only an insert can resolve.
+  defp can_comment?(case_record, user), do: poc?(user) or assigned?(case_record, user)
+
   defp can_propose?(case_record, user), do: case_record.state != :closed and (poc?(user) or assigned?(case_record, user))
 
   defp marks(nil), do: %{phantom: MapSet.new(), deleted: MapSet.new()}
@@ -973,6 +981,7 @@ defmodule VarselWeb.CaseDetailLive do
               marks={marks(@projection)}
               current_user={@current_user}
               can_resolve={can_edit?(@case_record, @current_user)}
+              can_refresh={@can_refresh}
               expanded_package_id={@expanded_package_id}
               child_form={@child_form}
             />
@@ -1096,7 +1105,7 @@ defmodule VarselWeb.CaseDetailLive do
           </.panel>
           <.panel>
             <:title>Activity</:title>
-            <form phx-submit="post_comment" class="mb-4">
+            <form :if={@can_comment} phx-submit="post_comment" class="mb-4">
               <textarea
                 name="body"
                 rows="2"
@@ -1519,6 +1528,7 @@ defmodule VarselWeb.CaseDetailLive do
         raw_case_record={@raw_case_record}
         current_user={@current_user}
         can_resolve={@can_resolve}
+        can_refresh={@can_refresh}
       />
 
       <p :if={@case_record.affected_packages == []} class="text-sm text-base-content/60">
@@ -1536,6 +1546,7 @@ defmodule VarselWeb.CaseDetailLive do
   attr :raw_case_record, :map, required: true
   attr :current_user, :map, required: true
   attr :can_resolve, :boolean, required: true
+  attr :can_refresh, :boolean, required: true
 
   defp affected_package_card(assigns) do
     ~H"""
@@ -1589,7 +1600,11 @@ defmodule VarselWeb.CaseDetailLive do
           >
             {if @mode == :propose, do: "Propose removal", else: "Remove"}
           </button>
-          <button class="link link-hover text-primary" phx-click="refresh_derivation">
+          <button
+            :if={@can_refresh}
+            class="link link-hover text-primary"
+            phx-click="refresh_derivation"
+          >
             Refresh ranges
           </button>
         </span>
@@ -1610,9 +1625,16 @@ defmodule VarselWeb.CaseDetailLive do
         package={@package}
         mode={@mode}
         marks={@marks}
+        can_refresh={@can_refresh}
       />
 
-      <.affected_card_at_rest :if={!@expanded?} package={@package} mode={@mode} marks={@marks} />
+      <.affected_card_at_rest
+        :if={!@expanded?}
+        package={@package}
+        mode={@mode}
+        marks={@marks}
+        can_refresh={@can_refresh}
+      />
 
       <.inline_suggestions
         case_record={@raw_case_record}
@@ -1653,6 +1675,8 @@ defmodule VarselWeb.CaseDetailLive do
   attr :mode, :atom, required: true
   attr :marks, :map, required: true
 
+  attr :can_refresh, :boolean, required: true
+
   defp affected_card_at_rest(assigns) do
     ~H"""
     <.channel_table rows={channel_rows(@package, :compact)} mode={@mode} marks={@marks} />
@@ -1677,7 +1701,11 @@ defmodule VarselWeb.CaseDetailLive do
       <span :if={@package.derivation_cached_at}>
         · derived <.relative_timestamp at={@package.derivation_cached_at} />
       </span>
-      <button class="link link-hover text-primary ml-auto" phx-click="refresh_derivation">
+      <button
+        :if={@can_refresh}
+        class="link link-hover text-primary ml-auto"
+        phx-click="refresh_derivation"
+      >
         Refresh
       </button>
     </div>
@@ -1767,6 +1795,8 @@ defmodule VarselWeb.CaseDetailLive do
   attr :mode, :atom, required: true
   attr :marks, :map, required: true
 
+  attr :can_refresh, :boolean, required: true
+
   defp affected_card_editor(assigns) do
     assigns = assign(assigns, :timeline_rows, Display.timeline_rows(assigns.package))
 
@@ -1830,7 +1860,11 @@ defmodule VarselWeb.CaseDetailLive do
         <span :if={@package.derivation_cached_at}>
           derived <.relative_timestamp at={@package.derivation_cached_at} /> ·
         </span>
-        <button class="link link-hover text-primary" phx-click="refresh_derivation">
+        <button
+          :if={@can_refresh}
+          class="link link-hover text-primary"
+          phx-click="refresh_derivation"
+        >
           Refresh
         </button>
       </span>
