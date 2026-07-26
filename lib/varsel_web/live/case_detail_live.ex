@@ -39,6 +39,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Proposal.Build
   alias Varsel.Cases.Readiness
   alias Varsel.Cases.VersionEvent
+  alias Varsel.CVE
   alias Varsel.Types.CVSS
   alias VarselWeb.TimelineComponents
 
@@ -666,12 +667,7 @@ defmodule VarselWeb.CaseDetailLive do
         |> to_form()
       end
 
-    users =
-      if poc?(actor) do
-        Accounts.list_users!(actor: actor)
-      else
-        []
-      end
+    users = if Accounts.can_list_users?(actor), do: Accounts.list_users!(actor: actor), else: []
 
     assign(socket,
       case_record: case_record,
@@ -800,10 +796,6 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp presence(value) when is_binary(value), do: if(String.trim(value) == "", do: nil, else: value)
 
-  defp assigned?(case_record, %{id: user_id}), do: Enum.any?(case_record.assignments, &(&1.user_id == user_id))
-
-  defp editable?(case_record), do: case_record.state in [:draft, :review]
-
   # An amendment: the backing CVE record already carries a published CNA
   # container, so publishing pushes an update — a diff against it is meaningful.
   defp amendment?(case_record) do
@@ -813,17 +805,20 @@ defmodule VarselWeb.CaseDetailLive do
     )
   end
 
-  defp can_edit?(case_record, user), do: editable?(case_record) and (poc?(user) or assigned?(case_record, user))
+  defp can_edit?(case_record, user), do: Cases.can_edit_case?(user, case_record, %{}, validate?: true)
 
-  # Proposals stay possible while the content is frozen (approved/published) —
-  # that is the post-publish enrichment flow; only closed cases refuse them.
-  # Commenting is the one thing a frozen or closed case still allows, so it
-  # asks who rather than when. `Ash.can?` cannot answer for it: the comment
-  # does not exist yet, and the policy reaches the case through the row being
-  # created, which only an insert can resolve.
-  defp can_comment?(case_record, user), do: poc?(user) or assigned?(case_record, user)
+  # Writing on a case asks two separate questions, and only the first is about
+  # the row being written. Whether this is your case to work on is what reading
+  # it already answers — POC, or assigned — and asking the child action instead
+  # would not work: its policy reaches the case through a row that does not
+  # exist yet, so the check comes back `:unknown` until the insert runs.
+  defp can_comment?(case_record, user), do: Ash.can?({case_record, :read}, user)
 
-  defp can_propose?(case_record, user), do: case_record.state != :closed and (poc?(user) or assigned?(case_record, user))
+  # Whether the case is still open to proposals is the second question. Asking
+  # the action would mean inventing a whole proposal to ask about, since its
+  # target validation runs first and rejects a shapeless one — so the state
+  # itself is read, mirroring `Proposal.Validations.CaseState`.
+  defp can_propose?(case_record, user), do: can_comment?(case_record, user) and case_record.state != :closed
 
   defp marks(nil), do: %{phantom: MapSet.new(), deleted: MapSet.new()}
   defp marks(projection), do: %{phantom: projection.phantom_ids, deleted: projection.deleted_ids}
@@ -1118,7 +1113,7 @@ defmodule VarselWeb.CaseDetailLive do
             <.activity_feed entries={activity_entries(@case_record)} />
           </.panel>
           <.assignments_section
-            :if={poc?(@current_user)}
+            :if={Cases.can_assign_case_user?(@current_user, %{case_id: @case_record.id})}
             case_record={@case_record}
             users={@users}
             current_user={@current_user}
@@ -1126,7 +1121,7 @@ defmodule VarselWeb.CaseDetailLive do
           <.reports_section
             :if={@case_record.vulnerability_reports != []}
             case_record={@case_record}
-            poc={poc?(@current_user)}
+            triage?={CVE.can_list_vulnerability_reports?(@current_user)}
           />
           <.close_link
             :if={Cases.can_close_case?(@current_user, @case_record, validate?: true)}
@@ -1980,7 +1975,7 @@ defmodule VarselWeb.CaseDetailLive do
     <.panel>
       <:title>Reports ({length(@case_record.vulnerability_reports)})</:title>
       <:actions>
-        <.link :if={@poc} navigate={~p"/reports"} class="link link-hover text-primary">
+        <.link :if={@triage?} navigate={~p"/reports"} class="link link-hover text-primary">
           Report triage
         </.link>
       </:actions>

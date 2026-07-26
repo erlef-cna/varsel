@@ -11,14 +11,6 @@ defmodule VarselWeb.ViewHelpers do
   """
 
   @doc """
-  Whether a user is a point of contact — the role the console's own actions
-  are gated on. Anonymous visitors and any other role are not.
-  """
-  @spec poc?(map() | nil) :: boolean()
-  def poc?(%{role: :poc}), do: true
-  def poc?(_user), do: false
-
-  @doc """
   Flattens an Ash error into one message per line, for a flash.
   """
   @spec errors_to_string(term()) :: String.t()

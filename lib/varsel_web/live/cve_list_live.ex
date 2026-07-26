@@ -26,22 +26,23 @@ defmodule VarselWeb.CveListLive do
 
   require Ash.Query
 
-  # States whose cve_json can be edited (:request_publish / :update `from` sets).
-  @editable [:draft, :published, :pending_update]
-
   # The states the records table lists (reserved and rejected records live in
   # their own summary panels) — also the table's filter-scope order.
   @table_states [:draft, :publishing, :published, :pending_update]
 
   @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
-    poc? = poc?(socket.assigns.current_user)
+    # One page, two readings: the public list of what has been issued, and the
+    # console the same list becomes for whoever works the pool. Which one you
+    # get follows from whether reserving an ID is something you may do —
+    # everything the console adds hangs off that pool.
+    console? = Ash.can?({CveRecord, :assign}, socket.assigns.current_user)
 
     socket =
       socket
       |> assign(
-        page_title: if(poc?, do: "CVE records", else: "Issued CVEs"),
-        poc?: poc?,
+        page_title: if(console?, do: "CVE records", else: "Issued CVEs"),
+        console?: console?,
         mitre_syncing?: false,
         query: "",
         filter: "all",
@@ -52,7 +53,7 @@ defmodule VarselWeb.CveListLive do
       )
       |> keep_records_live()
 
-    socket = if poc?, do: socket |> keep_pool_live() |> keep_rejected_live(), else: socket
+    socket = if console?, do: socket |> keep_pool_live() |> keep_rejected_live(), else: socket
 
     {:ok, socket}
   end
@@ -66,7 +67,7 @@ defmodule VarselWeb.CveListLive do
     opts = [subscribe: "cve_record:all", results: :lose]
 
     opts =
-      if socket.assigns.poc?,
+      if socket.assigns.console?,
         do: Keyword.put(opts, :after_fetch, &assign_record_counts/2),
         else: opts
 
@@ -321,7 +322,13 @@ defmodule VarselWeb.CveListLive do
 
   defp table_states, do: @table_states
 
-  defp editable?(state), do: state in @editable
+  # The edit page writes through whichever action the record's state allows —
+  # `:request_publish` for a draft, `:update` once published — so offering the
+  # link is a question of whether either of them would run.
+  defp editable?(actor, record) do
+    CVE.can_request_publish_cve_record?(actor, record, %{}, validate?: true) or
+      CVE.can_update_cve_record?(actor, record, %{}, validate?: true)
+  end
 
   # P3's search feedback reads as a sentence ("14 match “ssh”"), so the
   # verb agrees with the count rather than pluralizing a noun.
@@ -363,27 +370,33 @@ defmodule VarselWeb.CveListLive do
     <Layouts.flash_group flash={@flash} />
 
     <.page_header>
-      <:eyebrow>{if @poc?, do: "CNA Console", else: "EEF CNA"}</:eyebrow>
-      <:title>{if @poc?, do: "CVE records", else: "Issued CVEs"}</:title>
-      <:subtitle :if={@poc?}>Reserve, draft, publish, and reject CVE records.</:subtitle>
-      <:subtitle :if={not @poc?}>Vulnerabilities assigned and published by the EEF CNA.</:subtitle>
+      <:eyebrow>{if @console?, do: "CNA Console", else: "EEF CNA"}</:eyebrow>
+      <:title>{if @console?, do: "CVE records", else: "Issued CVEs"}</:title>
+      <:subtitle :if={@console?}>Reserve, draft, publish, and reject CVE records.</:subtitle>
+      <:subtitle :if={not @console?}>
+        Vulnerabilities assigned and published by the EEF CNA.
+      </:subtitle>
       <:actions>
         <.console_search
           id="cve-record-search"
           value={@query}
           placeholder={
-            if @poc?, do: "Search records…", else: "Search by ID, title, package, description…"
+            if @console?, do: "Search records…", else: "Search by ID, title, package, description…"
           }
         />
         <button
-          :if={@poc?}
+          :if={Ash.can?({CveRecord, :import_from_mitre}, @current_user)}
           class="btn btn-sm btn-eef-quiet"
           phx-click="sync_with_mitre"
           disabled={@mitre_syncing?}
         >
           {if @mitre_syncing?, do: "Syncing…", else: "Sync pool"}
         </button>
-        <button :if={@poc?} class="btn btn-sm btn-eef" phx-click="reserve">
+        <button
+          :if={Ash.can?({CveRecord, :assign}, @current_user)}
+          class="btn btn-sm btn-eef"
+          phx-click="reserve"
+        >
           Reserve a new one
         </button>
       </:actions>
@@ -391,7 +404,7 @@ defmodule VarselWeb.CveListLive do
 
     <.page_container>
       <.pool_panel
-        :if={@poc?}
+        :if={@console?}
         pool={@pool}
         open?={@pool_open?}
         confirming_reject_id={@confirming_reject_id}
@@ -399,7 +412,7 @@ defmodule VarselWeb.CveListLive do
       />
 
       <.list_card>
-        <:tabs :if={@poc?}>
+        <:tabs :if={@console?}>
           <.scope_button
             active={@filter}
             value="all"
@@ -414,12 +427,12 @@ defmodule VarselWeb.CveListLive do
             count={Map.get(@record_counts, state, 0)}
           />
         </:tabs>
-        <:note :if={@poc? and String.trim(@query) != ""}>
+        <:note :if={@console? and String.trim(@query) != ""}>
           <span class="font-semibold text-info tabular-nums">
             {match_summary(@cve_records.count, @query)}
           </span>
         </:note>
-        <:note :if={not @poc?}>
+        <:note :if={not @console?}>
           Machine-readable: <.link href={~p"/cves/index.json"} class="link">JSON</.link>
           · <.link href={~p"/osv/all.json"} class="link">OSV</.link>
           · <.link href={~p"/feed.atom"} class="link">Atom</.link>
@@ -434,36 +447,36 @@ defmodule VarselWeb.CveListLive do
                 <th>Title</th>
                 <th class="w-56">Packages</th>
                 <th class="w-20">Severity</th>
-                <th :if={@poc?} class="w-32">State</th>
+                <th :if={@console?} class="w-32">State</th>
                 <th class="w-24">Published</th>
-                <th :if={@poc?} class="w-16"></th>
+                <th :if={@console?} class="w-16"></th>
               </tr>
             </thead>
             <tbody>
               <tr
                 :for={record <- @cve_records.results}
-                class={["group hover:bg-base-300/40", not @poc? && "cursor-pointer"]}
-                phx-click={not @poc? && JS.navigate(~p"/cves/#{record.cve_id <> ".html"}")}
+                class={["group hover:bg-base-300/40", not @console? && "cursor-pointer"]}
+                phx-click={not @console? && JS.navigate(~p"/cves/#{record.cve_id <> ".html"}")}
               >
                 <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
                   {record.cve_id || "—"}
                 </td>
                 <td>
                   <.link
-                    :if={record.state == :published and @poc?}
+                    :if={record.state == :published and @console?}
                     href={~p"/cves/#{record.cve_id <> ".html"}"}
                     class="link link-hover font-semibold"
                   >
                     {record.title || record.cve_id}
                   </.link>
                   <span
-                    :if={not @poc? and record.state == :published}
+                    :if={not @console? and record.state == :published}
                     class="font-semibold group-hover:text-primary"
                   >
                     {record.title || record.cve_id}
                   </span>
                   <span
-                    :if={@poc? and record.state != :published}
+                    :if={@console? and record.state != :published}
                     class={record.state == :publishing && "font-semibold"}
                   >
                     {record.title || "—"}
@@ -481,16 +494,16 @@ defmodule VarselWeb.CveListLive do
                 <td>
                   <.severity_chip score={record_score(record)} />
                 </td>
-                <td :if={@poc?}>
+                <td :if={@console?}>
                   <.record_state_cell record={record} />
                 </td>
                 <td class="whitespace-nowrap tabular-nums text-xs">
                   {format_date(record.date_published)}
                 </td>
-                <td :if={@poc?} class="relative text-right">
+                <td :if={@console?} class="relative text-right">
                   <div class="flex flex-col items-end gap-0.5">
                     <.link
-                      :if={editable?(record.state)}
+                      :if={editable?(@current_user, record)}
                       navigate={~p"/cves/manage/#{record.id}"}
                       class="link link-hover text-primary text-sm font-medium"
                     >
@@ -552,13 +565,13 @@ defmodule VarselWeb.CveListLive do
         </div>
 
         <:footer :if={paged?(@cve_records)}>
-          <.pagination page={@cve_records} noun={if @poc?, do: "record", else: "CVE"} />
+          <.pagination page={@cve_records} noun={if @console?, do: "record", else: "CVE"} />
         </:footer>
       </.list_card>
 
-      <.rejected_panel :if={@poc?} rejected={@rejected} open?={@rejected_open?} />
+      <.rejected_panel :if={@console?} rejected={@rejected} open?={@rejected_open?} />
 
-      <p :if={@poc?} class="mt-6 text-sm text-base-content/60">
+      <p :if={@console?} class="mt-6 text-sm text-base-content/60">
         Machine-readable: <.link href={~p"/cves/index.json"} class="link">CVE index (JSON)</.link>
         · <.link href={~p"/osv/all.json"} class="link">OSV feed (JSON)</.link>
         · <.link href={~p"/feed.atom"} class="link">Atom</.link>
