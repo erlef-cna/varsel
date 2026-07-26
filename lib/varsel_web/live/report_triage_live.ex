@@ -122,6 +122,14 @@ defmodule VarselWeb.ReportTriageLive do
 
   defp actionable?(state), do: state in [:submitted, :triaged]
 
+  # Whether the triage block has anything to show; each form inside asks about
+  # its own action, so this only decides the spacing around them.
+  defp triage_actions?(actor, report) do
+    CVE.can_accept_vulnerability_report?(actor, report, %{}, validate?: true) or
+      CVE.can_triage_vulnerability_report?(actor, report, %{}, validate?: true) or
+      CVE.can_reject_vulnerability_report?(actor, report, %{}, validate?: true)
+  end
+
   # The triage queue defaults to the reports still needing action; resolved
   # reports stay reachable behind their own tabs.
   defp visible_reports(reports, "open"), do: Enum.filter(reports, &actionable?(&1.state))
@@ -200,7 +208,9 @@ defmodule VarselWeb.ReportTriageLive do
                 {report.state}
               </span>
               <button
-                :if={not @triage? and report.state == :submitted}
+                :if={
+                  CVE.can_withdraw_vulnerability_report?(@current_user, report, %{}, validate?: true)
+                }
                 type="button"
                 phx-click="withdraw"
                 phx-value-report_id={report.id}
@@ -225,8 +235,9 @@ defmodule VarselWeb.ReportTriageLive do
             View the case this report became
           </.link>
 
-          <div :if={@triage? and actionable?(report.state)} class="mt-2 space-y-2">
+          <div :if={triage_actions?(@current_user, report)} class="mt-2 space-y-2">
             <form
+              :if={CVE.can_accept_vulnerability_report?(@current_user, report, %{}, validate?: true)}
               id={"accept-#{report.id}"}
               phx-submit="accept"
               class="flex flex-wrap items-center gap-2"
@@ -249,7 +260,9 @@ defmodule VarselWeb.ReportTriageLive do
 
             <div class="flex flex-wrap items-center gap-2">
               <form
-                :if={report.state == :submitted}
+                :if={
+                  CVE.can_triage_vulnerability_report?(@current_user, report, %{}, validate?: true)
+                }
                 id={"triage-#{report.id}"}
                 phx-submit="triage"
                 class="flex items-center gap-2"
@@ -264,7 +277,14 @@ defmodule VarselWeb.ReportTriageLive do
                 <button type="submit" class="btn btn-outline btn-sm">Mark under triage</button>
               </form>
 
-              <form id={"reject-#{report.id}"} phx-submit="reject" class="flex items-center gap-2">
+              <form
+                :if={
+                  CVE.can_reject_vulnerability_report?(@current_user, report, %{}, validate?: true)
+                }
+                id={"reject-#{report.id}"}
+                phx-submit="reject"
+                class="flex items-center gap-2"
+              >
                 <input type="hidden" name="report_id" value={report.id} />
                 <input
                   type="text"
