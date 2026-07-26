@@ -11,7 +11,6 @@ defmodule VarselWeb.Storybook.Case do
   def folder_name, do: "Case workspace"
 
   def entry("activity_feed"), do: [name: "Activity feed", icon: {:local, "hero-clock"}]
-  def entry("avatar_disc"), do: [name: "Avatar disc", icon: {:local, "hero-user-circle"}]
 
   def entry("affected_package_form"), do: [name: "Affected package form", icon: {:local, "hero-cube"}]
 

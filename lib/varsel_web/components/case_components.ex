@@ -13,6 +13,7 @@ defmodule VarselWeb.CaseComponents do
 
   import Phoenix.HTML, only: [raw: 1]
   import VarselWeb.CoreComponents, only: [code_block: 1, mono_chip: 1]
+  import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
   alias Phoenix.LiveView.JS
   alias Varsel.Cases.Markdown
@@ -364,40 +365,6 @@ defmodule VarselWeb.CaseComponents do
   end
 
   @doc """
-  Renders a user identity as a small filled circle: their picture when one can
-  be reached, otherwise a 2-letter initials disc.
-
-  Callers must load `:avatar_url`.
-  """
-  attr :user, :any, required: true
-  attr :variant, :atom, default: :a, values: [:a, :b], doc: "the mock's two avatar color variants"
-  attr :class, :any, default: nil
-
-  def avatar_disc(assigns) do
-    ~H"""
-    <img
-      :if={@user.avatar_url}
-      src={@user.avatar_url}
-      alt=""
-      class={["size-[21px] shrink-0 rounded-full object-cover", @class]}
-    />
-    <span
-      :if={!@user.avatar_url}
-      class={[
-        "inline-flex size-[21px] shrink-0 items-center justify-center rounded-full text-[0.6rem] font-bold",
-        avatar_variant_class(@variant),
-        @class
-      ]}
-    >
-      {initials(@user)}
-    </span>
-    """
-  end
-
-  defp avatar_variant_class(:a), do: "bg-primary text-primary-content"
-  defp avatar_variant_class(:b), do: "bg-secondary text-secondary-content"
-
-  @doc """
   Renders an open (or resolved) suggestion inline, inside the section card it
   targets: author identity + field chip + timestamp, the old→new diff,
   reasoning, and an action row (Accept/Decline/Withdraw + a reply count that
@@ -481,19 +448,6 @@ defmodule VarselWeb.CaseComponents do
     </div>
     """
   end
-
-  # A small filled-circle initials disc; the "b" variant (violet) distinguishes
-  # a second collaborator per the mock, applied by whichever caller decides.
-  defp initials(%{name: name}) when is_binary(name) and name != "" do
-    name
-    |> String.split(~r/\s+/, trim: true)
-    |> Enum.map(&String.first/1)
-    |> Enum.take(2)
-    |> Enum.join()
-    |> String.upcase()
-  end
-
-  defp initials(_user), do: "?"
 
   defp suggestion_target_field(%{operation: :set, target: :case, field_name: field}), do: "case.#{field}"
 

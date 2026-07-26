@@ -20,8 +20,8 @@ defmodule VarselWeb.CaseManagementLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
-  import VarselWeb.CaseComponents, only: [avatar_disc: 1]
   import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
+  import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
   alias Varsel.Cases
   alias Varsel.Cases.Case

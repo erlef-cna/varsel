@@ -22,6 +22,7 @@ defmodule VarselWeb.CaseDetailLive do
   import AshPhoenix.LiveView, only: [keep_live: 4]
   import VarselWeb.CaseComponents
   import VarselWeb.CaseFormComponents
+  import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
   alias Varsel.Accounts
   alias Varsel.Cases

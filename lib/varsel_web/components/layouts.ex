@@ -9,6 +9,8 @@ defmodule VarselWeb.Layouts do
   """
   use VarselWeb, :html
 
+  import VarselWeb.UserComponents, only: [avatar_disc: 1]
+
   # Embed all files in layouts/* within this module.
   # The default root.html.heex file contains the HTML
   # skeleton of your application, namely HTML headers
@@ -141,6 +143,12 @@ defmodule VarselWeb.Layouts do
   attr :current_path, :string, default: nil
 
   def site_nav(assigns) do
+    # One load for both the account menu's label and its avatar.
+    assigns =
+      assign_new(assigns, :account, fn ->
+        assigns.current_user && Ash.load!(assigns.current_user, [:display_name, :avatar_url])
+      end)
+
     ~H"""
     <header class="eef-band border-b border-white/10 sticky top-0 z-40">
       <nav class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl flex items-center gap-4 h-16">
@@ -201,15 +209,13 @@ defmodule VarselWeb.Layouts do
               aria-label="Account menu"
               class="btn btn-ghost btn-sm btn-circle text-white hover:bg-white/10"
             >
-              <.icon name="hero-user-circle" class="size-6" />
+              <.avatar_disc user={@account} class="size-6" />
             </div>
             <ul
               tabindex="0"
               class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-56 p-2 z-50"
             >
-              <li class="menu-title truncate">
-                {Ash.load!(@current_user, :display_name).display_name}
-              </li>
+              <li class="menu-title truncate">{@account.display_name}</li>
               <li :if={Varsel.Accounts.can_list_api_keys?(@current_user)}>
                 <.link navigate={~p"/settings/tokens"}>API Tokens</.link>
               </li>

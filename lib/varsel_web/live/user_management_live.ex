@@ -10,6 +10,7 @@ defmodule VarselWeb.UserManagementLive do
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
   import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
+  import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
   alias Varsel.Accounts
   alias Varsel.Accounts.User
@@ -66,7 +67,7 @@ defmodule VarselWeb.UserManagementLive do
       actor: socket.assigns.current_user,
       query: Ash.Query.sort(User, poc_first: :asc, display_name: :asc),
       page: page_opts || [count: true, offset: 0],
-      load: [:display_name, :github_username, :hex_username]
+      load: [:display_name, :github_username, :hex_username, :avatar_url]
     )
   end
 
@@ -116,9 +117,12 @@ defmodule VarselWeb.UserManagementLive do
             <tbody>
               <tr :for={user <- @users.results} class="hover:bg-base-300/40">
                 <td class="font-medium">
-                  {user.name || "—"}
-                  <span :if={user.id == @current_user.id} class="badge badge-ghost badge-sm ml-1">
-                    you
+                  <span class="flex items-center gap-2">
+                    <.avatar_disc user={user} />
+                    {user.name || "—"}
+                    <span :if={user.id == @current_user.id} class="badge badge-ghost badge-sm">
+                      you
+                    </span>
                   </span>
                 </td>
                 <td class="text-base-content/70">{user.notification_email || "—"}</td>

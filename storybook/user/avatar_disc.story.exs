@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule VarselWeb.Storybook.Case.AvatarDisc do
+defmodule VarselWeb.Storybook.User.AvatarDisc do
   @moduledoc false
   use PhoenixStorybook.Story, :component
 
-  def function, do: &VarselWeb.CaseComponents.avatar_disc/1
+  def function, do: &VarselWeb.UserComponents.avatar_disc/1
 
   def variations do
     [
