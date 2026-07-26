@@ -15,13 +15,18 @@ defmodule Varsel.Accounts.User do
     notifiers: [Ash.Notifier.PubSub],
     extensions: [
       AshAuthentication,
+      Varsel.Accounts.Strategy.Github,
+      Varsel.Accounts.Strategy.Hex,
       AshPaperTrail.Resource,
       AshGraphql.Resource,
       AshAdmin.Resource
     ]
 
   alias AshAuthentication.Checks.AshAuthenticationInteraction
+  alias AshAuthentication.Strategy.OAuth2.IdentityChange
   alias AshOban.Checks.AshObanInteraction
+  alias Varsel.Accounts.User.Changes.PromoteFirstUserToPoc
+  alias Varsel.Accounts.UserIdentity
   alias Varsel.Cases.Proposal
 
   # Gates the mock (GitHub-bypassing) sign-in action at compile time. Its
@@ -77,11 +82,31 @@ defmodule Varsel.Accounts.User do
     end
 
     strategies do
-      github do
+      varsel_github do
         client_id Varsel.Secrets
         redirect_uri Varsel.Secrets
         client_secret Varsel.Secrets
-        identity_resource Varsel.Accounts.UserIdentity
+        identity_resource UserIdentity
+        # A provider is linked to an account from an authenticated session,
+        # never by presenting a matching email — not even a verified one, which
+        # the strategy would otherwise trust by default. Reaching an existing
+        # account this way requires only control of an address, so possession
+        # of the account itself has to be proven instead.
+        trust_email_verified? false
+        on_untrusted_email_match :reject
+      end
+
+      # Hex.pm is plain OAuth2 rather than OIDC, so its endpoints and profile
+      # mapping live in `Varsel.Accounts.Strategy.Hex`, which also refuses to
+      # match a sign-in to an existing account by email — hex.pm never asserts
+      # that an address is verified. `base_url` is configured because hex.pm
+      # is self-hostable.
+      hex do
+        client_id Varsel.Secrets
+        redirect_uri Varsel.Secrets
+        client_secret Varsel.Secrets
+        base_url Varsel.Secrets
+        identity_resource UserIdentity
       end
 
       api_key do
@@ -138,13 +163,43 @@ defmodule Varsel.Accounts.User do
       argument :oauth_tokens, :map, allow_nil?: false
       upsert? true
       upsert_identity :unique_github_id
-      upsert_fields [:github_handle, :name, :email]
+      # Not :email — the primary email is the user's choice (see
+      # :set_primary_email) and a later sign-in must not re-point it.
+      upsert_fields [:github_handle, :name]
 
       change AshAuthentication.GenerateTokenChange
-      change AshAuthentication.Strategy.OAuth2.IdentityChange
+      change IdentityChange
 
       change Varsel.Accounts.User.Changes.ApplyOauthUserInfo
-      change Varsel.Accounts.User.Changes.PromoteFirstUserToPoc
+      change PromoteFirstUserToPoc
+    end
+
+    create :register_with_hex do
+      description "Registers or updates a user from a Hex.pm OAuth sign-in."
+      argument :user_info, :map, allow_nil?: false
+      argument :oauth_tokens, :map, allow_nil?: false
+      upsert? true
+      # Hex.pm accounts carry no github_id, so an existing local account is
+      # resolved by email. Matching never *links* on its own: hex.pm asserts no
+      # verified email, so `on_untrusted_email_match :reject` refuses the
+      # sign-in and the user links hex from an authenticated session instead.
+      upsert_identity :unique_email
+      upsert_fields [:name]
+
+      change AshAuthentication.GenerateTokenChange
+      change IdentityChange
+
+      change Varsel.Accounts.User.Changes.ApplyHexUserInfo
+      change PromoteFirstUserToPoc
+    end
+
+    update :set_primary_email do
+      description "Sets the account's primary email to one a linked provider reported."
+      accept [:email]
+      # Checking the address against the linked identities needs to read them.
+      require_atomic? false
+
+      change Varsel.Accounts.User.Changes.ValidatePrimaryEmailIsLinked
     end
 
     update :update do
@@ -257,6 +312,18 @@ defmodule Varsel.Accounts.User do
   attributes do
     uuid_primary_key :id
 
+    # The account's primary email: the one address POC notifications go to and
+    # the one the console shows. Seeded from the first provider to report one
+    # and thereafter chosen by the user from their linked identities' emails
+    # (see :set_primary_email), so it is never silently re-pointed by a later
+    # sign-in. Unique, and nil for accounts whose providers reported no email.
+    #
+    # ⛔ NOT an authentication factor. Nobody has proven ownership of this
+    # address: GitHub's verified flag is not trusted and hex.pm does not
+    # publish one, so it is a delivery address and nothing more. It must never
+    # identify a user, authorize an action, or attach a sign-in to an account —
+    # both strategies set `trust_email_verified? false` to keep that true.
+    # Providers are linked from an authenticated session, never by email match.
     attribute :email, :string do
       public? true
       allow_nil? true
@@ -290,6 +357,13 @@ defmodule Varsel.Accounts.User do
     has_many :valid_api_keys, Varsel.Accounts.ApiKey do
       filter expr(valid)
     end
+
+    # The linked OAuth providers. Their emails are the candidates a user may
+    # choose their primary email from.
+    has_many :identities, UserIdentity do
+      public? true
+      destination_attribute :user_id
+    end
   end
 
   calculations do
@@ -307,5 +381,10 @@ defmodule Varsel.Accounts.User do
 
   identities do
     identity :unique_github_id, [:github_id]
+
+    # Resolves an OAuth sign-in to an existing local account. Postgres allows
+    # many NULLs in a unique index, so accounts whose providers reported no
+    # email (common on hex.pm, where the address is opt-in) do not collide.
+    identity :unique_email, [:email]
   end
 end

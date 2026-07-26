@@ -34,11 +34,16 @@ with {:ok, value} <- System.fetch_env("TEST_DEPLOYMENT") do
   config :varsel, :test_deployment?, value in ~w(true 1)
 end
 
-# Reads one OAuth login provider's three variables under a common prefix.
-# Returns `[]` when none are set (provider disabled) and raises when only some
-# are — a half-configured provider is an error, not an opt-out.
-oauth_provider_config = fn prefix ->
-  keys = [client_id: "CLIENT_ID", client_secret: "CLIENT_SECRET", redirect_uri: "REDIRECT_URI"]
+# Reads one OAuth login provider's variables under a common prefix. Returns
+# `[]` when none are set (provider disabled) and raises when only some are — a
+# half-configured provider is an error, not an opt-out. `extra_keys` carries
+# variables only some providers need, such as a self-hostable provider's base
+# URL; they are part of the same all-or-nothing set.
+oauth_provider_config = fn prefix, extra_keys ->
+  keys =
+    [client_id: "CLIENT_ID", client_secret: "CLIENT_SECRET", redirect_uri: "REDIRECT_URI"] ++
+      extra_keys
+
   values = Enum.map(keys, fn {key, var} -> {key, var, System.get_env("#{prefix}_#{var}")} end)
 
   case Enum.split_with(values, fn {_key, _var, value} -> is_nil(value) end) do
@@ -81,7 +86,11 @@ if config_env() != :test do
   # of its variables are set. Partial configuration is a mistake rather than a
   # choice, so it raises instead of silently disabling the provider. With none
   # set, local development falls back to the mock login.
-  config :varsel, :github, oauth_provider_config.("GITHUB")
+  config :varsel, :github, oauth_provider_config.("GITHUB", [])
+
+  # Hex.pm is self-hostable and the local hexpm runs on another port, so its
+  # base URL is configured rather than assumed to be hex.pm.
+  config :varsel, :hex, oauth_provider_config.("HEX", base_url: "BASE_URL")
 
   config :varsel,
     mitre_cve_api: [

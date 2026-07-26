@@ -188,6 +188,7 @@ jobs:
           SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
           MITRE_CVE_API_KEY: ${{ secrets.MITRE_CVE_API_KEY }}
           OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+          OAUTH_HEX_CLIENT_SECRET: ${{ secrets.OAUTH_HEX_CLIENT_SECRET }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           TOKEN_SIGNING_SECRET: ${{ secrets.TOKEN_SIGNING_SECRET }}
@@ -201,6 +202,7 @@ jobs:
           add OAUTH2_SIGNING_SECRET "${OAUTH2_SIGNING_SECRET}"
           add MITRE_CVE_API_KEY "${MITRE_CVE_API_KEY}"
           add GITHUB_CLIENT_SECRET "${OAUTH_GITHUB_CLIENT_SECRET}"
+          add HEX_CLIENT_SECRET "${OAUTH_HEX_CLIENT_SECRET}"
           add SMTP_USER "${SMTP_USER}"
           add SMTP_PASSWORD "${SMTP_PASSWORD}"
           if [ "${#pairs[@]}" -gt 0 ]; then
@@ -215,6 +217,9 @@ jobs:
           MITRE_CVE_API_USER: ${{ vars.MITRE_CVE_API_USER }}
           OAUTH_GITHUB_CLIENT_ID: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}
           OAUTH_GITHUB_REDIRECT_URI: ${{ vars.OAUTH_GITHUB_REDIRECT_URI }}
+          OAUTH_HEX_CLIENT_ID: ${{ vars.OAUTH_HEX_CLIENT_ID }}
+          OAUTH_HEX_REDIRECT_URI: ${{ vars.OAUTH_HEX_REDIRECT_URI }}
+          OAUTH_HEX_BASE_URL: ${{ vars.OAUTH_HEX_BASE_URL }}
           TEST_DEPLOYMENT: ${{ vars.TEST_DEPLOYMENT }}
           CNA_EMAIL_FROM: ${{ vars.CNA_EMAIL_FROM }}
           SMTP_RELAY_HOST: ${{ vars.SMTP_RELAY_HOST }}
@@ -229,6 +234,9 @@ jobs:
           add MITRE_CVE_API_USER "${MITRE_CVE_API_USER}"
           add GITHUB_CLIENT_ID "${OAUTH_GITHUB_CLIENT_ID}"
           add GITHUB_REDIRECT_URI "${OAUTH_GITHUB_REDIRECT_URI}"
+          add HEX_CLIENT_ID "${OAUTH_HEX_CLIENT_ID}"
+          add HEX_REDIRECT_URI "${OAUTH_HEX_REDIRECT_URI}"
+          add HEX_BASE_URL "${OAUTH_HEX_BASE_URL}"
           add TEST_DEPLOYMENT "${TEST_DEPLOYMENT}"
           add CNA_EMAIL_FROM "${CNA_EMAIL_FROM}"
           add SMTP_RELAY_HOST "${SMTP_RELAY_HOST}"

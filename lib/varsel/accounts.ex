@@ -51,6 +51,8 @@ defmodule Varsel.Accounts do
       define :get_user_by_subject, action: :get_by_subject, args: [:subject]
       define :sign_in_user_with_api_key, action: :sign_in_with_api_key, args: [:api_key]
       define :register_user_with_github, action: :register_with_github
+      define :register_user_with_hex, action: :register_with_hex
+      define :set_user_primary_email, action: :set_primary_email
       define :log_out_user_everywhere, action: :log_out_everywhere
 
       # The mock sign-in action only exists in dev/test builds; see

@@ -12,7 +12,12 @@ defmodule Varsel.Secrets do
   # runtime, so an unconfigured provider is instead hidden from the sign-in
   # page (see `VarselWeb.AuthOverrides`) and fails closed here: a missing
   # secret makes the strategy return `MissingSecret` rather than half-run.
-  @oauth_providers %{github: :github}
+  # Hex.pm is self-hostable, so its base URL is a required secret rather than
+  # a constant baked into the strategy.
+  @oauth_providers %{
+    github: [:client_id, :client_secret, :redirect_uri],
+    hex: [:client_id, :client_secret, :redirect_uri, :base_url]
+  }
 
   @doc """
   Whether every secret backing `provider`'s strategy is configured.
@@ -20,10 +25,10 @@ defmodule Varsel.Secrets do
   @spec oauth_provider_configured?(atom()) :: boolean()
   def oauth_provider_configured?(provider) do
     case Map.fetch(@oauth_providers, provider) do
-      {:ok, config_key} ->
-        config = Application.get_env(:varsel, config_key, [])
+      {:ok, required_keys} ->
+        config = Application.get_env(:varsel, provider, [])
 
-        Enum.all?([:client_id, :client_secret, :redirect_uri], &Keyword.has_key?(config, &1))
+        Enum.all?(required_keys, &Keyword.has_key?(config, &1))
 
       :error ->
         false
@@ -43,16 +48,13 @@ defmodule Varsel.Secrets do
     Application.fetch_env(:varsel, :token_signing_secret)
   end
 
-  def secret_for([:authentication, :strategies, :github, :client_id], User, _opts, _context) do
-    get_github_config(:client_id)
-  end
-
-  def secret_for([:authentication, :strategies, :github, :redirect_uri], User, _opts, _context) do
-    get_github_config(:redirect_uri)
-  end
-
-  def secret_for([:authentication, :strategies, :github, :client_secret], User, _opts, _context) do
-    get_github_config(:client_secret)
+  # Serves every OAuth provider's secrets. Fetching (rather than defaulting)
+  # keeps an unconfigured provider failing closed with `MissingSecret`.
+  def secret_for([:authentication, :strategies, provider, key], User, _opts, _context)
+      when is_map_key(@oauth_providers, provider) do
+    :varsel
+    |> Application.get_env(provider, [])
+    |> Keyword.fetch(key)
   end
 
   def secret_for([:issuer_url], Varsel.Oauth2Server, _opts, _context) do
@@ -65,11 +67,5 @@ defmodule Varsel.Secrets do
 
   def secret_for([:signing_secret], Varsel.Oauth2Server, _opts, _context) do
     Application.fetch_env(:varsel, :oauth2_signing_secret)
-  end
-
-  defp get_github_config(key) do
-    :varsel
-    |> Application.get_env(:github, [])
-    |> Keyword.fetch(key)
   end
 end
