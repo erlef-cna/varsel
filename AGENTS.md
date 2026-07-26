@@ -12,6 +12,82 @@ This is a web application written using the Phoenix web framework.
 - Before committing, check whether your change affects the security posture described in `THREAT_MODEL.md` — trust boundaries, roles/authorization, inputs and their sinks, outbound egress, or the properties provided/disclaimed (§4–§10). If it does, update `THREAT_MODEL.md` (and the `SECURITY.md` Scope section if scope shifted) in the **same** commit so the model never drifts from the code.
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
 
+### Authorization guidelines
+
+Authorization lives in Ash policies and nowhere else. The router runs one
+`:live_user` hook that resolves the actor; it does not gate by role. A page a
+caller may not have is refused by the first action it runs, and that refusal
+renders the error page (401 when nobody is signed in, 403 otherwise — see
+`lib/varsel_web/policy_status.ex`).
+
+**Never hand-write a permission check in the web layer.** No
+`user.role == :poc`, no `:if={@current_user}` standing in for "may they".
+Ask the domain:
+
+```elixir
+# Every code-interface `define` generates can_<name> and can_<name>? for free.
+Varsel.Cases.can_approve_case?(actor, case_record, validate?: true)
+
+# Action-level form — no record needed, for affordances with no particular row.
+Ash.can?({Varsel.Cases.Case, :read}, actor)
+```
+
+- **Pass `validate?: true`** for anything with a state machine or an action
+  validation. The default is `false`, which consults policies ONLY and happily
+  returns `true` for `:approve` on a closed case.
+- **Ask about the action the affordance performs**, and prefer the resource
+  the page is about. A button that runs `:reject` asks `can_reject_*?`; a nav
+  link to a list asks `{Resource, :read}`.
+- **Genuine identity checks are fine** — showing an avatar, a sign-out link, a
+  "you" badge. Those are not permissions.
+
+**Strict vs filter checks — the thing that surprises people.** A *strict*
+check (`actor_present()`, `actor_attribute_equals`) decides before any query
+and produces a `Forbidden` error. A *filter* check (`relates_to_actor_via`,
+`expr(id == ^actor(:id))`) authorizes the action and narrows the rows, so an
+unauthorized caller gets `{:ok, []}` — and `can?` returns **true**, because
+the action *is* authorized. Both are denials.
+
+Consequence: a private resource needs an explicit strict policy for `can?` to
+gate anything, and for an anonymous read to refuse rather than come back
+empty:
+
+```elixir
+policy always() do
+  access_type :strict          # without this it is a filter check and cannot decide
+  authorize_if actor_present()
+end
+```
+
+Write it as `authorize_if`, not `forbid_unless`: policies are solved by a SAT
+solver, and a policy whose checks can only forbid never *authorizes*, so the
+whole read filters to nothing — for everyone, including a POC.
+
+**Some questions cannot be answered before the write.** A create whose policy
+reaches through a relationship (`Comment.post` via `[:case, :assignments,
+:user]`) is `:unknown` at the strict step, since the row does not exist yet;
+no option fixes it. Ask about the parent instead — `Ash.can?({case_record,
+:read}, actor)` answers the same POC-or-assigned question, before the write.
+
+**`authorize?: false` is banned in app code**, whatever the generic Ash rules
+below say — `AshCredo.Check.Warning.AuthorizeFalse` enforces it. Tests may use
+it. In app code, route through a policy, an `AshOban` bypass, or
+`accessing_from` instead.
+
+**Inspecting policies.** To see what a resource actually decides, rather than
+guessing:
+
+```elixir
+Ash.Policy.Info.policies(Resource)                    # conditions + checks + access_type
+Ash.Policy.Policy.expression(policies, check_context) # the combined boolean expression
+```
+
+The `access_type` on each check is what tells you whether it can refuse up
+front. To check behaviour rather than structure, read the resource as each
+actor (`Ash.read(Resource, actor: nil)`) and compare against
+`Ash.count!(Resource, authorize?: false)` — an empty result with rows present
+is a filter policy working, not a missing one.
+
 ### Phoenix v1.8 guidelines
 
 - **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content
