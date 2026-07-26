@@ -70,12 +70,12 @@ defmodule Varsel.Accounts.User do
     end
 
     # Whoever can read the row may see the display name.
-    field_policy :name do
+    field_policy [:name, :github_handle, :display_name] do
       authorize_if always()
     end
 
     # Everything else is POC-or-self only.
-    field_policy [:email, :github_id, :github_handle, :role] do
+    field_policy [:email, :github_id, :role] do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
     end
@@ -182,10 +182,28 @@ defmodule Varsel.Accounts.User do
       authorize_if always()
     end
 
-    # Nothing about a user is public. Signing in is the bypass above, so every
-    # other path needs someone to be asking; the read policy below then narrows
-    # to what that someone may see.
+    if @mock_login? do
+      # The mock sign-in is the caller's way of *becoming* an actor, so there is
+      # none to authorize against. It only exists in dev builds.
+
+      # Bypass so that the access check below does not trigger
+      bypass action(:mock_sign_in) do
+        access_type :strict
+        authorize_if actor_absent()
+      end
+
+      # Normal so that it is checked eagerly
+      policy action(:mock_sign_in) do
+        access_type :strict
+        authorize_if actor_absent()
+      end
+    end
+
+    # Nothing about a user is public. Authentication, Oban and mock-login are
+    # the bypasses above, so every other path needs someone to be asking; the
+    # read policy below then narrows to what that someone may see.
     policy always() do
+      access_type :strict
       authorize_if actor_present()
     end
 
@@ -211,14 +229,6 @@ defmodule Varsel.Accounts.User do
 
     policy action(:set_role) do
       authorize_if actor_attribute_equals(:role, :poc)
-    end
-
-    if @mock_login? do
-      # The mock sign-in is the caller's way of *becoming* an actor, so there is
-      # none to authorize against. It only exists in dev builds.
-      policy action(:mock_sign_in) do
-        authorize_if always()
-      end
     end
   end
 

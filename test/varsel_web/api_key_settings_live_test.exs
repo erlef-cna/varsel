@@ -17,8 +17,8 @@ defmodule VarselWeb.ApiKeySettingsLiveTest do
     |> AuthPlug.store_in_session(user)
   end
 
-  test "an anonymous visitor is redirected to sign in", %{conn: conn} do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/settings/tokens")
+  test "an anonymous visitor is refused", %{conn: conn} do
+    assert_raise Ash.Error.Forbidden, fn -> live(conn, ~p"/settings/tokens") end
   end
 
   test "creating a token shows the plaintext exactly once", %{conn: conn} do

@@ -68,7 +68,10 @@ defmodule VarselWeb.DevNav do
             </li>
           </ul>
 
-          <div :if={is_nil(@current_user)} class="mt-1.5 border-t border-base-300 pt-1.5">
+          <div
+            :if={Varsel.Accounts.can_mock_sign_in_user?(@current_user, %{})}
+            class="mt-1.5 border-t border-base-300 pt-1.5"
+          >
             <p class="px-2 pb-1 text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50">
               Mock sign in
             </p>

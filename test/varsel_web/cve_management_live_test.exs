@@ -441,13 +441,6 @@ defmodule VarselWeb.VarselLiveTest do
     refute html =~ "CVE-#{@year}-1001"
   end
 
-  test "the old management path redirects to the merged list", %{conn: conn} do
-    poc = register("poc", :poc)
-
-    conn = conn |> log_in(poc) |> get(~p"/cves/manage")
-    assert redirected_to(conn) == ~p"/cves"
-  end
-
   describe "edit page" do
     test "renders the record's cve_json as pretty JSON", %{conn: conn} do
       poc = register("poc", :poc)

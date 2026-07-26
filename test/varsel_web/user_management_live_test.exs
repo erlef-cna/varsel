@@ -83,15 +83,19 @@ defmodule VarselWeb.UserManagementLiveTest do
     assert has_element?(lv, role_option)
   end
 
-  test "a non-POC is redirected away", %{conn: conn} do
+  test "a non-POC sees only themselves, and cannot change a role", %{conn: conn} do
     register("first", :poc)
     supporter = register("supporter", :supporter)
 
-    assert {:error, {:redirect, %{to: "/"}}} =
-             conn |> log_in(supporter) |> live(~p"/users")
+    {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/users")
+
+    assert [_only_themselves] = lv |> element("tbody") |> render() |> rows()
+    refute has_element?(lv, ~s{form[phx-change="set_role"]})
   end
 
-  test "an anonymous visitor is redirected to sign in", %{conn: conn} do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/users")
+  test "an anonymous visitor is refused", %{conn: conn} do
+    assert_raise Ash.Error.Forbidden, fn -> live(conn, ~p"/users") end
   end
+
+  defp rows(html), do: Regex.scan(~r/<tr[^>]*>/, html)
 end

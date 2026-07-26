@@ -5,9 +5,6 @@
 defmodule VarselWeb.UserManagementLive do
   @moduledoc """
   POC-only user management: list all users and change their role.
-
-  Access is gated by the `:live_poc_required` on_mount hook; role changes go
-  through the POC-authorized `set_role` action with the current user as actor.
   """
   use VarselWeb, :live_view
 

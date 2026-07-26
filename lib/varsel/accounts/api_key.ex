@@ -68,6 +68,14 @@ defmodule Varsel.Accounts.ApiKey do
       authorize_if always()
     end
 
+    # Nothing about an api key is public. Authentication is the bypass above, so
+    # every other path needs someone to be asking; the read policy below then
+    # narrows to what that someone may see.
+    policy always() do
+      access_type :strict
+      authorize_if actor_present()
+    end
+
     # Users manage exactly their own keys.
     policy action_type(:read) do
       authorize_if relates_to_actor_via(:user)

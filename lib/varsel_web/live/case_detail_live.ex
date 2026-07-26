@@ -2229,7 +2229,7 @@ defmodule VarselWeb.CaseDetailLive do
             <span class="shrink-0 text-base-content/50">{person_role(assignment.user)}</span>
           </span>
           <button
-            :if={Ash.can?({assignment, :unassign}, @current_user)}
+            :if={Varsel.Cases.can_unassign_case_user?(@current_user, assignment)}
             class="btn btn-ghost btn-xs text-error"
             phx-click="unassign_user"
             phx-value-id={assignment.id}

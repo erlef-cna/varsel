@@ -181,13 +181,13 @@ defmodule VarselWeb.Layouts do
               </ul>
             </div>
           </li>
-          <li :if={@current_user}>
+          <li :if={Varsel.Cases.can_list_cases?(@current_user)}>
             <.nav_link href={~p"/cases"} current_path={@current_path}>Cases</.nav_link>
           </li>
-          <li :if={@current_user}>
+          <li :if={Varsel.CVE.can_list_vulnerability_reports?(@current_user)}>
             <.nav_link href={~p"/reports"} current_path={@current_path}>Reports</.nav_link>
           </li>
-          <li :if={poc?(@current_user)}>
+          <li :if={Varsel.Accounts.can_list_users?(@current_user)}>
             <.nav_link href={~p"/users"} current_path={@current_path}>Users</.nav_link>
           </li>
         </ul>
@@ -208,9 +208,11 @@ defmodule VarselWeb.Layouts do
               class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-56 p-2 z-50"
             >
               <li class="menu-title truncate">
-                {@current_user.name || @current_user.email}
+                {Ash.load!(@current_user, :display_name).display_name}
               </li>
-              <li><.link navigate={~p"/settings/tokens"}>API Tokens</.link></li>
+              <li :if={Varsel.Accounts.can_list_api_keys?(@current_user)}>
+                <.link navigate={~p"/settings/tokens"}>API Tokens</.link>
+              </li>
               <li><.link href={~p"/sign-out"} method="delete">Sign out</.link></li>
             </ul>
           </div>
@@ -237,7 +239,9 @@ defmodule VarselWeb.Layouts do
               <li><.link navigate={~p"/common-weaknesses"}>Weaknesses</.link></li>
               <li class="menu-title mt-1">Documentation</li>
               <li :for={{label, path} <- doc_links()}><.link href={path}>{label}</.link></li>
-              <li :if={@current_user}><.link navigate={~p"/cases"}>Cases</.link></li>
+              <li :if={Varsel.Cases.can_list_cases?(@current_user)}>
+                <.link navigate={~p"/cases"}>Cases</.link>
+              </li>
             </ul>
           </div>
         </div>

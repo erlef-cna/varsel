@@ -30,6 +30,10 @@ config :ash_graphql, authorize_update_destroy_with_error?: true, json_type: :jso
 
 config :ash_oban, pro?: false
 
+# A refused policy is 403 by default; VarselWeb's own implementation answers
+# 401 instead when nobody is signed in and that is what the refusal turned on.
+config :ash_phoenix, exclude_exceptions_from_plug: [Ash.Error.Forbidden.Policy]
+
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.25.4",

@@ -33,7 +33,7 @@ defmodule VarselWeb.CaseLiveTest do
 
   describe "case list" do
     test "requires login", %{conn: conn} do
-      assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/cases")
+      assert_raise Ash.Error.Forbidden, fn -> live(conn, ~p"/cases") end
     end
 
     test "pipeline is the default face and shows lanes for the four active states", %{

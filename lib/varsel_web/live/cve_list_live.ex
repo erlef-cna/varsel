@@ -255,7 +255,7 @@ defmodule VarselWeb.CveListLive do
   defp list_cve_records(socket, page_opts) do
     CVE.list_all_cve_records!(
       actor: socket.assigns.current_user,
-      query: records_query(socket.assigns.filter, socket.assigns.query),
+      query: records_query(socket.assigns.filter, socket.assigns.query, socket.assigns.current_user),
       page: page_opts || [count: true, offset: 0]
     )
   end
@@ -263,9 +263,16 @@ defmodule VarselWeb.CveListLive do
   # Every active record — including :draft, which stays listed (and
   # editable) here as the manual escape hatch alongside the /cases flow.
   # Reserved and rejected records live in their own summary panels.
-  defp records_query(filter, query) do
+  defp records_query(filter, query, actor) do
+    # The case a record backs is only loadable by someone who may read cases;
+    # for everyone else the row stands on its own.
+    loads =
+      if Ash.can?({Varsel.Cases.Case, :read}, actor),
+        do: [:purls, :cve_json, :case],
+        else: [:purls, :cve_json]
+
     CveRecord
-    |> Ash.Query.load([:purls, :cve_json, :case])
+    |> Ash.Query.load(loads)
     |> Ash.Query.filter(state in ^@table_states)
     |> filter_state(filter)
     |> filter_search(query)
@@ -591,7 +598,7 @@ defmodule VarselWeb.CveListLive do
         {Phoenix.Naming.humanize(@record.state)}
       </.state>
       <.link
-        :if={@record.case}
+        :if={match?(%Varsel.Cases.Case{}, @record.case)}
         navigate={~p"/cases/#{@record.case.id}"}
         class="inline-flex items-center gap-[0.32rem] text-[0.67rem] font-semibold text-base-content/60 bg-base-100 border border-base-300 rounded-[5px] px-[0.45rem] py-[0.07rem] whitespace-nowrap transition-colors hover:text-primary hover:border-primary/60 hover:bg-primary/10"
       >

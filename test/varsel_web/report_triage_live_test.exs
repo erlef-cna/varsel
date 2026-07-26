@@ -38,7 +38,7 @@ defmodule VarselWeb.ReportTriageLiveTest do
   end
 
   test "requires a signed-in user", %{conn: conn} do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/reports")
+    assert_raise Ash.Error.Forbidden, fn -> live(conn, ~p"/reports") end
   end
 
   describe "reporter view" do

@@ -22,10 +22,13 @@ defmodule VarselWeb.ReportTriageLive do
 
   alias Varsel.Cases
   alias Varsel.CVE
+  alias Varsel.CVE.VulnerabilityReport
 
   @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
-    triage? = socket.assigns.current_user.role == :poc
+    # The page is both a triage queue and a reporter's own list; which one it
+    # is follows from whether triaging is something you may do at all.
+    triage? = Ash.can?({VulnerabilityReport, :triage}, socket.assigns.current_user)
 
     socket =
       socket

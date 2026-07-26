@@ -10,7 +10,7 @@ defmodule VarselWeb.VarselEditLive do
   `:request_publish` for a draft, `:update` for a published/pending record — which
   validates the JSON and enqueues the MITRE push job. The `cve_json` map is edited
   as a pretty-printed JSON string in a textarea and decoded into the action's
-  `cve_json` param on submit. Access is gated by `:live_poc_required`.
+  `cve_json` param on submit.
   """
   use VarselWeb, :live_view
 

@@ -20,9 +20,6 @@ defmodule VarselWeb.PageController do
     )
   end
 
-  @doc "The management list merged into /cves (2026-07-21); old bookmarks land here."
-  def manage_redirect(conn, _params), do: redirect(conn, to: ~p"/cves")
-
   @doc "301 an old Jekyll `<page>.html` URL to its extensionless canonical path."
   def legacy_redirect(conn, _params) do
     conn
