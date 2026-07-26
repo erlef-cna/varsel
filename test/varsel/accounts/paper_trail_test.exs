@@ -38,7 +38,7 @@ defmodule Varsel.Accounts.PaperTrailTest do
 
     assert [version] = versions
     assert version.version_action_name == :register_with_github
-    assert version.changes["email"] == user.email
+    assert version.changes["notification_email"] == user.notification_email
   end
 
   test "changing a user's role records the change and the acting user" do

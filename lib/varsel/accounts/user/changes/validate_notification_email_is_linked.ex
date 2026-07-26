@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Accounts.User.Changes.ValidatePrimaryEmailIsLinked do
+defmodule Varsel.Accounts.User.Changes.ValidateNotificationEmailIsLinked do
   @moduledoc """
-  Refuses a primary email that none of the account's linked providers reported.
+  Refuses an address that none of the account's linked providers reported.
 
   The set of addresses a user may choose from is exactly what their providers
-  have told us about them. Without this check `:set_primary_email` would be a
+  have told us about them. Without this check `:set_notification_email` would be a
   free-text email field, letting anyone claim an address they do not own — and
   the unique index would then hand them a permanent squat on it.
   """
@@ -20,7 +20,7 @@ defmodule Varsel.Accounts.User.Changes.ValidatePrimaryEmailIsLinked do
   end
 
   defp validate(changeset, context) do
-    case Ash.Changeset.get_attribute(changeset, :email) do
+    case Ash.Changeset.get_attribute(changeset, :notification_email) do
       nil ->
         changeset
 
@@ -29,7 +29,7 @@ defmodule Varsel.Accounts.User.Changes.ValidatePrimaryEmailIsLinked do
           changeset
         else
           Ash.Changeset.add_error(changeset,
-            field: :email,
+            field: :notification_email,
             message: "is not an address any linked provider reported"
           )
         end

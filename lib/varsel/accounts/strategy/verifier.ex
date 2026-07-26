@@ -11,11 +11,11 @@ defmodule Varsel.Accounts.Strategy.Verifier do
   confirmation add-on is configured, on the premise that an account would
   otherwise carry an email nobody has proven ownership of. Here the premise
   does not lead anywhere: an email is a notification address only, never an
-  authentication factor and never a way to reach an account (see the `:email`
-  attribute on `Varsel.Accounts.User`). Both providers deliberately keep
-  `trust_email_verified? false` precisely so that a matching address can never
-  link a sign-in to an existing account, which is the behaviour the warning
-  would have us trade away.
+  authentication factor and never a way to reach an account (see the
+  `:notification_email` attribute on `Varsel.Accounts.User`). Both providers
+  deliberately keep `trust_email_verified? false` precisely so that a matching
+  address can never link a sign-in to an existing account, which is the
+  behaviour the warning would have us trade away.
 
   Every hard validation still runs; only the warning is dropped.
   """

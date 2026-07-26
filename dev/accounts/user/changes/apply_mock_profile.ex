@@ -26,7 +26,7 @@ defmodule Varsel.Accounts.User.Changes.ApplyMockProfile do
     |> Ash.Changeset.force_change_attribute(:github_id, "mock-#{slug}")
     |> Ash.Changeset.force_change_attribute(:github_handle, "mock-#{slug}")
     |> Ash.Changeset.force_change_attribute(:name, "Mock #{label(slug)}")
-    |> Ash.Changeset.force_change_attribute(:email, "mock-#{slug}@example.com")
+    |> Ash.Changeset.force_change_attribute(:notification_email, "mock-#{slug}@example.com")
   end
 
   defp label(slug), do: slug |> String.replace("-", " ") |> String.capitalize()

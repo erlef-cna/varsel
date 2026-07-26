@@ -199,7 +199,7 @@ defmodule VarselWeb.ReportTriageLive do
             <div>
               <h3 class="font-semibold">{report.summary}</h3>
               <p class="text-xs text-base-content/60">
-                <span :if={@triage?}>by {report.reporter.name || report.reporter.email} · </span>
+                <span :if={@triage?}>by {report.reporter.name || report.reporter.notification_email} · </span>
                 {format_datetime(report.inserted_at)}
               </p>
               <p :if={report.triage_notes} class="text-sm text-base-content/70 mt-1 italic">

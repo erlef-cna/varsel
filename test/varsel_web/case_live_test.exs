@@ -1626,7 +1626,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       [loaded_report] = loaded_case.vulnerability_reports
       assert loaded_report.reporter.name == "case_report_reporter name"
-      assert %Ash.ForbiddenField{} = loaded_report.reporter.email
+      assert %Ash.ForbiddenField{} = loaded_report.reporter.notification_email
     end
 
     test "a case without reports shows no reports section", %{conn: conn, poc: poc} do

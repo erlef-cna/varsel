@@ -4,9 +4,7 @@
 
 defmodule Varsel.Accounts.User do
   @moduledoc false
-  # Login is GitHub-OAuth-only (identity :unique_github_id on github_id); email
-  # is secondary, GitHub-synced profile data and intentionally not an identity.
-  # credo:disable-for-next-line AshCredo.Check.Design.MissingIdentity
+
   use Ash.Resource,
     otp_app: :varsel,
     domain: Varsel.Accounts,
@@ -60,7 +58,7 @@ defmodule Varsel.Accounts.User do
     end
 
     # Everything else is POC-or-self only.
-    field_policy [:email, :github_id, :role] do
+    field_policy [:notification_email, :github_id, :role] do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
     end
@@ -163,8 +161,8 @@ defmodule Varsel.Accounts.User do
       argument :oauth_tokens, :map, allow_nil?: false
       upsert? true
       upsert_identity :unique_github_id
-      # Not :email — the primary email is the user's choice (see
-      # :set_primary_email) and a later sign-in must not re-point it.
+      # Not :notification_email — that address is the user's choice (see
+      # :set_notification_email) and a later sign-in must not re-point it.
       upsert_fields [:github_handle, :name]
 
       change AshAuthentication.GenerateTokenChange
@@ -183,7 +181,7 @@ defmodule Varsel.Accounts.User do
       # resolved by email. Matching never *links* on its own: hex.pm asserts no
       # verified email, so `on_untrusted_email_match :reject` refuses the
       # sign-in and the user links hex from an authenticated session instead.
-      upsert_identity :unique_email
+      upsert_identity :unique_notification_email
       upsert_fields [:name]
 
       change AshAuthentication.GenerateTokenChange
@@ -193,13 +191,13 @@ defmodule Varsel.Accounts.User do
       change PromoteFirstUserToPoc
     end
 
-    update :set_primary_email do
-      description "Sets the account's primary email to one a linked provider reported."
-      accept [:email]
+    update :set_notification_email do
+      description "Sets the account's notification email to one a linked provider reported."
+      accept [:notification_email]
       # Checking the address against the linked identities needs to read them.
       require_atomic? false
 
-      change Varsel.Accounts.User.Changes.ValidatePrimaryEmailIsLinked
+      change Varsel.Accounts.User.Changes.ValidateNotificationEmailIsLinked
     end
 
     update :update do
@@ -312,19 +310,11 @@ defmodule Varsel.Accounts.User do
   attributes do
     uuid_primary_key :id
 
-    # The account's primary email: the one address POC notifications go to and
-    # the one the console shows. Seeded from the first provider to report one
-    # and thereafter chosen by the user from their linked identities' emails
-    # (see :set_primary_email), so it is never silently re-pointed by a later
-    # sign-in. Unique, and nil for accounts whose providers reported no email.
-    #
-    # ⛔ NOT an authentication factor. Nobody has proven ownership of this
-    # address: GitHub's verified flag is not trusted and hex.pm does not
-    # publish one, so it is a delivery address and nothing more. It must never
-    # identify a user, authorize an action, or attach a sign-in to an account —
-    # both strategies set `trust_email_verified? false` to keep that true.
-    # Providers are linked from an authenticated session, never by email match.
-    attribute :email, :string do
+    # Seeded from the first provider to report one and thereafter chosen by the
+    # user from their linked identities' emails (see :set_notification_email), so it
+    # is never silently re-pointed by a later sign-in. Nil for accounts whose
+    # providers reported no address.
+    attribute :notification_email, :string do
       public? true
       allow_nil? true
     end
@@ -372,7 +362,7 @@ defmodule Varsel.Accounts.User do
     # sorted against the whole table, not just the rows already loaded.
     calculate :display_name,
               :string,
-              expr(coalesce([name, github_handle, email, "user"])) do
+              expr(coalesce([name, github_handle, notification_email, "user"])) do
       public? true
     end
 
@@ -384,7 +374,7 @@ defmodule Varsel.Accounts.User do
 
     # Resolves an OAuth sign-in to an existing local account. Postgres allows
     # many NULLs in a unique index, so accounts whose providers reported no
-    # email (common on hex.pm, where the address is opt-in) do not collide.
-    identity :unique_email, [:email]
+    # address (common on hex.pm, where it is opt-in) do not collide.
+    identity :unique_notification_email, [:notification_email]
   end
 end

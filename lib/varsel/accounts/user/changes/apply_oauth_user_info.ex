@@ -5,17 +5,17 @@
 defmodule Varsel.Accounts.User.Changes.ApplyOauthUserInfo do
   @moduledoc """
   Copies the GitHub OAuth `user_info` payload onto the user's profile
-  attributes (github_id, github_handle, name, email).
+  attributes (github_id, github_handle, name, notification_email).
 
-  The email is only *seeded*: it is written when the account has none yet, so
-  the address a user later picks as their primary (see `:set_primary_email`)
-  survives every subsequent sign-in. Each provider's own reported address is
-  kept on its identity row regardless.
+  The address is only *seeded*: it is written when the account has none yet, so
+  the one a user later picks (see `:set_notification_email`) survives every
+  subsequent sign-in. Each provider's own reported address is kept on its
+  identity row regardless.
   """
 
   use Ash.Resource.Change
 
-  alias Varsel.Accounts.User.Changes.SeedPrimaryEmail
+  alias Varsel.Accounts.User.Changes.SeedNotificationEmail
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, _context) do
@@ -25,6 +25,6 @@ defmodule Varsel.Accounts.User.Changes.ApplyOauthUserInfo do
     |> Ash.Changeset.force_change_attribute(:github_id, to_string(user_info["sub"]))
     |> Ash.Changeset.force_change_attribute(:github_handle, user_info["preferred_username"])
     |> Ash.Changeset.force_change_attribute(:name, user_info["name"])
-    |> SeedPrimaryEmail.seed(user_info["email"])
+    |> SeedNotificationEmail.seed(user_info["email"])
   end
 end

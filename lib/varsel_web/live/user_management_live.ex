@@ -72,7 +72,7 @@ defmodule VarselWeb.UserManagementLive do
   defp role_value(nil), do: ""
   defp role_value(role), do: to_string(role)
 
-  defp display_name(user), do: user.name || user.github_handle || user.email || "user"
+  defp display_name(user), do: user.name || user.github_handle || user.notification_email || "user"
 
   @impl Phoenix.LiveView
   def render(assigns) do
@@ -110,7 +110,7 @@ defmodule VarselWeb.UserManagementLive do
                     you
                   </span>
                 </td>
-                <td class="text-base-content/70">{user.email || "—"}</td>
+                <td class="text-base-content/70">{user.notification_email || "—"}</td>
                 <td>
                   <.link
                     :if={user.github_handle}
