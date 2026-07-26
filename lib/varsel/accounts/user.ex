@@ -13,7 +13,12 @@ defmodule Varsel.Accounts.User do
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
     notifiers: [Ash.Notifier.PubSub],
-    extensions: [AshAuthentication, AshPaperTrail.Resource, AshGraphql.Resource]
+    extensions: [
+      AshAuthentication,
+      AshPaperTrail.Resource,
+      AshGraphql.Resource,
+      AshAdmin.Resource
+    ]
 
   alias AshAuthentication.Checks.AshAuthenticationInteraction
   alias AshOban.Checks.AshObanInteraction
@@ -25,8 +30,35 @@ defmodule Varsel.Accounts.User do
   # (Mix is not available in a release).
   @mock_login? Mix.env() in [:dev, :test]
 
+  admin do
+    actor? true
+  end
+
   graphql do
     type :user
+  end
+
+  field_policies do
+    field_policy_bypass :*, AshAuthenticationInteraction do
+      authorize_if always()
+    end
+
+    # The :notify_pocs Oban worker needs each POC's email; it reads through the
+    # Oban bypass (see the read policy), so grant it every field too.
+    field_policy_bypass :*, AshObanInteraction do
+      authorize_if always()
+    end
+
+    # Whoever can read the row may see the display name.
+    field_policy [:name, :github_handle, :display_name] do
+      authorize_if always()
+    end
+
+    # Everything else is POC-or-self only.
+    field_policy [:email, :github_id, :role] do
+      authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if expr(id == ^actor(:id))
+    end
   end
 
   authentication do
@@ -55,29 +87,6 @@ defmodule Varsel.Accounts.User do
       api_key do
         api_key_relationship :valid_api_keys
       end
-    end
-  end
-
-  field_policies do
-    field_policy_bypass :*, AshAuthenticationInteraction do
-      authorize_if always()
-    end
-
-    # The :notify_pocs Oban worker needs each POC's email; it reads through the
-    # Oban bypass (see the read policy), so grant it every field too.
-    field_policy_bypass :*, AshObanInteraction do
-      authorize_if always()
-    end
-
-    # Whoever can read the row may see the display name.
-    field_policy [:name, :github_handle, :display_name] do
-      authorize_if always()
-    end
-
-    # Everything else is POC-or-self only.
-    field_policy [:email, :github_id, :role] do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if expr(id == ^actor(:id))
     end
   end
 
