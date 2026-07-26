@@ -127,7 +127,12 @@ defmodule VarselWeb.UserManagementLive do
                   <span :if={is_nil(user.github_handle)} class="text-base-content/50">—</span>
                 </td>
                 <td class="text-right">
-                  <form id={"role-#{user.id}"} phx-change="set_role" class="inline-block">
+                  <form
+                    :if={Accounts.can_set_user_role?(@current_user, user, %{})}
+                    id={"role-#{user.id}"}
+                    phx-change="set_role"
+                    class="inline-block"
+                  >
                     <input type="hidden" name="user_id" value={user.id} />
                     <select name="role" class="select select-bordered select-sm w-32">
                       <option

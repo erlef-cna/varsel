@@ -422,7 +422,7 @@ defmodule VarselWeb.CaseManagementLive do
       </:meta>
       <:actions>
         <.console_search id="case-search" value={@query} placeholder="Search all cases…" />
-        <div :if={poc?(@current_user)} class="relative">
+        <div :if={Cases.can_open_case?(@current_user, %{})} class="relative">
           <button type="button" class="btn btn-sm btn-eef" phx-click="toggle_open_case">
             Open case
           </button>

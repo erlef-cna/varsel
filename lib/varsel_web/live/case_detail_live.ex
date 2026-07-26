@@ -1117,14 +1117,19 @@ defmodule VarselWeb.CaseDetailLive do
             </form>
             <.activity_feed entries={activity_entries(@case_record)} />
           </.panel>
-          <.assignments_section :if={poc?(@current_user)} case_record={@case_record} users={@users} />
+          <.assignments_section
+            :if={poc?(@current_user)}
+            case_record={@case_record}
+            users={@users}
+            current_user={@current_user}
+          />
           <.reports_section
             :if={@case_record.vulnerability_reports != []}
             case_record={@case_record}
             poc={poc?(@current_user)}
           />
           <.close_link
-            :if={poc?(@current_user) and editable?(@case_record)}
+            :if={Cases.can_close_case?(@current_user, @case_record, validate?: true)}
             case_record={@case_record}
           />
         </:right>
@@ -2224,6 +2229,7 @@ defmodule VarselWeb.CaseDetailLive do
             <span class="shrink-0 text-base-content/50">{person_role(assignment.user)}</span>
           </span>
           <button
+            :if={Ash.can?({assignment, :unassign}, @current_user)}
             class="btn btn-ghost btn-xs text-error"
             phx-click="unassign_user"
             phx-value-id={assignment.id}
@@ -2237,7 +2243,11 @@ defmodule VarselWeb.CaseDetailLive do
         No one assigned yet.
       </p>
 
-      <form phx-submit="assign_user" class="flex items-center gap-2 mt-2">
+      <form
+        :if={Cases.can_assign_case_user?(@current_user, %{case_id: @case_record.id})}
+        phx-submit="assign_user"
+        class="flex items-center gap-2 mt-2"
+      >
         <select name="user_id" required class="select select-bordered select-sm flex-1">
           <option value="">Assign a user…</option>
           <option
