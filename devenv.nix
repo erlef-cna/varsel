@@ -67,26 +67,6 @@ in
       type = "http";
       url = "http://localhost:4000/tidewave/mcp";
     };
-
-    commands = {
-      mix-format = ''
-      Format all Elixir files in the project using mix format.
-
-      ```bash
-      mix format
-      ```
-      '';
-    };
-
-    hooks = {
-      mix-format = {
-        enable = true;
-        name = "Format Elixir code with mix format";
-        hookType = "PostToolUse";
-        matcher = "^(Edit|MultiEdit|Write)$";
-        command = "mix format";
-      };
-    };
   };
 
   git-hooks.hooks = {
