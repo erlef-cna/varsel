@@ -179,6 +179,7 @@ defmodule VarselWeb.Router do
       live "/cases/:id/propose", CaseDetailLive, :propose
 
       live "/users", UserManagementLive, :index
+      live "/settings/account", AccountSettingsLive, :index
       live "/settings/tokens", ApiKeySettingsLive, :index
     end
   end

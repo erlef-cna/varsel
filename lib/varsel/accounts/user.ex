@@ -59,7 +59,7 @@ defmodule Varsel.Accounts.User do
     end
 
     # Everything else is POC-or-self only.
-    field_policy [:notification_email, :role] do
+    field_policy [:notification_email, :identity_emails, :role] do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
     end
@@ -294,6 +294,13 @@ defmodule Varsel.Accounts.User do
 
     policy action(:set_role) do
       authorize_if actor_attribute_equals(:role, :poc)
+    end
+
+    # Nobody picks anyone else's address, POCs included: the choice is between
+    # the addresses that user's own providers reported, and it decides where
+    # their mail goes.
+    policy action(:set_notification_email) do
+      authorize_if expr(id == ^actor(:id))
     end
   end
 

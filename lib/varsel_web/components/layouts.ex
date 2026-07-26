@@ -216,6 +216,7 @@ defmodule VarselWeb.Layouts do
               class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-56 p-2 z-50"
             >
               <li class="menu-title truncate">{@account.display_name}</li>
+              <li><.link navigate={~p"/settings/account"}>Account</.link></li>
               <li :if={Varsel.Accounts.can_list_api_keys?(@current_user)}>
                 <.link navigate={~p"/settings/tokens"}>API Tokens</.link>
               </li>
