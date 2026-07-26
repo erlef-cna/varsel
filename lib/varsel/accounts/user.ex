@@ -182,6 +182,13 @@ defmodule Varsel.Accounts.User do
       authorize_if always()
     end
 
+    # Nothing about a user is public. Signing in is the bypass above, so every
+    # other path needs someone to be asking; the read policy below then narrows
+    # to what that someone may see.
+    policy always() do
+      authorize_if actor_present()
+    end
+
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
