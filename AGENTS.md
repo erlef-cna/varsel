@@ -118,7 +118,10 @@ is a filter policy working, not a missing one.
 
 - **Never** use `@apply` when writing raw css
 
-- **Always** manually write your own tailwind-based components instead of using daisyUI for a unique, world-class design
+- This app **does** use daisyUI 5 (`assets/vendor/daisyui.js`, two themes defined in
+  `app.css`). Use its components — `card`, `badge`, `btn`, `select`, `input`,
+  `alert`, `toast` — rather than rebuilding them, and layer the EEF tokens and
+  named classes on top. See the UI/UX section below
 
 - Out of the box **only the app.js and app.css bundles are supported**
 
@@ -128,10 +131,76 @@ is a filter policy working, not a missing one.
 
 ### UI/UX & design guidelines
 
-- **Produce world-class UI designs** with a focus on usability, aesthetics, and modern design principles
-- Implement **subtle micro-interactions** (e.g., button hover effects, and smooth transitions)
-- Ensure **clean typography, spacing, and layout balance** for a refined, premium look
-- Focus on **delightful details** like hover effects, loading states, and smooth page transitions
+This app has an established design system — daisyUI 5 themes plus EEF brand tokens
+in `assets/css/app.css`. Work inside it rather than inventing a look per screen.
+
+- **Both themes are first-class.** Light and dark ship together and `base-100`
+  inverts between them: it is the *page* on dark but a *raised white* on light, so
+  a card that sits above a `base-200` panel cannot just use `bg-base-100` — on dark
+  it would sink. That is what `--lane-card-bg` exists for. Check every UI change in
+  both themes before calling it done.
+- **Tokens, not ad-hoc color.** `base-100/200/300`, `--eef-navy`/`--eef-navy-2`/
+  `--eef-blue`, the five-step `--sev-*` severity scale, `--violet` for the approved
+  lane. Named classes carry the patterns: `.console-band`, `.eef-band`,
+  `.page-header`, `.btn-eef` / `.btn-eef-quiet`, `.lane-card`, `.eef-eyebrow`,
+  `.overlay-scrim`, `.timeline-track`. Reach for these before writing new CSS; if a
+  value has no token, add one rather than inlining a hex.
+- Status colors have fixed roles: warning amber (staleness, attention), info blue
+  (**suggestions are always info-toned**), success green, error red.
+- Severity chips: **critical is the only filled chip.** Weight, not hue, sets it
+  apart, so the ranking survives color-blindness. Do not "fix" this by filling the
+  other buckets.
+- House rules: information-dense but calm; panels, not walls; one primary action
+  per band; derive-at-render facts render as chips and tables — **never raw JSON
+  where a human reads**.
+- The public site is branded **"EEF CNA"**. "Varsel" is the tool's name and never
+  appears in the UI.
+
+#### Seeing your work: storybook and visual diff
+
+Every rendering component in `lib/varsel_web/components` has a story under
+`storybook/`. Use it — it is faster and more complete than driving the live app,
+and it needs no login, no fixture data, and carries no risk of touching real case
+state.
+
+- `/dev/storybook` — browse. Each story page shows every variation **beside the
+  exact HEEx call that produces it** (`<.severity_chip score={9.8} variant={:full}/>`),
+  plus the component's doc, a Playground, and a Source tab. This is the place to
+  find a component to reuse before writing new markup.
+- `/dev/storybook/visual_tests/<folder>/<component>?theme=dark` — **all variations
+  of one component on a single page.** Two navigations (`?theme=light` and
+  `?theme=dark`) diff a component across both themes. Folders mirror the modules:
+  `core`, `case`, `board`, `inputs`, `layout`.
+
+Reading a `visual_tests` page correctly:
+
+- Variations render **stacked and unlabeled** under one wrapper id. Identify them
+  by story order and id from `storybook/<folder>/<name>.story.exs` — never by
+  "the third row on screen".
+- Variations that intentionally render nothing (e.g. `pagination`'s `no_results`)
+  leave **no visual trace**. Check those in the DOM or the story source.
+- It defaults to the **light** theme (the first configured one), whatever the
+  storybook chrome around it looks like. A screenshot with no `?theme=` is light.
+- Theme is a `data-theme` attribute on the sandbox, not on `<html>` — see the
+  `data_attribute` strategy in `dev/storybook.ex`.
+
+**New reusable markup gets a story.** When you extract a component, add
+`storybook/<folder>/<name>.story.exs` with a variation per state and register it in
+that folder's `_<folder>.index.exs`. A component without a story is invisible to
+the next person and unreviewable in both themes. ⚠️ Never name a component attr
+`id` if a story passes it — storybook eats it and the guard fails silently.
+
+#### Seeing the live app
+
+- Roles: the dev-tools launcher (bottom-right `</>` on any page) has a **MOCK SIGN
+  IN** section — POC / Supporter / No role — but only when signed out; sign out via
+  the user icon in the header first. Views that serve several audiences from one
+  route (`/reports` is a triage queue for a POC and a personal list for everyone
+  else) must be checked in each shape.
+- The three-column case workspace needs ≥1024 CSS px. Never resize the user's
+  Chrome window; report the width you have instead.
+- Dev data is free to create — but ⛔ **NEVER publish a CVE, even in dev.**
+  Publishing hits MITRE's real API.
 
 <!-- usage-rules-start -->
 <!-- usage_rules-start -->
