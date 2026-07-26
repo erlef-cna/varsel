@@ -13,7 +13,7 @@ SPDX-License-Identifier: Apache-2.0
 - **Versioning:** the model is versioned with the project (it lives in the
   repo and moves with `main`): a report against a given version is triaged
   against the model as it stood at that version. Written against `main`,
-  last updated 2026-07-25.
+  last updated 2026-07-26.
 - **Relationship to `SECURITY.md`:** this document accompanies `SECURITY.md`
   (it does not replace it). `SECURITY.md` holds the disclosure policy and a
   short Scope section that links here; this document is the detailed model.
@@ -150,6 +150,36 @@ is no "inside the app, everything is trusted" zone — even LiveView mounts
 re-run authorization on refetch (pervasive `policies do` blocks; `config.exs`
 sets `no_filter_static_forbidden_reads?: false`).
 
+**The boundary is enforced in one place.** The router runs a single
+`:live_user` hook that resolves the actor and nothing else; it does not gate
+routes by role, and there is no route-level allowlist to keep in step with
+the policies. A caller who requests a page they may not have reaches the
+LiveView, the first action it runs refuses, and the refusal is what produces
+the error page. The console's own affordances are drawn the same way — a
+button appears because `Ash.can?` says the action would run, not because a
+role was matched in the template *(maintainer, 2026-07)*. The practical
+consequence for a triager: **a report that a UI element is visible to the
+wrong actor is a policy question, not a routing question**, and the same
+policy is what refuses the request behind it. (`router.ex`,
+`live_user_auth.ex`)
+
+**Refusal is not the only way a policy says no.** Ash policies come in two
+flavours and they fail differently. A *strict* check (`actor_present()`,
+`actor_attribute_equals`) is decided before any query runs and produces a
+`Forbidden` error; a *filter* check (`relates_to_actor_via`,
+`expr(id == ^actor(:id))`) authorizes the action and narrows the rows, so an
+unauthorized caller gets an **empty result, not an error**. Both are correct
+outcomes. Four resources — `Case`, `User`, `ApiKey`, `VulnerabilityReport` —
+carry an explicit strict `actor_present()` policy so that an anonymous read
+refuses outright rather than returning nothing; the remaining private
+resources (case children, proposals, comments) are filter-scoped and return
+an empty list to an anonymous caller *(maintainer, 2026-07)*. Verified
+2026-07-26 by reading every resource as an anonymous actor: the four strict
+ones refuse with 401, the filter-scoped ones return zero of the rows that
+exist. **An "empty list" is therefore not evidence of a missing policy**, and
+a report premised on a private resource returning `{:ok, []}` rather than an
+error is out of model. (all `policies do` blocks)
+
 **Data flow across the boundary:**
 
 1. **Public read** — anonymous request → read action → policy filters to
@@ -191,6 +221,13 @@ claims:
   endpoint (`MITRE_CVE_API_BASE_URL`); no actor picks where these requests go.
   A finding premised on an *actor controlling those URLs* is out of model.
 - **CVE lifecycle writes** — POC-only. Not reachable below POC.
+- **A visible button is not a reachable action.** The console decides what to
+  draw by asking the same policies that authorize the request, so the two
+  agree by construction rather than by upkeep *(maintainer, 2026-07)*. A
+  finding that an affordance is *shown* to the wrong actor is in model only if
+  the underlying action also runs for them; if the click is refused, the
+  affordance is a cosmetic defect, not an authorization one.
+  (`case_detail_live.ex`, `cve_list_live.ex`)
 
 ---
 
@@ -404,14 +441,33 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `critical`.
    - (`cve_record.ex`, `case.ex`)
 
-3. **Field-level PII redaction on `User`.**
+3. **A CVE ID is taken once, and only while the case can still use it.**
+   `assign_cve_id` refuses a case that already holds an ID and one that is
+   published or closed, so a reserved identifier cannot be silently consumed
+   by a case that has no further use for it. The rule is an action validation
+   rather than a precondition inside the change that performs the assignment,
+   which is what makes it hold for every caller — the console, GraphQL, MCP —
+   and not only the one that happens to hide the button *(maintainer,
+   2026-07)*.
+   - *Violation symptom:* a reserved ID is attached to a published or closed
+     case, or a second ID replaces one already assigned.
+   - *Severity:* `medium` (identifier waste and a misleading record, not a
+     disclosure).
+   - (`case.ex`, `cve_id_assignable.ex`)
+
+4. **Field-level PII redaction on `User`.**
    A non-POC who reaches a `User` row through a permitted relationship sees
-   only `:name`; `email`, `github_id`, `github_handle`, `role` are POC-or-self.
-   - *Violation symptom:* a non-POC reads another user's email/handle/role.
+   only the attribution fields — `:name`, `:github_handle`, `:display_name`;
+   `email`, `github_id` and `role` are POC-or-self. The handle is public
+   attribution (it is what a credit renders), the address and the role are
+   not. This is the second of two layers: the row-level read policy already
+   removes users the actor may not see, so a non-POC listing users directly
+   gets an empty result rather than redacted rows *(maintainer, 2026-07)*.
+   - *Violation symptom:* a non-POC reads another user's email or role.
    - *Severity:* `high`.
    - (`user.ex`)
 
-4. **Case content is confined to assigned collaborators.**
+5. **Case content is confined to assigned collaborators.**
    Reads and edits of a case and all its child rows require POC or a
    `CaseAssignment` for that case; supporters cannot self-assign (assignment
    create/destroy is POC-only).
@@ -420,7 +476,7 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `high` (unpublished advisory content is embargoed).
    - (`case.ex`, `case_assignment.ex`)
 
-5. **OAuth scope separation between surfaces.**
+6. **OAuth scope separation between surfaces.**
    An OAuth 2.1 access token carries a scope (`mcp` or `gql`); a token
    without the required scope for a surface gets `403 insufficient_scope`.
    API keys and session JWTs (first-party credentials) are exempt by design.
@@ -429,7 +485,7 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `high`.
    - (`oauth_bearer_auth.ex`)
 
-6. **API keys and tokens stored hashed / redacted.**
+7. **API keys and tokens stored hashed / redacted.**
    Only a SHA-256 hash of an API key is persisted; the plaintext is shown
    once. Token `jti` and key hashes are `sensitive?`; error redaction is on
    (`redact_sensitive_values_in_errors?: true`).
@@ -438,7 +494,7 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `high`.
    - (`api_key.ex`, `token.ex`, `config.exs`)
 
-7. **Stored-content rendering is sanitized before display.**
+8. **Stored-content rendering is sanitized before display.**
    Every markdown/HTML render sink — case/report markdown
    (`Markdown.to_html`/`to_display_html`), CVE-record prose
    (`cve_view.ex` `markdown/1`), and imported `supportingMedia` HTML
@@ -452,7 +508,7 @@ none of the authorization properties, by construction rather than by defect.
      sanitizer + CSP.
    - (`markdown.ex`, `cve_view.ex`, `config.exs`)
 
-8. **Report intake is size-bounded.**
+9. **Report intake is size-bounded.**
    `report_json` (the one unbounded authenticated write) is capped at a
    configurable serialized size (default 256 KiB); an oversized payload is
    rejected before persistence.
@@ -461,7 +517,7 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `moderate` (storage/DoS).
    - (`report_json_size.ex`)
 
-9. **CSRF / clickjacking / cross-origin hardening on the browser surface.**
+10. **CSRF / clickjacking / cross-origin hardening on the browser surface.**
    `protect_from_forgery` on browser pipelines; `x-frame-options: DENY` +
    `frame-ancestors 'none'`; `permissions-policy`, COOP `same-origin`, CORP
    `same-site` (dropped only for the public JSON/feed data by design).
@@ -592,6 +648,17 @@ addressed in §9: `repo_url` is constrained to https + a public-resolving host,
 and the residual is a POC/assignee privilege — `VALID` only if shown reachable
 below that privilege.
 
+Two shapes an automated reviewer reliably mistakes for missing authorization,
+both explained in §4:
+
+- **"Route X has no authentication check."** No route does. The router
+  resolves an actor and stops; the policy on the first action the page runs is
+  the check. Grepping the router for a role gate finds nothing by design.
+- **"Reading resource X as an anonymous caller returns success."** For a
+  filter-scoped resource it returns `{:ok, []}` — success with no rows, which
+  is how an Ash filter policy denies. `NOT-A-FINDING` unless rows actually
+  come back; verified 2026-07-26 that none do.
+
 ---
 
 ## 12. Conditions that would change this model
@@ -610,6 +677,16 @@ below that privilege.
 - Adding another **build-gated authentication or authorization bypass**
   (as the mock login is, §5a), or making an existing one reachable in a
   `prod` build — whether by runtime flag or by compiling `dev/` into it.
+- Removing a resource's strict `actor_present()` policy, or adding a private
+  resource without one. The check is what turns an anonymous request into a
+  refusal instead of an empty result (§4), and it is the only reason a
+  console page can ask `Ash.can?` whether to render at all. Dropping it does
+  not open a hole — the filter policies still scope the rows — but it does
+  silently change a 401 into a blank page, and the model's claim that the two
+  layers agree stops holding.
+- Re-introducing a **route-level role gate** in the router. The model rests
+  on there being exactly one place that decides (§4); a second one that can
+  drift from the policies is the condition this section exists to catch.
 - A report that **cannot be routed** to a §13 disposition — a `MODEL-GAP`;
   add the property to §8/§9 rather than making an ad-hoc call.
 
