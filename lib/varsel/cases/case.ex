@@ -56,6 +56,7 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
   alias Varsel.Cases.Validations.CaseEditable
+  alias Varsel.Cases.Validations.CveIdAssignable
 
   @content_fields [
     :title,
@@ -215,6 +216,7 @@ defmodule Varsel.Cases.Case do
         description "A specific reserved CVE record to assign. Defaults to the lowest free ID of the current year."
       end
 
+      validate CveIdAssignable
       change Varsel.Cases.Case.Changes.AssignCveRecord
     end
 

@@ -13,24 +13,7 @@ defmodule Varsel.Cases.Case.Changes.AssignCveRecord do
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
-    Ash.Changeset.before_action(changeset, fn changeset ->
-      cond do
-        changeset.data.state == :published ->
-          Ash.Changeset.add_error(changeset,
-            field: :cve_record_id,
-            message: "the case is already published"
-          )
-
-        changeset.data.cve_record_id ->
-          Ash.Changeset.add_error(changeset,
-            field: :cve_record_id,
-            message: "the case already has a CVE ID assigned"
-          )
-
-        true ->
-          assign(changeset, context.actor)
-      end
-    end)
+    Ash.Changeset.before_action(changeset, &assign(&1, context.actor))
   end
 
   defp assign(changeset, actor) do

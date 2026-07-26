@@ -1232,17 +1232,14 @@ defmodule VarselWeb.CaseDetailLive do
     ~H"""
     <div class="flex flex-wrap items-center gap-2">
       <button
-        :if={
-          @case_record.state in [:draft, :review, :approved] and is_nil(@case_record.cve_id) and
-            poc?(@current_user)
-        }
+        :if={Cases.can_assign_case_cve_id?(@current_user, @case_record, validate?: true)}
         class="btn btn-sm btn-eef-quiet"
         phx-click="assign_cve_id"
       >
         Assign CVE ID
       </button>
       <button
-        :if={@case_record.state == :draft}
+        :if={Cases.can_request_case_review?(@current_user, @case_record, validate?: true)}
         class="btn btn-sm btn-eef"
         phx-click="lifecycle"
         phx-value-action="request_review"
@@ -1250,7 +1247,7 @@ defmodule VarselWeb.CaseDetailLive do
         Request review
       </button>
       <button
-        :if={@case_record.state == :review and poc?(@current_user)}
+        :if={Cases.can_request_case_changes?(@current_user, @case_record, validate?: true)}
         class="btn btn-sm btn-eef-quiet"
         phx-click="lifecycle"
         phx-value-action="request_changes"
@@ -1258,7 +1255,7 @@ defmodule VarselWeb.CaseDetailLive do
         Request changes
       </button>
       <button
-        :if={@case_record.state == :review and poc?(@current_user)}
+        :if={Cases.can_approve_case?(@current_user, @case_record, validate?: true)}
         class="btn btn-sm btn-eef"
         phx-click="lifecycle"
         phx-value-action="approve"
@@ -1266,7 +1263,9 @@ defmodule VarselWeb.CaseDetailLive do
         Approve
       </button>
       <button
-        :if={@include_publish and @case_record.state == :approved and poc?(@current_user)}
+        :if={
+          @include_publish and Cases.can_publish_case?(@current_user, @case_record, validate?: true)
+        }
         class={["btn btn-sm btn-eef", @publish_blocked && "opacity-45"]}
         disabled={@publish_blocked}
         phx-click="lifecycle"
@@ -1276,7 +1275,7 @@ defmodule VarselWeb.CaseDetailLive do
         Publish to MITRE
       </button>
       <button
-        :if={@case_record.state in [:review, :approved, :published] and poc?(@current_user)}
+        :if={Cases.can_reopen_case?(@current_user, @case_record, validate?: true)}
         class="btn btn-ghost btn-sm"
         phx-click="lifecycle"
         phx-value-action="reopen"
