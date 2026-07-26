@@ -77,10 +77,7 @@ defmodule VarselWeb.UserManagementLive do
   # Links to whichever hex instance we authenticate against, defaulting to
   # public hex.pm — a self-hosted one is the exception, and it sets base_url.
   defp hex_profile_url(username) do
-    base_url =
-      :varsel
-      |> Application.get_env(:hex, [])
-      |> Keyword.get(:base_url, "https://hex.pm")
+    base_url = Keyword.get(Application.get_env(:varsel, :hex) || [], :base_url, "https://hex.pm")
 
     "#{String.trim_trailing(base_url, "/")}/users/#{username}"
   end

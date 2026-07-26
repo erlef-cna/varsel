@@ -53,8 +53,16 @@ defmodule Varsel.Accounts.User do
       authorize_if always()
     end
 
-    # Whoever can read the row may see the display name.
-    field_policy [:name, :github_username, :hex_username, :display_name, :avatar_url] do
+    # Whoever can read the row may see the display name, and whether the
+    # account still exists in its own right or has been merged away.
+    field_policy [
+      :name,
+      :github_username,
+      :hex_username,
+      :display_name,
+      :avatar_url,
+      :merged_into_id
+    ] do
       authorize_if always()
     end
 
@@ -146,6 +154,13 @@ defmodule Varsel.Accounts.User do
       prepare AshAuthentication.Preparations.FilterBySubject
     end
 
+    read :get_link_counterpart do
+      description "Reads the other half of an in-progress account link, by id."
+      argument :id, :uuid, allow_nil?: false
+      get? true
+      filter expr(id == ^arg(:id))
+    end
+
     read :sign_in_with_api_key do
       description "Signs a user in by verifying a presented personal API key."
       argument :api_key, :string, allow_nil?: false, sensitive?: true
@@ -192,6 +207,16 @@ defmodule Varsel.Accounts.User do
 
       change ApplyProviderProfile
       change PromoteFirstUserToPoc
+    end
+
+    update :merge_into do
+      description "Merges this account into another, handing over its providers and live work."
+      argument :into, :uuid, allow_nil?: false
+      # Repointing the other tables happens in an after_action hook.
+      require_atomic? false
+
+      change set_attribute(:merged_into_id, arg(:into))
+      change Varsel.Accounts.User.Changes.RepointToMergeTarget
     end
 
     update :set_notification_email do
@@ -272,6 +297,16 @@ defmodule Varsel.Accounts.User do
       authorize_if actor_present()
     end
 
+    # Naming the account you are about to link to needs to read it, and it is
+    # by definition not the one you are signed in as — so the read policy below
+    # would filter it away. A bypass, because that policy is the thing being
+    # stepped around: anyone signed in may read a single account whose id they
+    # already hold, and the field policies keep that to the display name, which
+    # is all the confirmation page shows.
+    bypass action(:get_link_counterpart) do
+      authorize_if actor_present()
+    end
+
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
@@ -300,6 +335,13 @@ defmodule Varsel.Accounts.User do
     # the addresses that user's own providers reported, and it decides where
     # their mail goes.
     policy action(:set_notification_email) do
+      authorize_if expr(id == ^actor(:id))
+    end
+
+    # Merging is something you do to your own account, and only towards the one
+    # you are signed in as: the actor is the account being merged *away*, which
+    # is the half the caller just proved they hold by signing in with it.
+    policy action(:merge_into) do
       authorize_if expr(id == ^actor(:id))
     end
   end
@@ -353,6 +395,14 @@ defmodule Varsel.Accounts.User do
     has_many :identities, UserIdentity do
       public? false
       destination_attribute :user_id
+    end
+
+    # Set when this account was merged into another (see :merge_into). The row
+    # stays so everything it authored keeps pointing at a real user; nobody
+    # can sign in as it any more, since its providers moved.
+    belongs_to :merged_into, __MODULE__ do
+      public? true
+      allow_nil? true
     end
   end
 

@@ -87,6 +87,12 @@ defmodule VarselWeb.Router do
     plug :load_from_session
   end
 
+  # Pages that only mean anything for a signed-in user; anonymous callers are
+  # sent to sign in rather than shown an empty version.
+  pipeline :logged_in_browser do
+    plug :require_login
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
     plug ApiKeyAuth
@@ -182,6 +188,18 @@ defmodule VarselWeb.Router do
       live "/settings/account", AccountSettingsLive, :index
       live "/settings/tokens", ApiKeySettingsLive, :index
     end
+  end
+
+  # Linking a second provider to the account you are already signed in as.
+  # Only the confirmation step is a page; the rest is redirects around the
+  # ordinary OAuth flow (see VarselWeb.AccountLinkController).
+  scope "/settings/account/link", VarselWeb do
+    pipe_through [:browser, :logged_in_browser]
+
+    get "/start/:strategy", AccountLinkController, :start
+    get "/confirm", AccountLinkController, :confirm_page
+    post "/confirm", AccountLinkController, :confirm
+    post "/decline", AccountLinkController, :decline
   end
 
   # Authentication pages — bare, centered layout (no site nav/footer).

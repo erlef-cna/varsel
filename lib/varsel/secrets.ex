@@ -26,7 +26,9 @@ defmodule Varsel.Secrets do
   def oauth_provider_configured?(provider) do
     case Map.fetch(@oauth_providers, provider) do
       {:ok, required_keys} ->
-        config = Application.get_env(:varsel, provider, [])
+        # `|| []` rather than a get_env default: the key can be present and
+        # explicitly nil, which no default covers.
+        config = Application.get_env(:varsel, provider) || []
 
         Enum.all?(required_keys, &Keyword.has_key?(config, &1))
 

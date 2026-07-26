@@ -50,13 +50,34 @@ defmodule VarselWeb.AccountSettingsLive do
     actor = socket.assigns.current_user
 
     account =
-      Ash.load!(actor, [:avatar_url, :display_name, :identity_emails], actor: actor)
+      Ash.load!(actor, [:avatar_url, :display_name, :identity_emails, :identities], actor: actor)
+
+    linked = MapSet.new(account.identities, & &1.strategy)
 
     assign(socket,
       account: account,
-      candidate_emails: account.identity_emails |> Enum.reject(&is_nil/1) |> Enum.uniq() |> Enum.sort()
+      candidate_emails: account.identity_emails |> Enum.reject(&is_nil/1) |> Enum.uniq() |> Enum.sort(),
+      providers:
+        Enum.map(oauth_strategies(), fn strategy ->
+          %{
+            name: strategy.name,
+            label: provider_label(strategy.name),
+            linked?: MapSet.member?(linked, to_string(strategy.name))
+          }
+        end)
     )
   end
+
+  # Only providers this deployment actually offers; an unconfigured one has no
+  # working callback, so a Link button for it would go nowhere.
+  defp oauth_strategies do
+    Varsel.Accounts.User
+    |> AshAuthentication.Info.authentication_strategies()
+    |> Enum.filter(&(&1.name in [:github, :hex] and Varsel.Secrets.strategy_enabled?(&1)))
+  end
+
+  defp provider_label(:github), do: "GitHub"
+  defp provider_label(:hex), do: "Hex.pm"
 
   @impl Phoenix.LiveView
   def render(assigns) do
@@ -87,6 +108,28 @@ defmodule VarselWeb.AccountSettingsLive do
             for your notification email.
           </p>
         </div>
+      </div>
+
+      <div class="rounded-box border border-base-300 p-4">
+        <h2 class="font-semibold">Sign-in providers</h2>
+        <p class="text-sm text-base-content/60 mt-0.5 mb-3">
+          Any provider linked here signs you into this account. Linking one you
+          have already used elsewhere brings that account's work across.
+        </p>
+
+        <ul class="divide-y divide-base-300">
+          <li :for={provider <- @providers} class="flex items-center gap-3 py-2">
+            <span class="font-medium">{provider.label}</span>
+            <.state :if={provider.linked?} dot="bg-success" class="shrink-0">Linked</.state>
+            <.link
+              :if={!provider.linked?}
+              href={~p"/settings/account/link/start/#{provider.name}"}
+              class="btn btn-xs btn-ghost ml-auto"
+            >
+              Link account
+            </.link>
+          </li>
+        </ul>
       </div>
 
       <div class="rounded-box border border-base-300 p-4">

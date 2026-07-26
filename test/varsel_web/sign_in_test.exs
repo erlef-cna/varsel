@@ -9,8 +9,16 @@ defmodule VarselWeb.SignInTest do
   alias AshAuthentication.Info
 
   setup do
-    original = Application.get_env(:varsel, :github)
-    on_exit(fn -> Application.put_env(:varsel, :github, original) end)
+    # Restore by deleting when the key was never set: putting `nil` back is not
+    # the same as absent, and every reader would have to defend against it.
+    original = Application.fetch_env(:varsel, :github)
+
+    on_exit(fn ->
+      case original do
+        {:ok, value} -> Application.put_env(:varsel, :github, value)
+        :error -> Application.delete_env(:varsel, :github)
+      end
+    end)
   end
 
   defp put_github(config), do: Application.put_env(:varsel, :github, config)
