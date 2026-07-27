@@ -106,15 +106,12 @@ defmodule VarselWeb.UserManagementLive do
   defp role_value(nil), do: ""
   defp role_value(role), do: to_string(role)
 
-  # Whether to give the role its own column, asked of a row we already have.
-  #
-  # A field policy answers per record, and Ash offers no way to ask it as a
-  # general question — so the loaded rows are the only thing that knows. Every
-  # row gets the same answer here (the policy turns on the *viewer's* role, not
-  # the row's), which is why one row is enough. Nothing loaded means nothing to
-  # show a column for.
-  defp shows_role?([]), do: false
-  defp shows_role?([user | _rest]), do: not match?(%Ash.ForbiddenField{}, user.role)
+  # The same names the select offers, for a row whose role is readable but not
+  # editable. A role the viewer may not read at all reads as a dash rather than
+  # as the absence of one.
+  defp role_label(%Ash.ForbiddenField{}), do: "—"
+
+  defp role_label(role), do: Enum.find_value(@roles, "—", &if(elem(&1, 1) == role, do: elem(&1, 0)))
 
   # Links to whichever hex instance we authenticate against, defaulting to
   # public hex.pm — a self-hosted one is the exception, and it sets base_url.
@@ -150,7 +147,7 @@ defmodule VarselWeb.UserManagementLive do
                 <th>Email</th>
                 <th>GitHub</th>
                 <th>Hex.pm</th>
-                <th :if={shows_role?(@users.results)} class="text-right">Role</th>
+                <th class="text-right">Role</th>
                 <th></th>
               </tr>
             </thead>
@@ -190,7 +187,7 @@ defmodule VarselWeb.UserManagementLive do
                   </.link>
                   <span :if={is_nil(user.hex_username)} class="text-base-content/50">—</span>
                 </td>
-                <td :if={shows_role?(@users.results)} class="text-right">
+                <td class="text-right">
                   <form
                     :if={Accounts.can_set_user_role?(@current_user, user, %{})}
                     id={"role-#{user.id}"}
@@ -208,6 +205,14 @@ defmodule VarselWeb.UserManagementLive do
                       </option>
                     </select>
                   </form>
+                  <%!-- Readable but not yours to change: the name of the role
+                  rather than an empty cell where a control would be. --%>
+                  <span
+                    :if={!Accounts.can_set_user_role?(@current_user, user, %{})}
+                    class="text-base-content/70"
+                  >
+                    {role_label(user.role)}
+                  </span>
                 </td>
                 <td class="text-right">
                   <button
