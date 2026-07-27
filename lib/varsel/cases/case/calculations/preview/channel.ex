@@ -81,10 +81,13 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
 
   ## -------------------------------------------------------- entry assembly
 
+  # defaultStatus is always "unaffected": derivation labels every release, so
+  # affected/unknown eras are explicit versions[] ranges and everything else
+  # is genuinely unaffected.
   defp base_entry(package) do
     put_non_empty(
       %{
-        "defaultStatus" => to_string(package.default_status),
+        "defaultStatus" => "unaffected",
         "vendor" => package.vendor,
         "product" => package.product
       },

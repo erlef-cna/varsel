@@ -33,7 +33,6 @@ defmodule Varsel.Cases.AffectedPackage do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.AffectedPackage.Changes.FromPreset
-  alias Varsel.Cases.AffectedPackage.DefaultStatus
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.AffectedPackage.ProgramFile
   alias Varsel.Cases.Changes.ApplyProposedField
@@ -341,13 +340,6 @@ defmodule Varsel.Cases.AffectedPackage do
       cpe:2.3:a:<vendor>:<product>:*:*:*:*:*:*:*:* at render time when nil.
       """
 
-      public? true
-    end
-
-    attribute :default_status, DefaultStatus do
-      description "affected[].defaultStatus for every rendered channel entry."
-      allow_nil? false
-      default :unaffected
       public? true
     end
 

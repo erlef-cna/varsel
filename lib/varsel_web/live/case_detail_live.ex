@@ -1615,11 +1615,13 @@ defmodule VarselWeb.CaseDetailLive do
         </span>
       </:actions>
 
-      <p class="text-xs font-mono text-base-content/60 -mt-1.5 mb-2">
+      <p
+        :if={@package.repo_url || @package.allow_unreleased_fix}
+        class="text-xs font-mono text-base-content/60 -mt-1.5 mb-2"
+      >
         <span :if={@package.repo_url}>{@package.repo_url}</span>
-        <span class="font-sans">
-          · default status: {@package.default_status}
-          <span :if={@package.allow_unreleased_fix}>· allows unreleased fixes</span>
+        <span :if={@package.allow_unreleased_fix} class="font-sans">
+          · allows unreleased fixes
         </span>
       </p>
 
