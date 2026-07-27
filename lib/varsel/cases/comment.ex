@@ -33,6 +33,7 @@ defmodule Varsel.Cases.Comment do
     references do
       reference :case, on_delete: :delete
       reference :proposal, on_delete: :nilify
+      reference :author, on_delete: :nilify
     end
 
     custom_indexes do
@@ -47,6 +48,7 @@ defmodule Varsel.Cases.Comment do
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, User, domain: Varsel.Accounts
+    version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
   actions do
@@ -105,9 +107,11 @@ defmodule Varsel.Cases.Comment do
       attribute_writable? true
     end
 
+    # Nullable so the comment outlives its author: deleting an account must not
+    # take the discussion with it. A nil author renders as a deleted user.
     belongs_to :author, User do
-      description "Who wrote the comment. Set from the actor."
-      allow_nil? false
+      description "Who wrote the comment. Set from the actor; nil once they delete their account."
+      allow_nil? true
       public? true
     end
 

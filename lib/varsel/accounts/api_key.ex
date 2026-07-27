@@ -36,6 +36,7 @@ defmodule Varsel.Accounts.ApiKey do
     # Keys are hard-deleted on revoke, so versions can't reference the source row.
     reference_source? false
     belongs_to_actor :user, User, domain: Varsel.Accounts
+    version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
   actions do

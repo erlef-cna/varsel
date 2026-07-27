@@ -53,6 +53,7 @@ defmodule Varsel.Accounts do
       define :register_user_with_github, action: :register_with_github
       define :register_user_with_hex, action: :register_with_hex
       define :set_user_notification_email, action: :set_notification_email
+      define :delete_user, action: :destroy
       define :log_out_user_everywhere, action: :log_out_everywhere
 
       # The mock sign-in action only exists in dev/test builds; see

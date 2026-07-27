@@ -54,6 +54,8 @@ defmodule Varsel.Cases.Proposal do
     references do
       reference :case, on_delete: :delete
       reference :parent_proposal, on_delete: :nilify
+      reference :author, on_delete: :nilify
+      reference :resolved_by, on_delete: :nilify
     end
 
     custom_indexes do
@@ -82,6 +84,7 @@ defmodule Varsel.Cases.Proposal do
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, User, domain: Varsel.Accounts
+    version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
   actions do
@@ -328,9 +331,10 @@ defmodule Varsel.Cases.Proposal do
       attribute_writable? true
     end
 
+    # Nullable so the proposal outlives its author — see `Varsel.Cases.Comment`.
     belongs_to :author, User do
-      description "Who made the proposal. Set from the actor."
-      allow_nil? false
+      description "Who made the proposal. Set from the actor; nil once they delete their account."
+      allow_nil? true
       public? true
     end
 

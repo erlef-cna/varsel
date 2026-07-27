@@ -13,7 +13,7 @@ defmodule VarselWeb.CaseComponents do
 
   import Phoenix.HTML, only: [raw: 1]
   import VarselWeb.CoreComponents, only: [code_block: 1, mono_chip: 1]
-  import VarselWeb.UserComponents, only: [avatar_disc: 1]
+  import VarselWeb.UserComponents, only: [avatar_disc: 1, user_name: 1]
 
   alias Phoenix.LiveView.JS
   alias Varsel.Cases.Markdown
@@ -162,7 +162,7 @@ defmodule VarselWeb.CaseComponents do
           feed_dot_class(entry.kind)
         ]}></span>
         <p class="text-xs text-base-content/60">
-          <span class="font-semibold text-base-content/90">{entry.who}</span>
+          <.user_name user={entry.who} class="font-semibold text-base-content/90" />
           <span class="text-base-content/50">· {relative_time(entry.at)}</span>
         </p>
         <.markdown :if={entry[:markdown?]} content={entry.body} class="prose-xs" />
@@ -384,7 +384,7 @@ defmodule VarselWeb.CaseComponents do
     <div id={@id} class="rounded-lg border border-info/40 bg-info/5 p-3 text-sm scroll-mt-4">
       <div class="flex items-center gap-2">
         <.avatar_disc user={@proposal.author} variant={:b} />
-        <span class="font-bold">{display_name(@proposal.author)}</span>
+        <.user_name user={@proposal.author} class="font-bold" />
         <span class="text-base-content/70">suggests</span>
         <span class="badge badge-sm badge-info badge-outline font-mono">
           {suggestion_target_field(@proposal)}
@@ -437,7 +437,7 @@ defmodule VarselWeb.CaseComponents do
           Enum.map(@comments, fn comment ->
             %{
               kind: :comment,
-              who: display_name(comment.author),
+              who: comment.author,
               at: comment.inserted_at,
               body: comment.body,
               markdown?: true
@@ -457,10 +457,6 @@ defmodule VarselWeb.CaseComponents do
 
   defp suggestion_target_field(%{operation: :insert, target: target}), do: "+ #{target}"
   defp suggestion_target_field(%{operation: :delete, target: target}), do: "− #{target}"
-
-  defp display_name(%{name: name}) when is_binary(name) and name != "", do: name
-  defp display_name(%{email: email}) when is_binary(email), do: email
-  defp display_name(_user), do: "(hidden)"
 
   # Decline requires a click before it offers the note input/confirm button —
   # not a permanently visible input. Plain JS show/hide; no server round trip
@@ -592,9 +588,9 @@ defmodule VarselWeb.CaseComponents do
       </div>
 
       <p class="mt-1 text-xs text-base-content/60">
-        by {display_name(@proposal.author)} · {relative_time(@proposal.inserted_at)}
+        by <.user_name user={@proposal.author} /> · {relative_time(@proposal.inserted_at)}
         <span :if={@proposal.resolved_by}>
-          · resolved by {display_name(@proposal.resolved_by)}
+          · resolved by <.user_name user={@proposal.resolved_by} />
         </span>
       </p>
 

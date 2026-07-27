@@ -22,7 +22,7 @@ defmodule VarselWeb.CaseDetailLive do
   import AshPhoenix.LiveView, only: [keep_live: 4]
   import VarselWeb.CaseComponents
   import VarselWeb.CaseFormComponents
-  import VarselWeb.UserComponents, only: [avatar_disc: 1]
+  import VarselWeb.UserComponents, only: [user_badge: 1, user_name: 1]
 
   alias Varsel.Accounts
   alias Varsel.Cases
@@ -1086,7 +1086,7 @@ defmodule VarselWeb.CaseDetailLive do
                 <span class="text-info font-bold shrink-0">◆</span>
                 <span class="truncate text-base-content/80">
                   {proposal_field_ref(proposal)}
-                  <span class="text-base-content/50">— {display_name(proposal.author)}</span>
+                  <span class="text-base-content/50">— <.user_name user={proposal.author} /></span>
                 </span>
                 <.link
                   href={"#suggestion-#{proposal.id}"}
@@ -1207,7 +1207,7 @@ defmodule VarselWeb.CaseDetailLive do
       Enum.map(case_record.comments, fn comment ->
         %{
           kind: :comment,
-          who: display_name(comment.author),
+          who: comment.author,
           at: comment.inserted_at,
           body: comment.body,
           markdown?: true
@@ -1218,7 +1218,7 @@ defmodule VarselWeb.CaseDetailLive do
       Enum.map(case_record.proposals, fn proposal ->
         %{
           kind: :proposal,
-          who: display_name(proposal.author),
+          who: proposal.author,
           at: proposal.inserted_at,
           body: "suggested a change to",
           chip: proposal_field_ref(proposal),
@@ -1994,7 +1994,7 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
 
         <p class="text-xs text-base-content/60">
-          by {display_name(report.reporter)} · {relative_time(report.inserted_at)}
+          by <.user_name user={report.reporter} /> · {relative_time(report.inserted_at)}
         </p>
 
         <p :if={report.triage_notes} class="text-xs text-base-content/70 italic">
@@ -2021,10 +2021,6 @@ defmodule VarselWeb.CaseDetailLive do
   # The User read policy allows loads through case-scoped relationships, but
   # field policies hide everything except :name from non-POC viewers - and
   # a forbidden email is an Ash.ForbiddenField struct, not nil.
-  defp display_name(%{name: name}) when is_binary(name) and name != "", do: name
-  defp display_name(%{email: email}) when is_binary(email), do: email
-  defp display_name(_user), do: "(hidden)"
-
   # Board D: a right-side slide-over over a scrim, with hairline text tabs
   # (Validation / Rendered JSON / Diff to published) and the lifecycle footer.
   defp preview_overlay(assigns) do
@@ -2221,8 +2217,11 @@ defmodule VarselWeb.CaseDetailLive do
           class="flex items-center justify-between gap-2"
         >
           <span class="flex min-w-0 items-center gap-2">
-            <.avatar_disc user={assignment.user} variant={person_variant(@case_record, assignment)} />
-            <span class="truncate">{display_name(assignment.user)}</span>
+            <.user_badge
+              user={assignment.user}
+              variant={person_variant(@case_record, assignment)}
+              name_class="truncate"
+            />
             <span class="shrink-0 text-base-content/50">{person_role(assignment.user)}</span>
           </span>
           <button
@@ -2252,7 +2251,7 @@ defmodule VarselWeb.CaseDetailLive do
             :if={not Enum.any?(@case_record.assignments, &(&1.user_id == user.id))}
             value={user.id}
           >
-            {display_name(user)}
+            <.user_name user={user} />
           </option>
         </select>
         <button type="submit" class="btn btn-outline btn-sm">Assign</button>

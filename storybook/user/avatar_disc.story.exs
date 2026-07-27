@@ -65,6 +65,14 @@ defmodule VarselWeb.Storybook.User.AvatarDisc do
         }
       },
       %Variation{
+        id: :deleted,
+        description: """
+        The account is gone. What it wrote stays behind, so there is still a
+        row to draw — a muted dash rather than initials of a name nobody has.
+        """,
+        attributes: %{user: nil}
+      },
+      %Variation{
         id: :sized_up,
         description: "`class` overrides the default 21px disc.",
         attributes: %{user: %{name: "Alex Rivera", avatar_url: nil}, class: "size-10 text-base"}

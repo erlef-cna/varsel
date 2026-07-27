@@ -129,6 +129,7 @@ defmodule Varsel.Cases.Case do
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, Varsel.Accounts.User, domain: Varsel.Accounts
+    version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
   actions do

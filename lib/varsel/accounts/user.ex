@@ -131,7 +131,11 @@ defmodule Varsel.Accounts.User do
     ignore_attributes [:inserted_at, :updated_at]
     only_when_changed? true
     store_action_name? true
+    # Accounts are really deleted, so a version cannot point at its source row.
+    # The id stays on the version either way, which is what the trail needs.
+    reference_source? false
     belongs_to_actor :user, __MODULE__, domain: Varsel.Accounts
+    version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
   actions do
@@ -228,6 +232,18 @@ defmodule Varsel.Accounts.User do
       accept [:role]
     end
 
+    destroy :destroy do
+      description "Deletes an account, keeping what it wrote."
+      primary? true
+      # What the account *was* — its providers, tokens, API keys, and the case
+      # assignments only it could act on — goes with it, by cascade. What it
+      # *wrote* stays and loses its author: comments, proposals, reports and
+      # credits nilify, because a discussion does not stop being a discussion
+      # when one participant leaves. Paper-trail versions keep the raw id (the
+      # foreign key is dropped), so the audit trail can still say which account
+      # made a change after the account is gone.
+    end
+
     if @mock_login? do
       create :mock_sign_in do
         description "Dev-only: upserts a dummy user for the given role and signs it in."
@@ -311,6 +327,13 @@ defmodule Varsel.Accounts.User do
     # the addresses that user's own providers reported, and it decides where
     # their mail goes.
     policy action(:set_notification_email) do
+      authorize_if expr(id == ^actor(:id))
+    end
+
+    # Your own account, or a POC removing someone from the team — the same
+    # reach `:set_role` already grants, including over other POCs.
+    policy action_type(:destroy) do
+      authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
     end
   end

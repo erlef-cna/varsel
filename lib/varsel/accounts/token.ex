@@ -29,6 +29,7 @@ defmodule Varsel.Accounts.Token do
     reference_source? false
     create_version_on_destroy? false
     belongs_to_actor :user, Varsel.Accounts.User, domain: Varsel.Accounts
+    version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
   # The three creates are AshAuthentication-managed token operations with no

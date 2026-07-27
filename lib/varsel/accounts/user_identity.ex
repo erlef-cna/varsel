@@ -33,6 +33,11 @@ defmodule Varsel.Accounts.UserIdentity do
     table "user_identities"
     repo Varsel.Repo
 
+    references do
+      # A provider link is meaningless without the account it links to.
+      reference :user, on_delete: :delete
+    end
+
     custom_statements do
       # One address belongs to one account. Not a unique index on `email`:
       # a single user legitimately holds the same address on several providers
@@ -70,6 +75,7 @@ defmodule Varsel.Accounts.UserIdentity do
     # Identities are hard-deleted when a user disconnects a provider
     reference_source? false
     belongs_to_actor :user, User, domain: Varsel.Accounts
+    version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
   actions do
