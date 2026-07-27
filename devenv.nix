@@ -54,6 +54,13 @@ in
   claude.code = {
     enable = true;
 
+    # devenv otherwise wires a PostToolUse hook running the whole git-hooks
+    # suite (dialyzer, sobelow, ...) after every Edit/Write. Pre-commit stashes
+    # unstaged changes for the duration of the run, so an interrupted run
+    # leaves the tree corrupted -- far likelier per-edit than per-commit. The
+    # hooks still run on commit.
+    hooks.git-hooks-run.enable = false;
+
     # The app's own MCP endpoint (dev server). Login required: Claude Code
     # runs the OAuth 2.1 discovery/registration flow on the first 401.
     mcpServers.varsel = {
