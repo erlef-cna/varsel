@@ -47,7 +47,7 @@ defmodule VarselWeb.VarselEditLive do
             {:noreply,
              socket
              |> put_flash(:info, "Saved — publish/update job enqueued.")
-             |> push_navigate(to: ~p"/cves/manage")}
+             |> push_navigate(to: ~p"/cves")}
 
           {:error, form} ->
             {:noreply, assign(socket, form: form, json_text: text)}
@@ -117,7 +117,7 @@ defmodule VarselWeb.VarselEditLive do
 
         <div class="flex items-center gap-2 mt-4">
           <button type="submit" class="btn btn-primary">Save</button>
-          <.link href={~p"/cves/manage"} class="btn btn-ghost">Cancel</.link>
+          <.link href={~p"/cves"} class="btn btn-ghost">Cancel</.link>
         </div>
       </.form>
     </.page_container>
