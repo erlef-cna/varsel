@@ -61,7 +61,7 @@ config :varsel, Varsel.Repo,
 config :varsel, Varsel.Vault,
   ciphers: [
     default:
-      {Cloak.Ciphers.AES.GCM, tag: "AES.GCM.V1", key: Base.decode64!("bvVixCuGMqaxlGEZiUEAWISf5p8qlrmpT+EvGhAJi2A=")}
+      {Cloak.Ciphers.AES.GCM, tag: "AES.GCM.V1", key: Base.decode64!("8tu1HQOPQ81DvQ3FjAIXzzJqqDKtDMffk8iBzII4N6s=")}
   ]
 
 # For development, we disable any cache and enable

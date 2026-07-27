@@ -77,18 +77,6 @@ if config_env() != :test do
   mitre_env = Map.new(mitre_vars, &{&1, System.get_env(&1)})
   mitre_missing = Enum.filter(mitre_vars, &is_nil(mitre_env[&1]))
 
-  config :varsel, Varsel.Vault,
-    ciphers: [
-      default:
-        {Cloak.Ciphers.AES.GCM,
-         tag: "AES.GCM.V1",
-         key:
-           Base.decode64!(
-             System.get_env("CLOAK_KEY") ||
-               raise("Missing environment variable `CLOAK_KEY`!")
-           )}
-    ]
-
   # "From" address for CNA notification emails (e.g. new vulnerability reports).
   config :varsel,
          :cna_email_from,
@@ -185,6 +173,18 @@ if config_env() == :prod do
     # For machines with several cores, consider starting multiple pools of `pool_size`
     # pool_count: 4,
     socket_options: maybe_ipv6
+
+  config :varsel, Varsel.Vault,
+    ciphers: [
+      default:
+        {Cloak.Ciphers.AES.GCM,
+         tag: "AES.GCM.V1",
+         key:
+           Base.decode64!(
+             System.get_env("CLOAK_KEY") ||
+               raise("Missing environment variable `CLOAK_KEY`!")
+           )}
+    ]
 
   config :varsel, VarselWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
