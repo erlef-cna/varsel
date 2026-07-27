@@ -8,7 +8,8 @@ defmodule VarselWeb.AuthController do
 
   alias AshAuthentication.Errors.AuthenticationFailed
   alias AshAuthentication.Strategy.OAuth2.UserResolver
-  alias VarselWeb.AccountLinkController
+  alias Varsel.Accounts.Strategy.LinkableOauth2
+  alias VarselWeb.Plugs.OauthLinking
 
   def success(conn, activity, user, _token) do
     return_to = get_session(conn, :return_to) || ~p"/"
@@ -20,23 +21,19 @@ defmodule VarselWeb.AuthController do
         _ -> "You are now signed in"
       end
 
-    conn =
-      conn
-      |> delete_session(:return_to)
-      |> store_in_session(user)
-      # If your resource has a different name, update the assign name here (i.e :current_admin)
-      |> assign(:current_user, user)
+    linking? = not is_nil(get_session(conn, OauthLinking.session_key()))
 
-    # A sign-in that began as a link is still a real sign-in — the session is
-    # stored either way, so declining leaves the caller on the account they
-    # just proved they hold. Only the destination differs.
-    if get_session(conn, AccountLinkController.session_key()) do
-      redirect(conn, to: ~p"/settings/account/link/confirm")
-    else
-      conn
-      |> put_flash(:info, message)
-      |> redirect(to: return_to)
-    end
+    conn
+    |> delete_session(:return_to)
+    # The marker has done its work by now: the register action attached the
+    # provider to the account it named. Leaving it set would make the next
+    # ordinary sign-in look like a link.
+    |> delete_session(OauthLinking.session_key())
+    |> store_in_session(user)
+    # If your resource has a different name, update the assign name here (i.e :current_admin)
+    |> assign(:current_user, user)
+    |> put_flash(:info, if(linking?, do: "Provider linked to your account", else: message))
+    |> redirect(to: if(linking?, do: ~p"/settings/account", else: return_to))
   end
 
   def failure(conn, activity, reason) do
@@ -65,13 +62,24 @@ defmodule VarselWeb.AuthController do
           provider you first used, then link this one from your account page.
           """
 
+        # Mid-link, the provider account turned out to sign in to someone else.
+        {_,
+         %AuthenticationFailed{
+           caused_by: %{module: LinkableOauth2.Actions, message: message}
+         }} ->
+          message
+
         _ ->
           "Incorrect email or password"
       end
 
+    linking? = not is_nil(get_session(conn, OauthLinking.session_key()))
+
     conn
+    # A link that failed is over; the next sign-in must not inherit it.
+    |> delete_session(OauthLinking.session_key())
     |> put_flash(:error, message)
-    |> redirect(to: ~p"/sign-in")
+    |> redirect(to: if(linking?, do: ~p"/settings/account", else: ~p"/sign-in"))
   end
 
   def sign_out(conn, _params) do

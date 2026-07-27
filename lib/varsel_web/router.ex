@@ -85,6 +85,8 @@ defmodule VarselWeb.Router do
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug :load_from_session
+    # Tells the OAuth callback's register action that this sign-in is a link.
+    plug VarselWeb.Plugs.OauthLinking
   end
 
   # Pages that only mean anything for a signed-in user; anonymous callers are
@@ -197,9 +199,6 @@ defmodule VarselWeb.Router do
     pipe_through [:browser, :logged_in_browser]
 
     get "/start/:strategy", AccountLinkController, :start
-    get "/confirm", AccountLinkController, :confirm_page
-    post "/confirm", AccountLinkController, :confirm
-    post "/decline", AccountLinkController, :decline
   end
 
   # Authentication pages — bare, centered layout (no site nav/footer).

@@ -16,9 +16,9 @@ defmodule Varsel.Accounts.Strategy.Hex do
 
   use AshAuthentication.Strategy.Custom, entity: __MODULE__.Dsl.dsl()
 
-  alias AshAuthentication.Strategy.OAuth2
+  alias Varsel.Accounts.Strategy.Transformer
   alias Varsel.Accounts.Strategy.Verifier
 
-  defdelegate transform(strategy, dsl_state), to: OAuth2
+  defdelegate transform(strategy, dsl_state), to: Transformer
   defdelegate verify(strategy, dsl_state), to: Verifier
 end

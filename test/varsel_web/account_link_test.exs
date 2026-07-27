@@ -3,13 +3,23 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule VarselWeb.AccountLinkTest do
+  @moduledoc """
+  Linking a second provider to an account already signed in.
+
+  The link resolves inside the OAuth callback rather than in a page of its
+  own: the Link button leaves a marker in the session, and the register action
+  attaches the provider to the account it names. These drive the register
+  action directly, since the provider half of the round trip cannot be faked.
+  """
+
   use VarselWeb.ConnCase, async: false
 
   import Varsel.Fixtures
 
+  alias Ash.Resource
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Accounts.User
-  alias VarselWeb.AccountLinkController
+  alias VarselWeb.Plugs.OauthLinking
 
   defp log_in(conn, user) do
     conn
@@ -17,13 +27,50 @@ defmodule VarselWeb.AccountLinkTest do
     |> AuthPlug.store_in_session(user)
   end
 
-  # Signed in as `user`, mid-link toward `from` — the state the OAuth callback
-  # leaves behind. The marker goes in with the session, not after: a second
-  # `init_test_session` would reset the token `store_in_session/2` just wrote.
-  defp linking_from(conn, user, from) do
-    conn
-    |> init_test_session(%{AccountLinkController.session_key() => from.id})
-    |> AuthPlug.store_in_session(user)
+  # The register action the OAuth callback runs, set up the way
+  # `AshAuthentication.Strategy.OAuth2.Actions.register/3` sets it up.
+  # `linking` is the account a link was started from, or nil for an ordinary
+  # sign-in.
+  defp register_via(strategy_name, uid, email, linking \\ nil) do
+    action_name = String.to_existing_atom("register_with_#{strategy_name}")
+    action = Resource.Info.action(User, action_name, :create)
+    linking_context = if linking, do: %{linking_user_id: linking.id}, else: %{}
+
+    User
+    |> Ash.Changeset.new()
+    |> Ash.Changeset.set_context(Map.put(linking_context, :private, %{ash_authentication?: true}))
+    |> Ash.Changeset.for_create(
+      action_name,
+      %{
+        user_info: %{"sub" => uid, "preferred_username" => uid, "email" => email},
+        oauth_tokens: %{"access_token" => "token"}
+      },
+      authorize?: false,
+      upsert?: true,
+      upsert_identity: action.upsert_identity
+    )
+    |> Ash.create()
+  end
+
+  # A refusal surfaces as `AuthenticationFailed`, whose own message is the
+  # generic "Authentication failed" — the reason it carries is what says which
+  # refusal it was, and what the sign-in page turns into a sentence.
+  defp caused_by_message(error) do
+    error
+    |> List.wrap()
+    |> Enum.flat_map(&(Map.get(&1, :errors) || List.wrap(&1)))
+    |> Enum.find_value("", fn
+      %{caused_by: %{message: message}} -> message
+      _other -> nil
+    end)
+  end
+
+  defp strategies_of(user) do
+    user
+    |> Ash.load!([:identities], authorize?: false)
+    |> Map.fetch!(:identities)
+    |> Enum.map(&to_string(&1.strategy))
+    |> Enum.sort()
   end
 
   describe "starting a link" do
@@ -33,7 +80,7 @@ defmodule VarselWeb.AccountLinkTest do
       conn = conn |> log_in(user) |> get(~p"/settings/account/link/start/hex")
 
       assert redirected_to(conn) == "/auth/user/hex"
-      assert get_session(conn, AccountLinkController.session_key()) == user.id
+      assert get_session(conn, OauthLinking.session_key()) == user.id
     end
 
     test "an anonymous visitor is sent to sign in", %{conn: conn} do
@@ -43,73 +90,59 @@ defmodule VarselWeb.AccountLinkTest do
     end
   end
 
-  describe "the confirmation page" do
-    test "names both accounts", %{conn: conn} do
-      keep = register_user("keep")
-      other = register_user("other")
+  describe "a sign-in that is not a link" do
+    test "registers a new account when nothing holds the address" do
+      assert {:ok, user} = register_via("hex", "newcomer", "newcomer@example.com")
 
-      html =
-        conn
-        |> linking_from(other, keep)
-        |> get(~p"/settings/account/link/confirm")
-        |> html_response(200)
-
-      assert html =~ "keep name"
-      assert html =~ "other name"
+      assert strategies_of(user) == ["hex"]
     end
 
-    test "goes back to the settings page when no link is in progress", %{conn: conn} do
-      user = register_user("alice")
+    test "is refused when an account already holds the address" do
+      register_user("alice")
 
-      conn = conn |> log_in(user) |> get(~p"/settings/account/link/confirm")
-
-      assert redirected_to(conn) == "/settings/account"
+      assert {:error, error} = register_via("hex", "alice_hex", "alice@example.com")
+      assert caused_by_message(error) =~ "already exists"
     end
   end
 
-  describe "confirming" do
-    test "merges the signed-in account into the one the link started from", %{conn: conn} do
-      keep = register_user("keep")
-      other = register_user("other")
+  describe "a sign-in that is a link" do
+    test "attaches the provider to the account instead of registering a second" do
+      alice = register_user("alice")
 
-      conn = conn |> linking_from(other, keep) |> post(~p"/settings/account/link/confirm")
+      assert {:ok, user} = register_via("hex", "alice_hex", "alice@example.com", alice)
 
-      assert redirected_to(conn) == "/settings/account"
-      assert Ash.get!(User, other.id, authorize?: false).merged_into_id == keep.id
-
-      # The provider that was just linked now signs the surviving account in.
-      identities =
-        keep
-        |> Ash.load!([:identities], authorize?: false)
-        |> Map.fetch!(:identities)
-
-      assert length(identities) == 2
+      assert user.id == alice.id
+      assert strategies_of(alice) == ["github", "hex"]
     end
 
-    test "leaves the session on the surviving account", %{conn: conn} do
-      keep = register_user("keep")
-      other = register_user("other")
+    test "attaches even when the provider reports an address nobody holds" do
+      alice = register_user("alice")
 
-      conn = conn |> linking_from(other, keep) |> post(~p"/settings/account/link/confirm")
+      assert {:ok, user} = register_via("hex", "alice_hex", "elsewhere@example.com", alice)
 
-      refute get_session(conn, AccountLinkController.session_key())
-      assert conn.assigns.current_user.id == keep.id
+      assert user.id == alice.id
+      assert strategies_of(alice) == ["github", "hex"]
     end
-  end
 
-  describe "declining" do
-    test "keeps both accounts and stays signed in as the new one", %{conn: conn} do
-      keep = register_user("keep")
-      other = register_user("other")
+    test "is refused when that provider account already signs someone else in" do
+      alice = register_user("alice")
+      {:ok, _bob} = register_via("hex", "bob_hex", "bob@example.com")
 
-      conn = conn |> linking_from(other, keep) |> post(~p"/settings/account/link/decline")
+      assert {:error, error} = register_via("hex", "bob_hex", "bob@example.com", alice)
+      assert caused_by_message(error) =~ "already signs in to a different account"
 
-      assert redirected_to(conn) == "/settings/account"
-      refute get_session(conn, AccountLinkController.session_key())
+      # Neither account gained or lost a provider.
+      assert strategies_of(alice) == ["github"]
+    end
 
-      # Nothing was merged: both accounts stand, each with its own provider.
-      assert Ash.get!(User, other.id, authorize?: false).merged_into_id == nil
-      assert Ash.get!(User, keep.id, authorize?: false).merged_into_id == nil
+    test "is a no-op when the provider is already this account's" do
+      alice = register_user("alice")
+      {:ok, _} = register_via("hex", "alice_hex", "alice@example.com", alice)
+
+      assert {:ok, user} = register_via("hex", "alice_hex", "alice@example.com", alice)
+
+      assert user.id == alice.id
+      assert strategies_of(alice) == ["github", "hex"]
     end
   end
 end
