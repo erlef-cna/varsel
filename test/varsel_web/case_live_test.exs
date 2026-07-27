@@ -1072,6 +1072,38 @@ defmodule VarselWeb.CaseLiveTest do
              |> render() =~ "hidden"
     end
 
+    test "affected-package suggestions render in the Affected section without suggest mode, once",
+         %{conn: conn, poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      proposal =
+        Cases.create_case_proposal!(
+          %{
+            case_id: case_record.id,
+            target: :affected_package,
+            operation: :insert,
+            proposed_value: %{"value" => %{"vendor" => "acme", "product" => "acme_lib"}},
+            reasoning: "acme_lib is affected too"
+          },
+          actor: supporter
+        )
+
+      # An :insert proposal has no package card to live in, yet its suggestion
+      # card must show in the Affected section even outside suggest mode.
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      [_before, affected_section] = String.split(html, ~s(<div id="affected">), parts: 2)
+      assert affected_section =~ ~s(id="suggestion-#{proposal.id}")
+
+      # With several package cards the suggestion renders once at section
+      # level, not repeated inside every card.
+      Fixtures.add_affected_package(poc, case_record)
+      Fixtures.add_affected_package(poc, case_record, %{product: "other_lib"})
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      assert length(String.split(html, ~s(id="suggestion-#{proposal.id}"))) == 2
+    end
+
     test "a one-word change to a long text renders as a merged inline word diff, not stacked blocks",
          %{conn: conn, poc: poc, supporter: supporter} do
       old_description =
