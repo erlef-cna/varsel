@@ -8,6 +8,7 @@ defmodule VarselWeb.AccountSettingsLiveTest do
   import Phoenix.LiveViewTest
   import Varsel.Fixtures
 
+  alias Ash.Error.Forbidden
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Accounts
   alias Varsel.Accounts.User
@@ -84,11 +85,92 @@ defmodule VarselWeb.AccountSettingsLiveTest do
     poc = register_user("poc", :poc)
     link_hex_identity(alice, "alice_hex", "alice@hex.example")
 
-    assert {:error, %Ash.Error.Forbidden{}} =
+    assert {:error, %Forbidden{}} =
              Accounts.set_user_notification_email(
                alice,
                %{notification_email: "alice@hex.example"},
                actor: poc
              )
+  end
+
+  describe "unlinking a provider" do
+    defp identities(user) do
+      user
+      |> Ash.load!([:identities], authorize?: false)
+      |> Map.fetch!(:identities)
+    end
+
+    # The providers section only lists what this deployment offers, and nothing
+    # is configured in test, so a row has to be conjured for it to render.
+    setup do
+      configured = [client_id: "id", client_secret: "secret", redirect_uri: "https://example.com"]
+
+      for provider <- [:github, :hex] do
+        original = Application.fetch_env(:varsel, provider)
+
+        Application.put_env(
+          :varsel,
+          provider,
+          if(provider == :hex,
+            do: Keyword.put(configured, :base_url, "https://hex.pm"),
+            else: configured
+          )
+        )
+
+        on_exit(fn ->
+          case original do
+            {:ok, value} -> Application.put_env(:varsel, provider, value)
+            :error -> Application.delete_env(:varsel, provider)
+          end
+        end)
+      end
+
+      :ok
+    end
+
+    test "drops the identity", %{conn: conn} do
+      user = register_user("alice")
+      link_hex_identity(user, "alice_hex", "alice@hex.example")
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      hex = Enum.find(identities(user), &(to_string(&1.strategy) == "hex"))
+
+      html =
+        lv
+        |> element(~s{button[phx-value-identity_id="#{hex.id}"]})
+        |> render_click()
+
+      assert html =~ "Unlinked Hex.pm"
+      assert Enum.map(identities(user), &to_string(&1.strategy)) == ["github"]
+    end
+
+    test "refuses the only provider left, which would lock the account out" do
+      user = register_user("alice")
+
+      assert [only] = identities(user)
+
+      assert {:error, _error} = Accounts.unlink_provider(only, actor: user)
+      assert length(identities(user)) == 1
+    end
+
+    test "offers no unlink button when there is only one provider", %{conn: conn} do
+      user = register_user("alice")
+
+      {:ok, _lv, html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      refute html =~ "Unlink"
+    end
+
+    test "nobody unlinks someone else's provider" do
+      alice = register_user("alice")
+      poc = register_user("poc", :poc)
+      link_hex_identity(alice, "alice_hex", "alice@hex.example")
+
+      hex = Enum.find(identities(alice), &(to_string(&1.strategy) == "hex"))
+
+      assert {:error, %Forbidden{}} = Accounts.unlink_provider(hex, actor: poc)
+      assert length(identities(alice)) == 2
+    end
   end
 end

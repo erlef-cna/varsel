@@ -94,6 +94,15 @@ defmodule Varsel.Accounts.UserIdentity do
       change AshAuthentication.UserIdentity.UpsertIdentityChange
       change Varsel.Accounts.UserIdentity.Changes.ApplyProviderFields
     end
+
+    destroy :destroy do
+      description "Unlinks a provider from the account it is linked to."
+      primary? true
+      # The guard has to read the account's other identities first.
+      require_atomic? false
+
+      change Varsel.Accounts.UserIdentity.Changes.RefuseLastIdentity
+    end
   end
 
   policies do
@@ -106,6 +115,12 @@ defmodule Varsel.Accounts.UserIdentity do
     # private attributes, so they are never readable through the API at all.
     policy action_type(:read) do
       authorize_if accessing_from(User, :identities)
+    end
+
+    # Your own providers, and nobody else's — a POC has no more business
+    # removing someone's way in than picking their address.
+    policy action_type(:destroy) do
+      authorize_if expr(user_id == ^actor(:id))
     end
   end
 

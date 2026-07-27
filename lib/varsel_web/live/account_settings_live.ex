@@ -42,6 +42,25 @@ defmodule VarselWeb.AccountSettingsLive do
     {:noreply, socket}
   end
 
+  @impl Phoenix.LiveView
+  def handle_event("unlink_provider", %{"identity_id" => identity_id}, socket) do
+    actor = socket.assigns.current_user
+    identity = Enum.find(socket.assigns.account.identities, &(&1.id == identity_id))
+
+    socket =
+      case Accounts.unlink_provider(identity, actor: actor) do
+        :ok ->
+          socket
+          |> assign_account()
+          |> put_flash(:info, "Unlinked #{provider_label(identity.strategy)}.")
+
+        {:error, _error} ->
+          put_flash(socket, :error, "Could not unlink that provider.")
+      end
+
+    {:noreply, socket}
+  end
+
   defp assign_account(%{assigns: %{current_user: nil}}), do: raise(VarselWeb.UnauthorizedError)
 
   # The addresses to choose between are exactly what this user's providers
@@ -52,17 +71,22 @@ defmodule VarselWeb.AccountSettingsLive do
     account =
       Ash.load!(actor, [:avatar_url, :display_name, :identity_emails, :identities], actor: actor)
 
-    linked = MapSet.new(account.identities, &to_string(&1.strategy))
+    linked = Map.new(account.identities, &{to_string(&1.strategy), &1})
 
     assign(socket,
       account: account,
       candidate_emails: candidate_emails(account),
       providers:
         Enum.map(oauth_strategies(), fn strategy ->
+          identity = Map.get(linked, to_string(strategy.name))
+
           %{
             name: strategy.name,
             label: provider_label(strategy.name),
-            linked?: MapSet.member?(linked, to_string(strategy.name))
+            identity_id: identity && identity.id,
+            # Unlinking the last provider would lock the account out, so the
+            # button is not offered (the action refuses it either way).
+            unlinkable?: not is_nil(identity) and length(account.identities) > 1
           }
         end)
     )
@@ -94,8 +118,12 @@ defmodule VarselWeb.AccountSettingsLive do
     |> Enum.filter(&(&1.name in [:github, :hex] and Varsel.Secrets.strategy_enabled?(&1)))
   end
 
-  defp provider_label(:github), do: "GitHub"
-  defp provider_label(:hex), do: "Hex.pm"
+  # Accepts either form: strategies name themselves with atoms, identity rows
+  # store the same name as a string.
+  defp provider_label(strategy) when is_atom(strategy), do: strategy |> to_string() |> provider_label()
+
+  defp provider_label("github"), do: "GitHub"
+  defp provider_label("hex"), do: "Hex.pm"
 
   @impl Phoenix.LiveView
   def render(assigns) do
@@ -132,20 +160,31 @@ defmodule VarselWeb.AccountSettingsLive do
         <h2 class="font-semibold">Sign-in providers</h2>
         <p class="text-sm text-base-content/60 mt-0.5 mb-3">
           Any provider linked here signs you into this account. Linking one you
-          have already used elsewhere brings that account's work across.
+          have already used elsewhere brings that account's work across, and the
+          last one cannot be unlinked — it is the only way back in.
         </p>
 
         <ul class="divide-y divide-base-300">
           <li :for={provider <- @providers} class="flex items-center gap-3 py-2">
             <span class="font-medium">{provider.label}</span>
-            <.state :if={provider.linked?} dot="bg-success" class="shrink-0">Linked</.state>
+            <.state :if={provider.identity_id} dot="bg-success" class="shrink-0">Linked</.state>
             <.link
-              :if={!provider.linked?}
+              :if={is_nil(provider.identity_id)}
               href={~p"/settings/account/link/start/#{provider.name}"}
               class="btn btn-xs btn-ghost ml-auto"
             >
               Link account
             </.link>
+            <button
+              :if={provider.unlinkable?}
+              type="button"
+              phx-click="unlink_provider"
+              phx-value-identity_id={provider.identity_id}
+              data-confirm={"Unlink #{provider.label} from this account?"}
+              class="btn btn-xs btn-ghost ml-auto"
+            >
+              Unlink
+            </button>
           </li>
         </ul>
       </div>

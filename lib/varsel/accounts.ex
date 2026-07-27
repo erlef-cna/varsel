@@ -64,7 +64,10 @@ defmodule Varsel.Accounts do
       end
     end
 
-    resource Varsel.Accounts.UserIdentity
+    resource Varsel.Accounts.UserIdentity do
+      define :unlink_provider, action: :destroy
+    end
+
     resource Varsel.Accounts.OauthClient
     resource Varsel.Accounts.OauthAuthorizationCode
     resource Varsel.Accounts.OauthRefreshToken
