@@ -18,6 +18,14 @@ defmodule Varsel.CVE.Cvelint do
 
   @ignored_rules "E007"
 
+  # The record's own id names the temp file, and the record is caller-supplied
+  # at any authenticated privilege (the `validate_cve_record_*` tools). Anything
+  # that is not a CVE ID — a path separator, `..`, an absolute path — would
+  # steer `Path.join/2` out of the temp directory, so only this shape is used
+  # as a filename and everything else falls back to the placeholder.
+  @cve_id_shape ~r/^CVE-\d{4}-\d{4,19}$/i
+  @placeholder_cve_id "CVE-0000-0000"
+
   @doc """
   Lints a decoded CVE record map.
 
@@ -38,7 +46,7 @@ defmodule Varsel.CVE.Cvelint do
          ]}
 
       _ ->
-        cve_id = get_in(cve_json, ["cveMetadata", "cveId"]) || "CVE-0000-0000"
+        cve_id = filename_id(get_in(cve_json, ["cveMetadata", "cveId"]))
 
         tmp_dir =
           Path.join(
@@ -57,6 +65,15 @@ defmodule Varsel.CVE.Cvelint do
         end
     end
   end
+
+  # cvelint reads the record from the file, so the name only has to identify it
+  # in an error message; a record whose id is missing or malformed still lints
+  # under the placeholder, and the lint reports the bad id itself.
+  defp filename_id(cve_id) when is_binary(cve_id) do
+    if Regex.match?(@cve_id_shape, cve_id), do: cve_id, else: @placeholder_cve_id
+  end
+
+  defp filename_id(_not_a_string), do: @placeholder_cve_id
 
   defp run(path) do
     bin = Application.get_env(:varsel, :cvelint_bin, "cvelint")

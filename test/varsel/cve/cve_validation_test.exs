@@ -121,6 +121,16 @@ defmodule Varsel.CVE.CveValidationTest do
     assert Enum.any?(errors, &(&1.source == :cvelint and &1.code == "E004"))
   end
 
+  test "a cveId that is not a CVE ID cannot steer the cvelint temp file" do
+    # The id names the temp file cvelint reads, and any authenticated user can
+    # reach this action, so a traversing id must not escape the temp directory.
+    traversing =
+      put_in(@valid_cve_json, ["cveMetadata", "cveId"], "../../../../tmp/varsel-cvelint-escape")
+
+    assert %{valid: _} = CVE.validate_cve_record_cvelint!(traversing)
+    refute File.exists?("/tmp/varsel-cvelint-escape.json")
+  end
+
   test "missing hex packages are reported" do
     invalid =
       put_in(
