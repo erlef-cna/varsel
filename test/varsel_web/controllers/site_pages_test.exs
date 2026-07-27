@@ -109,6 +109,9 @@ defmodule VarselWeb.SitePagesTest do
       assert body =~ "<loc>#{base}/</loc>"
       assert body =~ "<loc>#{base}/scope</loc>"
       assert body =~ "<loc>#{base}/cves/#{cve_id}.html</loc>"
+
+      # The document is encoded, not concatenated — so it parses.
+      assert {:ok, {"urlset", _attrs, _children}} = Saxy.SimpleForm.parse_string(body)
     end
   end
 end

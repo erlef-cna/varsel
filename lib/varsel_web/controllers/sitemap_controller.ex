@@ -10,9 +10,15 @@ defmodule VarselWeb.SitemapController do
   The document is rebuilt at most once every `@ttl_ms` and cached in
   `:persistent_term` — the CVE set changes rarely and rebuilding scans every
   published record, so a short cache keeps crawler hits cheap.
+
+  Built as an XML tree and encoded rather than concatenated, so every URL is
+  escaped by the encoder. Note that a bare string child of
+  `Saxy.XML.element/3` is emitted raw; text goes through `characters/1`.
   """
 
   use VarselWeb, :controller
+
+  import Saxy.XML
 
   alias Varsel.CVE
 
@@ -47,6 +53,8 @@ defmodule VarselWeb.SitemapController do
   end
 
   defp build_xml do
+    base = VarselWeb.Endpoint.url()
+
     cves =
       CVE.list_published_cve_records!(
         load: [:cve_id, :date_updated, :date_published],
@@ -54,14 +62,26 @@ defmodule VarselWeb.SitemapController do
         actor: nil
       )
 
-    VarselWeb.Endpoint.url()
-    |> SitemapBuilder.new()
-    |> SitemapBuilder.add(static_pages(), &%SitemapBuilder{url: &1, lastmod: @compiled_at})
-    |> SitemapBuilder.add(
-      cves,
-      &%SitemapBuilder{url: ~p"/cves/#{&1.cve_id <> ".html"}", lastmod: record_mod(&1)}
-    )
-    |> SitemapBuilder.generate()
+    static = Enum.map(static_pages(), &url_entry(base <> &1, @compiled_at))
+
+    published =
+      Enum.map(cves, &url_entry(base <> ~p"/cves/#{&1.cve_id <> ".html"}", record_mod(&1)))
+
+    urlset =
+      element(
+        "urlset",
+        [{"xmlns", "http://www.sitemaps.org/schemas/sitemap/0.9"}],
+        static ++ published
+      )
+
+    Saxy.encode!(urlset, version: "1.0", encoding: "UTF-8")
+  end
+
+  defp url_entry(url, lastmod) do
+    element("url", [], [
+      element("loc", [], [characters(url)]),
+      element("lastmod", [], [characters(Date.to_iso8601(lastmod))])
+    ])
   end
 
   defp static_pages do

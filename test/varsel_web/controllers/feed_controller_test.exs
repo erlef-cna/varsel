@@ -9,7 +9,14 @@ defmodule VarselWeb.FeedControllerTest do
 
   @cve_id "CVE-2025-12345"
 
-  defp publish do
+  # Every XML metacharacter, plus the shapes that would break out of a text
+  # node or an attribute if anything were concatenated instead of encoded.
+  @hostile ~S|A & B <script>alert(1)</script> "quoted" 'single' ]]> </title>|
+
+  defp publish(opts \\ []) do
+    title = Keyword.get(opts, :title, "Test vulnerability")
+    description = Keyword.get(opts, :description, "A test vulnerability.")
+
     cve_json = %{
       "dataType" => "CVE_RECORD",
       "dataVersion" => "5.2",
@@ -21,8 +28,8 @@ defmodule VarselWeb.FeedControllerTest do
       },
       "containers" => %{
         "cna" => %{
-          "title" => "Test vulnerability",
-          "descriptions" => [%{"lang" => "en", "value" => "A test vulnerability."}],
+          "title" => title,
+          "descriptions" => [%{"lang" => "en", "value" => description}],
           "affected" => [],
           "references" => []
         }
@@ -59,4 +66,56 @@ defmodule VarselWeb.FeedControllerTest do
       assert body =~ @cve_id
     end
   end
+
+  # The feeds are built as XML and encoded, so a value that looks like markup
+  # has to survive as *text* — parseable, and identical to what went in.
+  describe "hostile content" do
+    for {name, path} <- [atom: "/feed.atom", rss: "/feed.rss"] do
+      test "#{name}: a title full of markup stays text", %{conn: conn} do
+        publish(title: @hostile)
+
+        body = conn |> get(unquote(path)) |> response(200)
+
+        assert {:ok, texts} = text_nodes(body)
+        assert Enum.any?(texts, &String.contains?(&1, @hostile))
+
+        # The dangerous shapes only ever appear escaped in the document.
+        refute body =~ "<script>"
+        refute body =~ "]]>"
+      end
+
+      test "#{name}: a description full of markup stays text", %{conn: conn} do
+        publish(description: @hostile)
+
+        body = conn |> get(unquote(path)) |> response(200)
+
+        assert {:ok, texts} = text_nodes(body)
+        assert Enum.any?(texts, &String.contains?(&1, @hostile))
+        refute body =~ "<script>"
+      end
+    end
+
+    test "a spoofed Host cannot inject markup into the feed", %{conn: conn} do
+      publish()
+
+      body =
+        %{conn | host: ~S|evil.example"><script>alert(1)</script>|}
+        |> get(~p"/feed.atom")
+        |> response(200)
+
+      assert {:ok, _texts} = text_nodes(body)
+      refute body =~ "<script>"
+    end
+  end
+
+  # Parses the document and returns every text node, which doubles as a
+  # well-formedness check: malformed XML fails here rather than in a browser.
+  defp text_nodes(xml) do
+    with {:ok, tree} <- Saxy.SimpleForm.parse_string(xml) do
+      {:ok, collect_text(tree)}
+    end
+  end
+
+  defp collect_text({_name, _attrs, children}), do: Enum.flat_map(children, &collect_text/1)
+  defp collect_text(text) when is_binary(text), do: [text]
 end
