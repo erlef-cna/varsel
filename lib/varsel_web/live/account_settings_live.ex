@@ -13,11 +13,18 @@ defmodule VarselWeb.AccountSettingsLive do
 
   import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
+  alias AshAuthentication.TokenResource.Actions, as: TokenActions
   alias Varsel.Accounts
+  alias Varsel.Accounts.Token
+  alias VarselWeb.UserAgent
 
   @impl Phoenix.LiveView
-  def mount(_params, _session, socket) do
-    {:ok, socket |> assign(page_title: "Account") |> assign_account()}
+  def mount(_params, session, socket) do
+    {:ok,
+     socket
+     |> assign(page_title: "Account", current_session_jti: session["current_session_jti"])
+     |> assign_account()
+     |> assign_sessions()}
   end
 
   @impl Phoenix.LiveView
@@ -78,6 +85,77 @@ defmodule VarselWeb.AccountSettingsLive do
       end
 
     {:noreply, socket}
+  end
+
+  @impl Phoenix.LiveView
+  def handle_event("revoke_session", %{"jti" => jti}, socket) do
+    actor = socket.assigns.current_user
+
+    # The current session has no button, so this can only arrive hand-made.
+    socket =
+      cond do
+        jti == socket.assigns.current_session_jti ->
+          put_flash(socket, :error, "Use sign out to end the session you are using.")
+
+        not Enum.any?(socket.assigns.sessions, &(&1.jti == jti)) ->
+          put_flash(socket, :error, "That session is no longer signed in.")
+
+        true ->
+          revoke_session(socket, actor, jti)
+      end
+
+    {:noreply, assign_sessions(socket)}
+  end
+
+  def handle_event("revoke_other_sessions", _params, socket) do
+    actor = socket.assigns.current_user
+    others = Enum.reject(socket.assigns.sessions, & &1.current?)
+
+    socket =
+      if Enum.all?(others, &(revoke(actor, &1.jti) == :ok)) do
+        put_flash(socket, :info, "Signed out #{count_phrase(length(others))}.")
+      else
+        put_flash(socket, :error, "Could not sign out every other session.")
+      end
+
+    {:noreply, assign_sessions(socket)}
+  end
+
+  defp revoke_session(socket, actor, jti) do
+    case revoke(actor, jti) do
+      :ok -> put_flash(socket, :info, "Session signed out.")
+      {:error, _error} -> put_flash(socket, :error, "Could not sign out that session.")
+    end
+  end
+
+  # Flips the stored row rather than writing a second, orphaned one.
+  defp revoke(actor, jti) do
+    TokenActions.revoke_jti(Token, jti, AshAuthentication.user_to_subject(actor), store_all_tokens?: true)
+  end
+
+  defp count_phrase(1), do: "1 other session"
+  defp count_phrase(count), do: "#{count} other sessions"
+
+  # The current session is shown but not revocable; sign out ends that one.
+  defp assign_sessions(socket) do
+    actor = socket.assigns.current_user
+    current = socket.assigns.current_session_jti
+
+    sessions =
+      actor
+      |> AshAuthentication.user_to_subject()
+      |> Accounts.list_sessions!(actor: actor)
+      |> Enum.map(fn token ->
+        %{
+          jti: token.jti,
+          current?: token.jti == current,
+          signed_in_at: token.created_at,
+          user_agent: UserAgent.describe(get_in(token.extra_data, ["user_agent"])),
+          ip: get_in(token.extra_data, ["ip"])
+        }
+      end)
+
+    assign(socket, sessions: sessions)
   end
 
   defp assign_account(%{assigns: %{current_user: nil}}), do: raise(VarselWeb.UnauthorizedError)
@@ -241,6 +319,51 @@ defmodule VarselWeb.AccountSettingsLive do
             </button>
           </li>
         </ul>
+      </.panel>
+
+      <.panel>
+        <:title>Sessions</:title>
+        <p class="text-sm text-base-content/60 mb-3">
+          Every browser you are currently signed in on. Signing one out ends it
+          straight away — do that for anything you do not recognise, or for a
+          computer you have stopped using.
+        </p>
+
+        <ul class="divide-y divide-base-300">
+          <li :for={session <- @sessions} class="flex items-center gap-3 py-2">
+            <div class="min-w-0">
+              <p class="flex items-center gap-2">
+                <span class="font-medium truncate">{session.user_agent || "Unknown browser"}</span>
+                <.state :if={session.current?} dot="bg-success" class="shrink-0">
+                  This device
+                </.state>
+              </p>
+              <p class="text-xs text-base-content/60">
+                <span :if={session.ip}>{session.ip} · </span>
+                signed in {format_datetime(session.signed_in_at)}
+              </p>
+            </div>
+            <button
+              :if={!session.current?}
+              type="button"
+              phx-click="revoke_session"
+              phx-value-jti={session.jti}
+              class="btn btn-xs btn-ghost ml-auto"
+            >
+              Sign out
+            </button>
+          </li>
+        </ul>
+
+        <button
+          :if={Enum.count(@sessions, &(not &1.current?)) > 0}
+          type="button"
+          phx-click="revoke_other_sessions"
+          data-confirm="Sign out every other session?"
+          class="btn btn-sm btn-outline mt-3"
+        >
+          Sign out everywhere else
+        </button>
       </.panel>
 
       <.panel class="border-error/40">

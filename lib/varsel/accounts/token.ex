@@ -44,6 +44,16 @@ defmodule Varsel.Accounts.Token do
       filter expr(expires_at < now())
     end
 
+    # Revoking flips `purpose` on the row itself, so there is no separate
+    # revocation row to exclude here.
+    read :list_sessions do
+      description "The unexpired sign-in sessions belonging to a subject."
+      argument :subject, :string, allow_nil?: false, sensitive?: true
+
+      filter expr(subject == ^arg(:subject) and purpose == "user" and expires_at > now())
+      prepare build(sort: [created_at: :desc])
+    end
+
     read :get_token do
       description "Look up a token by JTI or token, and an optional purpose."
       get? true
@@ -84,6 +94,7 @@ defmodule Varsel.Accounts.Token do
       accept [:extra_data, :purpose]
       argument :token, :string, allow_nil?: false, sensitive?: true
       change AshAuthentication.TokenResource.StoreTokenChange
+      change Varsel.Accounts.Token.Changes.RecordSignInDetails
     end
 
     destroy :expunge_expired do
@@ -103,6 +114,13 @@ defmodule Varsel.Accounts.Token do
     bypass AshAuthentication.Checks.AshAuthenticationInteraction do
       description "AshAuthentication can interact with the token resource"
       authorize_if always()
+    end
+
+    # Your own sessions, and nobody else's — not even a POC's.
+    policy action(:list_sessions) do
+      description "A user may list their own sessions"
+      access_type :strict
+      authorize_if expr(^arg(:subject) == "user?id=" <> ^actor(:id))
     end
   end
 

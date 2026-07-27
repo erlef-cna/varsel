@@ -200,4 +200,107 @@ defmodule VarselWeb.AccountSettingsLiveTest do
                ])
     end
   end
+
+  describe "sessions" do
+    # A stored sign-in token is what a session *is*, so making one directly is
+    # the same thing the browser ends up with.
+    defp sign_in_session(user, details \\ nil) do
+      context = if details, do: %{shared: %{sign_in_details: details}}, else: %{}
+      {:ok, _token, claims} = AshAuthentication.Jwt.token_for_user(user, %{}, context: context)
+      claims["jti"]
+    end
+
+    defp session_purposes(user) do
+      %{rows: rows} =
+        Varsel.Repo.query!("SELECT jti, purpose FROM tokens WHERE subject = $1", [
+          "user?id=#{user.id}"
+        ])
+
+      Map.new(rows, fn [jti, purpose] -> {jti, purpose} end)
+    end
+
+    test "lists the sessions signed in on the account", %{conn: conn} do
+      user = register_user("alice")
+
+      sign_in_session(user, %{
+        "user_agent" => "Mozilla/5.0 (Macintosh) Chrome/141",
+        "ip" => "198.51.100.4"
+      })
+
+      {:ok, _lv, html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      assert html =~ "Chrome on macOS"
+      assert html =~ "198.51.100.4"
+    end
+
+    # Sessions predating the recording, or made by a client that sends no user
+    # agent, still have to render as something.
+    test "says so when there is nothing recorded about a session", %{conn: conn} do
+      user = register_user("alice")
+      sign_in_session(user)
+
+      {:ok, _lv, html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      assert html =~ "Unknown browser"
+    end
+
+    test "signing out a session revokes that token alone", %{conn: conn} do
+      user = register_user("alice")
+      one = sign_in_session(user)
+      two = sign_in_session(user)
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      lv |> element(~s{button[phx-value-jti="#{one}"]}) |> render_click()
+
+      purposes = session_purposes(user)
+      assert purposes[one] == "revocation"
+      assert purposes[two] == "user"
+    end
+
+    test "signing out everywhere else leaves the current session alone", %{conn: conn} do
+      user = register_user("alice")
+      current = sign_in_session(user)
+      other = sign_in_session(user)
+
+      {:ok, lv, _html} =
+        conn
+        |> log_in(user)
+        |> Plug.Test.init_test_session(%{"current_session_jti" => current})
+        |> live(~p"/settings/account")
+
+      lv |> element("button[phx-click=revoke_other_sessions]") |> render_click()
+
+      purposes = session_purposes(user)
+      assert purposes[other] == "revocation"
+      assert purposes[current] == "user"
+    end
+
+    # The row for the session you are reading from has no button, so this can
+    # only arrive hand-made — and must not sign you out sideways.
+    test "refuses to sign out the session making the request", %{conn: conn} do
+      user = register_user("alice")
+      current = sign_in_session(user)
+
+      {:ok, lv, _html} =
+        conn
+        |> log_in(user)
+        |> Plug.Test.init_test_session(%{"current_session_jti" => current})
+        |> live(~p"/settings/account")
+
+      render_click(lv, "revoke_session", %{"jti" => current})
+
+      assert session_purposes(user)[current] == "user"
+    end
+
+    test "a session belonging to somebody else is not listed", %{conn: conn} do
+      user = register_user("alice")
+      stranger = register_user("mallory")
+      theirs = sign_in_session(stranger)
+
+      {:ok, _lv, html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      refute html =~ theirs
+    end
+  end
 end

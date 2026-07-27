@@ -42,7 +42,9 @@ defmodule Varsel.Accounts do
       define :revoke_api_key, action: :destroy
     end
 
-    resource Varsel.Accounts.Token
+    resource Varsel.Accounts.Token do
+      define :list_sessions, action: :list_sessions, args: [:subject]
+    end
 
     resource User do
       define :list_users, action: :read

@@ -13,7 +13,7 @@ SPDX-License-Identifier: Apache-2.0
 - **Versioning:** the model is versioned with the project (it lives in the
   repo and moves with `main`): a report against a given version is triaged
   against the model as it stood at that version. Written against `main`,
-  last updated 2026-07-26.
+  last updated 2026-07-27.
 - **Relationship to `SECURITY.md`:** this document accompanies `SECURITY.md`
   (it does not replace it). `SECURITY.md` holds the disclosure policy and a
   short Scope section that links here; this document is the detailed model.
@@ -505,7 +505,30 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `high`.
    - (`api_key.ex`, `token.ex`, `config.exs`)
 
-8. **Stored-content rendering is sanitized before display.**
+8. **A user sees and ends their own sessions, and only their own.**
+   `/settings/account` lists the account's unexpired sign-in tokens and
+   revokes them individually or all but the current one. The `:list_sessions`
+   policy compares the requested subject to the actor's id, so a POC reaches
+   another user's sessions no more than a stranger does. Revocation flips the
+   stored row's purpose, which the session lookup then rejects. The session
+   making the request is shown but never revocable, hand-made events
+   included.
+   Signing out revokes the token rather than only clearing the cookie.
+   Each row records the user agent and IP it was created from — **personal
+   data**, kept until the token expires or is expunged, deleted with the
+   account, readable by its owner alone. Both are self-reported: the user
+   agent is a client string, and `RemoteIp` takes the address from
+   `x-forwarded-for` without checking the peer, so a caller reaching the
+   endpoint directly can set it. They are there to help someone recognise
+   their own session, and are not evidence of origin.
+   - *Violation symptom:* one user lists or revokes another's sessions; a
+     revoked token still authenticates; sign-in details readable by anyone
+     but their owner.
+   - *Severity:* `high` (session-fixation-adjacent / PII disclosure).
+   - (`token.ex`, `sign_in_details.ex`, `record_sign_in_details.ex`,
+     `account_settings_live.ex`)
+
+9. **Stored-content rendering is sanitized before display.**
    Every markdown/HTML render sink — case/report markdown
    (`Markdown.to_html`/`to_display_html`), CVE-record prose
    (`cve_view.ex` `markdown/1`), and imported `supportingMedia` HTML
@@ -519,7 +542,7 @@ none of the authorization properties, by construction rather than by defect.
      sanitizer + CSP.
    - (`markdown.ex`, `cve_view.ex`, `config.exs`)
 
-9. **Report intake is size-bounded.**
+10. **Report intake is size-bounded.**
    `report_json` (the one unbounded authenticated write) is capped at a
    configurable serialized size (default 256 KiB); an oversized payload is
    rejected before persistence.
@@ -528,7 +551,7 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `moderate` (storage/DoS).
    - (`report_json_size.ex`)
 
-10. **CSRF / clickjacking / cross-origin hardening on the browser surface.**
+11. **CSRF / clickjacking / cross-origin hardening on the browser surface.**
    `protect_from_forgery` on browser pipelines; `x-frame-options: DENY` +
    `frame-ancestors 'none'`; `permissions-policy`, COOP `same-origin`, CORP
    `same-site` (dropped only for the public JSON/feed data by design).
@@ -541,7 +564,7 @@ none of the authorization properties, by construction rather than by defect.
 the git-derivation timeout (10 min), cache TTL (900 s), and 250k commit-count
 cap, the Oban `Lifeline` rescue (30 min) for orphaned jobs, the `report_json`
 size cap (default
-256 KiB, property 8), and `max_length` caps on every free-text/markdown field
+256 KiB, property 10), and `max_length` caps on every free-text/markdown field
 (title 500; `*_md`/comment/notes 20–50 KB; report body 200 KB) that bound the
 parser input. There is still **no application-level request-rate limit** — so
 submission *rate* and read-endpoint volume are not bounded in-app, and
@@ -554,7 +577,7 @@ submission *rate* and read-endpoint volume are not bounded in-app, and
 - **No rate limiting or request-volume DoS defense at the application layer.**
   Report submission, search queries (full-text `tsquery`), and read endpoints
   are not rate-limited in-app; the operator/platform must provide it. Payload
-  *size* is capped (property 8), but an authenticated user can still submit
+  *size* is capped (property 10), but an authenticated user can still submit
   arbitrarily many capped `report_json` payloads. Accepted as the operator's
   edge responsibility for now; in-app rate limiting is planned (§14).
 - **No allowlist on which public host `repo_url` may name.** `repo_url` is

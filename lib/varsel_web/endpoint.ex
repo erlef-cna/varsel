@@ -79,5 +79,6 @@ defmodule VarselWeb.Endpoint do
   # SearchIndexing so its early robots.txt response carries them too.
   plug VarselWeb.Plugs.SecurityHeaders
   plug VarselWeb.Plugs.SearchIndexing
+  plug VarselWeb.Plugs.SignInDetails
   plug VarselWeb.Router
 end
