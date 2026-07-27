@@ -169,8 +169,8 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   # Lazy clone (refs only) + one tree:0 fetch wanting every ref tip, then one
   # BFS over parent edges recording reverse (children) edges.
   defp build_commit_graph(repo_url) do
-    with {:pin, {:ok, transport}} <- {:pin, PinnedTransport.build(repo_url)},
-         {:clone, {:ok, repo}} <- {:clone, Exgit.clone(transport, lazy: true)},
+    with {:pin, {:ok, remote}} <- {:pin, remote(repo_url)},
+         {:clone, {:ok, repo}} <- {:clone, Exgit.clone(remote, lazy: true)},
          tags = list_refs(repo, "refs/tags/"),
          tips = ref_tips(tags, list_refs(repo, "refs/heads/")),
          {:fetch, {:ok, store}} <-
@@ -190,6 +190,15 @@ defmodule Varsel.Cases.Derivation.GitRepo do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # A `repo_url` is https by validation — `RepoUrlHttps` refuses to store any
+  # other scheme, which is what keeps exgit's `file://` local-file transport
+  # out of reach — and those clones are pinned to the address the check passed
+  # (see `PinnedTransport`). Anything else has no host to resolve and is handed
+  # to exgit as-is; in practice that is only the `file://` fixture the
+  # derivation tests clone.
+  defp remote("https://" <> _ = repo_url), do: PinnedTransport.build(repo_url)
+  defp remote(repo_url), do: {:ok, repo_url}
 
   defp ref_tips(tags, heads) do
     (tags ++ heads) |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
