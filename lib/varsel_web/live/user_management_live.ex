@@ -57,6 +57,38 @@ defmodule VarselWeb.UserManagementLive do
     {:noreply, socket}
   end
 
+  def handle_event("delete_user", %{"user_id" => user_id}, socket) do
+    actor = socket.assigns.current_user
+    user = Enum.find(socket.assigns.users.results, &(&1.id == user_id))
+
+    case Accounts.delete_user(user, actor: actor) do
+      :ok when user_id == actor.id ->
+        # Deleting yourself revokes your own tokens, so this page is no longer
+        # yours to be on — the session cookie stops authenticating anything.
+        {:noreply,
+         socket
+         |> put_flash(:info, "Your account has been deleted.")
+         |> push_navigate(to: ~p"/")}
+
+      :ok ->
+        # The list refreshes via the pub_sub notification handled above.
+        {:noreply, put_flash(socket, :info, "Deleted #{user.display_name}.")}
+
+      {:error, _error} ->
+        {:noreply, put_flash(socket, :error, "Could not delete #{user.display_name}.")}
+    end
+  end
+
+  # Deleting your own account from here signs you out, so say so; a POC
+  # deleting someone else needs to know what survives and what does not.
+  defp delete_confirmation(user) do
+    """
+    Delete #{user.display_name}? Their sign-in providers, API tokens and case \
+    assignments go with the account. What they wrote — comments, suggestions \
+    and reports — stays, credited to a deleted user. This cannot be undone.\
+    """
+  end
+
   # The keep_live callback: page_opts is nil on the first run and the stored
   # page's options on a refetch, so a role change keeps the page the user is
   # on. Points of contact lead the list, then everyone by display name —
@@ -165,6 +197,16 @@ defmodule VarselWeb.UserManagementLive do
                       </option>
                     </select>
                   </form>
+                  <button
+                    :if={Accounts.can_delete_user?(@current_user, user)}
+                    type="button"
+                    phx-click="delete_user"
+                    phx-value-user_id={user.id}
+                    data-confirm={delete_confirmation(user)}
+                    class="btn btn-ghost btn-sm text-error ml-1"
+                  >
+                    Delete
+                  </button>
                 </td>
               </tr>
             </tbody>

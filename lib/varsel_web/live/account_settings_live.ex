@@ -21,6 +21,25 @@ defmodule VarselWeb.AccountSettingsLive do
   end
 
   @impl Phoenix.LiveView
+  def handle_event("delete_account", _params, socket) do
+    actor = socket.assigns.current_user
+
+    case Accounts.delete_user(actor, actor: actor) do
+      :ok ->
+        # Deleting an account revokes its tokens, so the session cookie the
+        # browser still holds no longer authenticates anything — landing on a
+        # public page is all that is left to do.
+        {:noreply,
+         socket
+         |> put_flash(:info, "Your account has been deleted.")
+         |> push_navigate(to: ~p"/")}
+
+      {:error, _error} ->
+        {:noreply, put_flash(socket, :error, "Could not delete your account.")}
+    end
+  end
+
+  @impl Phoenix.LiveView
   def handle_event("set_notification_email", %{"notification_email" => email}, socket) do
     actor = socket.assigns.current_user
 
@@ -222,6 +241,25 @@ defmodule VarselWeb.AccountSettingsLive do
             </button>
           </li>
         </ul>
+      </.panel>
+
+      <.panel class="border-error/40">
+        <:title>Delete account</:title>
+        <p class="text-sm text-base-content/60 mb-3">
+          Your sign-in providers, API tokens and case assignments go with the
+          account, and you are signed out. What you wrote stays — comments,
+          suggestions and reports keep their place in the record, credited to a
+          deleted user. This cannot be undone.
+        </p>
+
+        <button
+          type="button"
+          phx-click="delete_account"
+          data-confirm="Delete your account? This cannot be undone."
+          class="btn btn-sm btn-error btn-outline"
+        >
+          Delete my account
+        </button>
       </.panel>
     </.page_container>
     """

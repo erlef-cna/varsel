@@ -173,4 +173,31 @@ defmodule VarselWeb.AccountSettingsLiveTest do
       assert length(identities(alice)) == 2
     end
   end
+
+  describe "deleting your own account" do
+    test "deletes it and lands somewhere public", %{conn: conn} do
+      user = register_user("alice")
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      assert {:error, {:live_redirect, %{to: "/"}}} =
+               lv |> element("button[phx-click=delete_account]") |> render_click()
+
+      assert {:error, %Ash.Error.Invalid{}} = Ash.get(User, user.id, authorize?: false)
+    end
+
+    # The session cookie outlives the account, so what stops it being useful
+    # is the token revocation rather than anything the page does.
+    test "leaves the session unable to authenticate", %{conn: conn} do
+      user = register_user("alice")
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+      lv |> element("button[phx-click=delete_account]") |> render_click()
+
+      assert %{rows: [["revocation"]]} =
+               Varsel.Repo.query!("SELECT purpose FROM tokens WHERE subject = $1", [
+                 "user?id=#{user.id}"
+               ])
+    end
+  end
 end

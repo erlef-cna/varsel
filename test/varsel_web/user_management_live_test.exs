@@ -97,5 +97,46 @@ defmodule VarselWeb.UserManagementLiveTest do
     assert_raise Ash.Error.Forbidden, fn -> live(conn, ~p"/users") end
   end
 
+  describe "deleting a user" do
+    test "a POC deletes someone", %{conn: conn} do
+      poc = register("poc", :poc)
+      alice = register("alice")
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/users")
+
+      html =
+        lv
+        |> element(~s{button[phx-value-user_id="#{alice.id}"]})
+        |> render_click()
+
+      assert html =~ "Deleted alice name"
+      assert {:error, %Ash.Error.Invalid{}} = Ash.get(User, alice.id, authorize?: false)
+    end
+
+    # Deleting yourself revokes your own tokens, so staying on a page that
+    # only POCs may see is not an option.
+    test "a POC deleting themselves is sent to a public page", %{conn: conn} do
+      poc = register("poc", :poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/users")
+
+      assert {:error, {:live_redirect, %{to: "/"}}} =
+               lv
+               |> element(~s{button[phx-value-user_id="#{poc.id}"]})
+               |> render_click()
+    end
+
+    test "a non-POC is offered no delete button for anyone else", %{conn: conn} do
+      register("poc", :poc)
+      alice = register("alice")
+
+      {:ok, _lv, html} = conn |> log_in(alice) |> live(~p"/users")
+
+      # Their own row still offers it — deleting your own account is yours.
+      assert html =~ ~s{phx-value-user_id="#{alice.id}"}
+      refute html =~ "poc name"
+    end
+  end
+
   defp rows(html), do: Regex.scan(~r/<tr[^>]*>/, html)
 end

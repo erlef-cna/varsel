@@ -44,6 +44,25 @@ defmodule Varsel.Accounts.UserDeletionTest do
       assert count("api_keys", "user_id", user.id) == 0
     end
 
+    # Tokens have no foreign key to users — they are keyed by subject — so
+    # nothing removes them on their own. A live session token for an account
+    # that no longer exists is worth ending rather than leaving to expire.
+    test "its sessions, revoked rather than left to expire" do
+      user = register_user("alice")
+
+      assert %{rows: [["user"]]} =
+               Varsel.Repo.query!("SELECT purpose FROM tokens WHERE subject = $1", [
+                 "user?id=#{user.id}"
+               ])
+
+      Accounts.delete_user!(user, actor: user)
+
+      assert %{rows: [["revocation"]]} =
+               Varsel.Repo.query!("SELECT purpose FROM tokens WHERE subject = $1", [
+                 "user?id=#{user.id}"
+               ])
+    end
+
     test "its case assignments, which only it could act on" do
       poc = register_user("poc", :poc)
       user = register_user("alice")
