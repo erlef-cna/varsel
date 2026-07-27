@@ -119,6 +119,7 @@ defmodule Varsel.MixProject do
       {:plug_content_security_policy, "~> 0.2"},
       {:postgrex, ">= 0.0.0"},
       {:purl, "~> 0.4.0"},
+      {:remote_ip, "~> 1.2"},
       {:req, "~> 0.5"},
       {:saxy, "~> 1.6"},
       {:sitemap_builder, "~> 0.1"},
