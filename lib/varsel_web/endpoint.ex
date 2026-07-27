@@ -20,7 +20,11 @@ defmodule VarselWeb.Endpoint do
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
-  socket "/ws/gql", VarselWeb.GraphqlSocket, websocket: true, longpoll: true
+  # The socket authenticates the connection itself (VarselWeb.GraphqlSocket);
+  # it needs the session so a signed-in browser is recognised without a token.
+  socket "/ws/gql", VarselWeb.GraphqlSocket,
+    websocket: [connect_info: [session: @session_options]],
+    longpoll: [connect_info: [session: @session_options]]
 
   # Serve at "/" the static files from "priv/static" directory.
   #

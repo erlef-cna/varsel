@@ -51,6 +51,10 @@ defmodule Varsel.Accounts do
       define :update_user, action: :update
       define :set_user_role, action: :set_role, args: [:role]
       define :get_user_by_subject, action: :get_by_subject, args: [:subject]
+      # The OAuth 2.1 access token's `sub` is a bare user id, not an
+      # AshAuthentication subject string; `VarselWeb.GraphqlSocket` resolves it
+      # to the actor the way `BearerPlug` does on the HTTP surface.
+      define :get_user_by_id, action: :read, get_by: [:id]
       define :sign_in_user_with_api_key, action: :sign_in_with_api_key, args: [:api_key]
       define :register_user_with_github, action: :register_with_github
       define :register_user_with_hex, action: :register_with_hex
