@@ -98,10 +98,6 @@ defmodule Varsel.Accounts.UserIdentity do
     destroy :destroy do
       description "Unlinks a provider from the account it is linked to."
       primary? true
-      # The guard has to read the account's other identities first.
-      require_atomic? false
-
-      change Varsel.Accounts.UserIdentity.Changes.RefuseLastIdentity
     end
   end
 
@@ -118,8 +114,12 @@ defmodule Varsel.Accounts.UserIdentity do
     end
 
     # Your own providers, and nobody else's — a POC has no more business
-    # removing someone's way in than picking their address.
+    # removing someone's way in than picking their address. And never the last
+    # one: providers are the only way to sign in, so unlinking it would lock
+    # the account out permanently, with no password to fall back on and no
+    # session left to attach a replacement from.
     policy action_type(:destroy) do
+      forbid_if expr(users_only_strategy?)
       authorize_if expr(user_id == ^actor(:id))
     end
   end
@@ -144,6 +144,19 @@ defmodule Varsel.Accounts.UserIdentity do
     attribute :username, CiString do
       public? false
       allow_nil? true
+    end
+  end
+
+  calculations do
+    calculate :users_only_strategy?, :boolean, expr(user_identity_count < 2) do
+      public? true
+    end
+  end
+
+  aggregates do
+    count :user_identity_count, __MODULE__ do
+      filter expr(user_id == parent(user_id))
+      authorize? false
     end
   end
 end

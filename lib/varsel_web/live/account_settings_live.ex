@@ -84,9 +84,10 @@ defmodule VarselWeb.AccountSettingsLive do
             name: strategy.name,
             label: provider_label(strategy.name),
             identity_id: identity && identity.id,
-            # Unlinking the last provider would lock the account out, so the
-            # button is not offered (the action refuses it either way).
-            unlinkable?: not is_nil(identity) and length(account.identities) > 1
+            # Asked of the policy rather than reasoned about here, so the
+            # button cannot drift from what is actually allowed — it refuses
+            # the last provider, which would lock the account out.
+            unlinkable?: not is_nil(identity) and Accounts.can_unlink_provider?(actor, identity)
           }
         end)
     )
