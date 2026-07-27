@@ -509,6 +509,77 @@ defmodule VarselWeb.CaseComponents do
   end
 
   @doc """
+  Renders a free-form vulnerability report payload, in the two shapes it
+  arrives in.
+
+  Reports carry an arbitrary map; only `"report"` is ever assumed. A string
+  under that key is the body the reporter wrote and reads as Markdown, with
+  whatever else the payload holds tucked into a disclosure beside it. A
+  payload with no such body *is* the report, so it renders open — there would
+  otherwise be nothing to show.
+
+  The caller owns the disclosure: pass `toggle` to drive it from a LiveView
+  (`expanded?` then says whether it is open), or leave it `nil` for a plain
+  `<details>` that needs no state. `body_class` is the clamp, which differs
+  between the queue and the narrower case rail.
+  """
+  attr :payload, :any, required: true
+  attr :report_id, :string, required: true, doc: ~s(not `id` — storybook eats an `id` attr)
+  attr :expanded?, :boolean, default: false
+  attr :toggle, :string, default: nil, doc: "the event a click on the disclosure pushes"
+  attr :body_class, :any, default: nil
+  attr :json_class, :any, default: nil
+
+  def report_payload(assigns) do
+    body = report_body(assigns.payload)
+
+    assigns =
+      assign(assigns,
+        body: body,
+        json: if(body, do: payload_rest(assigns.payload), else: presence(assigns.payload)),
+        # With no body lifted out of it, the payload is all the report says.
+        always_open?: is_nil(body)
+      )
+
+    ~H"""
+    <.markdown
+      :if={@body}
+      content={@body}
+      class={["prose-xs rounded-lg border border-base-300 bg-base-100 px-3 py-2", @body_class]}
+    />
+
+    <div :if={@json} class={[@body && "mt-2"]}>
+      <button
+        :if={not @always_open?}
+        type="button"
+        class="text-xs font-semibold text-base-content/60 hover:text-base-content cursor-pointer"
+        phx-click={@toggle}
+        phx-value-report_id={@report_id}
+      >
+        {if @expanded?, do: "Report payload ▴", else: "Report payload ▾"}
+      </button>
+      <.code_block
+        :if={@always_open? or @expanded?}
+        source={pretty_json(@json)}
+        class={["overflow-y-auto", not @always_open? && "mt-1.5", @json_class || "max-h-72"]}
+      />
+    </div>
+    """
+  end
+
+  defp report_body(%{"report" => body}) when is_binary(body), do: body
+  defp report_body(_payload), do: nil
+
+  defp payload_rest(payload), do: payload |> Map.delete("report") |> presence()
+
+  # An empty payload has nothing to disclose; `{}` is not worth a codebox.
+  defp presence(payload) when payload == %{} or is_nil(payload), do: nil
+  defp presence(payload), do: payload
+
+  # Jason, not the stdlib JSON module: only Jason has a pretty printer.
+  defp pretty_json(value), do: Jason.encode!(value, pretty: true)
+
+  @doc """
   The info-outlined "✎ Suggest: on/off" status pill — the band's toggle and,
   with `:explain`, the read-only variant shown above a card being edited in
   suggest mode.

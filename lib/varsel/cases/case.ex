@@ -147,8 +147,15 @@ defmodule Varsel.Cases.Case do
     end
 
     create :open do
-      description "Opens a new case in the :draft state."
+      description "Opens a new case in the :draft state, assigned to whoever opened it."
       accept @content_fields
+
+      argument :assignments, {:array, :map} do
+        public? false
+      end
+
+      change Varsel.Cases.Changes.AssignOpener
+      change manage_relationship(:assignments, type: :create)
     end
 
     update :edit do

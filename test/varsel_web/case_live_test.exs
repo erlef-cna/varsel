@@ -19,6 +19,15 @@ defmodule VarselWeb.CaseLiveTest do
 
   # The pager states its page through the value of its jump-to-page input,
   # not as prose, so which page is showing has to be read off the input.
+  defp unassign_everyone(case_record, actor) do
+    case_record
+    |> Ash.load!([:assignments], actor: actor)
+    |> Map.fetch!(:assignments)
+    |> Enum.each(&Cases.unassign_case_user!(&1, actor: actor))
+
+    case_record
+  end
+
   defp page_input_value(html) do
     [[_match, value]] = Regex.scan(~r/<input[^>]*name="page"[^>]*value="([^"]*)"/, html)
     value
@@ -194,8 +203,10 @@ defmodule VarselWeb.CaseLiveTest do
 
     test "review/approved cards without an assignee show the dashed needs-owner circle; draft doesn't",
          %{conn: conn, poc: poc} do
-      Fixtures.open_case(poc, %{title: "Unassigned draft"})
+      # Opening assigns the opener, so an ownerless case is made by unassigning.
+      poc |> Fixtures.open_case(%{title: "Unassigned draft"}) |> unassign_everyone(poc)
       unassigned_review = Fixtures.open_case(poc, %{title: "Unassigned review"})
+      unassign_everyone(unassigned_review, poc)
       Cases.request_case_review!(unassigned_review, actor: poc)
 
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
@@ -1266,8 +1277,8 @@ defmodule VarselWeb.CaseLiveTest do
       poc: poc,
       supporter: supporter
     } do
+      # Opening the case assigns the POC who opened it.
       case_record = Fixtures.open_case(poc)
-      Cases.assign_case_user!(%{case_id: case_record.id, user_id: poc.id}, actor: poc)
       Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
 
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")

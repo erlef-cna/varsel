@@ -50,6 +50,7 @@ defmodule Varsel.Cases.CaseAssignment do
 
     create :assign do
       description "POC grants a user access to a case."
+      primary? true
       accept [:case_id, :user_id, :note]
     end
 
