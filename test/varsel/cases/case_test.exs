@@ -31,6 +31,13 @@ defmodule Varsel.Cases.CaseTest do
                Cases.open_case(%{title: "nope"}, actor: supporter)
     end
 
+    test "whoever opens the case is assigned to it", %{poc: poc} do
+      case_record = Cases.open_case!(%{title: "SSH bug"}, actor: poc)
+
+      assert [assignment] = Ash.load!(case_record, [:assignments], actor: poc).assignments
+      assert assignment.user_id == poc.id
+    end
+
     test "an invalid CVSS vector is rejected", %{poc: poc} do
       assert {:error, error} =
                Cases.open_case(%{title: "x", cvss_v4: "CVSS:4.0/bogus"}, actor: poc)
