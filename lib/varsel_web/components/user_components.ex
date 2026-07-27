@@ -42,8 +42,12 @@ defmodule VarselWeb.UserComponents do
 
   def user_badge(assigns) do
     ~H"""
-    <span class={["inline-flex items-center gap-1.5", @class]}>
-      <.avatar_disc user={@user} variant={@variant} />
+    <%!-- An inline-flex box takes its baseline from its first item, which here
+          is the avatar — so the name would sit below the text around it.
+          `items-baseline` hands the baseline to the name instead, and the
+          avatar centres on it rather than standing on it. --%>
+    <span class={["inline-flex items-baseline gap-1.5", @class]}>
+      <.avatar_disc user={@user} variant={@variant} class="self-center" />
       <.user_name user={@user} class={@name_class} />
     </span>
     """
