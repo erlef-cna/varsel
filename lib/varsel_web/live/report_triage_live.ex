@@ -19,6 +19,7 @@ defmodule VarselWeb.ReportTriageLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
+  import VarselWeb.UserComponents, only: [user_badge: 1]
 
   alias Varsel.Cases
   alias Varsel.CVE
@@ -100,7 +101,10 @@ defmodule VarselWeb.ReportTriageLive do
   end
 
   defp list_reports(socket) do
-    CVE.list_vulnerability_reports!(actor: socket.assigns.current_user, load: [:reporter])
+    CVE.list_vulnerability_reports!(
+      actor: socket.assigns.current_user,
+      load: [reporter: [:display_name, :avatar_url]]
+    )
   end
 
   # Open (non-closed) cases a report can be consolidated into.
@@ -199,7 +203,9 @@ defmodule VarselWeb.ReportTriageLive do
             <div>
               <h3 class="font-semibold">{report.summary}</h3>
               <p class="text-xs text-base-content/60">
-                <span :if={@triage?}>by {report.reporter.name || report.reporter.notification_email} · </span>
+                <span :if={@triage?}>
+                  by <.user_badge user={report.reporter} /> ·
+                </span>
                 {format_datetime(report.inserted_at)}
               </p>
               <p :if={report.triage_notes} class="text-sm text-base-content/70 mt-1 italic">
