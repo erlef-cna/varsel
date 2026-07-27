@@ -51,8 +51,10 @@ but shared/self-hosted operation is not a supported deployment shape today.
   editorial *cases*, and publish CVE records to MITRE (`README.md`).
 - The public consumes published CVE/OSV/CWE/CAPEC data **anonymously** over
   HTML pages, JSON feeds and Atom/RSS. The same data is also queryable over
-  GraphQL and MCP, but those endpoints **require a login** (API key or OAuth
-  token) — they are not an anonymous surface. (`README.md`, `router.ex`)
+  GraphQL and MCP, but those endpoints **require a login** (API key, session,
+  or OAuth token) — they are not an anonymous surface. That covers all three
+  GraphQL entrances: `/gql`, the playground, and the `/ws/gql` websocket.
+  (`README.md`, `router.ex`, `graphql_socket.ex`)
 
 **Deployment context.** A public-facing web service behind TLS on Fly.io,
 config entirely from environment variables/secrets (`README.md`,
@@ -63,9 +65,14 @@ protection are the platform's/operator's job, not the app's.
 
 - **Anonymous / public** — untrusted internet clients. See only published
   data.
-- **Authenticated user (no role / `nil`)** — a logged-in GitHub user with
-  no CNA role. Minimal rights: submit a vulnerability report, manage their
-  own API keys.
+- **Authenticated user (no role / `nil`)** — a logged-in user with no CNA
+  role, which is what every new sign-in starts as. Rights: submit a
+  vulnerability report and read/withdraw their own, manage their own API keys
+  and sessions, set a notification address one of their own linked providers
+  reported, and run the CVE **validation** actions (§6). They are refused
+  outright on `Case` — its policy is strict and admits only `:poc` and
+  `:supporter`, so a role-less caller gets a refusal there rather than an
+  empty list.
 - **Supporter** — a CNA collaborator scoped to the specific cases they are
   assigned to. Can read and edit content on those cases; cannot run
   lifecycle actions or publish.
@@ -75,13 +82,27 @@ protection are the platform's/operator's job, not the app's.
 Roles live in `Varsel.Accounts.User.Role` (`:poc | :supporter`, plus `nil`)
 — see `user/role.ex`.
 
+**How someone becomes a user.** Sign-in is OAuth-only — GitHub or Hex.pm.
+There is no password strategy, no magic link and no confirmation strategy on
+`Varsel.Accounts.User`; the router still declares `reset_route`,
+`confirm_route` and `magic_sign_in_route`, so those paths render, but with no
+strategy behind them they cannot authenticate anyone. Either provider can be
+left unconfigured, and a half-configured one refuses to boot.
+Registration is open: anyone with an account at a configured provider becomes
+an authenticated user. **The first account to register becomes POC** — the
+check counts users and promotes when the table is empty, so deleting every
+account re-arms it for whoever signs in next (`promote_first_user_to_poc.ex`).
+
 ### Component-family table
 
 | Family | Entry point | Touches outside process? | In model? |
 | --- | --- | --- | --- |
-| Anonymous read surface (CVE/OSV JSON, HTML, feeds) | `/cves`, `/osv`, `/`, `/feed.*` | DB reads | **Yes** |
+| Anonymous read surface (CVE/OSV JSON, HTML, feeds, sitemap) | `/cves`, `/osv`, `/`, `/feed.*`, `/sitemap.xml` | DB reads | **Yes** |
 | Authenticated API (GraphQL, MCP) — login-gated even for read tools | `/gql`, `/mcp` | DB reads/writes, workbench tools | **Yes** |
-| Auth surface (GitHub OAuth login, OAuth 2.1 server, API keys, session) | `/auth`, `/oauth/*`, `/sign-in`, `/settings/tokens` | GitHub IdP, DB | **Yes** |
+| GraphQL websocket — login-gated like `/gql` | `/ws/gql` | DB reads/writes under policy | **Yes** |
+| CVE validation actions — any authenticated user | `validate_cve_record*` (GraphQL + MCP) | **cvelint subprocess**, **hex.pm egress** | **Yes — §6** |
+| Auth surface (GitHub **and Hex.pm** OAuth login, OAuth 2.1 server, API keys, sessions) | `/auth`, `/oauth/*`, `/sign-in`, `/settings/tokens`, `/settings/account` | GitHub + Hex.pm IdPs, DB | **Yes** |
+| Account linking (attach a second provider to an existing account) | `/settings/account/link/start/:strategy` | IdP, DB | **Yes — §6** |
 | CNA workbench (cases, reports, CVE lifecycle, user mgmt) — LiveView + GraphQL/MCP tools | `/cases`, `/reports`, `/users`, `/cves/manage`, GraphQL/MCP POC tools | DB, **MITRE API**, **git egress** | **Yes** |
 | Render-time derivation (`exgit` git clone/fetch of package repos) | `Varsel.Cases.Derivation` | **Outbound git to `repo_url`** | **Yes — key boundary (§4)** |
 | Catalog sync (CWE/CAPEC/OTP-versions) — Oban jobs | scheduled workers | Outbound HTTPS to fixed hosts | **Yes (trusted-source egress)** |
@@ -167,7 +188,7 @@ the policies. A caller who requests a page they may not have reaches the
 LiveView, the first action it runs refuses, and the refusal is what produces
 the error page. The console's own affordances are drawn the same way — a
 button appears because `Ash.can?` says the action would run, not because a
-role was matched in the template *(maintainer, 2026-07)*. The practical
+role was matched in the template. The practical
 consequence for a triager: **a report that a UI element is visible to the
 wrong actor is a policy question, not a routing question**, and the same
 policy is what refuses the request behind it. (`router.ex`,
@@ -179,16 +200,36 @@ flavours and they fail differently. A *strict* check (`actor_present()`,
 `Forbidden` error; a *filter* check (`relates_to_actor_via`,
 `expr(id == ^actor(:id))`) authorizes the action and narrows the rows, so an
 unauthorized caller gets an **empty result, not an error**. Both are correct
-outcomes. Four resources — `Case`, `User`, `ApiKey`, `VulnerabilityReport` —
-carry an explicit strict `actor_present()` policy so that an anonymous read
-refuses outright rather than returning nothing; the remaining private
-resources (case children, proposals, comments) are filter-scoped and return
-an empty list to an anonymous caller *(maintainer, 2026-07)*. Verified
-2026-07-26 by reading every resource as an anonymous actor: the four strict
-ones refuse with 401, the filter-scoped ones return zero of the rows that
+outcomes. Five strict policies exist:
+
+- `Case`, `User`, `ApiKey` and `VulnerabilityReport` carry a resource-wide
+  strict policy, so an anonymous read refuses outright rather than returning
+  nothing.
+- `Token` carries an action-scoped strict policy on `:list_sessions`, which
+  compares the requested subject to the actor's own id.
+
+`Case`'s strict policy is not merely "is anyone signed in": it admits `:poc`
+and `:supporter` only, so **an authenticated user with no role is refused
+there too**, not filtered to empty. Every other private resource (case
+children, proposals, comments) is filter-scoped and returns an empty list to
+an anonymous or role-less caller. Reading each
+resource as an anonymous actor and as a role-less one bears this out: the
+strict resources refuse, the filter-scoped ones return zero of the rows that
 exist. **An "empty list" is therefore not evidence of a missing policy**, and
 a report premised on a private resource returning `{:ok, []}` rather than an
 error is out of model. (all `policies do` blocks)
+
+**The websocket carries the same login requirement as `/gql`.** A socket has
+no `conn`, so the `:graphql` pipeline's plugs cannot run on it. `/ws/gql`
+therefore authenticates the connection itself, accepting the same three
+credentials and refusing the handshake outright when none identifies a user:
+an `eefcna_` API key, a session (delegated to AshAuthentication, so a revoked
+or signed-out token stops working here too), or an OAuth 2.1 token that
+carries the `gql` scope — a token minted for MCP is refused, exactly as on the
+HTTP surface. The resolved actor is put into the Absinthe context, so policies
+apply to socket-borne documents as they do to posted ones. Credentials travel
+in the connect params because browsers cannot set headers on a websocket
+handshake. (`graphql_socket.ex`, `endpoint.ex`)
 
 **Data flow across the boundary:**
 
@@ -226,6 +267,16 @@ claims:
 - **Report intake** — reachable by **any authenticated user**. `report_json`
   is fully attacker-controlled at that privilege; downstream sinks (email,
   triage UI) are the question.
+- **CVE validation** (`validate_cve_record`, `…_schema`, `…_cvelint`,
+  `…_hex_packages`, `…_eef`) — reachable by **any authenticated user**, over
+  GraphQL and MCP. These actions read nothing and write nothing: they take a
+  CVE record as an argument and report what is wrong with it, so there is no
+  state for a policy to protect and `Varsel.CVE.CveValidation` carries no
+  authorizer. The login gate on those two surfaces is the access control.
+  It is still the lowest privilege from which the **cvelint subprocess** and
+  **hex.pm egress** can be driven, with fully caller-supplied JSON, so a
+  finding in those sinks is in model at *authenticated-user* privilege — not
+  POC.
 - **Catalog sync / MITRE import** — the egress targets are compile-time
   constants (the CWE/CAPEC/OTP-versions URLs) or a single operator-configured
   endpoint (`MITRE_CVE_API_BASE_URL`); no actor picks where these requests go.
@@ -233,7 +284,7 @@ claims:
 - **CVE lifecycle writes** — POC-only. Not reachable below POC.
 - **A visible button is not a reachable action.** The console decides what to
   draw by asking the same policies that authorize the request, so the two
-  agree by construction rather than by upkeep *(maintainer, 2026-07)*. A
+  agree by construction rather than by upkeep. A
   finding that an affordance is *shown* to the wrong actor is in model only if
   the underlying action also runs for them; if the click is refused, the
   affordance is a cosmetic defect, not an authorization one.
@@ -272,9 +323,24 @@ claims:
   `cvelint` binary; and writes a short-lived temp file with the CVE JSON
   (`cvelint.ex`).
 - **Sends email** — yes, to POC addresses via SMTP. (`emails.ex`)
-- **Writes to disk** — only the transient `cvelint` temp file (removed in an
-  `after`); `exgit` and the catalog unzip are **in-memory**. (`cvelint.ex`,
-  `weakness.ex`, `git_repo.ex`)
+- **Writes to disk** — only the transient `cvelint` temp file, written into a
+  fresh per-call directory and removed in an `after`; `exgit` and the catalog
+  unzip are **in-memory**. The record's CVE ID names the file, and since a
+  caller supplies that id, only a real CVE-ID shape is used as a filename —
+  anything else falls back to a placeholder, so the write cannot leave the
+  temp directory (`cvelint.ex`, `weakness.ex`, `git_repo.ex`).
+
+**Derivation is one process for the whole node.** Every git clone, fetch and
+graph walk runs inside a single named GenServer (`Varsel.Cases.Derivation.
+GitRepo`), so derivation is serialized: one slow or hostile `repo_url` delays
+derivation for every case until its 10-minute call timeout expires. The
+timeout, the 900 s cache TTL and the 250k commit cap bound a single
+derivation; they do not stop one repository from occupying the shared process.
+That process also keeps a commit-object store per distinct `repo_url`,
+replaced when stale but **never evicted by count**, so memory grows with the
+number of distinct URLs derived. Both are bounded in practice by the
+POC/assignee privilege needed to add a package (§9). (`git_repo.ex`,
+`application.ex`)
 
 ### 5a. Build-time and configuration variants
 
@@ -311,8 +377,11 @@ are below.
 | `AffectedPackage` create/update | `repo_url` | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `VersionEvent` | `commit_sha` | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
 | `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
+| `CveValidation.validate*` | `cve_json` | **Yes — any authenticated user** | **cvelint subprocess** (temp file; argv, not shell; filename constrained to a CVE-ID shape) and **hex.pm lookups** keyed on package names taken from the JSON. No policy authorizer on this resource; the login gate is the control (§4) |
 | `Case.cna_override` | RFC 7396 merge patch on rendered container | POC / assigned supporter | Applied as last render step; can override any rendered field (`case.ex`) |
 | GitHub OAuth | `user_info` (sub, preferred_username, name, email) | IdP-supplied, verified by GitHub | Stored as `github_id/handle/name/email`; `handle` later in a client-side `img`/link |
+| Hex.pm OAuth | `user_info` (username as `sub`, email) | IdP-supplied by Hex.pm | Identity keyed on the **username**, since Hex.pm exposes no numeric id and offers no way to rename an account (§7). Email is opt-in-public there, so it is usually absent and is never used to match an account |
+| Account linking | `:strategy` path segment; `linking_from_user_id` **from the session** | Any authenticated user | Names the account by id from the signed session, not from `current_user`. Linking an identity another account already owns is refused (`resolve_oauth_identity.ex`) |
 | MCP/GraphQL tool args | per tool | scope-gated bearer (mcp/gql) + role policy | Same Ash actions as above; no separate trust level |
 
 **Persisted state as input.** Varsel reads back only its own PostgreSQL rows
@@ -339,7 +408,10 @@ a 900s cache TTL, and a 250k commit-count cap on the graph walk
 | Case markdown → on-site HTML (`Markdown.to_display_html`) | Browser HTML | **Yes** — rendered `unsafe: true` then run through the `sanitize` (ammonia) allow-list, so scripts/handlers/dangerous URLs are stripped while safe author HTML survives (`markdown.ex`) | — (sanitized) |
 | Case markdown → `supportingMedia` text/html in published CVE (`Markdown.to_html`) | MITRE + downstream CVE consumers | Yes — same sanitized Comrak output | — |
 | CVE record prose → on-site HTML (`cve_view.ex` `prose/2`) | Browser HTML | **Yes** — `markdown/1` sanitizes its output; a `supportingMedia` HTML value (may be MITRE-imported) is run through `MDExNative.Ammonia.safe_html/1` before render (`cve_view.ex`) | — (sanitized) |
-| CVE JSON / OSV JSON / feeds | Machine consumers, cross-origin | N/A (data) — CORP dropped deliberately for these (`public_resource.ex`) | — |
+| CVE JSON / OSV JSON | Machine consumers, cross-origin | N/A (data) — CORP dropped deliberately for these (`public_resource.ex`) | — |
+| Atom/RSS feeds | Feed readers, cross-origin | **Yes** — built as an XML tree and encoded (`Saxy`), never concatenated, so every value is escaped as text or as an attribute by construction. Links are `~p` routes resolved against the endpoint, so they name the configured host and the request's `Host` never reaches the document (`feed_controller.ex`) | — |
+| Sitemap XML | Crawlers | **Yes** — same as the feeds: an XML tree, encoded (`Saxy`). The host is the configured `Endpoint.url()`, not the request's (`sitemap_controller.ex`) | — |
+| `avatar_url` on a user | Browser `img` | Public field, deliberately. With a linked GitHub account it is that account's picture; otherwise a Gravatar URL keyed on the MD5 of `notification_email`, which lets anyone who can read the row test a guess at that address (§9) (`user.ex`) | — |
 | POC notification email | Plain-text mail | Yes — `text_body`, fixed headers, and **content-free**: it carries only a link to the authenticated triage console, no report payload or reporter identity, since email is unencrypted in transit/at rest (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
 
@@ -401,8 +473,19 @@ is always `OUT-OF-MODEL: report-upstream`.
 
 - **A POC.** Trusted CNA operator; being a POC *is* the top of the trust
   model. A malicious POC has already won (they can publish to MITRE directly).
-- **Anyone who controls the MITRE API, GitHub IdP, or the SMTP relay.** These
-  are trusted integration partners; compromising them is out of layer.
+- **Anyone who controls the MITRE API, the GitHub or Hex.pm IdP, or the SMTP
+  relay.** These are trusted integration partners; compromising them is out of
+  layer. Two consequences follow, and both are load-bearing:
+  - **A provider's `sub` is the account key.** For Hex.pm that subject is the
+    **username**: Hex.pm exposes no numeric id, and offers no way to rename an
+    account, so the username is the stable identifier available. Should
+    Hex.pm ever add renaming, or re-issue a deleted account's name, the
+    identity row would silently re-point and whoever took the name would sign
+    in as the original account — the app cannot detect that on its own. This
+    is a property of the provider we rely on, so a report resting on it is
+    escalated rather than closed.
+  - **Email never selects an account.** Neither provider's address is trusted
+    as verified, so an address is only ever a notification target.
 - **An attacker with database or host access.** Beneath the app's boundary.
 - **A network attacker without TLS-break capability.** TLS is assumed intact
   (terminated at the edge).
@@ -468,13 +551,16 @@ none of the authorization properties, by construction rather than by defect.
 
 4. **Field-level PII redaction on `User`.**
    A non-POC who reaches a `User` row through a permitted relationship sees
-   only the attribution fields — `:name`, `:github_handle`, `:display_name`;
-   `email`, `github_id` and `role` are POC-or-self. The handle is public
-   attribution (it is what a credit renders), the address and the role are
-   not. This is the second of two layers: the row-level read policy already
-   removes users the actor may not see, so a non-POC listing users directly
-   gets an empty result rather than redacted rows *(maintainer, 2026-07)*.
-   - *Violation symptom:* a non-POC reads another user's email or role.
+   the attribution fields — `:name`, `:github_username`, `:hex_username`,
+   `:display_name` and `:avatar_url`; `:notification_email`,
+   `:identity_emails` and `:role` are POC-or-self. Usernames and the picture
+   are public attribution (a credit renders them), the addresses and the role
+   are not. Note the avatar can confirm a *guessed* address for an account
+   with no linked GitHub, which is accepted (§9). This is the second of two
+   layers: the row-level read policy already removes users the actor may not
+   see, so a non-POC listing users directly gets an empty result rather than
+   redacted rows.
+   - *Violation symptom:* a non-POC reads another user's address or role.
    - *Severity:* `high`.
    - (`user.ex`)
 
@@ -491,6 +577,13 @@ none of the authorization properties, by construction rather than by defect.
    An OAuth 2.1 access token carries a scope (`mcp` or `gql`); a token
    without the required scope for a surface gets `403 insufficient_scope`.
    API keys and session JWTs (first-party credentials) are exempt by design.
+   This holds on the websocket too: `/ws/gql` refuses a token that lacks the
+   `gql` scope (§4).
+   The property constrains **use per surface, not issuance**: a token may
+   legitimately carry both scopes, and holding both is not a violation. The
+   token never exceeds the underlying user's role either way. Audience does
+   not separate the two surfaces — `resource_url` is the bare host — so the
+   scope check is what divides them.
    - *Violation symptom:* a `gql`-scoped token invokes an MCP tool, or vice
      versa.
    - *Severity:* `high`.
@@ -513,6 +606,17 @@ none of the authorization properties, by construction rather than by defect.
    stored row's purpose, which the session lookup then rejects. The session
    making the request is shown but never revocable, hand-made events
    included.
+   **Where this one is enforced is the exception to §4.** Revocation runs
+   through AshAuthentication's own token action, which takes a `jti` and
+   revokes it; `Token` carries only the AshAuthentication bypass, so no policy
+   narrows it. What scopes it to the caller is the account page, which refuses
+   any `jti` absent from the strictly-scoped list it just read. Only three
+   places revoke at all, and none takes a `jti` from a caller: the account
+   page (checked as above), sign-out (the jti of the session making the
+   request), and account deletion (every token of the account being deleted).
+   None is exposed over GraphQL, MCP or the JSON API. So a triager checking
+   this property reads those call sites rather than a policy, and any *new*
+   caller of `revoke_jti` would have to bring its own check.
    Signing out revokes the token rather than only clearing the cookie.
    Each row records the user agent and IP it was created from — **personal
    data**, kept until the token expires or is expunged, deleted with the
@@ -544,6 +648,18 @@ none of the authorization properties, by construction rather than by defect.
      sanitizer + CSP.
    - (`markdown.ex`, `cve_view.ex`, `config.exs`)
 
+   **The XML surfaces are structurally safe.** The Atom and RSS feeds and the
+   sitemap are built as an XML tree and handed to an encoder (`Saxy`); no
+   markup is concatenated anywhere in them. Every value lands as a text node
+   or an attribute and is escaped by construction, so neither an advisory
+   title nor a summary can close a tag or open an attribute. Their links are
+   `~p` routes resolved against the endpoint, so nothing from the request
+   reaches either document.
+   - *Violation symptom:* a value from a record or a request appears as
+     markup in a feed or the sitemap, or either document fails to parse.
+   - *Severity:* `high` (XML injection into a syndicated document).
+   - (`feed_controller.ex`, `sitemap_controller.ex`)
+
 10. **Report intake is size-bounded.**
    `report_json` (the one unbounded authenticated write) is capped at a
    configurable serialized size (default 256 KiB); an oversized payload is
@@ -561,6 +677,53 @@ none of the authorization properties, by construction rather than by defect.
      or a private response is fetched cross-origin.
    - *Severity:* `high`.
    - (`router.ex`, `security_headers.ex`, `public_resource.ex`)
+
+12. **Git egress reaches only a public address, at the moment it connects.**
+   A `repo_url` is constrained to `https://` and to a host resolving publicly
+   when it is saved. The clone re-resolves and re-checks immediately before
+   connecting, then **pins to what that lookup returned**: the request goes to
+   the address, while the hostname is kept for the `Host` header, the TLS
+   server name, and the name the certificate must match. There is no second
+   lookup in between for DNS to answer differently, so a name that answers
+   publicly at save time and privately later is refused rather than cloned.
+   Redirects stay off, so there is no later hop to re-resolve. Pinning does
+   not weaken TLS: a certificate that does not match the case's hostname
+   still fails the handshake.
+   - *Violation symptom:* a clone connects to a loopback, RFC 1918, or other
+     non-public address; or a pinned request accepts a certificate that does
+     not match the named host.
+   - *Severity:* `high` (server-side request forgery).
+   - *Bound:* the privilege to set `repo_url` is POC or assigned supporter
+     (§4), and the host may still be any *public* one — that is deliberate
+     (§9).
+   - (`pinned_transport.ex`, `repo_url_https.ex`, `private_address.ex`)
+
+13. **Caller-supplied content stays inside the temp directory it is written
+   to.** `cvelint` needs the record on disk, so validation writes one — into a
+   fresh per-call directory, removed afterwards. The record names that file,
+   and since the record comes from any authenticated user, only a real CVE-ID
+   shape is used; anything else falls back to a placeholder. Nothing a caller
+   supplies reaches a shell: the command is fixed and every other value is
+   passed as an argument.
+   - *Violation symptom:* a write lands outside the per-call directory, or a
+     caller-supplied string is interpreted by the shell.
+   - *Severity:* `critical` (arbitrary write / command execution).
+   - (`cvelint.ex`)
+
+14. **One provider cannot take over an account made with another.**
+   An identity is matched on `(strategy, sub)` and never on an email address.
+   A sign-in whose identity is unknown, but whose address another account's
+   identity already reports, is **refused** rather than merged — and a
+   database exclusion constraint enforces the same rule, so two concurrent
+   callbacks cannot race past the check. During a link, an identity another
+   account already owns is refused as well. The last provider on an account
+   cannot be unlinked, since providers are the only way in.
+   - *Violation symptom:* signing in with provider B lands in an account
+     created with provider A, or a link moves an identity between accounts.
+   - *Severity:* `critical` (account takeover).
+   - *Bound:* this rests on the provider's `sub` being stable and
+     non-reusable — for Hex.pm, on it offering no rename (§7).
+   - (`resolve_oauth_identity.ex`, `user_identity.ex`)
 
 **Resource bound (the one quantified DoS line we can state):** guardrails are
 the git-derivation timeout (10 min), cache TTL (900 s), and 250k commit-count
@@ -587,10 +750,35 @@ submission *rate* and read-endpoint volume are not bounded in-app, and
   plaintext `http://`) and to a host that resolves to a public address —
   loopback, RFC 1918, link-local, unique-local, CGNAT and other special-use
   ranges are rejected, so a case editor cannot aim egress at an internal
-  service (`repo_url_https.ex`, `private_address.ex`). Beyond that the host is
-  unrestricted on purpose, since a public self-hosted forge is a supported
-  source: derivation will clone any public https host a POC/assignee names.
+  service — checked when the URL is saved and again when the clone connects
+  (property 12). Beyond that the host is unrestricted on purpose, since a
+  public self-hosted forge is a supported source: derivation will clone any
+  public https host a POC/assignee names.
+  Credentials in the URL (`https://user:token@host/…`) and non-standard ports
+  are likewise accepted; the check is on the scheme and the resolved address,
+  not the rest of the URL.
+- **A user's identity is not treated as secret from other users.** Whoever can
+  read a user row sees the display identity — name, provider usernames,
+  avatar. Only the address, the linked-provider addresses and the role are
+  POC-or-self. One consequence is deliberate rather than overlooked: an
+  account with no linked GitHub gets a Gravatar avatar keyed on the MD5 of its
+  notification address, so a viewer can test a guess at that address against
+  it. It confirms a guess, it does not reveal an unknown address, and the
+  people who can read a given row are the CNA collaborators already working
+  the same cases. Serving the picture through the app would only move the
+  hash into a redirect, and proxying it would put a fetch to a third party on
+  every avatar — neither is worth it for that.
 - **No availability/uptime guarantee.**
+- **Nothing bounds how much outbound traffic an authenticated user can drive.**
+  The validation actions reach hex.pm, and derivation reaches a case's
+  `repo_url`; neither is rate-limited in-app, so Varsel can be used to push
+  volume at a third party. The per-call bounds (§8) limit a single request,
+  not how many are made. Same disclaimer as request-volume DoS: it is the
+  operator's edge.
+- **Nothing bounds how many rows an authenticated user can create for
+  themselves.** API keys and sessions have no per-user cap; the §8 caps bound
+  the *size* of what is stored, never the count. This is the same disclaimer
+  as request-volume DoS.
 - **`cna_override` is an intentional escape hatch, not a validated surface.**
   A POC can override any rendered CNA field via a merge patch; correctness of
   the result is the POC's responsibility.
@@ -607,6 +795,17 @@ submission *rate* and read-endpoint volume are not bounded in-app, and
 - **CORP being *dropped* on the JSON/feed endpoints is intentional openness,
   not a missing header.** Those responses are public data meant to be fetched
   cross-origin. (`public_resource.ex`)
+- **`/ws/gql` authenticating a connection is not the router doing it.** The
+  socket enforces the login requirement in its own `connect/3`, not through
+  the `:graphql` pipeline, which cannot run there (§4). A change to that
+  pipeline does not change the socket.
+- **The account-link confirmation is the provider's consent screen, not
+  ours.** Starting a link redirects straight to the provider; there is no
+  in-app confirmation step, and the existing session is not re-authenticated
+  before a new sign-in path is added to the account. The marker naming the
+  account also has no expiry: a link abandoned at the provider leaves it in
+  the session, so the next sign-in in that browser is still treated as a link
+  to the same account. It is cleared on both success and failure.
 
 **Well-known attack classes for this category, left to the caller/operator:**
 
@@ -648,11 +847,15 @@ integrator — Varsel is a deployed service).
    `*_SIGNING_SECRET` out of source and rotate on schedule** — all are
    environment secrets.
 6. **Grant the POC role deliberately.** POC is full publish authority; the
-   first-ever GitHub login auto-becomes POC (bootstrap), so control who logs
-   in first. (`user.ex`)
+   first login through any configured provider auto-becomes POC (bootstrap),
+   so control who logs in first. The check is "are there no users", not "has
+   this ever run" — so if every account is deleted, the next person to sign in
+   becomes POC again. (`user.ex`)
 7. **Treat `repo_url` on cases as a trusted-egress control:** only assign
-   supporters to cases you trust to set outbound clone targets; if egress
-   filtering matters, enforce it at the network layer.
+   supporters to cases you trust to set outbound clone targets. The app keeps
+   that egress on public addresses and pins each clone to the address it
+   checked (property 12), but any *public* host is allowed by design — so
+   restrict which ones at the network layer if that matters (§9).
 8. **Do not publish from a non-production instance** expecting a sandbox —
    the test MITRE endpoint is real staging (§9).
 
@@ -699,7 +902,32 @@ both explained in §4:
 - **"Reading resource X as an anonymous caller returns success."** For a
   filter-scoped resource it returns `{:ok, []}` — success with no rows, which
   is how an Ash filter policy denies. `NOT-A-FINDING` unless rows actually
-  come back; verified 2026-07-26 that none do.
+  come back, and none do.
+- **"`authorize?: false` appears in the code."** Every remaining use is inside
+  a change, validation or notifier that runs *after* the enclosing action's
+  policy has already admitted the caller; none sits on a path a caller
+  selects. Caller-facing uses are banned by a credo check (§8, property 1).
+- **"The `cvelint` call shells out with user input."** It runs `/bin/sh -c`
+  with a fixed script and passes everything else as argv, so no caller string
+  reaches a shell parsing context. The record's CVE ID names the temp file and
+  is constrained to a CVE-ID shape before use (§5).
+- **"A supporter can resolve proposals like a POC."** Accepting or declining a
+  proposal on an assigned case is intended supporter authority; assignment is
+  the grant (§11, "treating a supporter as low-trust").
+- **"A token carries both the `mcp` and `gql` scopes."** Not a scope-separation
+  violation: property 6 constrains what a token may *use*, per surface, not
+  what it may be issued.
+- **"An avatar URL exposes the MD5 of a user's email."** Known and accepted
+  (§9): a Gravatar hash confirms a guessed address to someone who can already
+  read that user's row, and display identity is not secret between
+  collaborators. Reported regularly because the hash is recognisable.
+
+**An entry here describes an outcome, not a promise to disregard the
+evidence.** Each says what the code does and why the flag is expected. A
+report that *demonstrates* the stated control does not hold — a filename that
+escapes the temp directory, an anonymous read that returns rows — is `VALID`,
+not `KNOWN-NON-FINDING`. Match on the behaviour, not on the shape of the
+report.
 
 ---
 
@@ -711,9 +939,17 @@ both explained in §4:
 - Accepting a **new attacker-controllable input** that reaches a subprocess,
   a network egress, or an unsafe render sink — especially any new consumer of
   `report_json` beyond email/triage, or any new `unsafe: true` render path.
-- Implementing any **§14 planned follow-up** (`repo_url` commit-count limit,
-  private-network egress block, or application-level rate limiting) — each
-  promotes a §9 disclaimer toward a §8 property.
+- Implementing any **§14 planned follow-up** — each promotes a §9 disclaimer
+  toward a §8 property.
+- **Adding a GraphQL subscription.** None is declared today, so `/ws/gql`
+  carries no live data path; adding one puts pushed data on a transport whose
+  authentication is written by hand rather than inherited from the router
+  (§4).
+- **Adding a third login provider**, or changing what a provider's `sub` means
+  — account identity rests on that value being stable and non-reusable (§7).
+- **Giving `CveValidation` a policy**, or adding another resource with no
+  policy authorizer. The login gate on `/gql` and `/mcp` is currently the only
+  thing scoping those actions (§4).
 - Opening any **currently-public read** to more data, or any
   **currently-POC-only** action to supporters.
 - Adding another **build-gated authentication or authorization bypass**
@@ -748,6 +984,28 @@ both explained in §4:
 | `BY-DESIGN: property-disclaimed` | Concerns a §9 disclaimed property (rate limiting, `repo_url` egress to any public host within privilege, availability). | §9 |
 | `KNOWN-NON-FINDING` | Matches a §11a recurring false positive. | §11a |
 | `MODEL-GAP` | Routes to none of the above; triggers a §12 revision. | §12 |
+
+**Precedence, where two rows both seem to fit:**
+
+1. An exact §11a match wins — `KNOWN-NON-FINDING`.
+2. Dev-only code — the `/dev/*` tooling and the mock login — routes two ways.
+   If the report turns on that code being **present in a production build**,
+   it is `non-default-build`, whatever the code then does. If it turns on how
+   that code behaves where it does belong, it is `unsupported-component`.
+3. A `repo_url` report turns on how the host **resolves**, never on how the
+   name looks. Resolves privately → `KNOWN-NON-FINDING`, the check already
+   rejects it, at save time and again when the clone connects. Resolves
+   publicly → `BY-DESIGN`, any public host is allowed on purpose. A report
+   that gets a clone to actually reach a private address — by rebinding or
+   otherwise — is `VALID` against property 12.
+4. Otherwise take the first matching row, reading the table top to bottom.
+
+**Escalate rather than close when a claim rests on somebody else.** One claim
+here holds only while something outside this codebase does: that a login
+provider keeps a subject stable and non-reusable (§7). A report arguing that
+no longer holds is **escalated to the maintainers, not closed against the
+reporter** — record the disposition for tracking, but answer the reporter as
+an open question. Everything else in §13 closes on its own authority.
 
 ---
 
