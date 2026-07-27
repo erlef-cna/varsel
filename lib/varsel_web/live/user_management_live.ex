@@ -106,6 +106,16 @@ defmodule VarselWeb.UserManagementLive do
   defp role_value(nil), do: ""
   defp role_value(role), do: to_string(role)
 
+  # Whether to give the role its own column, asked of a row we already have.
+  #
+  # A field policy answers per record, and Ash offers no way to ask it as a
+  # general question — so the loaded rows are the only thing that knows. Every
+  # row gets the same answer here (the policy turns on the *viewer's* role, not
+  # the row's), which is why one row is enough. Nothing loaded means nothing to
+  # show a column for.
+  defp shows_role?([]), do: false
+  defp shows_role?([user | _rest]), do: not match?(%Ash.ForbiddenField{}, user.role)
+
   # Links to whichever hex instance we authenticate against, defaulting to
   # public hex.pm — a self-hosted one is the exception, and it sets base_url.
   defp hex_profile_url(username) do
@@ -140,7 +150,8 @@ defmodule VarselWeb.UserManagementLive do
                 <th>Email</th>
                 <th>GitHub</th>
                 <th>Hex.pm</th>
-                <th class="text-right">Role</th>
+                <th :if={shows_role?(@users.results)} class="text-right">Role</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -179,7 +190,7 @@ defmodule VarselWeb.UserManagementLive do
                   </.link>
                   <span :if={is_nil(user.hex_username)} class="text-base-content/50">—</span>
                 </td>
-                <td class="text-right">
+                <td :if={shows_role?(@users.results)} class="text-right">
                   <form
                     :if={Accounts.can_set_user_role?(@current_user, user, %{})}
                     id={"role-#{user.id}"}
@@ -197,13 +208,15 @@ defmodule VarselWeb.UserManagementLive do
                       </option>
                     </select>
                   </form>
+                </td>
+                <td class="text-right">
                   <button
                     :if={Accounts.can_delete_user?(@current_user, user)}
                     type="button"
                     phx-click="delete_user"
                     phx-value-user_id={user.id}
                     data-confirm={delete_confirmation(user)}
-                    class="btn btn-ghost btn-sm text-error ml-1"
+                    class="btn btn-ghost btn-sm text-error"
                   >
                     Delete
                   </button>
