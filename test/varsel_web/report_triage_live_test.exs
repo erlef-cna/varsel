@@ -30,6 +30,15 @@ defmodule VarselWeb.ReportTriageLiveTest do
     )
   end
 
+  # Each decision is taken in its own box, opened from the row it belongs to.
+  defp decide(lv, report, decision) do
+    lv
+    |> element("button[phx-value-decision=#{decision}][phx-value-report_id='#{report.id}']")
+    |> render_click()
+
+    element(lv, "#decision-form-#{report.id}")
+  end
+
   setup %{conn: conn} do
     poc = Fixtures.register_user("triage_live_poc", :poc)
     reporter = Fixtures.register_user("triage_live_reporter")
@@ -64,7 +73,7 @@ defmodule VarselWeb.ReportTriageLiveTest do
       # The submit call-to-action stays; triage tooling does not.
       assert has_element?(lv, "a[href='/report']")
       refute has_element?(lv, "button[phx-value-filter]")
-      refute has_element?(lv, "summary", "Report payload")
+      refute has_element?(lv, "[phx-click=toggle_payload]")
     end
 
     test "withdrawing a submitted report rejects it and records the withdrawal", %{
@@ -115,23 +124,56 @@ defmodule VarselWeb.ReportTriageLiveTest do
     assert has_element?(lv, "h3", "Waiting report")
     refute has_element?(lv, "h3", "Consolidated report")
 
-    lv |> element("button[phx-value-filter=accepted]") |> render_click()
+    # The stat tiles and the scope tabs both select a scope; drive the tiles.
+    lv |> element("button.rounded-lg[phx-value-filter=accepted]") |> render_click()
     assert has_element?(lv, "h3", "Consolidated report")
     refute has_element?(lv, "h3", "Waiting report")
 
-    lv |> element("button[phx-value-filter=all]") |> render_click()
+    lv |> element("button.rounded-lg[phx-value-filter=all]") |> render_click()
     assert has_element?(lv, "h3", "Consolidated report")
     assert has_element?(lv, "h3", "Waiting report")
   end
 
+  # A payload with no `report` body is all the report says, so it needs no
+  # disclosure to sit behind — it renders open.
   test "lists reports with their payload", %{conn: conn, poc: poc, reporter: reporter} do
     submit_report(reporter, "acme_lib leaks secrets")
 
-    {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/reports")
+    {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/reports")
 
-    assert html =~ "acme_lib leaks secrets"
+    assert has_element?(lv, "h3", "acme_lib leaks secrets")
     assert html =~ "triage_live_reporter"
-    assert html =~ "leaks secrets"
+
+    refute has_element?(lv, "[phx-click=toggle_payload]")
+    assert lv |> element("pre") |> render() =~ "leaks secrets"
+  end
+
+  test "a markdown body reads as prose, with the rest behind a disclosure", %{
+    conn: conn,
+    poc: poc,
+    reporter: reporter
+  } do
+    CVE.submit_vulnerability_report!(
+      %{
+        report_json: %{
+          "report" => "## Heap overflow\n\nThe parser never bounds the length.",
+          "affected" => "acme_lib"
+        },
+        summary: "acme_lib overflows",
+        confirms_criteria: true,
+        confirms_in_scope: true
+      },
+      actor: reporter
+    )
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/reports")
+
+    assert lv |> element(".prose h2") |> render() =~ "Heap overflow"
+
+    # The leftovers start closed and open on demand.
+    refute has_element?(lv, "pre")
+    lv |> element("[phx-click=toggle_payload]") |> render_click()
+    assert lv |> element("pre") |> render() =~ "acme_lib"
   end
 
   test "accepting without a case opens a draft case and navigates to it", %{
@@ -144,7 +186,7 @@ defmodule VarselWeb.ReportTriageLiveTest do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/reports")
 
     lv
-    |> element("#accept-#{report.id}")
+    |> decide(report, :accept)
     |> render_submit(%{"case_id" => "", "triage_notes" => "looks real"})
 
     assert {path, _flash} = assert_redirect(lv)
@@ -167,7 +209,7 @@ defmodule VarselWeb.ReportTriageLiveTest do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/reports")
 
     lv
-    |> element("#accept-#{report.id}")
+    |> decide(report, :accept)
     |> render_submit(%{"case_id" => case_record.id})
 
     assert {path, _flash} = assert_redirect(lv)
@@ -183,7 +225,7 @@ defmodule VarselWeb.ReportTriageLiveTest do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/reports")
 
     lv
-    |> element("#triage-#{report.id}")
+    |> decide(report, :triage)
     |> render_submit(%{"triage_notes" => "checking upstream"})
 
     report = Ash.get!(CVE.VulnerabilityReport, report.id, authorize?: false)
@@ -191,7 +233,7 @@ defmodule VarselWeb.ReportTriageLiveTest do
     assert report.triage_notes == "checking upstream"
 
     lv
-    |> element("#reject-#{report.id}")
+    |> decide(report, :reject)
     |> render_submit(%{"triage_notes" => "out of scope"})
 
     report = Ash.get!(CVE.VulnerabilityReport, report.id, authorize?: false)
