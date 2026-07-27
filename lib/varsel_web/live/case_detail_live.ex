@@ -1298,9 +1298,11 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   # Renders every open suggestion targeting one section, inline inside that
-  # section's own card — the aggregate "Suggestions" section is gone; this is
-  # its only rendering now, plus the rail's compact queue and the bottom
-  # "Resolved suggestions" disclosure.
+  # section's own card (for Affected: once at section level, below the
+  # per-package cards — a package :insert proposal has no card of its own) —
+  # the aggregate "Suggestions" section is gone; this is its only rendering
+  # now, plus the rail's compact queue and the bottom "Resolved suggestions"
+  # disclosure.
   attr :case_record, :map, required: true
   attr :section_id, :string, required: true
   attr :current_user, :map, required: true
@@ -1527,15 +1529,19 @@ defmodule VarselWeb.CaseDetailLive do
         }
         mode={@mode}
         marks={@marks}
-        raw_case_record={@raw_case_record}
-        current_user={@current_user}
-        can_resolve={@can_resolve}
         can_refresh={@can_refresh}
       />
 
       <p :if={@case_record.affected_packages == []} class="text-sm text-base-content/60">
         No affected packages yet.
       </p>
+
+      <.inline_suggestions
+        case_record={@raw_case_record}
+        section_id="affected"
+        current_user={@current_user}
+        can_resolve={@can_resolve}
+      />
     </div>
     """
   end
@@ -1545,9 +1551,6 @@ defmodule VarselWeb.CaseDetailLive do
   attr :field_form, :any, required: true
   attr :mode, :atom, required: true
   attr :marks, :map, required: true
-  attr :raw_case_record, :map, required: true
-  attr :current_user, :map, required: true
-  attr :can_resolve, :boolean, required: true
   attr :can_refresh, :boolean, required: true
 
   defp affected_package_card(assigns) do
@@ -1636,13 +1639,6 @@ defmodule VarselWeb.CaseDetailLive do
         mode={@mode}
         marks={@marks}
         can_refresh={@can_refresh}
-      />
-
-      <.inline_suggestions
-        case_record={@raw_case_record}
-        section_id="affected"
-        current_user={@current_user}
-        can_resolve={@can_resolve}
       />
     </.panel>
     """
