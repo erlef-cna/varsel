@@ -52,15 +52,15 @@ defmodule Varsel.Accounts do
       define :sign_in_user_with_api_key, action: :sign_in_with_api_key, args: [:api_key]
       define :register_user_with_github, action: :register_with_github
       define :register_user_with_hex, action: :register_with_hex
+
+      # Gated the same way the action is; see `Varsel.Accounts.Strategy.Mock`.
+      if Mix.env() in ~w(dev test)a do
+        define :register_user_with_mock, action: :register_with_mock
+      end
+
       define :set_user_notification_email, action: :set_notification_email
       define :delete_user, action: :destroy
       define :log_out_user_everywhere, action: :log_out_everywhere
-
-      # The mock sign-in action only exists in dev/test builds; see
-      # Varsel.Accounts.User.
-      if Mix.env() in [:dev, :test] do
-        define :mock_sign_in_user, action: :mock_sign_in
-      end
     end
 
     resource Varsel.Accounts.UserIdentity do

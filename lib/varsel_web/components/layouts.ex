@@ -261,12 +261,10 @@ defmodule VarselWeb.Layouts do
   The floating dev-tools launcher (`VarselWeb.DevNav`), rendered only in
   dev/test builds where that module is compiled.
   """
-  attr :current_user, :any, default: nil
-
   if Mix.env() in [:dev, :test] do
     def dev_nav(assigns) do
       ~H"""
-      <VarselWeb.DevNav.dev_nav current_user={@current_user} />
+      <VarselWeb.DevNav.dev_nav />
       """
     end
   else

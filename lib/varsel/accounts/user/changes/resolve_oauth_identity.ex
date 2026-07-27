@@ -130,7 +130,7 @@ defmodule Varsel.Accounts.User.Changes.ResolveOauthIdentity do
     else
       strategy.identity_resource
       |> Ash.Query.filter(email == ^email)
-      |> Ash.Query.filter(is_nil(^ours) or user_id != ^ours)
+      |> exclude_own_identities(ours)
       |> Ash.Query.set_context(%{private: %{ash_authentication?: true}})
       |> Ash.read_one(Ash.Context.to_opts(context))
       |> case do
@@ -140,6 +140,9 @@ defmodule Varsel.Accounts.User.Changes.ResolveOauthIdentity do
       end
     end
   end
+
+  defp exclude_own_identities(query, nil), do: query
+  defp exclude_own_identities(query, ours), do: Ash.Query.filter(query, user_id != ^ours)
 
   defp refuse(changeset, strategy, message) do
     {:error,

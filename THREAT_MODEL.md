@@ -87,7 +87,7 @@ Roles live in `Varsel.Accounts.User.Role` (`:poc | :supporter`, plus `nil`)
 | Catalog sync (CWE/CAPEC/OTP-versions) — Oban jobs | scheduled workers | Outbound HTTPS to fixed hosts | **Yes (trusted-source egress)** |
 | `cvelint` subprocess (validates rendered CVE JSON) | `Varsel.CVE.Cvelint` | `System.cmd`, temp file | **Yes** |
 | Dev tooling (LiveDashboard, Oban Web, AshAdmin, Swoosh mailbox, storybook, error preview) | `/dev/*` | DB, mail | **No — §3 (absent from prod builds)** |
-| Mock login (unauthenticated sign-in as a dummy user of any role) | `/dev/mock-auth/sign-in/:role` | DB | **No — §3 (absent from prod builds)** |
+| Mock login (unauthenticated sign-in as a dummy user of any role) | `/auth/user/mock/callback` | DB | **No — §3 (absent from prod builds)** |
 | GraphiQL playground | `/gql/playground` | DB | **Yes, but relaxed CSP — §5a** |
 
 There is **no plugin/extension/user-defined-function loader.** Tool exposure
@@ -108,27 +108,37 @@ dynamic code loading from any actor.
   to act) are governance/insider concerns, not product security boundaries.
 - **The developer tooling under `/dev/*`** — the dashboards
   (`/dev/dashboard`, `/dev/oban`, `/dev/admin`, `/dev/mailbox`), the component
-  storybook (`/dev/storybook`), the error-page preview
-  (`/dev/http-error/:status`) and the **mock login**
-  (`/dev/mock-auth/sign-in/:role`). All of it lives in the `dev/` directory,
-  which `elixirc_paths/1` compiles **only** for `:dev` and `:test`, so none of
-  these modules — `VarselWeb.DevRouter`, its routes, the dev-nav component,
-  `MockAuthController` and the mock sign-in changes — exist in a production
-  build at all. The dashboards additionally run a relaxed CSP; the storybook
-  serves component fixtures, never real data.
+  storybook (`/dev/storybook`) and the error-page preview
+  (`/dev/http-error/:status`). All of it lives in the `dev/` directory, which
+  `elixirc_paths/1` compiles **only** for `:dev` and `:test`, so none of these
+  modules — `VarselWeb.DevRouter`, its routes and the dev-nav component —
+  exist in a production build at all. The dashboards additionally run a
+  relaxed CSP; the storybook serves component fixtures, never real data.
 
-  The mock login is the sharp one: a deliberate, total authentication bypass
-  that upserts a dummy user of the requested role (**including POC**) and
-  signs the caller in with no credential, so where it exists it **voids every
-  §8 authorization property**. It is not a runtime flag and has no
-  configuration override — the code is simply absent from a release, as are
-  the `User.mock_sign_in` action, its policy and the
-  `Accounts.mock_sign_in_user` interface (all gated on the same `Mix.env/0`
-  check, evaluated at compile time).
+- **The mock login** (`/auth/user/mock/callback?role=…`) — a deliberate, total
+  authentication bypass that signs the caller in as a dummy user of the
+  requested role (**including POC**) with no credential, so where it exists it
+  **voids every §8 authorization property**. The role is a plain query
+  parameter and the sign-in page links one per role; only the three roles the
+  strategy declares are accepted, but that is a typo guard, not a control —
+  every one of them is unauthenticated.
+
+  It is an ordinary authentication strategy: it registers through the same
+  action every provider does, and the account it creates carries a normal
+  identity row, so the linking and resolution paths (§8) are exercised in
+  development rather than bypassed.
+
+  Its modules compile into every build. What confines it to development is the
+  `mock do` block on `Varsel.Accounts.User` and its `register_with_mock`
+  action, both behind a `Mix.env/0` check evaluated at compile time. Undeclared
+  the strategy has no route and no action, so there is no way in. The guard is
+  that condition, not the presence of a file; widening it is what would expose
+  the bypass. There is no runtime flag and no configuration override.
 
   Findings against any of this are `OUT-OF-MODEL: unsupported-component`; a
-  finding that a *production build ships `dev/`* is a build/deployment error
-  (§10), not a code defect. (`mix.exs`, `dev/`, `router.ex`)
+  finding that a *production build declares the mock strategy* is a
+  build/deployment error (§10), not a code defect.
+  (`mix.exs`, `dev/`, `router.ex`, `user.ex`)
 - **The `cvelint` and `exgit` third-party tools themselves.** Varsel invokes
   them; bugs *inside* them are upstream (see §6). Varsel owns only how it
   feeds them.
@@ -270,7 +280,7 @@ claims:
 
 | Knob | Default | Effect on model |
 | --- | --- | --- |
-| `MIX_ENV` (compile) | `prod` for releases | The **only** switch governing the `/dev/*` tooling and the mock login (§3). `elixirc_paths/1` adds the `dev/` directory for `:dev` and `:test` only, so a prod build contains neither `VarselWeb.DevRouter` (dashboards, storybook, error preview, `/dev/mock-auth/*`) nor `MockAuthController`, the mock sign-in changes, or the dev-nav component; the matching `Mix.env/0` guards drop the `User.mock_sign_in` action, its policy and the `Accounts.mock_sign_in_user` interface. The storybook, Oban Web and LiveDashboard **dependencies** are themselves `only: [:dev, :test]`, so a prod build cannot link them even by mistake. There is no runtime or configuration override — building with `MIX_ENV=prod` is the whole control. **A release built from any other env exposes an unauthenticated POC sign-in and this model no longer holds at all.** (`mix.exs`, `dev/`, `user.ex`) |
+| `MIX_ENV` (compile) | `prod` for releases | The **only** switch governing the `/dev/*` tooling and the mock login (§3), through two mechanisms. `elixirc_paths/1` adds the `dev/` directory for `:dev` and `:test` only, so a prod build contains neither `VarselWeb.DevRouter` (dashboards, storybook, error preview) nor the dev-nav component. The mock login is instead gated by `Mix.env/0` checks *inside* `Varsel.Accounts.User`, which drop the `mock do` strategy declaration and the `register_with_mock` action — its modules compile, but nothing declares them, so there is no route and no action. The storybook, Oban Web and LiveDashboard **dependencies** are themselves `only: [:dev, :test]`, so a prod build cannot link them even by mistake. There is no runtime or configuration override — building with `MIX_ENV=prod` is the whole control. **A release built from any other env exposes an unauthenticated POC sign-in and this model no longer holds at all.** (`mix.exs`, `dev/`, `user.ex`) |
 | `TEST_DEPLOYMENT` (runtime) | `true` | When true, serves a disallow-all `robots.txt`, `X-Robots-Tag: noindex`, and a warning banner. **Must be set `false` on the real production instance.** Not a security control — an indexing/labeling one. (`config.exs`, `runtime.exs`) |
 | `MITRE_CVE_API_BASE_URL` | none (required) | Points the publish pipeline at a MITRE endpoint. Every configured endpoint (including MITRE's shared staging, `cveawg-test`) is a real remote system — the pipeline has no in-app dry-run or sandbox, so any publish leaves the machine (see §9, "false friend"). (`mitre_cve_api.ex`) |
 | GraphiQL relaxed CSP | route-scoped | `/gql/playground` serves `'unsafe-inline'` + a jsdelivr allowlist so GraphiQL boots. The rest of the site is deny-by-default (`default-src 'none'`, `script-src 'self'`, nonce'd). In a prod build this is the *only* CSP relaxation, and it is confined to that one login-gated route (the `/dev/*` relaxation lives in `VarselWeb.DevRouter`, which is not compiled). (`router.ex`, `dev/dev_router.ex`) |
@@ -278,9 +288,10 @@ claims:
 One build variant voids the §8 auth properties outright — a non-`prod`
 `MIX_ENV`, which ships the mock login: an intentional authentication bypass.
 It fails loudly rather than silently: there is no runtime or environment
-override that can enable it in a `prod` build (the code is not compiled, and
-its dependencies are not even linked), and where it *is* present every page
-carries a visible floating dev-tools launcher offering the mock sign-ins. The
+override that can enable it in a `prod` build (the strategy is not declared,
+the `/dev/*` code is not compiled, and its dependencies are not even linked),
+and where it *is* present the sign-in page lists it beside the real
+providers and every page carries a visible floating dev-tools launcher. The
 two variants that matter (a release built from a non-`prod` env,
 `TEST_DEPLOYMENT` left true) are operator-deployment errors, surfaced in §10.
 
@@ -593,9 +604,11 @@ integrator — Varsel is a deployed service).
    keeping the `/dev/*` tooling and the mock login out of the build (§5a).
    Any other env ships a full authentication bypass that lets an anonymous
    caller become a POC, plus the dashboards' relaxed CSP. Do not add the
-   `dev/` directory to `elixirc_paths/1` for other environments, and do not
-   move those routes into `VarselWeb.Router`. Verify on the built release:
-   it must expose no `/dev/*` route (in particular no `/dev/mock-auth/*`).
+   `dev/` directory to `elixirc_paths/1` for other environments, do not move
+   those routes into `VarselWeb.Router`, and do not widen the `Mix.env/0`
+   condition guarding the `mock` strategy on `Varsel.Accounts.User`. Verify on
+   the built release: it must expose no `/dev/*` route and no
+   `/auth/user/mock/*`.
 3. **Terminate TLS at the edge and forward the scheme** — the app forces
    HTTPS + HSTS itself (`force_ssl`), but relies on the proxy setting a
    truthful `x-forwarded-proto`; a proxy that lets a client spoof it to
@@ -700,7 +713,7 @@ both explained in §4:
 | `VALID-HARDENING` | No §8 property broken, but a §11 misuse is easy enough to warrant hardening (e.g. a `repo_url` public-host allowlist on top of the https + public-address checks). Fixed at maintainer discretion. | §11 |
 | `OUT-OF-MODEL: trusted-input` | Requires control of an input the model marks trusted at that privilege (e.g. `repo_url`/`cve_json`/`cna_override` from below POC/assignee; catalog-sync URLs). | §6 |
 | `OUT-OF-MODEL: adversary-not-in-scope` | Requires POC privilege, DB/host access, TLS break, or control of MITRE/GitHub/SMTP. | §7 |
-| `OUT-OF-MODEL: unsupported-component` | Lands in the `/dev/*` tooling, including the mock login (`/dev/mock-auth/*`). | §3 |
+| `OUT-OF-MODEL: unsupported-component` | Lands in the `/dev/*` tooling, or in the mock login (`/auth/user/mock/*`). | §3 |
 | `OUT-OF-MODEL: non-default-build` | Only manifests in a release built from a non-`prod` `MIX_ENV` (which ships `dev/`), or with `TEST_DEPLOYMENT` misconfigured. | §5a |
 | `OUT-OF-MODEL: report-upstream` | Lands in `exgit`/`mdex`/`cvelint`/`saxy`/`req` internals; Varsel ships the fix by bumping the dep. | §6b |
 | `BY-DESIGN: property-disclaimed` | Concerns a §9 disclaimed property (rate limiting, `repo_url` egress to any public host within privilege, availability). | §9 |

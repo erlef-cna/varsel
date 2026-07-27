@@ -7,8 +7,8 @@ defmodule VarselWeb.DevNav do
   Floating dev-tools launcher, pinned to the bottom-right of every page.
 
   Hovering the `</>` disc opens the tooling index — storybook, dashboards,
-  admin, mailbox, error previews — plus the GitHub-bypassing mock logins while
-  signed out. Kept out of the site header so the real chrome stays honest.
+  admin, mailbox, error previews. Kept out of the site header so the real
+  chrome stays honest.
 
   Lives under `dev/`, only compiled for `:dev` and `:test`; the layout renders
   it behind the same `Mix.env/0` check.
@@ -40,12 +40,8 @@ defmodule VarselWeb.DevNav do
     ]
   end
 
-  @mock_roles [{"POC", "poc"}, {"Supporter", "supporter"}, {"No role", "none"}]
-
-  attr :current_user, :any, default: nil
-
   def dev_nav(assigns) do
-    assigns = assign(assigns, tools: tools(), roles: @mock_roles)
+    assigns = assign(assigns, tools: tools())
 
     ~H"""
     <div class="group fixed bottom-4 right-4 z-[60] print:hidden">
@@ -67,27 +63,6 @@ defmodule VarselWeb.DevNav do
               </.link>
             </li>
           </ul>
-
-          <div
-            :if={Varsel.Accounts.can_mock_sign_in_user?(@current_user, %{})}
-            class="mt-1.5 border-t border-base-300 pt-1.5"
-          >
-            <p class="px-2 pb-1 text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50">
-              Mock sign in
-            </p>
-            <ul class="space-y-0.5 text-sm">
-              <li :for={{label, role} <- @roles}>
-                <.link
-                  href={~p"/dev/mock-auth/sign-in/#{role}"}
-                  method="post"
-                  class="flex items-center gap-2 rounded px-2 py-1.5 text-base-content hover:bg-base-200"
-                >
-                  <.icon name="hero-beaker" class="size-4 shrink-0 text-warning" />
-                  {label}
-                </.link>
-              </li>
-            </ul>
-          </div>
         </div>
       </div>
 

@@ -13,7 +13,6 @@ defmodule Varsel.Accounts.UserDeletionTest do
 
   alias Ash.Error.Forbidden
   alias Varsel.Accounts
-  alias Varsel.Accounts.ApiKey
   alias Varsel.Accounts.User
   alias Varsel.Cases
 

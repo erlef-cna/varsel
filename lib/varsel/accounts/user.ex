@@ -15,6 +15,9 @@ defmodule Varsel.Accounts.User do
       AshAuthentication,
       Varsel.Accounts.Strategy.Github,
       Varsel.Accounts.Strategy.Hex,
+      # Always available; only the `mock do` block below is dev-only, so the
+      # provider exists nowhere else.
+      Varsel.Accounts.Strategy.Mock,
       AshPaperTrail.Resource,
       AshGraphql.Resource,
       AshAdmin.Resource
@@ -25,14 +28,12 @@ defmodule Varsel.Accounts.User do
   alias Varsel.Accounts.User.Changes.ApplyProviderProfile
   alias Varsel.Accounts.User.Changes.PromoteFirstUserToPoc
   alias Varsel.Accounts.User.Changes.ResolveOauthIdentity
+  alias Varsel.Accounts.User.Role
   alias Varsel.Accounts.UserIdentity
   alias Varsel.Cases.Proposal
 
-  # Gates the mock (GitHub-bypassing) sign-in action at compile time. Its
-  # changes live under `dev/`, which is only compiled for :dev and :test, so
-  # this must match — `Mix.env/0` is read while compiling, never at runtime
-  # (Mix is not available in a release).
-  @mock_login? Mix.env() in [:dev, :test]
+  # Read while compiling, never at runtime — Mix is absent from a release.
+  @mock_login? Mix.env() in ~w(dev test)a
 
   admin do
     actor? true
@@ -115,6 +116,15 @@ defmodule Varsel.Accounts.User do
         identity_resource UserIdentity
       end
 
+      # Local development has no OAuth app to talk to, so this one asks which
+      # role you want instead of asking a provider who you are. Otherwise an
+      # ordinary provider — see `Varsel.Accounts.Strategy.Mock`.
+      if @mock_login? do
+        mock do
+          identity_resource UserIdentity
+        end
+      end
+
       api_key do
         api_key_relationship :valid_api_keys
       end
@@ -124,11 +134,6 @@ defmodule Varsel.Accounts.User do
   postgres do
     table "users"
     repo Varsel.Repo
-
-    if @mock_login? do
-      # The `where` on :unique_mock_name, spelled for the partial index.
-      identity_wheres_to_sql unique_mock_name: "name IS NOT NULL AND name LIKE 'Mock %'"
-    end
   end
 
   paper_trail do
@@ -170,9 +175,8 @@ defmodule Varsel.Accounts.User do
 
     create :register_with_github do
       description "Registers or updates a user from a GitHub OAuth sign-in."
-      # GitHub OAuth is the only way a real user comes into being, so it stays
-      # the primary create even in dev builds, where :mock_sign_in adds a
-      # second one.
+      # One of several provider creates, and the one anything asking for "the"
+      # create should get.
       primary? true
       argument :user_info, :map, allow_nil?: false
       argument :oauth_tokens, :map, allow_nil?: false
@@ -251,20 +255,21 @@ defmodule Varsel.Accounts.User do
     end
 
     if @mock_login? do
-      create :mock_sign_in do
-        description "Dev-only: upserts a dummy user for the given role and signs it in."
-        accept [:role]
+      create :register_with_mock do
+        description "Dev-only: registers or signs in the dummy account for a role."
+        argument :user_info, :map, allow_nil?: false
+        argument :oauth_tokens, :map, allow_nil?: false
+        # Only on the way in: signing in again does not put back a role the
+        # console has since changed, exactly as a real provider would not.
+        argument :role, Role, allow_nil?: true
+
         upsert? true
-        upsert_identity :unique_mock_name
+        upsert_fields [:name]
 
-        # Re-signing in as the same role must reuse the same row, so the
-        # synthetic name is derived from the role rather than random.
-        change Varsel.Accounts.User.Changes.ApplyMockProfile
-        change Varsel.Accounts.User.Changes.MockGenerateToken
-
-        metadata :token, :string do
-          allow_nil? false
-        end
+        change AshAuthentication.GenerateTokenChange
+        change ApplyProviderProfile
+        change set_attribute(:role, arg(:role), new?: true)
+        change ResolveOauthIdentity
       end
     end
   end
@@ -280,26 +285,9 @@ defmodule Varsel.Accounts.User do
       authorize_if always()
     end
 
-    if @mock_login? do
-      # The mock sign-in is the caller's way of *becoming* an actor, so there is
-      # none to authorize against. It only exists in dev builds.
-
-      # Bypass so that the access check below does not trigger
-      bypass action(:mock_sign_in) do
-        access_type :strict
-        authorize_if actor_absent()
-      end
-
-      # Normal so that it is checked eagerly
-      policy action(:mock_sign_in) do
-        access_type :strict
-        authorize_if actor_absent()
-      end
-    end
-
-    # Nothing about a user is public. Authentication, Oban and mock-login are
-    # the bypasses above, so every other path needs someone to be asking; the
-    # read policy below then narrows to what that someone may see.
+    # Nothing about a user is public. Authentication and Oban are the bypasses
+    # above, so every other path needs someone to be asking; the read policy
+    # below then narrows to what that someone may see.
     policy always() do
       access_type :strict
       authorize_if actor_present()
@@ -378,7 +366,7 @@ defmodule Varsel.Accounts.User do
       allow_nil? true
     end
 
-    attribute :role, Varsel.Accounts.User.Role do
+    attribute :role, Role do
       public? true
       allow_nil? true
     end
@@ -450,13 +438,5 @@ defmodule Varsel.Accounts.User do
   identities do
     # Two accounts cannot ask for mail at the same address.
     identity :unique_notification_email, [:notification_email]
-
-    if @mock_login? do
-      # Only so re-signing in as a role reuses its row. Names are otherwise
-      # free-form, so this is scoped to the accounts the mock invents.
-      identity :unique_mock_name, [:name] do
-        where expr(not is_nil(name) and like(name, "Mock %"))
-      end
-    end
   end
 end

@@ -5,8 +5,8 @@
 defmodule VarselWeb.DevRouter do
   @moduledoc """
   Routes for the developer tooling: the component storybook, Oban Web, the
-  LiveDashboard, AshAdmin, the Swoosh mailbox preview, the error-page preview
-  and the GitHub-bypassing mock login.
+  LiveDashboard, AshAdmin, the Swoosh mailbox preview and the error-page
+  preview.
 
   Lives under `dev/`, a directory `elixirc_paths/1` only compiles for `:dev`
   and `:test`, which is what keeps these routes out of production — the
@@ -47,21 +47,6 @@ defmodule VarselWeb.DevRouter do
       }
   end
 
-  # The mock login signs a real session token and hands it to
-  # `store_in_session/2`, so it needs the app's own session/actor handling
-  # rather than the relaxed dashboard pipeline — and it keeps the strict CSP,
-  # since it renders no dashboard of its own.
-  pipeline :mock_auth do
-    plug :accepts, ["html"]
-    plug :fetch_session
-    plug :fetch_live_flash
-    plug :put_root_layout, html: {VarselWeb.Layouts, :root}
-    plug :protect_from_forgery
-    plug :put_secure_browser_headers
-    plug :load_from_session
-    plug :set_actor, :user
-  end
-
   # Every path here is declared in full, including the `/dev` segment, and the
   # main router forwards this module at the ROOT rather than at "/dev". These
   # tools build their own redirects (`/dev/storybook` -> the first story,
@@ -71,14 +56,6 @@ defmodule VarselWeb.DevRouter do
   # which does not exist.
   scope "/" do
     storybook_assets("/dev/storybook/assets")
-  end
-
-  # Bypasses GitHub OAuth by signing in a dummy user of the chosen role, so
-  # local development needs no configured OAuth app.
-  scope "/dev/mock-auth", VarselWeb do
-    pipe_through :mock_auth
-
-    post "/sign-in/:role", MockAuthController, :create
   end
 
   scope "/" do
