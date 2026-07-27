@@ -57,7 +57,7 @@ defmodule VarselWeb.CaseDetailLive do
     affected_packages: [:channels, :version_events],
     comments: [:author],
     # The report read policy is POC-only; supporters get an empty list here.
-    vulnerability_reports: [:reporter]
+    vulnerability_reports: [reporter: [:avatar_url]]
   ]
 
   # Modal child-form registry: UI type -> resource + labels. Every resource
@@ -141,7 +141,8 @@ defmodule VarselWeb.CaseDetailLive do
         preview_tab: "validation",
         diff: nil,
         users: nil,
-        catalog_options: nil
+        catalog_options: nil,
+        expanded_payloads: MapSet.new()
       )
       |> keep_live(:case_record, &load_case/1,
         subscribe: ["case:#{id}", "case_proposal:#{id}", "case_comment:#{id}"],
@@ -179,6 +180,19 @@ defmodule VarselWeb.CaseDetailLive do
   def handle_event("toggle_suggest", _params, socket) do
     socket = assign(socket, suggest?: not socket.assigns.suggest?)
     {:noreply, assign_case(socket, socket.assigns.case_record)}
+  end
+
+  def handle_event("toggle_payload", %{"report_id" => report_id}, socket) do
+    expanded = socket.assigns.expanded_payloads
+
+    expanded =
+      if MapSet.member?(expanded, report_id) do
+        MapSet.delete(expanded, report_id)
+      else
+        MapSet.put(expanded, report_id)
+      end
+
+    {:noreply, assign(socket, expanded_payloads: expanded)}
   end
 
   def handle_event("edit_section", %{"section" => section}, socket) when section in ["summary", "severity"] do
@@ -1124,6 +1138,7 @@ defmodule VarselWeb.CaseDetailLive do
             :if={@case_record.vulnerability_reports != []}
             case_record={@case_record}
             triage?={CVE.can_list_vulnerability_reports?(@current_user)}
+            expanded_payloads={@expanded_payloads}
           />
           <.close_link
             :if={Cases.can_close_case?(@current_user, @case_record, validate?: true)}
@@ -1980,39 +1995,62 @@ defmodule VarselWeb.CaseDetailLive do
         </.link>
       </:actions>
 
+      <%!-- The queue's row, at rail width: same state vocabulary and payload
+            treatment, with the body clamped tighter and no decision bar —
+            reports are acted on in triage, read here. --%>
       <div
         :for={report <- Enum.sort_by(@case_record.vulnerability_reports, & &1.inserted_at, DateTime)}
         class="rounded-lg border border-base-300 bg-base-300/30 p-3 text-sm mb-2 last:mb-0"
       >
         <div class="flex items-start justify-between gap-2">
           <span class="font-semibold">{report.summary}</span>
-          <span class={["badge badge-sm shrink-0", report_badge_class(report.state)]}>
-            {report.state}
-          </span>
+          <.state
+            dot={report_dot_class(report.state)}
+            class={["text-xs shrink-0", report_text_class(report.state)]}
+          >
+            {Phoenix.Naming.humanize(report.state)}
+          </.state>
         </div>
 
-        <p class="text-xs text-base-content/60">
-          by <.user_name user={report.reporter} /> · {relative_time(report.inserted_at)}
-        </p>
+        <div class="flex items-center gap-1.5 text-xs text-base-content/60">
+          <.user_badge
+            user={report.reporter}
+            class="items-center"
+            name_class="text-base-content/60"
+          />
+          <span>· {relative_time(report.inserted_at)}</span>
+        </div>
 
         <p :if={report.triage_notes} class="text-xs text-base-content/70 italic">
           {report.triage_notes}
         </p>
 
-        <details>
-          <summary class="cursor-pointer text-xs text-base-content/60">Report payload</summary>
-          <.code_block source={pretty_json(report.report_json)} class="mt-1 max-h-60" />
-        </details>
+        <div class="mt-2">
+          <.report_payload
+            payload={report.report_json}
+            report_id={report.id}
+            expanded?={MapSet.member?(@expanded_payloads, report.id)}
+            toggle="toggle_payload"
+            body_class="max-h-24 overflow-y-auto"
+            json_class="max-h-60"
+          />
+        </div>
       </div>
     </.panel>
     """
   end
 
-  defp report_badge_class(:submitted), do: "badge-warning"
-  defp report_badge_class(:triaged), do: "badge-info"
-  defp report_badge_class(:accepted), do: "badge-success"
-  defp report_badge_class(:rejected), do: "badge-error"
-  defp report_badge_class(_other), do: "badge-ghost"
+  defp report_dot_class(:submitted), do: "bg-warning"
+  defp report_dot_class(:triaged), do: "bg-info"
+  defp report_dot_class(:accepted), do: "bg-success"
+  defp report_dot_class(:rejected), do: "bg-error"
+  defp report_dot_class(_other), do: "bg-base-content/30"
+
+  defp report_text_class(:submitted), do: "text-warning"
+  defp report_text_class(:triaged), do: "text-info"
+  defp report_text_class(:accepted), do: "text-success"
+  defp report_text_class(:rejected), do: "text-base-content/50"
+  defp report_text_class(_other), do: "text-base-content/60"
 
   # The User read policy is self-or-POC: a supporter sees the report through
   # their case assignment but not the reporter account behind it.
