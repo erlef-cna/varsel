@@ -52,11 +52,11 @@ defmodule VarselWeb.AccountSettingsLive do
     account =
       Ash.load!(actor, [:avatar_url, :display_name, :identity_emails, :identities], actor: actor)
 
-    linked = MapSet.new(account.identities, & &1.strategy)
+    linked = MapSet.new(account.identities, &to_string(&1.strategy))
 
     assign(socket,
       account: account,
-      candidate_emails: account.identity_emails |> Enum.reject(&is_nil/1) |> Enum.uniq() |> Enum.sort(),
+      candidate_emails: candidate_emails(account),
       providers:
         Enum.map(oauth_strategies(), fn strategy ->
           %{
@@ -67,6 +67,24 @@ defmodule VarselWeb.AccountSettingsLive do
         end)
     )
   end
+
+  # The addresses to choose between, each flagged if it is the one in use.
+  # Compared and deduplicated as plain strings: these are case-insensitive
+  # values, and `==`/`uniq`/`sort` would otherwise treat two spellings of one
+  # address as two — which is exactly what the type exists to prevent.
+  defp candidate_emails(account) do
+    in_use = normalize(account.notification_email)
+
+    account.identity_emails
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&to_string/1)
+    |> Enum.uniq_by(&String.downcase/1)
+    |> Enum.sort_by(&String.downcase/1)
+    |> Enum.map(&%{email: &1, in_use?: normalize(&1) == in_use})
+  end
+
+  defp normalize(nil), do: nil
+  defp normalize(value), do: value |> to_string() |> String.downcase()
 
   # Only providers this deployment actually offers; an unconfigured one has no
   # working callback, so a Link button for it would go nowhere.
@@ -145,16 +163,16 @@ defmodule VarselWeb.AccountSettingsLive do
         </p>
 
         <ul :if={@candidate_emails != []} class="divide-y divide-base-300">
-          <li :for={email <- @candidate_emails} class="flex items-center gap-3 py-2">
-            <span class="font-mono text-sm">{email}</span>
-            <.state :if={email == @account.notification_email} dot="bg-success" class="shrink-0">
+          <li :for={candidate <- @candidate_emails} class="flex items-center gap-3 py-2">
+            <span class="font-mono text-sm">{candidate.email}</span>
+            <.state :if={candidate.in_use?} dot="bg-success" class="shrink-0">
               In use
             </.state>
             <button
-              :if={email != @account.notification_email}
+              :if={!candidate.in_use?}
               type="button"
               phx-click="set_notification_email"
-              phx-value-notification_email={email}
+              phx-value-notification_email={candidate.email}
               class="btn btn-xs btn-ghost ml-auto"
             >
               Use this

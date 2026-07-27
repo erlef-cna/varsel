@@ -38,7 +38,9 @@ defmodule Varsel.Accounts.PaperTrailTest do
 
     assert [version] = versions
     assert version.version_action_name == :register_with_github
-    assert version.changes["notification_email"] == user.notification_email
+    # The version stores the serialized value; the attribute reads back as an
+    # Ash.CiString, which does not == a binary.
+    assert version.changes["notification_email"] == to_string(user.notification_email)
   end
 
   test "changing a user's role records the change and the acting user" do

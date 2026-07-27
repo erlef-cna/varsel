@@ -25,7 +25,9 @@ defmodule Varsel.Accounts.User.Changes.ValidateNotificationEmailIsLinked do
         changeset
 
       email ->
-        if email in linked_emails(changeset, context) do
+        # `in` compares with ==, which is false for two Ash.CiStrings that
+        # differ only in case — exactly the pair this has to treat as one.
+        if Enum.any?(linked_emails(changeset, context), &(Ash.CiString.compare(&1, email) == :eq)) do
           changeset
         else
           Ash.Changeset.add_error(changeset,

@@ -366,7 +366,11 @@ defmodule Varsel.Accounts.User do
     # user from their linked identities' emails (see :set_notification_email), so it
     # is never silently re-pointed by a later sign-in. Nil for accounts whose
     # providers reported no address.
-    attribute :notification_email, :string do
+    # Case-insensitive so the unique identity below actually holds: otherwise
+    # two accounts could claim the same address by capitalising it
+    # differently, and neither this nor the check against the addresses a
+    # user's providers reported would notice.
+    attribute :notification_email, Ash.Type.CiString do
       public? true
       allow_nil? true
     end

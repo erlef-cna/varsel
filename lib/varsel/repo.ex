@@ -9,7 +9,9 @@ defmodule Varsel.Repo do
   @impl AshPostgres.Repo
   def installed_extensions do
     # Add extensions here, and the migration generator will install them.
-    ["ash-functions", "citext"]
+    # btree_gist lets an exclusion constraint compare uuid/text for equality,
+    # which is how `user_identities` keeps one address to one account.
+    ["ash-functions", "citext", "btree_gist"]
   end
 
   # Don't open unnecessary transactions

@@ -61,7 +61,8 @@ defmodule VarselWeb.AccountSettingsLiveTest do
 
     assert html =~ "Notification email set to alice@hex.example"
 
-    assert Ash.get!(User, user.id, authorize?: false).notification_email == "alice@hex.example"
+    assert to_string(Ash.get!(User, user.id, authorize?: false).notification_email) ==
+             "alice@hex.example"
   end
 
   test "an address no linked provider reported is refused" do
@@ -74,7 +75,8 @@ defmodule VarselWeb.AccountSettingsLiveTest do
                actor: user
              )
 
-    assert Ash.get!(User, user.id, authorize?: false).notification_email == "alice@example.com"
+    assert to_string(Ash.get!(User, user.id, authorize?: false).notification_email) ==
+             "alice@example.com"
   end
 
   test "nobody sets someone else's notification email" do
