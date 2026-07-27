@@ -11,6 +11,18 @@ defmodule VarselWeb.Layouts do
 
   import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
+  @nav_user_load [:display_name, :avatar_url]
+
+  @doc """
+  What `site_nav/1` needs of the signed-in user.
+
+  The router hands this to `load_from_session` so the nav's own fields arrive
+  with the user rather than being loaded again on each render. Both are
+  publicly readable, so no actor is needed to resolve them.
+  """
+  @spec nav_user_load() :: list(atom())
+  def nav_user_load, do: @nav_user_load
+
   # Embed all files in layouts/* within this module.
   # The default root.html.heex file contains the HTML
   # skeleton of your application, namely HTML headers
@@ -139,16 +151,10 @@ defmodule VarselWeb.Layouts do
   end
 
   @doc "Primary site navigation bar."
-  attr :current_user, :any, default: nil
+  attr :current_user, :any, default: nil, doc: "signed in with `nav_user_load/0` loaded"
   attr :current_path, :string, default: nil
 
   def site_nav(assigns) do
-    # One load for both the account menu's label and its avatar.
-    assigns =
-      assign_new(assigns, :account, fn ->
-        assigns.current_user && Ash.load!(assigns.current_user, [:display_name, :avatar_url])
-      end)
-
     ~H"""
     <header class="eef-band border-b border-white/10 sticky top-0 z-40">
       <nav class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl flex items-center gap-4 h-16">
@@ -209,13 +215,13 @@ defmodule VarselWeb.Layouts do
               aria-label="Account menu"
               class="btn btn-ghost btn-sm btn-circle text-white hover:bg-white/10"
             >
-              <.avatar_disc user={@account} class="size-6" />
+              <.avatar_disc user={@current_user} class="size-6" />
             </div>
             <ul
               tabindex="0"
               class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-56 p-2 z-50"
             >
-              <li class="menu-title truncate">{@account.display_name}</li>
+              <li class="menu-title truncate">{@current_user.display_name}</li>
               <li><.link navigate={~p"/settings/account"}>Account</.link></li>
               <li :if={Varsel.Accounts.can_list_api_keys?(@current_user)}>
                 <.link navigate={~p"/settings/tokens"}>API Tokens</.link>

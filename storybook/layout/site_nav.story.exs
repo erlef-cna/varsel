@@ -16,10 +16,7 @@ defmodule VarselWeb.Storybook.Layout.SiteNav do
     [
       %Variation{
         id: :anonymous,
-        description: """
-        Signed out: public links only, plus the sign-in affordance. In dev the
-        mock-login menu appears beside it (compiled out everywhere else).
-        """,
+        description: "Signed out: public links only, plus the sign-in affordance.",
         attributes: %{current_path: "/"}
       },
       %Variation{
@@ -27,7 +24,12 @@ defmodule VarselWeb.Storybook.Layout.SiteNav do
         description: "A signed-in supporter also sees Cases and Reports.",
         attributes: %{
           current_path: "/cases",
-          current_user: %{name: "Alex Rivera", email: "alex@example.com", role: :supporter}
+          current_user: %{
+            name: "Alex Rivera",
+            display_name: "Alex Rivera",
+            avatar_url: nil,
+            role: :supporter
+          }
         }
       },
       %Variation{
@@ -35,7 +37,7 @@ defmodule VarselWeb.Storybook.Layout.SiteNav do
         description: "A POC additionally sees Users.",
         attributes: %{
           current_path: "/users",
-          current_user: %{name: "Sam Chen", email: "sam@example.com", role: :poc}
+          current_user: %{name: "Sam Chen", display_name: "Sam Chen", avatar_url: nil, role: :poc}
         }
       },
       %Variation{
@@ -46,15 +48,23 @@ defmodule VarselWeb.Storybook.Layout.SiteNav do
         """,
         attributes: %{
           current_path: "/common-weaknesses",
-          current_user: %{name: "Alex Rivera", email: "alex@example.com", role: :supporter}
+          current_user: %{
+            name: "Alex Rivera",
+            display_name: "Alex Rivera",
+            avatar_url: nil,
+            role: :supporter
+          }
         }
       },
       %Variation{
         id: :no_name,
-        description: "Without a name the account menu falls back to the email.",
+        description: """
+        Nobody set a name, so both the menu label and the initials disc fall
+        back to the provider handle `display_name` carries.
+        """,
         attributes: %{
           current_path: "/cases",
-          current_user: %{name: nil, email: "reporter@example.com", role: :supporter}
+          current_user: %{name: nil, display_name: "reporter", avatar_url: nil, role: :supporter}
         }
       }
     ]

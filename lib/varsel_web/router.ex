@@ -13,6 +13,8 @@ defmodule VarselWeb.Router do
   alias VarselWeb.Plugs.OauthBearerAuth
   alias VarselWeb.Plugs.PublicResource
 
+  @nav_user_load VarselWeb.Layouts.nav_user_load()
+
   # Accepts an `eefcna_` API key, an AshAuthentication session JWT, or an
   # OAuth 2.1 access token; anonymous requests get the 401 challenge.
   pipeline :graphql do
@@ -64,7 +66,7 @@ defmodule VarselWeb.Router do
     plug :put_root_layout, html: {VarselWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
-    plug :load_from_session
+    plug :load_from_session, load: @nav_user_load
     # The OAuth consent screen identifies the consenting user through the
     # conn's Ash actor (Ash.PlugHelpers.get_actor/1).
     plug :set_actor, :user
@@ -84,7 +86,7 @@ defmodule VarselWeb.Router do
     plug :put_root_layout, html: {VarselWeb.Layouts, :root_auth}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
-    plug :load_from_session
+    plug :load_from_session, load: @nav_user_load
     # Tells the OAuth callback's register action that this sign-in is a link.
     plug VarselWeb.Plugs.OauthLinking
   end
