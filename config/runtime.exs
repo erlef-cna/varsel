@@ -148,17 +148,38 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
+  smtp_relay_host =
+    System.get_env("SMTP_RELAY_HOST") ||
+      raise("Missing environment variable `SMTP_RELAY_HOST`!")
+
+  # gen_smtp sets `cacerts` as `:undefined`, which `ssl` rejects outright
+  # when combined with `verify: :verify_peer`. Pass verification options
+  # explicitly.
+  # `:https` hostname matching is required for the wildcard certificates mail
+  # relays typically serve (e.g. `*.fastmail.com` for `smtp.fastmail.com`),
+  # which the default match function rejects.
+  smtp_tls_options = [
+    verify: :verify_peer,
+    cacerts: :public_key.cacerts_get(),
+    server_name_indication: String.to_charlist(smtp_relay_host),
+    depth: 3,
+    customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
+  ]
+
   # Deliver mail over SMTP in production (adapter needs :gen_smtp).
   config :varsel, Varsel.Mailer,
     adapter: Swoosh.Adapters.SMTP,
-    relay:
-      System.get_env("SMTP_RELAY_HOST") ||
-        raise("Missing environment variable `SMTP_RELAY_HOST`!"),
+    relay: smtp_relay_host,
     ssl: true,
     auth: :always,
     port: String.to_integer(System.get_env("SMTP_PORT") || "465"),
     retries: 2,
     no_mx_lookups: false,
+    # Implicit TLS (port 465) connects via `smtp_socket:connect(ssl, ...)`,
+    # which reads `:sockopts`; `:tls_options` is only consulted for the
+    # STARTTLS upgrade. Set both so either relay style is verified.
+    sockopts: smtp_tls_options,
+    tls_options: smtp_tls_options,
     username:
       System.get_env("SMTP_USER") ||
         raise("Missing environment variable `SMTP_USER`!"),
