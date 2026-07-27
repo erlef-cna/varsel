@@ -37,15 +37,20 @@ defmodule VarselWeb.AccountLinkTest do
     action = Resource.Info.action(User, action_name, :create)
     linking_context = if linking, do: %{linking_user_id: linking.id}, else: %{}
 
+    # A provider that reports no address at all — hex.pm's is opt-in — sends no
+    # "email" key, rather than a nil one.
+    user_info =
+      then(
+        %{"sub" => uid, "preferred_username" => uid},
+        &if(email, do: Map.put(&1, "email", email), else: &1)
+      )
+
     User
     |> Ash.Changeset.new()
     |> Ash.Changeset.set_context(Map.put(linking_context, :private, %{ash_authentication?: true}))
     |> Ash.Changeset.for_create(
       action_name,
-      %{
-        user_info: %{"sub" => uid, "preferred_username" => uid, "email" => email},
-        oauth_tokens: %{"access_token" => "token"}
-      },
+      %{user_info: user_info, oauth_tokens: %{"access_token" => "token"}},
       authorize?: false,
       upsert?: true,
       upsert_identity: action.upsert_identity
@@ -109,17 +114,43 @@ defmodule VarselWeb.AccountLinkTest do
   end
 
   describe "a sign-in that is not a link" do
-    test "registers a new account when nothing holds the address" do
+    test "signs in as whoever holds the provider account" do
+      assert {:ok, first} = register_via("hex", "returning", "returning@example.com")
+      assert {:ok, again} = register_via("hex", "returning", "returning@example.com")
+
+      assert again.id == first.id
+      assert strategies_of(first) == ["hex"]
+    end
+
+    test "registers when no identity reports that address" do
       assert {:ok, user} = register_via("hex", "newcomer", "newcomer@example.com")
 
       assert strategies_of(user) == ["hex"]
     end
 
-    test "is refused when an account already holds the address" do
-      register_user("alice")
+    # The address is compared against what other *identities* reported, not
+    # against where an account happens to want its mail.
+    test "is refused when another identity reports that address" do
+      alice = register_user("alice")
 
       assert {:error, error} = register_via("hex", "alice_hex", "alice@example.com")
-      assert caused_by_message(error) =~ "already exists"
+      assert caused_by_message(error) =~ "already uses that email address"
+
+      # No second account, and the first gained nothing.
+      assert strategies_of(alice) == ["github"]
+    end
+
+    test "registers separately when only a notification email matches" do
+      alice = register_user("alice")
+
+      Varsel.Accounts.set_user_notification_email(
+        alice,
+        %{notification_email: "chosen@example.com"},
+        actor: alice
+      )
+
+      assert {:ok, user} = register_via("hex", "someone", "chosen@example.com")
+      assert user.id != alice.id
     end
   end
 
@@ -140,6 +171,33 @@ defmodule VarselWeb.AccountLinkTest do
 
       assert user.id == alice.id
       assert strategies_of(alice) == ["github", "hex"]
+    end
+
+    # Resolving by an address rather than by the account's own id used to
+    # register a *second* account here, while telling the caller it had linked.
+    test "attaches to an account that has no notification email" do
+      assert {:ok, target} = register_via("hex", "nomail", nil)
+      assert target.notification_email == nil
+
+      assert {:ok, user} = register_via("github", "nomail_gh", "fresh@example.com", target)
+
+      assert user.id == target.id
+      assert strategies_of(target) == ["github", "hex"]
+    end
+
+    # ...and here it switched the session to whoever held the address. One
+    # address belongs to one account, so this is refused rather than attached —
+    # the point is that neither account moves.
+    test "is refused when another identity already reports that address" do
+      alice = register_user("alice")
+      other = register_user("other")
+
+      assert {:error, error} =
+               register_via("hex", "alice_hex", to_string(other.notification_email), alice)
+
+      assert caused_by_message(error) =~ "already uses that email address"
+      assert strategies_of(alice) == ["github"]
+      assert strategies_of(other) == ["github"]
     end
 
     test "is refused when that provider account already signs someone else in" do

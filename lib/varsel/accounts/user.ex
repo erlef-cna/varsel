@@ -124,6 +124,11 @@ defmodule Varsel.Accounts.User do
   postgres do
     table "users"
     repo Varsel.Repo
+
+    if @mock_login? do
+      # The `where` on :unique_mock_name, spelled for the partial index.
+      identity_wheres_to_sql unique_mock_name: "name IS NOT NULL AND name LIKE 'Mock %'"
+    end
   end
 
   paper_trail do
@@ -172,20 +177,17 @@ defmodule Varsel.Accounts.User do
       argument :user_info, :map, allow_nil?: false
       argument :oauth_tokens, :map, allow_nil?: false
       upsert? true
-      # Which account a sign-in belongs to is settled by the provider's iss/sub
-      # on the identity row; this only resolves a pre-existing local account,
-      # and never links on its own (see `trust_email_verified? false`).
-      upsert_identity :unique_notification_email
-      # Not :notification_email — that address is the user's choice (see
-      # :set_notification_email) and a later sign-in must not re-point it.
+      # No `upsert_identity`, so Ash upserts on the primary key — and only
+      # ResolveOauthIdentity sets it, from the identity row that names the
+      # account. Nothing about an address decides who signs in.
       upsert_fields [:name]
 
       change AshAuthentication.GenerateTokenChange
       change ApplyProviderProfile
       change PromoteFirstUserToPoc
 
-      # Last: mid-link it points the upsert at the account being linked to, and
-      # must not be undone by a change that seeds from what the provider said.
+      # Last: it settles which account this is, and must not be undone by a
+      # change that seeds from what the provider said.
       change ResolveOauthIdentity
     end
 
@@ -194,18 +196,15 @@ defmodule Varsel.Accounts.User do
       argument :user_info, :map, allow_nil?: false
       argument :oauth_tokens, :map, allow_nil?: false
       upsert? true
-      # As above: matching an address never *links* on its own. Hex.pm asserts
-      # no verified email, so `on_untrusted_email_match :reject` refuses the
-      # sign-in and the user links hex from an authenticated session instead.
-      upsert_identity :unique_notification_email
+      # As above: the primary key, set from the identity row.
       upsert_fields [:name]
 
       change AshAuthentication.GenerateTokenChange
       change ApplyProviderProfile
       change PromoteFirstUserToPoc
 
-      # Last: mid-link it points the upsert at the account being linked to, and
-      # must not be undone by a change that seeds from what the provider said.
+      # Last: it settles which account this is, and must not be undone by a
+      # change that seeds from what the provider said.
       change ResolveOauthIdentity
     end
 
@@ -256,10 +255,10 @@ defmodule Varsel.Accounts.User do
         description "Dev-only: upserts a dummy user for the given role and signs it in."
         accept [:role]
         upsert? true
-        upsert_identity :unique_notification_email
+        upsert_identity :unique_mock_name
 
         # Re-signing in as the same role must reuse the same row, so the
-        # synthetic address is derived from the role rather than random.
+        # synthetic name is derived from the role rather than random.
         change Varsel.Accounts.User.Changes.ApplyMockProfile
         change Varsel.Accounts.User.Changes.MockGenerateToken
 
@@ -449,9 +448,15 @@ defmodule Varsel.Accounts.User do
   end
 
   identities do
-    # Resolves an OAuth sign-in to an existing local account. Postgres allows
-    # many NULLs in a unique index, so accounts whose providers reported no
-    # address (common on hex.pm, where it is opt-in) do not collide.
+    # Two accounts cannot ask for mail at the same address.
     identity :unique_notification_email, [:notification_email]
+
+    if @mock_login? do
+      # Only so re-signing in as a role reuses its row. Names are otherwise
+      # free-form, so this is scoped to the accounts the mock invents.
+      identity :unique_mock_name, [:name] do
+        where expr(not is_nil(name) and like(name, "Mock %"))
+      end
+    end
   end
 end
