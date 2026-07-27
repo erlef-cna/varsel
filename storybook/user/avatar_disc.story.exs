@@ -31,6 +31,14 @@ defmodule VarselWeb.Storybook.User.AvatarDisc do
             attributes: %{user: %{name: "Varsel", avatar_url: nil}}
           },
           %Variation{
+            id: :display_name,
+            description: """
+            Nobody set a name, so `display_name` carries a provider handle and
+            the disc reads from it — the same label the account menu shows.
+            """,
+            attributes: %{user: %{name: nil, display_name: "maennchen", avatar_url: nil}}
+          },
+          %Variation{
             id: :no_name,
             description: "No name at all renders \"?\".",
             attributes: %{user: %{avatar_url: nil}}

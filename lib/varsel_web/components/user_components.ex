@@ -53,7 +53,8 @@ defmodule VarselWeb.UserComponents do
   Renders a user as a small filled circle: their picture when one can be
   reached, otherwise a 2-letter initials disc.
 
-  Callers must load `:avatar_url`.
+  Callers must load `:avatar_url`, and `:display_name` for the initials to
+  read as the account menu's label does.
   """
   attr :user, :any, required: true
   attr :variant, :atom, default: :a, values: [:a, :b], doc: "the mock's two avatar color variants"
@@ -98,7 +99,18 @@ defmodule VarselWeb.UserComponents do
   defp avatar_variant_class(:a), do: "bg-primary text-primary-content"
   defp avatar_variant_class(:b), do: "bg-secondary text-secondary-content"
 
-  defp initials(%{name: name}) when is_binary(name) and name != "" do
+  # `display_name` first: it is what the account menu shows, and it falls back
+  # to a provider handle for the users who never set a name of their own.
+  defp initials(user) do
+    case Enum.find([:display_name, :name], &present?(Map.get(user, &1))) do
+      nil -> "?"
+      key -> user |> Map.fetch!(key) |> to_initials()
+    end
+  end
+
+  defp present?(value), do: is_binary(value) and value != ""
+
+  defp to_initials(name) do
     name
     |> String.split(~r/\s+/, trim: true)
     |> Enum.map(&String.first/1)
@@ -106,6 +118,4 @@ defmodule VarselWeb.UserComponents do
     |> Enum.join()
     |> String.upcase()
   end
-
-  defp initials(_user), do: "?"
 end
