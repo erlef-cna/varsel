@@ -516,17 +516,19 @@ none of the authorization properties, by construction rather than by defect.
    Signing out revokes the token rather than only clearing the cookie.
    Each row records the user agent and IP it was created from — **personal
    data**, kept until the token expires or is expunged, deleted with the
-   account, readable by its owner alone. Both are self-reported: the user
-   agent is a client string, and `RemoteIp` takes the address from
-   `x-forwarded-for` without checking the peer, so a caller reaching the
-   endpoint directly can set it. They are there to help someone recognise
-   their own session, and are not evidence of origin.
+   account, readable by its owner alone. The user agent is a client string
+   and claims nothing verifiable. The address is resolved from
+   `x-forwarded-for` only when the peer is a trusted proxy
+   (`VarselWeb.Plugs.ClientIp`); a caller reaching the endpoint directly is
+   recorded by its own address, whatever it puts in the header. `RemoteIp`
+   alone would not do this — it classifies the forwarded addresses and never
+   the peer.
    - *Violation symptom:* one user lists or revokes another's sessions; a
      revoked token still authenticates; sign-in details readable by anyone
      but their owner.
    - *Severity:* `high` (session-fixation-adjacent / PII disclosure).
    - (`token.ex`, `sign_in_details.ex`, `record_sign_in_details.ex`,
-     `account_settings_live.ex`)
+     `client_ip.ex`, `account_settings_live.ex`)
 
 9. **Stored-content rendering is sanitized before display.**
    Every markdown/HTML render sink — case/report markdown
@@ -635,7 +637,11 @@ integrator — Varsel is a deployed service).
 3. **Terminate TLS at the edge and forward the scheme** — the app forces
    HTTPS + HSTS itself (`force_ssl`), but relies on the proxy setting a
    truthful `x-forwarded-proto`; a proxy that lets a client spoof it to
-   `https` would defeat the redirect.
+   `https` would defeat the redirect. `x-forwarded-for` is read on the same
+   assumption, but only from a peer in the private ranges
+   (`VarselWeb.Plugs.ClientIp`) — a deployment fronted from a public address
+   must name it in that plug's `:proxies`, or every request will be recorded
+   as coming from the proxy.
 4. **Provide request rate limiting and payload-size limits at the edge** —
    the app does not (report intake, search, reads).
 5. **Keep the MITRE/GitHub/SMTP credentials and `CLOAK_KEY` /
