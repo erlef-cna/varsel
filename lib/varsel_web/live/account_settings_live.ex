@@ -138,28 +138,31 @@ defmodule VarselWeb.AccountSettingsLive do
     </.page_header>
 
     <.page_container class="space-y-4">
-      <div class="rounded-box border border-base-300 p-4 flex items-center gap-3">
-        <.avatar_disc user={@account} class="size-12" />
-        <div>
-          <p class="font-semibold">{@account.display_name}</p>
-          <p class="text-sm text-base-content/60">
-            Your picture comes from your linked GitHub account, or from
-            <.link
-              href="https://gravatar.com"
-              class="link link-hover text-primary"
-              target="_blank"
-              rel="noopener"
-            >
-              Gravatar
-            </.link>
-            for your notification email.
-          </p>
+      <.panel>
+        <:title>Profile</:title>
+        <div class="flex items-center gap-3">
+          <.avatar_disc user={@account} class="size-12" />
+          <div>
+            <p class="font-semibold">{@account.display_name}</p>
+            <p class="text-sm text-base-content/60">
+              Your picture comes from your linked GitHub account, or from
+              <.link
+                href="https://gravatar.com"
+                class="link link-hover text-primary"
+                target="_blank"
+                rel="noopener"
+              >
+                Gravatar
+              </.link>
+              for your notification email.
+            </p>
+          </div>
         </div>
-      </div>
+      </.panel>
 
-      <div class="rounded-box border border-base-300 p-4">
-        <h2 class="font-semibold">Sign-in providers</h2>
-        <p class="text-sm text-base-content/60 mt-0.5 mb-3">
+      <.panel>
+        <:title>Sign-in providers</:title>
+        <p class="text-sm text-base-content/60 mb-3">
           Any provider linked here signs you into this account. Linking one you
           have already used elsewhere brings that account's work across, and the
           last one cannot be unlinked — it is the only way back in.
@@ -188,23 +191,23 @@ defmodule VarselWeb.AccountSettingsLive do
             </button>
           </li>
         </ul>
-      </div>
+      </.panel>
 
-      <div class="rounded-box border border-base-300 p-4">
-        <h2 class="font-semibold">Notification email</h2>
-        <p class="text-sm text-base-content/60 mt-0.5 mb-3">
+      <.panel>
+        <:title>Notification email</:title>
+        <p class="text-sm text-base-content/60 mb-3">
           Where the CNA writes to you. You can pick any address one of your
           linked providers reported — link another provider to add to this list.
         </p>
 
-        <p :if={@candidate_emails == []} class="text-sm text-base-content/60">
+        <.empty_state :if={@candidate_emails == []} class="py-4">
           None of your linked providers reported an email address, so there is
           nothing to choose from yet.
-        </p>
+        </.empty_state>
 
         <ul :if={@candidate_emails != []} class="divide-y divide-base-300">
           <li :for={candidate <- @candidate_emails} class="flex items-center gap-3 py-2">
-            <span class="font-mono text-sm">{candidate.email}</span>
+            <.mono_chip size={:small}>{candidate.email}</.mono_chip>
             <.state :if={candidate.in_use?} dot="bg-success" class="shrink-0">
               In use
             </.state>
@@ -219,7 +222,7 @@ defmodule VarselWeb.AccountSettingsLive do
             </button>
           </li>
         </ul>
-      </div>
+      </.panel>
     </.page_container>
     """
   end
