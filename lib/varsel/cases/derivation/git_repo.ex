@@ -35,6 +35,7 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   alias Exgit.ObjectStore
   alias Exgit.RefStore
   alias Varsel.Cases.Derivation.GitBackend
+  alias Varsel.Cases.Derivation.PinnedTransport
 
   @ttl_seconds 900
 
@@ -168,7 +169,8 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   # Lazy clone (refs only) + one tree:0 fetch wanting every ref tip, then one
   # BFS over parent edges recording reverse (children) edges.
   defp build_commit_graph(repo_url) do
-    with {:clone, {:ok, repo}} <- {:clone, Exgit.clone(repo_url, lazy: true)},
+    with {:pin, {:ok, transport}} <- {:pin, PinnedTransport.build(repo_url)},
+         {:clone, {:ok, repo}} <- {:clone, Exgit.clone(transport, lazy: true)},
          tags = list_refs(repo, "refs/tags/"),
          tips = ref_tips(tags, list_refs(repo, "refs/heads/")),
          {:fetch, {:ok, store}} <-
@@ -182,6 +184,7 @@ defmodule Varsel.Cases.Derivation.GitRepo do
          fetched_at: System.monotonic_time(:second)
        }}
     else
+      {:pin, {:error, reason}} -> {:error, {:clone_failed, reason}}
       {:clone, {:error, reason}} -> {:error, {:clone_failed, reason}}
       {:fetch, {:error, reason}} -> {:error, {:fetch_failed, reason}}
       {:error, reason} -> {:error, reason}
