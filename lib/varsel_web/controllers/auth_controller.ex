@@ -8,10 +8,12 @@ defmodule VarselWeb.AuthController do
 
   alias AshAuthentication.Errors.AuthenticationFailed
   alias AshAuthentication.Strategy.OAuth2.UserResolver
+  alias AshAuthentication.TokenResource.Actions, as: TokenActions
+  alias Varsel.Accounts.Token
   alias Varsel.Accounts.User.Changes.ResolveOauthIdentity
   alias VarselWeb.Plugs.OauthLinking
 
-  def success(conn, activity, user, _token) do
+  def success(conn, activity, user, token) do
     return_to = get_session(conn, :return_to) || ~p"/"
 
     message =
@@ -30,11 +32,21 @@ defmodule VarselWeb.AuthController do
     # ordinary sign-in look like a link.
     |> delete_session(OauthLinking.session_key())
     |> store_in_session(user)
+    |> put_session(:current_session_jti, session_jti(token))
     # If your resource has a different name, update the assign name here (i.e :current_admin)
     |> assign(:current_user, user)
     |> put_flash(:info, if(linking?, do: "Provider linked to your account", else: message))
     |> redirect(to: if(linking?, do: ~p"/settings/account", else: return_to))
   end
+
+  defp session_jti(token) when is_binary(token) do
+    case AshAuthentication.Jwt.peek(token) do
+      {:ok, %{"jti" => jti}} -> jti
+      _unreadable -> nil
+    end
+  end
+
+  defp session_jti(_token), do: nil
 
   def failure(conn, activity, reason) do
     message =
@@ -91,9 +103,19 @@ defmodule VarselWeb.AuthController do
   def sign_out(conn, _params) do
     return_to = get_session(conn, :return_to) || ~p"/"
 
+    revoke_session(conn.assigns[:current_user], get_session(conn, :current_session_jti))
+
     conn
     |> clear_session(:varsel)
     |> put_flash(:info, "You are now signed out")
     |> redirect(to: return_to)
   end
+
+  # Clearing the cookie only makes the browser forget the token; the token
+  # itself stays valid, and listed as a live session, until it expires.
+  defp revoke_session(%{} = user, jti) when is_binary(jti) do
+    TokenActions.revoke_jti(Token, jti, AshAuthentication.user_to_subject(user), store_all_tokens?: true)
+  end
+
+  defp revoke_session(_user, _jti), do: :ok
 end
