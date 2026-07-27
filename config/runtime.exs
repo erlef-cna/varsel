@@ -34,31 +34,35 @@ with {:ok, value} <- System.fetch_env("TEST_DEPLOYMENT") do
   config :varsel, :test_deployment?, value in ~w(true 1)
 end
 
-# Reads one OAuth login provider's variables under a common prefix. Returns
-# `[]` when none are set (provider disabled) and raises when only some are — a
-# half-configured provider is an error, not an opt-out. `extra_keys` carries
-# variables only some providers need, such as a self-hostable provider's base
-# URL; they are part of the same all-or-nothing set.
-oauth_provider_config = fn prefix, extra_keys ->
-  keys =
-    [client_id: "CLIENT_ID", client_secret: "CLIENT_SECRET", redirect_uri: "REDIRECT_URI"] ++
-      extra_keys
+# Reads one OAuth login provider's credentials under a common prefix. Returns
+# `[]` when neither is set (provider disabled) and raises when only one is — a
+# half-configured provider is an error, not an opt-out. `optional` carries
+# settings that have a working default, so they neither enable the provider
+# on their own nor are missed when it is enabled.
+oauth_provider_config = fn prefix, optional ->
+  credentials = [client_id: "CLIENT_ID", client_secret: "CLIENT_SECRET"]
 
-  values = Enum.map(keys, fn {key, var} -> {key, var, System.get_env("#{prefix}_#{var}")} end)
+  values =
+    Enum.map(credentials, fn {key, var} -> {key, var, System.get_env("#{prefix}_#{var}")} end)
+
+  extras =
+    Enum.map(optional, fn {key, {var, default}} ->
+      {key, System.get_env("#{prefix}_#{var}", default)}
+    end)
 
   case Enum.split_with(values, fn {_key, _var, value} -> is_nil(value) end) do
     {_missing, []} ->
       []
 
     {[], set} ->
-      Enum.map(set, fn {key, _var, value} -> {key, value} end)
+      Enum.map(set, fn {key, _var, value} -> {key, value} end) ++ extras
 
     {missing, _set} ->
       raise """
       Incomplete OAuth configuration for #{prefix}.
 
-      Set all of #{Enum.map_join(keys, ", ", fn {_key, var} -> "#{prefix}_#{var}" end)}, or
-      none of them to disable the provider. Missing: \
+      Set both of #{Enum.map_join(credentials, ", ", fn {_key, var} -> "#{prefix}_#{var}" end)}, or
+      neither to disable the provider. Missing: \
       #{Enum.map_join(missing, ", ", fn {_key, var, _value} -> "#{prefix}_#{var}" end)}
       """
   end
@@ -82,15 +86,16 @@ if config_env() != :test do
          :cna_email_from,
          System.get_env("CNA_EMAIL_FROM", "cna@erlef.org")
 
-  # OAuth login providers are opt-in: a provider is only offered when all three
-  # of its variables are set. Partial configuration is a mistake rather than a
+  # OAuth login providers are opt-in: a provider is only offered when every one
+  # of its variables is set. Partial configuration is a mistake rather than a
   # choice, so it raises instead of silently disabling the provider. With none
-  # set, local development falls back to the mock login.
+  # set, local development falls back to the mock login. The callback URI is
+  # not among them — `Varsel.Secrets` builds it from the endpoint.
   config :varsel, :github, oauth_provider_config.("GITHUB", [])
 
-  # Hex.pm is self-hostable and the local hexpm runs on another port, so its
-  # base URL is configured rather than assumed to be hex.pm.
-  config :varsel, :hex, oauth_provider_config.("HEX", base_url: "BASE_URL")
+  # Hex.pm is self-hostable, so the base URL can be pointed at a local hexpm
+  # for development; it defaults to the public one.
+  config :varsel, :hex, oauth_provider_config.("HEX", base_url: {"BASE_URL", "https://hex.pm"})
 
   config :varsel,
     mitre_cve_api: [

@@ -14,10 +14,15 @@ defmodule Varsel.Secrets do
   # secret makes the strategy return `MissingSecret` rather than half-run.
   # Hex.pm is self-hostable, so its base URL is a required secret rather than
   # a constant baked into the strategy.
+  # `redirect_uri` is not among them: it is our own callback route, so it is
+  # assembled from the endpoint rather than configured (see `secret_for/4`).
   @oauth_providers %{
-    github: [:client_id, :client_secret, :redirect_uri],
-    hex: [:client_id, :client_secret, :redirect_uri, :base_url]
+    github: [:client_id, :client_secret],
+    hex: [:client_id, :client_secret, :base_url]
   }
+
+  # Where `AshAuthentication.Phoenix.Router.auth_routes/3` is mounted.
+  @auth_routes_prefix "/auth"
 
   @doc """
   Whether every secret backing `provider`'s strategy is configured.
@@ -48,6 +53,15 @@ defmodule Varsel.Secrets do
 
   def secret_for([:authentication, :tokens, :signing_secret], User, _opts, _context) do
     Application.fetch_env(:varsel, :token_signing_secret)
+  end
+
+  # The callback is a route of ours, so it is assembled rather than configured
+  # — every deployment points at itself, and there is no variable to set to a
+  # host that isn't this one. This is the base URI of the auth plug; the
+  # strategy appends `<subject>/<name>/callback` to it.
+  def secret_for([:authentication, :strategies, provider, :redirect_uri], User, _opts, _context)
+      when is_map_key(@oauth_providers, provider) do
+    {:ok, Path.join(VarselWeb.Endpoint.url(), @auth_routes_prefix)}
   end
 
   # Serves every OAuth provider's secrets. Fetching (rather than defaulting)

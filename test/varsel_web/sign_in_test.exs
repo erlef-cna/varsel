@@ -38,17 +38,13 @@ defmodule VarselWeb.SignInTest do
     end
 
     test "is false when the configuration is missing a secret" do
-      put_github(client_id: "id", redirect_uri: "https://example.com/callback")
+      put_github(client_id: "id")
 
       refute Varsel.Secrets.oauth_provider_configured?(:github)
     end
 
     test "is true once every secret is present" do
-      put_github(
-        client_id: "id",
-        client_secret: "secret",
-        redirect_uri: "https://example.com/callback"
-      )
+      put_github(client_id: "id", client_secret: "secret")
 
       assert Varsel.Secrets.oauth_provider_configured?(:github)
     end
@@ -66,11 +62,7 @@ defmodule VarselWeb.SignInTest do
     end
 
     test "shows a configured OAuth provider" do
-      put_github(
-        client_id: "id",
-        client_secret: "secret",
-        redirect_uri: "https://example.com/callback"
-      )
+      put_github(client_id: "id", client_secret: "secret")
 
       assert :github in visible_strategies()
     end
@@ -90,11 +82,7 @@ defmodule VarselWeb.SignInTest do
     end
 
     test "offers a GitHub link once GitHub is configured", %{conn: conn} do
-      put_github(
-        client_id: "id",
-        client_secret: "secret",
-        redirect_uri: "https://example.com/callback"
-      )
+      put_github(client_id: "id", client_secret: "secret")
 
       assert conn |> get(~p"/sign-in") |> html_response(200) =~ "/auth/user/github"
     end

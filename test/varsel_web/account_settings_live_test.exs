@@ -103,7 +103,7 @@ defmodule VarselWeb.AccountSettingsLiveTest do
     # The providers section only lists what this deployment offers, and nothing
     # is configured in test, so a row has to be conjured for it to render.
     setup do
-      configured = [client_id: "id", client_secret: "secret", redirect_uri: "https://example.com"]
+      configured = [client_id: "id", client_secret: "secret"]
 
       for provider <- [:github, :hex] do
         original = Application.fetch_env(:varsel, provider)

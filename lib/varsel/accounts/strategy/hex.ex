@@ -10,8 +10,8 @@ defmodule Varsel.Accounts.Strategy.Hex do
   server rather than an OIDC provider, so the endpoints and profile mapping
   come from `Varsel.Accounts.Assent.Hex`, which documents the consequences.
 
-  Requires `client_id`, `client_secret`, `redirect_uri` and `base_url` — the
-  last because hex.pm is self-hostable and local development runs its own.
+  Configured with `client_id`, `client_secret` and `base_url` — the last
+  because hex.pm is self-hostable and local development runs its own.
   """
 
   use AshAuthentication.Strategy.Custom, entity: __MODULE__.Dsl.dsl()
