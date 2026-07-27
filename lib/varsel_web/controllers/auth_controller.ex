@@ -8,7 +8,7 @@ defmodule VarselWeb.AuthController do
 
   alias AshAuthentication.Errors.AuthenticationFailed
   alias AshAuthentication.Strategy.OAuth2.UserResolver
-  alias Varsel.Accounts.Strategy.LinkableOauth2
+  alias Varsel.Accounts.User.Changes.ResolveOauthIdentity
   alias VarselWeb.Plugs.OauthLinking
 
   def success(conn, activity, user, _token) do
@@ -50,29 +50,16 @@ defmodule VarselWeb.AuthController do
           You can confirm your account using the link we sent to you, or by resetting your password.
           """
 
-        # An account already holds this address. We will not take a provider's
-        # word for who owns an email, so the way in is to sign in as whoever
-        # that account already is, and link this provider from there.
-        {_,
-         %AuthenticationFailed{
-           caused_by: %{module: UserResolver, message: "Email could not be verified" <> _}
-         }} ->
-          """
-          An account here already uses that email address. Sign in with the \
-          provider you first used, then link this one from your account page.
-          """
-
-        # Mid-link, the provider account turned out to sign in to someone else.
-        {_,
-         %AuthenticationFailed{
-           caused_by: %{module: LinkableOauth2.Actions, message: message}
-         }} ->
-          message
-
         _ ->
-          "Incorrect email or password"
+          # A refusal from the OAuth callback arrives wrapped: the register
+          # action's error is re-raised as `AuthenticationFailed` by
+          # `OAuth2.Actions.register/3`, so the one that says *why* is nested
+          # inside it. Search rather than match a fixed depth.
+          oauth_refusal(reason) || "Incorrect email or password"
       end
 
+    # A failed link is not a failed sign-in: the caller is still signed in as
+    # whoever they were, and belongs back where they started.
     linking? = not is_nil(get_session(conn, OauthLinking.session_key()))
 
     conn
@@ -81,6 +68,25 @@ defmodule VarselWeb.AuthController do
     |> put_flash(:error, message)
     |> redirect(to: if(linking?, do: ~p"/settings/account", else: ~p"/sign-in"))
   end
+
+  # The sentence to show for an OAuth refusal, or nil if this was not one.
+  # Both cases are a deliberate refusal with something specific to say; the
+  # generic fallback would tell the caller their password was wrong, when no
+  # password was involved.
+  defp oauth_refusal(%{caused_by: %{module: ResolveOauthIdentity, message: message}}), do: message
+
+  defp oauth_refusal(%{caused_by: %{module: UserResolver, message: "Email could not be" <> _}}) do
+    """
+    An account here already uses that email address. Sign in with the \
+    provider you first used, then link this one from your account page.
+    """
+  end
+
+  defp oauth_refusal(%{caused_by: caused_by}), do: oauth_refusal(caused_by)
+
+  defp oauth_refusal(%{errors: errors}) when is_list(errors), do: Enum.find_value(errors, &oauth_refusal/1)
+
+  defp oauth_refusal(_reason), do: nil
 
   def sign_out(conn, _params) do
     return_to = get_session(conn, :return_to) || ~p"/"

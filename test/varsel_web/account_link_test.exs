@@ -18,6 +18,7 @@ defmodule VarselWeb.AccountLinkTest do
 
   alias Ash.Resource
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
+  alias AshAuthentication.Strategy.OAuth2
   alias Varsel.Accounts.User
   alias VarselWeb.Plugs.OauthLinking
 
@@ -50,6 +51,23 @@ defmodule VarselWeb.AccountLinkTest do
       upsert_identity: action.upsert_identity
     )
     |> Ash.create()
+  end
+
+  # The whole call the OAuth callback makes, not just the action underneath —
+  # including the error re-wrapping that only happens at this level.
+  defp register_through_callback(strategy_name, uid, email, linking) do
+    {:ok, strategy} =
+      AshAuthentication.Info.strategy(User, String.to_existing_atom(strategy_name))
+
+    OAuth2.Actions.register(
+      strategy,
+      %{
+        user_info: %{"sub" => uid, "preferred_username" => uid, "email" => email},
+        oauth_tokens: %{"access_token" => "token"}
+      },
+      authorize?: false,
+      context: %{linking_user_id: linking.id}
+    )
   end
 
   # A refusal surfaces as `AuthenticationFailed`, whose own message is the
@@ -133,6 +151,29 @@ defmodule VarselWeb.AccountLinkTest do
 
       # Neither account gained or lost a provider.
       assert strategies_of(alice) == ["github"]
+    end
+
+    # The refusal above is only useful if it survives the controller. It goes
+    # through `OAuth2.Actions.register/3`, which re-wraps the action's error in
+    # another `AuthenticationFailed` — so the reason arrives nested, and a
+    # controller matching a fixed depth silently falls back to "Incorrect email
+    # or password". Drive the same call the callback makes, wrapping and all.
+    test "says why it was refused rather than blaming a password", %{conn: conn} do
+      alice = register_user("alice")
+      {:ok, _bob} = register_via("hex", "bob_hex", "bob@example.com")
+      {:error, error} = register_through_callback("hex", "bob_hex", "bob@example.com", alice)
+
+      conn =
+        conn
+        |> init_test_session(%{OauthLinking.session_key() => alice.id})
+        |> fetch_flash()
+        |> VarselWeb.AuthController.failure({:hex, :callback}, error)
+
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~
+               "already signs in to a different account"
+
+      # ...and back to where the link was started, not to the sign-in page.
+      assert redirected_to(conn) == "/settings/account"
     end
 
     test "is a no-op when the provider is already this account's" do
