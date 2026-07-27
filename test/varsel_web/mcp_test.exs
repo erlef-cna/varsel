@@ -137,6 +137,41 @@ defmodule VarselWeb.McpTest do
     assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
   end
 
+  test "submit_vulnerability_report is rate limited for users without a role", %{conn: conn} do
+    # The first-ever user auto-becomes POC; the reporter must stay unroled.
+    register_user("bootstrap_poc")
+    reporter = register_user("reporter")
+    {_api_key, plaintext} = create_api_key(reporter)
+
+    Varsel.Hammer.hit(
+      "vulnerability_report:submit:user:#{reporter.id}",
+      to_timeout(day: 1),
+      25,
+      25
+    )
+
+    body =
+      conn
+      |> put_req_header("authorization", "Bearer " <> plaintext)
+      |> mcp("tools/call", %{
+        name: "submit_vulnerability_report",
+        arguments: %{
+          input: %{
+            report_json: %{"x" => 1},
+            summary: "a bug",
+            confirms_criteria: true,
+            confirms_in_scope: true
+          }
+        }
+      })
+      |> json_response(200)
+
+    assert %{"result" => %{"isError" => true, "content" => [%{"text" => text}]}} = body
+    assert text =~ "Rate limit exceeded"
+
+    assert Ash.read!(Varsel.CVE.VulnerabilityReport, authorize?: false) == []
+  end
+
   test "a token without the mcp scope is rejected with insufficient_scope", %{conn: conn} do
     poc = register_user("poc", :poc)
 

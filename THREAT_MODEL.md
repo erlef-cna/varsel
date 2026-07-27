@@ -58,8 +58,8 @@ but shared/self-hosted operation is not a supported deployment shape today.
 
 **Deployment context.** A public-facing web service behind TLS on Fly.io,
 config entirely from environment variables/secrets (`README.md`,
-`runtime.exs`). HTTPS termination, network-level rate limiting, and DDoS
-protection are the platform's/operator's job, not the app's.
+`runtime.exs`). HTTPS termination and network-level DDoS protection sit at
+the platform edge, not in the app.
 
 **Caller roles.** Unlike a library, there is no single "caller." Four roles:
 
@@ -373,7 +373,7 @@ are below.
 
 | Surface | Parameter | Attacker-controllable? | Sink / caller must |
 | --- | --- | --- | --- |
-| `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | **Yes — any authenticated user** | Persisted (size-capped, default 256 KiB); triage UI (escaped, §7/§8). The POC email is content-free (link only), so the payload never leaves the authenticated console. |
+| `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | **Yes — any authenticated user** | Persisted (size-capped, default 256 KiB; rate-capped at 25/day for a role-less reporter, §8); triage UI (escaped, §7/§8). The POC email is content-free (link only), so the payload never leaves the authenticated console. |
 | `AffectedPackage` create/update | `repo_url` | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `VersionEvent` | `commit_sha` | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
 | `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
@@ -393,10 +393,13 @@ the OTP versions table — all from fixed MITRE/GitHub hosts (§6a/§6b), not
 attacker-writable.
 
 **Size / rate.** `report_json` is free-form JSON from any authenticated user,
-now **capped** at a configurable serialized size (default 256 KiB,
+**capped** at a configurable serialized size (default 256 KiB,
 `:max_report_json_bytes`) via the `ReportJsonSize` validation — a single
-oversized payload is rejected, though submission *rate* is still unbounded
-in-app (§9, operator's edge). Git derivation fetches an entire commit graph
+oversized payload is rejected. Submission *rate* is bounded for the least
+trusted reporters only: a role-less user gets 25 submissions per day
+(property 10); users holding a CNA role, and every other endpoint, remain
+unbounded in-app (§9, best effort). Git derivation fetches an entire
+commit graph
 (`tree:0`, no blobs) from `repo_url`, bounded by a 10-minute GenServer timeout,
 a 900s cache TTL, and a 250k commit-count cap on the graph walk
 (`report_json_size.ex`, `git_repo.ex`).
@@ -660,14 +663,24 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `high` (XML injection into a syndicated document).
    - (`feed_controller.ex`, `sitemap_controller.ex`)
 
-10. **Report intake is size-bounded.**
-   `report_json` (the one unbounded authenticated write) is capped at a
-   configurable serialized size (default 256 KiB); an oversized payload is
-   rejected before persistence.
+10. **Report intake is size-bounded, and rate-bounded below any CNA role.**
+   `report_json` is capped at a configurable serialized size (default
+   256 KiB); an oversized payload is rejected before persistence. A reporter
+   with **no role** (`role == nil` — what every fresh sign-up is) may
+   additionally submit at most **25 reports per 24 hours**, counted per user.
+   The limit sits on the `:submit` action itself, so the form, GraphQL and
+   MCP all draw from the same budget; POCs and supporters are deliberately
+   exempt. The counter is node-local ETS (`Varsel.Hammer`): it resets on
+   restart/deploy and would count per node if the app were ever scaled out.
+   The rate cap is therefore an **abuse mitigation, not a guarantee** — the
+   property claimed is that intake cannot be used to disrupt operation, not
+   that the counter is exact. A submission slipping past the cap (say,
+   after a restart cleared the counters) is not by itself a vulnerability.
    - *Violation symptom:* an authenticated user stores an arbitrarily large
-     payload.
+     payload, or drives enough report volume to disrupt operation (exhaust
+     storage, drown triage) despite the caps.
    - *Severity:* `moderate` (storage/DoS).
-   - (`report_json_size.ex`)
+   - (`report_json_size.ex`, `rate_limit_submit.ex`, `hammer.ex`)
 
 11. **CSRF / clickjacking / cross-origin hardening on the browser surface.**
    `protect_from_forgery` on browser pipelines; `x-frame-options: DENY` +
@@ -729,22 +742,26 @@ none of the authorization properties, by construction rather than by defect.
 the git-derivation timeout (10 min), cache TTL (900 s), and 250k commit-count
 cap, the Oban `Lifeline` rescue (30 min) for orphaned jobs, the `report_json`
 size cap (default
-256 KiB, property 10), and `max_length` caps on every free-text/markdown field
+256 KiB, property 10), the 25/day submission cap on role-less reporters
+(property 10), and `max_length` caps on every free-text/markdown field
 (title 500; `*_md`/comment/notes 20–50 KB; report body 200 KB) that bound the
-parser input. There is still **no application-level request-rate limit** — so
-submission *rate* and read-endpoint volume are not bounded in-app, and
-"bounded resource use" is **not** a general claim (§9).
+parser input. Beyond that one submission cap there is **no
+application-level request-rate limit** — read-endpoint volume, search, and
+every other write are not bounded in-app, and "bounded resource use" is
+**not** a general claim (§9).
 
 ---
 
 ## 9. Security properties the project does *not* provide
 
-- **No rate limiting or request-volume DoS defense at the application layer.**
-  Report submission, search queries (full-text `tsquery`), and read endpoints
-  are not rate-limited in-app; the operator/platform must provide it. Payload
-  *size* is capped (property 10), but an authenticated user can still submit
-  arbitrarily many capped `report_json` payloads. Accepted as the operator's
-  edge responsibility for now; in-app rate limiting is planned (§14).
+- **No general rate limiting or request-volume DoS defense at the
+  application layer.** One narrow exception exists — the 25/day cap on
+  report submission by role-less users (property 10). Everything else —
+  search queries (full-text `tsquery`), read endpoints, every other write,
+  and report submission by roled users — is not rate-limited in-app. The
+  posture is **best effort**: the platform's baseline DDoS protection plus
+  the §8 per-request bounds are what exist today, and in-app limits for
+  further surfaces will be investigated if they see actual misuse (§14).
 - **No allowlist on which public host `repo_url` may name.** `repo_url` is
   constrained to `https://` (rejecting exgit's `file://` local-file read and
   plaintext `http://`) and to a host that resolves to a public address —
@@ -773,8 +790,8 @@ submission *rate* and read-endpoint volume are not bounded in-app, and
   The validation actions reach hex.pm, and derivation reaches a case's
   `repo_url`; neither is rate-limited in-app, so Varsel can be used to push
   volume at a third party. The per-call bounds (§8) limit a single request,
-  not how many are made. Same disclaimer as request-volume DoS: it is the
-  operator's edge.
+  not how many are made. Same disclaimer as request-volume DoS: best effort,
+  investigated if misused.
 - **Nothing bounds how many rows an authenticated user can create for
   themselves.** API keys and sessions have no per-user cap; the §8 caps bound
   the *size* of what is stored, never the count. This is the same disclaimer
@@ -809,7 +826,8 @@ submission *rate* and read-endpoint volume are not bounded in-app, and
 
 **Well-known attack classes for this category, left to the caller/operator:**
 
-- **DoS by request volume / large payloads** (see above) — operator's edge.
+- **DoS by request volume / large payloads** (see above) — best effort,
+  investigated if misused.
 - **OAuth 2.1 / DCR abuse** (open dynamic client registration) — a Byzantine
   client can register; scope + role enforcement bound what it can do, but
   registration itself is open by design to support AI/MCP client integration
@@ -841,22 +859,20 @@ integrator — Varsel is a deployed service).
    (`VarselWeb.Plugs.ClientIp`) — a deployment fronted from a public address
    must name it in that plug's `:proxies`, or every request will be recorded
    as coming from the proxy.
-4. **Provide request rate limiting and payload-size limits at the edge** —
-   the app does not (report intake, search, reads).
-5. **Keep the MITRE/GitHub/SMTP credentials and `CLOAK_KEY` /
+4. **Keep the MITRE/GitHub/SMTP credentials and `CLOAK_KEY` /
    `*_SIGNING_SECRET` out of source and rotate on schedule** — all are
    environment secrets.
-6. **Grant the POC role deliberately.** POC is full publish authority; the
+5. **Grant the POC role deliberately.** POC is full publish authority; the
    first login through any configured provider auto-becomes POC (bootstrap),
    so control who logs in first. The check is "are there no users", not "has
    this ever run" — so if every account is deleted, the next person to sign in
    becomes POC again. (`user.ex`)
-7. **Treat `repo_url` on cases as a trusted-egress control:** only assign
+6. **Treat `repo_url` on cases as a trusted-egress control:** only assign
    supporters to cases you trust to set outbound clone targets. The app keeps
    that egress on public addresses and pins each clone to the address it
    checked (property 12), but any *public* host is allowed by design — so
    restrict which ones at the network layer if that matters (§9).
-8. **Do not publish from a non-production instance** expecting a sandbox —
+7. **Do not publish from a non-production instance** expecting a sandbox —
    the test MITRE endpoint is real staging (§9).
 
 ---
@@ -1014,7 +1030,10 @@ an open question. Everything else in §13 closes on its own authority.
 Hardening accepted as future work. Implementing any of these promotes a §9
 disclaimer toward a §8 property, and the model updates in the same change.
 
-- **Application-level rate limiting.** No in-app request-rate limit exists;
-  volumetric DoS (report submission, search, reads) is currently the
-  operator's edge responsibility. Investigate in-app rate limiting so the
-  app carries a baseline itself.
+- **Application-level rate limiting on the remaining surfaces.** The first
+  slice landed: report submission by role-less users is capped in-app
+  (property 10, `ash_rate_limiter` on the `:submit` action). Search, reads,
+  and the other authenticated writes remain best effort; extending the same
+  mechanism to them will be investigated if those surfaces see actual
+  misuse, and each extension moves that surface from the §9 disclaimer into
+  property 10's pattern.

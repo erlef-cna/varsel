@@ -16,6 +16,7 @@
     :ash_authentication_phoenix,
     :ash_authentication,
     :ash_postgres,
+    :ash_rate_limiter,
     :ash_phoenix,
     :ash,
     :reactor,

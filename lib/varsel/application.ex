@@ -23,6 +23,7 @@ defmodule Varsel.Application do
          Application.fetch_env!(:varsel, Oban)
        )},
       {Phoenix.PubSub, name: Varsel.PubSub},
+      {Varsel.Hammer, clean_period: to_timeout(minute: 10)},
       {Varsel.Cases.Derivation.GitRepo, []},
       # Start a worker by calling: Varsel.Worker.start_link(arg)
       # {Varsel.Worker, arg},

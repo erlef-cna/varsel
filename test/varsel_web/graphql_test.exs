@@ -115,6 +115,49 @@ defmodule VarselWeb.GraphqlTest do
       assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
     end
 
+    test "submitVulnerabilityReport is rate limited for users without a role", %{conn: conn} do
+      # The first-ever user auto-becomes POC; the reporter must stay unroled.
+      register_user("bootstrap_poc")
+      reporter = register_user("reporter")
+
+      Varsel.Hammer.hit(
+        "vulnerability_report:submit:user:#{reporter.id}",
+        to_timeout(day: 1),
+        25,
+        25
+      )
+
+      body =
+        conn
+        |> with_api_key(reporter)
+        |> gql(
+          """
+          mutation($input: SubmitVulnerabilityReportInput!) {
+            submitVulnerabilityReport(input: $input) { result { id } errors { message } }
+          }
+          """,
+          %{
+            "input" => %{
+              "reportJson" => ~s({"x": 1}),
+              "summary" => "a bug",
+              "confirmsCriteria" => true,
+              "confirmsInScope" => true
+            }
+          }
+        )
+
+      assert %{
+               "data" => %{
+                 "submitVulnerabilityReport" => %{
+                   "result" => nil,
+                   "errors" => [%{"message" => "Rate limit exceeded"}]
+                 }
+               }
+             } = body
+
+      assert Ash.read!(Varsel.CVE.VulnerabilityReport, authorize?: false) == []
+    end
+
     test "setUserRole updates a user's role", %{conn: conn} do
       poc = register_user("poc", :poc)
       alice = register_user("alice")
