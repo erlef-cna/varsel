@@ -193,9 +193,11 @@
           {AshCredo.Check.Refactor.UseCodeInterface, []},
           {AshCredo.Check.Warning.ActorOnCallOptions, []},
           # Flag every `authorize?: false` in the app; only tests (factories,
-          # setup) are allowed to bypass. Legitimate app-code bypasses use a
-          # system actor + bypass policy, or an inline credo:disable with reason.
-          {AshCredo.Check.Warning.AuthorizeFalse, [include_non_ash_calls: false, excluded_paths: [~r"/test/", "test"]]},
+          # setup) and dev tooling under dev/ are allowed to bypass. Legitimate
+          # app-code bypasses use a system actor + bypass policy, or an inline
+          # credo:disable with reason.
+          {AshCredo.Check.Warning.AuthorizeFalse,
+           [include_non_ash_calls: false, excluded_paths: [~r"/test/", "test", ~r"/dev/", "dev"]]},
           {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
           {AshCredo.Check.Warning.CompileTimeDefault, []},
           {AshCredo.Check.Warning.EmptyDomain, []},

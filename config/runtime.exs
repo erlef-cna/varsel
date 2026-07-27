@@ -69,6 +69,14 @@ oauth_provider_config = fn prefix, optional ->
 end
 
 if config_env() != :test do
+  # MITRE credentials are opt-in in development: with none of the variables
+  # set, a built-in mock (`Varsel.Dev.MitreCveApiMock`) stands in for the MITRE
+  # API so the app runs without credentials. Partial configuration is a mistake
+  # rather than a choice, so it raises. Production always requires the real API.
+  mitre_vars = ~w(MITRE_CVE_API_BASE_URL MITRE_CVE_API_ORG MITRE_CVE_API_USER MITRE_CVE_API_KEY)
+  mitre_env = Map.new(mitre_vars, &{&1, System.get_env(&1)})
+  mitre_missing = Enum.filter(mitre_vars, &is_nil(mitre_env[&1]))
+
   config :varsel, Varsel.Vault,
     ciphers: [
       default:
@@ -97,21 +105,35 @@ if config_env() != :test do
   # for development; it defaults to the public one.
   config :varsel, :hex, oauth_provider_config.("HEX", base_url: {"BASE_URL", "https://hex.pm"})
 
-  config :varsel,
-    mitre_cve_api: [
-      base_url:
-        System.get_env("MITRE_CVE_API_BASE_URL") ||
-          raise("Missing environment variable `MITRE_CVE_API_BASE_URL`!"),
-      org:
-        System.get_env("MITRE_CVE_API_ORG") ||
-          raise("Missing environment variable `MITRE_CVE_API_ORG`!"),
-      user:
-        System.get_env("MITRE_CVE_API_USER") ||
-          raise("Missing environment variable `MITRE_CVE_API_USER`!"),
-      api_key:
-        System.get_env("MITRE_CVE_API_KEY") ||
-          raise("Missing environment variable `MITRE_CVE_API_KEY`!")
-    ]
+  case {length(mitre_missing), config_env()} do
+    {0, _env} ->
+      config :varsel,
+        mitre_cve_api: [
+          base_url: mitre_env["MITRE_CVE_API_BASE_URL"],
+          org: mitre_env["MITRE_CVE_API_ORG"],
+          user: mitre_env["MITRE_CVE_API_USER"],
+          api_key: mitre_env["MITRE_CVE_API_KEY"]
+        ]
+
+    {4, :dev} ->
+      config :varsel,
+        mitre_cve_api: [
+          base_url: "http://mitre.invalid",
+          org: "EEF",
+          user: "mock@localhost",
+          api_key: "mock",
+          plug: Varsel.Dev.MitreCveApiMock
+        ]
+
+    {_missing_count, env} ->
+      raise """
+      Incomplete MITRE CVE API configuration.
+
+      Set all of #{Enum.join(mitre_vars, ", ")}\
+      #{if env == :dev, do: ",\nor none to use the built-in mock", else: ""}.
+      Missing: #{Enum.join(mitre_missing, ", ")}
+      """
+  end
 end
 
 if config_env() == :prod do

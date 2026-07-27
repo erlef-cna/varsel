@@ -199,8 +199,10 @@ the next person and unreviewable in both themes. ⚠️ Never name a component a
   else) must be checked in each shape.
 - The three-column case workspace needs ≥1024 CSS px. Never resize the user's
   Chrome window; report the width you have instead.
-- Dev data is free to create — but ⛔ **NEVER publish a CVE, even in dev.**
-  Publishing hits MITRE's real API.
+- Dev data is free to create. Publishing is safe only while the MITRE mock is
+  active (no `MITRE_CVE_API_*` variables set — `Varsel.Dev.MitreCveApiMock`
+  stands in and stamps dates locally). ⛔ **With MITRE credentials configured,
+  NEVER publish a CVE, even in dev** — it hits MITRE's real API.
 
 <!-- usage-rules-start -->
 <!-- usage_rules-start -->
