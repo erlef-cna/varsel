@@ -10,8 +10,11 @@ defmodule VarselWeb.FeedController do
   The documents are built as XML rather than as strings: every value goes
   into the tree as an element, an attribute, or `Saxy.XML.characters/1`, and
   the encoder is what escapes it. Nothing here concatenates markup, so no
-  value — an advisory title, a summary, or the site's own host — can close a
-  tag or open an attribute.
+  value — an advisory title or a summary — can close a tag or open an
+  attribute.
+
+  Links are `~p` routes resolved against the endpoint, so a feed names the
+  configured host rather than whichever one the request carried.
 
   Note that a bare string child of `Saxy.XML.element/3` is emitted **raw**;
   only `characters/1` escapes. Every text node below therefore goes through
@@ -30,13 +33,13 @@ defmodule VarselWeb.FeedController do
   def atom(conn, _params) do
     conn
     |> put_resp_content_type("application/atom+xml")
-    |> send_resp(200, Saxy.encode!(atom_feed(feed_entries(), base_url(conn)), @prolog))
+    |> send_resp(200, Saxy.encode!(atom_feed(feed_entries()), @prolog))
   end
 
   def rss(conn, _params) do
     conn
     |> put_resp_content_type("application/rss+xml")
-    |> send_resp(200, Saxy.encode!(rss_feed(feed_entries(), base_url(conn)), @prolog))
+    |> send_resp(200, Saxy.encode!(rss_feed(feed_entries()), @prolog))
   end
 
   defp feed_entries do
@@ -60,49 +63,44 @@ defmodule VarselWeb.FeedController do
     |> Enum.find_value("", fn d -> if d["lang"] == "en", do: d["value"] end)
   end
 
-  defp base_url(conn), do: "#{conn.scheme}://#{conn.host}#{port_suffix(conn)}"
-
-  defp port_suffix(%{scheme: :http, port: 80}), do: ""
-  defp port_suffix(%{scheme: :https, port: 443}), do: ""
-  defp port_suffix(%{port: port}), do: ":#{port}"
-
-  defp entry_url(base, cve_id), do: "#{base}/cves/#{cve_id}.html"
+  defp entry_url(cve_id), do: url(~p"/cves/#{cve_id <> ".html"}")
 
   ## ---------------------------------------------------------------- Atom
 
-  defp atom_feed(entries, base) do
+  defp atom_feed(entries) do
     updated = entries |> List.first(%{}) |> Map.get(:published)
+    self_url = url(~p"/feed.atom")
 
     element("feed", [{"xmlns", "http://www.w3.org/2005/Atom"}], [
       element("title", [], text(@title)),
       element("subtitle", [], text(@description)),
       element(
         "link",
-        [{"href", "#{base}/feed.atom"}, {"rel", "self"}, {"type", "application/atom+xml"}],
+        [{"href", self_url}, {"rel", "self"}, {"type", "application/atom+xml"}],
         []
       ),
       element(
         "link",
-        [{"href", "#{base}/cves"}, {"rel", "alternate"}, {"type", "text/html"}],
+        [{"href", url(~p"/cves")}, {"rel", "alternate"}, {"type", "text/html"}],
         []
       ),
-      element("id", [], text("#{base}/feed.atom")),
+      element("id", [], text(self_url)),
       element("updated", [], text(iso(updated))),
       element("author", [], [
         element("name", [], text(@title)),
-        element("uri", [], text(base))
+        element("uri", [], text(url(~p"/")))
       ])
-      | Enum.map(entries, &atom_entry(&1, base))
+      | Enum.map(entries, &atom_entry/1)
     ])
   end
 
-  defp atom_entry(entry, base) do
-    url = entry_url(base, entry.cve_id)
+  defp atom_entry(entry) do
+    entry_url = entry_url(entry.cve_id)
 
     element("entry", [], [
-      element("id", [], text(url)),
+      element("id", [], text(entry_url)),
       element("title", [], text("#{entry.cve_id}: #{entry.title}")),
-      element("link", [{"href", url}, {"rel", "alternate"}, {"type", "text/html"}], []),
+      element("link", [{"href", entry_url}, {"rel", "alternate"}, {"type", "text/html"}], []),
       element("published", [], text(iso(entry.published))),
       element("updated", [], text(iso(entry.updated))),
       element("summary", [], text(entry.summary))
@@ -111,21 +109,21 @@ defmodule VarselWeb.FeedController do
 
   ## ---------------------------------------------------------------- RSS
 
-  defp rss_feed(entries, base) do
+  defp rss_feed(entries) do
     build_date = entries |> List.first(%{}) |> Map.get(:published)
 
     channel =
       [
         element("title", [], text(@title)),
         element("description", [], text(@description)),
-        element("link", [], text("#{base}/cves")),
+        element("link", [], text(url(~p"/cves"))),
         element(
           "atom:link",
-          [{"href", "#{base}/feed.rss"}, {"rel", "self"}, {"type", "application/rss+xml"}],
+          [{"href", url(~p"/feed.rss")}, {"rel", "self"}, {"type", "application/rss+xml"}],
           []
         ),
         element("lastBuildDate", [], text(rfc822(build_date)))
-        | Enum.map(entries, &rss_item(&1, base))
+        | Enum.map(entries, &rss_item/1)
       ]
 
     element(
@@ -135,13 +133,13 @@ defmodule VarselWeb.FeedController do
     )
   end
 
-  defp rss_item(entry, base) do
-    url = entry_url(base, entry.cve_id)
+  defp rss_item(entry) do
+    entry_url = entry_url(entry.cve_id)
 
     element("item", [], [
       element("title", [], text("#{entry.cve_id}: #{entry.title}")),
-      element("link", [], text(url)),
-      element("guid", [{"isPermaLink", "true"}], text(url)),
+      element("link", [], text(entry_url)),
+      element("guid", [{"isPermaLink", "true"}], text(entry_url)),
       element("pubDate", [], text(rfc822(entry.published))),
       element("description", [], text(entry.summary))
     ])

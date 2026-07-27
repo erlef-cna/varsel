@@ -95,7 +95,9 @@ defmodule VarselWeb.FeedControllerTest do
       end
     end
 
-    test "a spoofed Host cannot inject markup into the feed", %{conn: conn} do
+    # Links come from the endpoint, so the request's host never reaches the
+    # document — not as a link, and not as markup.
+    test "a spoofed Host does not reach the feed at all", %{conn: conn} do
       publish()
 
       body =
@@ -104,7 +106,9 @@ defmodule VarselWeb.FeedControllerTest do
         |> response(200)
 
       assert {:ok, _texts} = text_nodes(body)
+      refute body =~ "evil.example"
       refute body =~ "<script>"
+      assert body =~ "<id>#{VarselWeb.Endpoint.url()}/feed.atom</id>"
     end
   end
 
