@@ -42,7 +42,6 @@ defmodule Varsel.Cases.Proposable do
     :product,
     :repo_url,
     :cpe,
-    :default_status,
     :program_files,
     :platforms,
     :allow_unreleased_fix,

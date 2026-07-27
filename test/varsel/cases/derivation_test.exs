@@ -275,8 +275,7 @@ defmodule Varsel.Cases.DerivationTest do
       Fixtures.add_affected_package(poc, case_record, %{
         vendor: "Erlang",
         product: "OTP",
-        repo_url: otp_repo,
-        default_status: :unknown
+        repo_url: otp_repo
       })
 
     otp_channel =

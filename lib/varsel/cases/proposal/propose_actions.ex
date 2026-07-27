@@ -165,7 +165,6 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :product, :string, allow_nil?: false
       argument :repo_url, :string
       argument :cpe, :string
-      argument :default_status, Varsel.Cases.AffectedPackage.DefaultStatus
       argument :program_files, {:array, ProgramFile}
       argument :platforms, {:array, :string}
       argument :allow_unreleased_fix, :boolean

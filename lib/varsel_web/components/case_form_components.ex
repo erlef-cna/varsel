@@ -16,7 +16,6 @@ defmodule VarselWeb.CaseFormComponents do
 
   import VarselWeb.CoreComponents
 
-  alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.PackageChannel
@@ -62,13 +61,6 @@ defmodule VarselWeb.CaseFormComponents do
       </div>
       <.input field={@form[:repo_url]} type="text" placeholder="https://github.com/owner/repo">
         <:label>Repository URL (empty for hosted services)</:label>
-      </.input>
-      <.input
-        field={@form[:default_status]}
-        type="select"
-        options={enum_options(AffectedPackage.DefaultStatus)}
-      >
-        <:label>Default status</:label>
       </.input>
       <.program_files_field form={@form} />
       <.input
