@@ -26,19 +26,33 @@ defmodule Varsel.CVE.Cvelint do
           :ok | {:error, [{String.t() | nil, String.t(), String.t() | nil}]}
   def lint(cve_json) when is_map(cve_json) do
     # cvelint silently skips ("not a CVE v5 JSON record") anything without an
-    # assignerShortName — reject upfront instead of pretending it was linted
-    case get_in(cve_json, ["cveMetadata", "assignerShortName"]) do
-      short_name when short_name in [nil, ""] ->
-        {:error,
-         [
-           {nil, "cveMetadata.assignerShortName is missing — cvelint skips records without it",
-            "cveMetadata.assignerShortName"}
-         ]}
-
-      _ ->
+    # assignerShortName — reject upfront instead of pretending it was linted.
+    # Matching the record rather than reading a path through it also answers for
+    # the wrong-shape cases, which callers can send.
+    case cve_json do
+      %{"cveMetadata" => %{"assignerShortName" => short_name}}
+      when is_binary(short_name) and short_name != "" ->
         cve_json |> JSON.encode!() |> run()
+
+      %{"cveMetadata" => %{"assignerShortName" => short_name}}
+      when not is_nil(short_name) and not is_binary(short_name) ->
+        error("cveMetadata.assignerShortName must be a string", "cveMetadata.assignerShortName")
+
+      %{"cveMetadata" => metadata} when is_map(metadata) ->
+        error(
+          "cveMetadata.assignerShortName is missing — cvelint skips records without it",
+          "cveMetadata.assignerShortName"
+        )
+
+      %{"cveMetadata" => _not_an_object} ->
+        error("cveMetadata must be an object", "cveMetadata")
+
+      _no_metadata ->
+        error("cveMetadata is missing", "cveMetadata")
     end
   end
+
+  defp error(message, path), do: {:error, [{nil, message, path}]}
 
   defp run(input) do
     bin = Application.get_env(:varsel, :cvelint_bin, "cvelint")
