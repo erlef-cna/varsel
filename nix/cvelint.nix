@@ -7,24 +7,24 @@
 { stdenvNoCC, fetchurl }:
 
 let
-  version = "0.6.0";
+  version = "0.7.0";
 
   assets = {
     "aarch64-darwin" = {
       asset = "cvelint_Darwin_arm64.tar.gz";
-      sha256 = "f5b1ad176543424197de890397d4fb139b56f23b3ca0be0b44cbcaedad579efc";
+      sha256 = "c61914ea9ea5efe79077e5b71bd66b09eadac1cc598157710c87ee9c85eda869";
     };
     "x86_64-darwin" = {
       asset = "cvelint_Darwin_x86_64.tar.gz";
-      sha256 = "7fe439fcf4d05f643276edcfc207fc5bded7a587cd4a7765268de4e30a4128e2";
+      sha256 = "275f56e340e4a3932ccddc97ef229730006daa89787bb5e8bfca5a0f49f18d12";
     };
     "aarch64-linux" = {
       asset = "cvelint_Linux_arm64.tar.gz";
-      sha256 = "c69d173d04343f8392a1eb8c9b41e4af622bbc83caf08d78de01cd2149ddae48";
+      sha256 = "0e5a56e4673276d900aa229bf6f506103b924b70fccf0afeb3a0c51baf26f707";
     };
     "x86_64-linux" = {
       asset = "cvelint_Linux_x86_64.tar.gz";
-      sha256 = "88078c84238ae13053328fc28c4ab9c63482d3b4d4ac3b1366a168be7d3e65cf";
+      sha256 = "85e1aa63935584cce44a326cc07d42bcbdf3b3f9c7d899275c9fd08c5ca6ef9a";
     };
   };
 
