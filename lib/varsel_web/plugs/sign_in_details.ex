@@ -17,15 +17,17 @@ defmodule VarselWeb.Plugs.SignInDetails do
 
   @impl Plug
   def call(conn, _opts) do
-    Ash.PlugHelpers.set_context(conn, %{
-      # `:shared` is the only part of a context Ash carries into nested actions.
-      shared: %{
-        sign_in_details: %{
-          "user_agent" => user_agent(conn),
-          "ip" => conn.remote_ip |> :inet.ntoa() |> to_string()
-        }
-      }
-    })
+    details = %{
+      "user_agent" => user_agent(conn),
+      "ip" => conn.remote_ip |> :inet.ntoa() |> to_string()
+    }
+
+    # `:shared` is the only part of a context Ash carries into nested actions.
+    Ash.PlugHelpers.update_context(conn, fn context ->
+      context = context || %{}
+      shared = Map.get(context, :shared, %{})
+      Map.put(context, :shared, Map.put(shared, :sign_in_details, details))
+    end)
   end
 
   defp user_agent(conn) do

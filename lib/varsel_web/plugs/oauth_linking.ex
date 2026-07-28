@@ -33,8 +33,11 @@ defmodule VarselWeb.Plugs.OauthLinking do
   @impl Plug
   def call(conn, _opts) do
     case get_session(conn, @session_key) do
-      nil -> conn
-      user_id -> Ash.PlugHelpers.set_context(conn, %{linking_user_id: user_id})
+      nil ->
+        conn
+
+      user_id ->
+        Ash.PlugHelpers.update_context(conn, &Map.put(&1 || %{}, :linking_user_id, user_id))
     end
   end
 end
