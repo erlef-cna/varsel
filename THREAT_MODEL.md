@@ -106,7 +106,7 @@ account re-arms it for whoever signs in next (`promote_first_user_to_poc.ex`).
 | CNA workbench (cases, reports, CVE lifecycle, user mgmt) — LiveView + GraphQL/MCP tools | `/cases`, `/reports`, `/users`, `/cves`, GraphQL/MCP POC tools | DB, **MITRE API**, **git egress** | **Yes** |
 | Render-time derivation (`exgit` git clone/fetch of package repos) | `Varsel.Cases.Derivation` | **Outbound git to `repo_url`** | **Yes — key boundary (§4)** |
 | Catalog sync (CWE/CAPEC/OTP-versions) — Oban jobs | scheduled workers | Outbound HTTPS to fixed hosts | **Yes (trusted-source egress)** |
-| `cvelint` subprocess (validates rendered CVE JSON) | `Varsel.CVE.Cvelint` | `System.cmd`, temp file | **Yes** |
+| `cvelint` subprocess (validates rendered CVE JSON) | `Varsel.CVE.Cvelint` | `Exile`, record piped to stdin | **Yes** |
 | Dev tooling (LiveDashboard, Oban Web, AshAdmin, Swoosh mailbox, storybook, error preview) | `/dev/*` | DB, mail | **No — §3 (absent from prod builds)** |
 | Mock login (unauthenticated sign-in as a dummy user of any role) | `/auth/user/mock/callback` | DB | **No — §3 (absent from prod builds)** |
 | GraphiQL playground | `/gql/playground` | DB | **Yes, but relaxed CSP — §5a** |
@@ -319,16 +319,11 @@ claims:
   OTP versions table, to GitHub as the OAuth IdP, to the SMTP relay, and —
   critically — **to the public https host a case's `repo_url` names** during
   derivation (see §6).
-- **Spawns a subprocess** — yes: `System.cmd("/bin/sh", …)` to run the
-  `cvelint` binary; and writes a short-lived temp file with the CVE JSON
-  (`cvelint.ex`).
+- **Spawns a subprocess** — yes: the `cvelint` binary, run directly with a
+  fixed argument list and fed the CVE JSON on its stdin (`cvelint.ex`).
 - **Sends email** — yes, to POC addresses via SMTP. (`emails.ex`)
-- **Writes to disk** — only the transient `cvelint` temp file, written into a
-  fresh per-call directory and removed in an `after`; `exgit` and the catalog
-  unzip are **in-memory**. The record's CVE ID names the file, and since a
-  caller supplies that id, only a real CVE-ID shape is used as a filename —
-  anything else falls back to a placeholder, so the write cannot leave the
-  temp directory (`cvelint.ex`, `weakness.ex`, `git_repo.ex`).
+- **Writes to disk** — no. `cvelint` reads from stdin, and `exgit` and the
+  catalog unzip are **in-memory** (`cvelint.ex`, `weakness.ex`, `git_repo.ex`).
 
 **Derivation is one process for the whole node.** Every git clone, fetch and
 graph walk runs inside a single named GenServer (`Varsel.Cases.Derivation.
@@ -377,7 +372,7 @@ are below.
 | `AffectedPackage` create/update | `repo_url` | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `VersionEvent` | `commit_sha` | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
 | `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
-| `CveValidation.validate*` | `cve_json` | **Yes — any authenticated user** | **cvelint subprocess** (temp file; argv, not shell; filename constrained to a CVE-ID shape) and **hex.pm lookups** keyed on package names taken from the JSON. No policy authorizer on this resource; the login gate is the control (§4) |
+| `CveValidation.validate*` | `cve_json` | **Yes — any authenticated user** | **cvelint subprocess** (piped to stdin; argv, not shell) and **hex.pm lookups** keyed on package names taken from the JSON. No policy authorizer on this resource; the login gate is the control (§4) |
 | `Case.cna_override` | RFC 7396 merge patch on rendered container | POC / assigned supporter | Applied as last render step; can override any rendered field (`case.ex`) |
 | GitHub OAuth | `user_info` (sub, preferred_username, name, email) | IdP-supplied, verified by GitHub | Stored as `github_id/handle/name/email`; `handle` later in a client-side `img`/link |
 | Hex.pm OAuth | `user_info` (username as `sub`, email) | IdP-supplied by Hex.pm | Identity keyed on the **username**, since Hex.pm exposes no numeric id and offers no way to rename an account (§7). Email is opt-in-public there, so it is usually absent and is never used to match an account |
@@ -439,11 +434,13 @@ scope** per §1.
 
 For orientation only, the dependencies that receive attacker-influenced input
 (so an upstream bug is actually *reachable* through Varsel, rather than dead
-code) are `exgit` (git data from a case's `repo_url`) and `mdex` (author
-markdown / CVE prose). `saxy`, `cvelint`, and `req` are fed only trusted or
-fixed-host data, so their surface is not attacker-reachable. This list informs
-prioritization of a dependency bump; it does not change the disposition, which
-is always `OUT-OF-MODEL: report-upstream`.
+code) are `exgit` (git data from a case's `repo_url`), `mdex` (author markdown
+/ CVE prose), and `cvelint` together with `exile`, which carries the record to
+it — any authenticated caller can hand `validate_cve_record*` an arbitrary
+`cve_json` (§5). `saxy` and `req` are fed only trusted or fixed-host data, so
+their surface is not attacker-reachable. This list informs prioritization of a
+dependency bump; it does not change the disposition, which is always
+`OUT-OF-MODEL: report-upstream`.
 
 ---
 
@@ -711,16 +708,13 @@ none of the authorization properties, by construction rather than by defect.
      (§9).
    - (`pinned_transport.ex`, `repo_url_https.ex`, `private_address.ex`)
 
-13. **Caller-supplied content stays inside the temp directory it is written
-   to.** `cvelint` needs the record on disk, so validation writes one — into a
-   fresh per-call directory, removed afterwards. The record names that file,
-   and since the record comes from any authenticated user, only a real CVE-ID
-   shape is used; anything else falls back to a placeholder. Nothing a caller
-   supplies reaches a shell: the command is fixed and every other value is
-   passed as an argument.
-   - *Violation symptom:* a write lands outside the per-call directory, or a
-     caller-supplied string is interpreted by the shell.
-   - *Severity:* `critical` (arbitrary write / command execution).
+13. **Nothing a caller supplies reaches a shell.** The only subprocess is
+   `cvelint`, executed directly with a fixed argument list; the record itself
+   is written to its stdin, so no caller-supplied value is ever interpreted by
+   a shell or used to build a path.
+   - *Violation symptom:* a caller-supplied string is interpreted by the
+     shell, or reaches the subprocess as an argument rather than on stdin.
+   - *Severity:* `critical` (command execution).
    - (`cvelint.ex`)
 
 14. **One provider cannot take over an account made with another.**
@@ -923,10 +917,10 @@ both explained in §4:
   a change, validation or notifier that runs *after* the enclosing action's
   policy has already admitted the caller; none sits on a path a caller
   selects. Caller-facing uses are banned by a credo check (§8, property 1).
-- **"The `cvelint` call shells out with user input."** It runs `/bin/sh -c`
-  with a fixed script and passes everything else as argv, so no caller string
-  reaches a shell parsing context. The record's CVE ID names the temp file and
-  is constrained to a CVE-ID shape before use (§5).
+- **"The `cvelint` call passes user input to an external program."** The
+  binary is executed directly — no shell — with a fixed argument list, and the
+  record reaches it on stdin rather than as an argument, so no caller string
+  reaches a shell parsing context (§5).
 - **"A supporter can resolve proposals like a POC."** Accepting or declining a
   proposal on an assigned case is intended supporter authority; assignment is
   the grant (§11, "treating a supporter as low-trust").
@@ -940,10 +934,9 @@ both explained in §4:
 
 **An entry here describes an outcome, not a promise to disregard the
 evidence.** Each says what the code does and why the flag is expected. A
-report that *demonstrates* the stated control does not hold — a filename that
-escapes the temp directory, an anonymous read that returns rows — is `VALID`,
-not `KNOWN-NON-FINDING`. Match on the behaviour, not on the shape of the
-report.
+report that *demonstrates* the stated control does not hold — a caller string
+that reaches a shell, an anonymous read that returns rows — is `VALID`, not
+`KNOWN-NON-FINDING`. Match on the behaviour, not on the shape of the report.
 
 ---
 
@@ -996,7 +989,7 @@ report.
 | `OUT-OF-MODEL: adversary-not-in-scope` | Requires POC privilege, DB/host access, TLS break, or control of MITRE/GitHub/SMTP. | §7 |
 | `OUT-OF-MODEL: unsupported-component` | Lands in the `/dev/*` tooling, or in the mock login (`/auth/user/mock/*`). | §3 |
 | `OUT-OF-MODEL: non-default-build` | Only manifests in a release built from a non-`prod` `MIX_ENV` (which ships `dev/`), or with `TEST_DEPLOYMENT` misconfigured. | §5a |
-| `OUT-OF-MODEL: report-upstream` | Lands in `exgit`/`mdex`/`cvelint`/`saxy`/`req` internals; Varsel ships the fix by bumping the dep. | §6b |
+| `OUT-OF-MODEL: report-upstream` | Lands in `exgit`/`mdex`/`cvelint`/`exile`/`saxy`/`req` internals; Varsel ships the fix by bumping the dep. | §6b |
 | `BY-DESIGN: property-disclaimed` | Concerns a §9 disclaimed property (rate limiting, `repo_url` egress to any public host within privilege, availability). | §9 |
 | `KNOWN-NON-FINDING` | Matches a §11a recurring false positive. | §11a |
 | `MODEL-GAP` | Routes to none of the above; triggers a §12 revision. | §12 |

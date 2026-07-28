@@ -96,6 +96,7 @@ defmodule Varsel.MixProject do
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:ex_json_schema, "~> 0.10"},
       {:exgit, "~> 0.1.0"},
+      {:exile, "~> 0.14"},
       {:gen_smtp, "~> 1.2"},
       {:gettext, "~> 1.0"},
       {:hammer, "~> 7.0"},

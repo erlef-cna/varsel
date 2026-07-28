@@ -54,7 +54,8 @@ reachable by an attacker the model includes:
 - Outbound requests to a repository URL set on a case — that egress is a
   bounded POC/assigned-collaborator capability, not an anonymous SSRF, unless
   you can trigger it below that privilege.
-- Bugs inside bundled third-party tools (`exgit`, `mdex`, `saxy`, `cvelint`),
+- Bugs inside bundled third-party tools (`exgit`, `mdex`, `saxy`, `cvelint`,
+  `exile`),
   which we address by updating the dependency; report those upstream too.
 
 If you are unsure whether something is in scope, report it anyway — we would

@@ -278,8 +278,10 @@ stdenv.mkDerivation {
     # NIFs compiled during the deps build (bcrypt, picosat) carry gcc and
     # glibc-dev paths in their debug info; stripping it drops those
     # references. The OTP-shipped .so files are already stripped but copied
-    # read-only, so make them writable for the tools first.
-    find "$out"/lib -name '*.so' -exec chmod u+w {} + -exec strip --strip-debug {} +
+    # read-only, so make them writable for the tools first. exile also ships
+    # a helper *executable* next to its NIF, so match that too.
+    find "$out"/lib \( -name '*.so' -o -name 'spawner' \) \
+      -exec chmod u+w {} + -exec strip --strip-debug {} +
 
     # epmd genuinely links libsystemd, but its rpath names the full systemd
     # package — ~150 MiB of gnutls/curl/pam/... in the image. Point it at
@@ -295,7 +297,7 @@ stdenv.mkDerivation {
     # -rpath $out/lib). Functionally dead, but enough for Nix to pull the
     # whole toolchain into the image — remove-references-to zeroes the
     # hashes in place (length-preserving, so .beam chunks stay valid).
-    find "$out"/lib -type f \( -name '*.beam' -o -name '*.so' \) \
+    find "$out"/lib -type f \( -name '*.beam' -o -name '*.so' -o -name 'spawner' \) \
       -exec remove-references-to -t ${erlang} -t ${elixir} -t ${depsCompiled} {} +
 
     # allowedReferences enforces the closure contract, but fails without
