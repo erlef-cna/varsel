@@ -32,6 +32,7 @@ defmodule VarselWeb.AuthController do
     # ordinary sign-in look like a link.
     |> delete_session(OauthLinking.session_key())
     |> store_in_session(user)
+    |> set_live_socket_id(token)
     |> put_session(:current_session_jti, session_jti(token))
     # If your resource has a different name, update the assign name here (i.e :current_admin)
     |> assign(:current_user, user)
@@ -39,14 +40,12 @@ defmodule VarselWeb.AuthController do
     |> redirect(to: if(linking?, do: ~p"/settings/account", else: return_to))
   end
 
-  defp session_jti(token) when is_binary(token) do
+  defp session_jti(token) do
     case AshAuthentication.Jwt.peek(token) do
       {:ok, %{"jti" => jti}} -> jti
       _unreadable -> nil
     end
   end
-
-  defp session_jti(_token), do: nil
 
   def failure(conn, activity, reason) do
     message =

@@ -42,7 +42,12 @@ defmodule Varsel.Accounts.User.Changes.RevokeTokens do
           strategy: [:atomic, :atomic_batches, :stream],
           context: %{private: %{ash_authentication?: true}},
           return_errors?: true,
-          stop_on_error?: true
+          stop_on_error?: true,
+          # Bulk actions notify only when asked, and the notification needs the
+          # rows: without both, the revoked sessions' sockets are never told to
+          # disconnect.
+          notify?: true,
+          return_records?: true
         )
       )
     end
