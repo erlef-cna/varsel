@@ -35,6 +35,8 @@ config :varsel, VarselWeb.Endpoint,
     expires: 63_072_000,
     preload: true,
     subdomains: true,
+    # Health checks reach the listener directly, over plain http and without
+    # going through the edge that terminates TLS.
     exclude: [
       # paths: ["/health"],
       hosts: ["localhost", "127.0.0.1"]
