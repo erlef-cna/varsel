@@ -121,6 +121,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+        id: setup
         with:
           elixir: true
           mix-env: test
@@ -128,9 +129,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: _build/*/*.plt*
-          key: plt-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          key: plt-${{ runner.os }}-${{ steps.setup.outputs.toolchain-version }}-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            plt-${{ runner.os }}-
+            plt-${{ runner.os }}-${{ steps.setup.outputs.toolchain-version }}-
       - name: mix dialyzer
         # precommit runs Dialyzer in MIX_ENV=test, so PLT apps line up.
         env:

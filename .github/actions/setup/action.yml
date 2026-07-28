@@ -17,6 +17,13 @@ inputs:
     required: false
     default: dev
 
+outputs:
+  toolchain-version:
+    description: >-
+      Resolved Elixir/OTP/ERTS version of the dev shell, for cache keys that
+      hold compiled artifacts. Empty unless the elixir input is enabled.
+    value: ${{ steps.toolchain.outputs.version }}
+
 runs:
   using: composite
   steps:
@@ -45,6 +52,16 @@ runs:
     - name: Export PWD for devenv
       shell: bash
       run: echo "PWD=$PWD" >> "$GITHUB_ENV" # zizmor: ignore[github-env]
+    # Compiled artifacts are not portable across toolchains, so the cache key
+    # carries the resolved versions.
+    - name: Resolve toolchain version
+      if: inputs.elixir == 'true'
+      id: toolchain
+      shell: nix develop --no-pure-eval -c bash -e {0}
+      run: |
+        elixir -e 'IO.puts("version=#{System.version()}-otp#{System.otp_release()}-erts#{:erlang.system_info(:version)}")' \
+          >> "$GITHUB_OUTPUT"
+
     - name: Cache deps and _build
       if: inputs.elixir == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -52,9 +69,9 @@ runs:
         path: |
           deps
           _build
-        key: mix-${{ runner.os }}-${{ inputs.mix-env }}-${{ hashFiles('mix.lock') }}
+        key: mix-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ inputs.mix-env }}-${{ hashFiles('mix.lock') }}
         restore-keys: |
-          mix-${{ runner.os }}-${{ inputs.mix-env }}-
+          mix-${{ runner.os }}-${{ steps.toolchain.outputs.version }}-${{ inputs.mix-env }}-
 
     - name: Fetch dependencies
       if: inputs.elixir == 'true'
