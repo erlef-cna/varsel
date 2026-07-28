@@ -13,7 +13,7 @@ SPDX-License-Identifier: Apache-2.0
 - **Versioning:** the model is versioned with the project (it lives in the
   repo and moves with `main`): a report against a given version is triaged
   against the model as it stood at that version. Written against `main`,
-  last updated 2026-07-27.
+  last updated 2026-07-28.
 - **Relationship to `SECURITY.md`:** this document accompanies `SECURITY.md`
   (it does not replace it). `SECURITY.md` holds the disclosure policy and a
   short Scope section that links here; this document is the detailed model.
@@ -89,9 +89,11 @@ There is no password strategy, no magic link and no confirmation strategy on
 strategy behind them they cannot authenticate anyone. Either provider can be
 left unconfigured, and a half-configured one refuses to boot.
 Registration is open: anyone with an account at a configured provider becomes
-an authenticated user. **The first account to register becomes POC** — the
-check counts users and promotes when the table is empty, so deleting every
-account re-arms it for whoever signs in next (`promote_first_user_to_poc.ex`).
+an authenticated user. **Registering grants no role.** A role is only ever set
+by a POC, so the first one is set out of band: an operator with a shell on the
+release runs `bin/promote-to-poc <user-id>` against an account that has already
+signed in. A deployment with no POC stays without one until someone with that
+access says otherwise (`release.ex`).
 
 ### Component-family table
 
@@ -202,11 +204,18 @@ flavours and they fail differently. A *strict* check (`actor_present()`,
 unauthorized caller gets an **empty result, not an error**. Both are correct
 outcomes. Five strict policies exist:
 
-- `Case`, `User`, `ApiKey` and `VulnerabilityReport` carry a resource-wide
-  strict policy, so an anonymous read refuses outright rather than returning
-  nothing.
+- `Case`, `User`, `ApiKey` and `VulnerabilityReport` carry a strict policy on
+  reads, so an anonymous read refuses outright rather than returning nothing.
 - `Token` carries an action-scoped strict policy on `:list_sessions`, which
   compares the requested subject to the actor's own id.
+
+**Those strict policies match reads only.** A policy that matches an action and
+grants is the whole decision for it, so a policy matching every action would
+decide every action no other policy names. Scoping these to `action_type(:read)`
+leaves each write to be named by a policy of its own, and an action no policy
+names is refused. **A new action on any resource is forbidden until someone
+writes a policy for it** — that is the property to check a report against, not
+the framework's default.
 
 `Case`'s strict policy is not merely "is anyone signed in": it admits `:poc`
 and `:supporter` only, so **an authenticated user with no role is refused
@@ -405,7 +414,7 @@ a 900s cache TTL, and a 250k commit-count cap on the graph walk
 | --- | --- | --- | --- |
 | Case markdown → on-site HTML (`Markdown.to_display_html`) | Browser HTML | **Yes** — rendered `unsafe: true` then run through the `sanitize` (ammonia) allow-list, so scripts/handlers/dangerous URLs are stripped while safe author HTML survives (`markdown.ex`) | — (sanitized) |
 | Case markdown → `supportingMedia` text/html in published CVE (`Markdown.to_html`) | MITRE + downstream CVE consumers | Yes — same sanitized Comrak output | — |
-| CVE record prose → on-site HTML (`cve_view.ex` `prose/2`) | Browser HTML | **Yes** — `markdown/1` sanitizes its output; a `supportingMedia` HTML value (may be MITRE-imported) is run through `MDExNative.Ammonia.safe_html/1` before render (`cve_view.ex`) | — (sanitized) |
+| CVE record prose → on-site HTML (`cve_view.ex` `prose/1`) | Browser HTML | **Yes** — `markdown/1` sanitizes its output; a `supportingMedia` HTML value (may be MITRE-imported) is run through `MDExNative.Ammonia.safe_html/1` before render (`cve_view.ex`) | — (sanitized) |
 | CVE JSON / OSV JSON | Machine consumers, cross-origin | N/A (data) — CORP dropped deliberately for these (`public_resource.ex`) | — |
 | Atom/RSS feeds | Feed readers, cross-origin | **Yes** — built as an XML tree and encoded (`Saxy`), never concatenated, so every value is escaped as text or as an attribute by construction. Links are `~p` routes resolved against the endpoint, so they name the configured host and the request's `Host` never reaches the document (`feed_controller.ex`) | — |
 | Sitemap XML | Crawlers | **Yes** — same as the feeds: an XML tree, encoded (`Saxy`). The host is the configured `Endpoint.url()`, not the request's (`sitemap_controller.ex`) | — |
@@ -413,8 +422,8 @@ a 900s cache TTL, and a 250k commit-count cap on the graph walk
 | POC notification email | Plain-text mail | Yes — `text_body`, fixed headers, and **content-free**: it carries only a link to the authenticated triage console, no report payload or reporter identity, since email is unencrypted in transit/at rest (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
 
-Every markdown/HTML render sink now sanitizes (ammonia allow-list) before
-`raw/1`, so injected script/handlers are stripped at the source. The app-wide
+Every markdown/HTML render sink sanitizes (ammonia allow-list) before `raw/1`,
+so injected script/handlers are stripped at the source. The app-wide
 **strict CSP** (`default-src 'none'`, `script-src 'self'` with per-request
 nonce, **no `unsafe-inline`/`unsafe-eval`**) is a second, independent layer:
 even a sanitizer bypass would need an inline `<script>`/event handler the
@@ -618,6 +627,12 @@ none of the authorization properties, by construction rather than by defect.
    this property reads those call sites rather than a policy, and any *new*
    caller of `revoke_jti` would have to bring its own check.
    Signing out revokes the token rather than only clearing the cookie.
+   **Revoking also closes the LiveViews that token opened.** A mounted
+   LiveView holds the actor it resolved at mount and would keep acting as it
+   until the page navigated or reconnected, so revocation broadcasts a
+   disconnect to the socket named after the token, and the socket closes. This
+   covers all three revoking callers — the account page, sign-out, and account
+   deletion.
    Each row records the user agent and IP it was created from — **personal
    data**, kept until the token expires or is expunged, deleted with the
    account, readable by its owner alone. The user agent is a client string
@@ -628,11 +643,12 @@ none of the authorization properties, by construction rather than by defect.
    alone would not do this — it classifies the forwarded addresses and never
    the peer.
    - *Violation symptom:* one user lists or revokes another's sessions; a
-     revoked token still authenticates; sign-in details readable by anyone
-     but their owner.
+     revoked token still authenticates; a LiveView open under a revoked token
+     keeps acting for it; sign-in details readable by anyone but their owner.
    - *Severity:* `high` (session-fixation-adjacent / PII disclosure).
-   - (`token.ex`, `sign_in_details.ex`, `record_sign_in_details.ex`,
-     `client_ip.ex`, `account_settings_live.ex`)
+   - (`token.ex`, `auth_controller.ex`, `revoke_tokens.ex`,
+     `sign_in_details.ex`, `record_sign_in_details.ex`, `client_ip.ex`,
+     `account_settings_live.ex`)
 
 9. **Stored-content rendering is sanitized before display.**
    Every markdown/HTML render sink — case/report markdown
@@ -640,8 +656,8 @@ none of the authorization properties, by construction rather than by defect.
    (`cve_view.ex` `markdown/1`), and imported `supportingMedia` HTML
    (`MDExNative.Ammonia.safe_html/1`) — passes through the ammonia allow-list
    before `raw/1`, stripping scripts, event handlers and dangerous URLs while
-   keeping safe author HTML. The strict app-wide CSP (`script-src 'self'`, no
-   `unsafe-inline`) is an independent second layer.
+   keeping safe author HTML. The strict app-wide CSP
+   (`script-src 'self'`, no `unsafe-inline`) is an independent second layer.
    - *Violation symptom:* stored XSS — content executes script in a viewer's
      session.
    - *Severity:* `critical` if it fired; mitigated to `low` residual by the
@@ -689,16 +705,15 @@ none of the authorization properties, by construction rather than by defect.
    - (`router.ex`, `security_headers.ex`, `public_resource.ex`)
 
 12. **Git egress reaches only a public address, at the moment it connects.**
-   A `repo_url` is constrained to `https://` and to a host resolving publicly
-   when it is saved. The clone re-resolves and re-checks immediately before
-   connecting, then **pins to what that lookup returned**: the request goes to
-   the address, while the hostname is kept for the `Host` header, the TLS
-   server name, and the name the certificate must match. There is no second
-   lookup in between for DNS to answer differently, so a name that answers
-   publicly at save time and privately later is refused rather than cloned.
-   Redirects stay off, so there is no later hop to re-resolve. Pinning does
-   not weaken TLS: a certificate that does not match the case's hostname
-   still fails the handshake.
+   A `repo_url` is constrained to `https://` and to a host that resolves
+   publicly. The clone re-resolves immediately before connecting and **pins to
+   what that lookup returned**, so there is no window between the check and the
+   connection for DNS to answer differently. Redirects stay off, so there is no
+   later hop to re-resolve. Pinning does not weaken TLS: the hostname is still
+   the name the certificate must match.
+   An address that carries an IPv4 one inside it — IPv4-mapped,
+   IPv4-compatible, 6to4, NAT64 — is judged by the address it carries, since
+   those prefixes are globally routable while the address inside need not be.
    - *Violation symptom:* a clone connects to a loopback, RFC 1918, or other
      non-public address; or a pinned request accepts a certificate that does
      not match the named host.
@@ -706,7 +721,7 @@ none of the authorization properties, by construction rather than by defect.
    - *Bound:* the privilege to set `repo_url` is POC or assigned supporter
      (§4), and the host may still be any *public* one — that is deliberate
      (§9).
-   - (`pinned_transport.ex`, `repo_url_https.ex`, `private_address.ex`)
+   - (`pinned_transport.ex`, `git_repo.ex`, `uri.ex`, `private_address.ex`)
 
 13. **Nothing a caller supplies reaches a shell.** The only subprocess is
    `cvelint`, executed directly with a fixed argument list; the record itself
@@ -856,11 +871,11 @@ integrator — Varsel is a deployed service).
 4. **Keep the MITRE/GitHub/SMTP credentials and `CLOAK_KEY` /
    `*_SIGNING_SECRET` out of source and rotate on schedule** — all are
    environment secrets.
-5. **Grant the POC role deliberately.** POC is full publish authority; the
-   first login through any configured provider auto-becomes POC (bootstrap),
-   so control who logs in first. The check is "are there no users", not "has
-   this ever run" — so if every account is deleted, the next person to sign in
-   becomes POC again. (`user.ex`)
+5. **Grant the POC role deliberately.** POC is full publish authority. The
+   first one is granted from a shell on the release
+   (`bin/promote-to-poc <user-id>`), so whoever holds that access decides who
+   starts with it; every later role is granted by a POC in the app.
+   (`release.ex`, `user.ex`)
 6. **Treat `repo_url` on cases as a trusted-egress control:** only assign
    supporters to cases you trust to set outbound clone targets. The app keeps
    that egress on public addresses and pins each clone to the address it
@@ -971,6 +986,10 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
   not open a hole — the filter policies still scope the rows — but it does
   silently change a 401 into a blank page, and the model's claim that the two
   layers agree stops holding.
+- **Widening a policy's condition past reads** — a `policy always()`, or an
+  `action_type` list that picks up writes. A broad policy that grants decides
+  every action no other policy names, which is what turns "an action nobody
+  wrote a policy for" from refused into permitted (§4).
 - Re-introducing a **route-level role gate** in the router. The model rests
   on there being exactly one place that decides (§4); a second one that can
   drift from the policies is the condition this section exists to catch.
@@ -1007,7 +1026,11 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
    publicly → `BY-DESIGN`, any public host is allowed on purpose. A report
    that gets a clone to actually reach a private address — by rebinding or
    otherwise — is `VALID` against property 12.
-4. Otherwise take the first matching row, reading the table top to bottom.
+4. A report that an action is reachable by the wrong actor turns on **which
+   policies match that action** (§4), not on the framework's default. Read
+   them; a matching policy that grants what the §2 role matrix does not is
+   `VALID`.
+5. Otherwise take the first matching row, reading the table top to bottom.
 
 **Escalate rather than close when a claim rests on somebody else.** One claim
 here holds only while something outside this codebase does: that a login
