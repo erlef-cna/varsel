@@ -25,6 +25,60 @@ let
   # there. The mode is set via `perms` below: the store normalizes everything
   # it holds to read-only, so a chmod here would not survive.
   tmpDir = pkgs.runCommand "tmp-dir" { } "mkdir -p $out/tmp";
+
+  # busybox ships ~400 applets by default, including a download, remote-exec
+  # and account-management toolkit nothing here calls. `enableMinimal` starts
+  # from the opposite end — no applets — so the list below is everything the
+  # image may run, and anything not named is absent rather than merely
+  # unused. Same approach nixpkgs takes for busybox-sandbox-shell, which is
+  # too bare on its own (ash and sh only).
+  #
+  # The shell itself stays: the release launcher and entry scripts are POSIX
+  # shell, so booting and `fly ssh console` both need it, along with the
+  # utilities they call.
+  hardenedBusybox = pkgs.busybox.override {
+    enableMinimal = true;
+    extraConfig = ''
+      CONFIG_ASH y
+      CONFIG_ASH_OPTIMIZE_FOR_SIZE y
+      CONFIG_ASH_ALIAS y
+      CONFIG_ASH_CMDCMD y
+      CONFIG_ASH_ECHO y
+      CONFIG_ASH_GETOPTS y
+      CONFIG_ASH_INTERNAL_GLOB y
+      CONFIG_ASH_JOB_CONTROL y
+      CONFIG_ASH_PRINTF y
+      CONFIG_ASH_TEST y
+      CONFIG_FEATURE_FANCY_ECHO y
+      CONFIG_FEATURE_SH_MATH y
+      CONFIG_FEATURE_SH_MATH_64 y
+      CONFIG_FEATURE_TEST_64 y
+
+      # Called by bin/varsel, bin/server, bin/migrate and erts/bin/erl.
+      CONFIG_AWK y
+      CONFIG_BASENAME y
+      CONFIG_CAT y
+      CONFIG_CUT y
+      CONFIG_DATE y
+      CONFIG_DIRNAME y
+      CONFIG_ENV y
+      CONFIG_GREP y
+      CONFIG_MKDIR y
+      CONFIG_OD y
+      CONFIG_PWD y
+      CONFIG_READLINK y
+      CONFIG_FEATURE_READLINK_FOLLOW y
+      CONFIG_SED y
+
+      # Enough of a shell to be worth keeping for `fly ssh console`.
+      CONFIG_HEAD y
+      CONFIG_LS y
+      CONFIG_PS y
+      CONFIG_RM y
+      CONFIG_TAIL y
+      CONFIG_WC y
+    '';
+  };
 in
 nix2container.buildImage {
   name = "ghcr.io/erlef-cna/varsel";
@@ -35,7 +89,7 @@ nix2container.buildImage {
   # fakeNss supplies /etc/passwd + /etc/group (and /var/empty): Fly's SSH
   # daemon resolves `root` via getpwnam and rejects sessions without them,
   # and the `nobody` entry backs the non-root User set below.
-  copyToRoot = [ release cvelint pkgs.busybox pkgs.cacert otpCacerts pkgs.dockerTools.fakeNss tmpDir ];
+  copyToRoot = [ release cvelint hardenedBusybox pkgs.cacert otpCacerts pkgs.dockerTools.fakeNss tmpDir ];
 
   # Split the store closure across many layers so pulls cache: glibc, ERTS
   # and the dependency .beam files land in their own layers and are reused
