@@ -69,7 +69,7 @@ defmodule VarselWeb.CveHTML do
     ]
   end
 
-  defp prose_present?(cna, key), do: not is_nil(prose(cna[key], cna["references"] || []))
+  defp prose_present?(cna, key), do: not is_nil(prose(cna[key]))
 
   @doc "Rows for the components table: zips modules / files / routines by index."
   def component_rows(entry) do

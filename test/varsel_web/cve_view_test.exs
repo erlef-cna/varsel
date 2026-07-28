@@ -86,28 +86,57 @@ defmodule VarselWeb.CveViewTest do
     end
   end
 
-  describe "link_commit_shas/2" do
-    test "links bare 40-hex shas to the repo's commit url" do
-      refs = [
-        %{
-          "url" => "https://github.com/erlang/otp/commit/5a55feec10c9b69189d56723d8f237afa58d5d4f"
-        }
-      ]
-
-      html = "Fixed in 5a55feec10c9b69189d56723d8f237afa58d5d4f now."
-
-      out = html |> CveView.link_commit_shas(refs) |> Phoenix.HTML.safe_to_string()
-
-      assert out =~
-               ~s(href="https://github.com/erlang/otp/commit/5a55feec10c9b69189d56723d8f237afa58d5d4f")
-
-      assert out =~ "5a55feec10</code>"
+  describe "prose/1" do
+    test "returns nil without an English entry" do
+      assert CveView.prose(nil) == nil
+      assert CveView.prose([]) == nil
+      assert CveView.prose([%{"lang" => "de", "value" => "hallo"}]) == nil
     end
 
-    test "leaves content untouched when no commit reference exists" do
-      html = "Fixed in 5a55feec10c9b69189d56723d8f237afa58d5d4f."
-      out = html |> CveView.link_commit_shas([]) |> Phoenix.HTML.safe_to_string()
-      refute out =~ "<a"
+    test "renders the entry's own markdown when there is no supporting media" do
+      assert render([%{"lang" => "en", "value" => "the *value*"}]) =~ "<em>value</em>"
+    end
+
+    test "prefers markdown, then html, then plain text" do
+      markdown = %{"type" => "text/markdown", "value" => "*markdown*"}
+      html = %{"type" => "text/html", "value" => "<em>html</em>"}
+      plain = %{"type" => "text/plain", "value" => "*plain*"}
+
+      assert render(entry([plain, html, markdown])) =~ "<em>markdown</em>"
+      assert render(entry([plain, html])) =~ "<em>html</em>"
+      assert render(entry([plain])) =~ "<em>plain</em>"
+    end
+
+    test "ignores media types it cannot render" do
+      assert render(entry([%{"type" => "image/png", "value" => "iVBOR"}])) =~ "<em>value</em>"
+    end
+
+    test "sanitizes html media" do
+      media = %{"type" => "text/html", "value" => ~s|<img src=x onerror="alert(1)">ok|}
+      out = render(entry([media]))
+
+      refute out =~ "onerror"
+      assert out =~ "ok"
+    end
+
+    test "sanitizes html smuggled through markdown media" do
+      media = %{"type" => "text/markdown", "value" => ~s|<img src=x onerror="alert(1)">ok|}
+      refute render(entry([media])) =~ "onerror"
+    end
+
+    test "decodes base64 media" do
+      media = %{
+        "type" => "text/markdown",
+        "base64" => true,
+        "value" => Base.encode64("*encoded*")
+      }
+
+      assert render(entry([media])) =~ "<em>encoded</em>"
+    end
+
+    test "falls through when base64 media cannot be decoded" do
+      media = %{"type" => "text/markdown", "base64" => true, "value" => "not base64!"}
+      assert render(entry([media])) =~ "<em>value</em>"
     end
   end
 
@@ -340,4 +369,8 @@ defmodule VarselWeb.CveViewTest do
       assert html =~ "pkg:hex/bandit"
     end
   end
+
+  defp render(entries), do: entries |> CveView.prose() |> Phoenix.HTML.safe_to_string()
+
+  defp entry(media), do: [%{"lang" => "en", "value" => "the *value*", "supportingMedia" => media}]
 end

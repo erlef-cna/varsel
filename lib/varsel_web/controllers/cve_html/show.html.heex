@@ -4,7 +4,7 @@ SPDX-License-Identifier: Apache-2.0
 --%>
 <% cve_id = @cve["cveMetadata"]["cveId"] %>
 <% cvss = best_cvss(@cna) %>
-<% description = prose(@cna["descriptions"], @cna["references"] || []) %>
+<% description = prose(@cna["descriptions"]) %>
 <% weaknesses = cwe_descriptions(@cna) %>
 <% attack_patterns = capec_items(@cna) %>
 <% affected = @cna["affected"] || [] %>
@@ -221,21 +221,21 @@ SPDX-License-Identifier: Apache-2.0
     <.panel :if={present["workarounds"]} id="workarounds">
       <:title>Workarounds</:title>
       <div class="prose max-w-none text-sm">
-        {prose(@cna["workarounds"], @cna["references"] || [])}
+        {prose(@cna["workarounds"])}
       </div>
     </.panel>
 
     <.panel :if={present["configurations"]} id="configurations">
       <:title>Configurations</:title>
       <div class="prose max-w-none text-sm">
-        {prose(@cna["configurations"], @cna["references"] || [])}
+        {prose(@cna["configurations"])}
       </div>
     </.panel>
 
     <.panel :if={present["solutions"]} id="solutions">
       <:title>Solutions</:title>
       <div class="prose max-w-none text-sm">
-        {prose(@cna["solutions"], @cna["references"] || [])}
+        {prose(@cna["solutions"])}
       </div>
     </.panel>
 

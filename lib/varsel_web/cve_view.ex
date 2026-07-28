@@ -5,8 +5,8 @@
 defmodule VarselWeb.CveView do
   @moduledoc """
   Shared rendering helpers for CVE records — the Phoenix port of the Jekyll
-  site's `package-link.html`, `version-link.html`, `link_commit_shas.rb`, and
-  the per-ecosystem link derivation baked into `cve.html`.
+  site's `package-link.html`, `version-link.html`, and the per-ecosystem link
+  derivation baked into `cve.html`.
 
   Functions come in two flavours:
 
@@ -19,8 +19,6 @@ defmodule VarselWeb.CveView do
 
   alias Phoenix.HTML.Engine
   alias VarselWeb.CveView.AffectedChecker
-
-  @sha_regex ~r/\b[0-9a-f]{40}\b/
 
   ## ---------------------------------------------------------------- CVSS
 
@@ -435,76 +433,57 @@ defmodule VarselWeb.CveView do
     """
   end
 
-  ## ---------------------------------------------------------------- Commit SHAs
-
-  @doc """
-  Rewrites bare 40-hex commit SHAs in advisory HTML into links to their GitHub
-  commit URL, using the record's references to discover the repo. Port of
-  `_plugins/link_commit_shas.rb`. Returns safe HTML.
-
-  The commit base URL is taken from the first reference whose URL matches a
-  GitHub `.../commit/<sha>` shape; SHAs are shown truncated to 10 chars.
-
-  Callers pass HTML that has already been sanitized (`markdown/1` /
-  `MDExNative.Ammonia.safe_html/1`); the SHA-links injected here are built
-  from a hex-only regex and a github.com base URL, so the output stays safe.
-  """
-  # Input is already sanitized; the injected SHA links are hex-only.
-  # sobelow_skip ["XSS.Raw"]
-  @spec link_commit_shas(String.t(), [map()]) :: Phoenix.HTML.safe()
-  def link_commit_shas(html, references) when is_binary(html) do
-    case commit_base_url(references) do
-      nil ->
-        Phoenix.HTML.raw(html)
-
-      base ->
-        Phoenix.HTML.raw(
-          Regex.replace(@sha_regex, html, fn sha ->
-            ~s(<a href="#{base}#{sha}" class="link link-primary"><code>#{String.slice(sha, 0, 10)}</code></a>)
-          end)
-        )
-    end
-  end
-
-  defp commit_base_url(references) when is_list(references) do
-    Enum.find_value(references, fn ref ->
-      case Regex.run(
-             ~r/^(https:\/\/github\.com\/[^\/]+\/[^\/]+\/commit\/)[0-9a-f]{40}/,
-             ref["url"] || ""
-           ) do
-        [_full, base] -> base
-        _no_match -> nil
-      end
-    end)
-  end
-
-  defp commit_base_url(_references), do: nil
-
   ## ---------------------------------------------------------------- Markdown
 
+  # Richest first: markdown carries the most formatting we can render, html is
+  # taken as-is, and plain text goes through markdown too so paragraphs and
+  # autolinks still come out.
+  @media_priority ["text/markdown", "text/html", "text/plain"]
+
   @doc """
-  Renders advisory prose: prefers an English `text/html` supportingMedia value,
-  otherwise renders the entry's markdown `value`. The result is run through
-  `link_commit_shas/2`. `entries` is a `descriptions`/`workarounds`/… list.
+  Renders advisory prose from the English entry's `supportingMedia`, preferring
+  #{Enum.map_join(@media_priority, ", ", &"`#{&1}`")} in that order and falling
+  back to the entry's own markdown `value`. `entries` is a
+  `descriptions`/`workarounds`/… list.
   """
-  @spec prose(list() | nil, [map()]) :: Phoenix.HTML.safe() | nil
-  def prose(entries, references) do
+  # Every branch sanitizes.
+  # sobelow_skip ["XSS.Raw"]
+  @spec prose(list() | nil) :: Phoenix.HTML.safe() | nil
+  def prose(entries) do
     case english_entry(entries) do
-      nil ->
-        nil
-
-      entry ->
-        html =
-          case Enum.find(entry["supportingMedia"] || [], &(&1["type"] == "text/html")) do
-            # supportingMedia HTML may come straight from a MITRE import, so
-            # sanitize it. `markdown/1` already sanitizes its own output.
-            %{"value" => value} -> MDExNative.Ammonia.safe_html(value)
-            _ -> markdown(entry["value"] || "")
-          end
-
-        link_commit_shas(html, references)
+      nil -> nil
+      entry -> entry |> render_prose() |> Phoenix.HTML.raw()
     end
   end
+
+  defp render_prose(entry) do
+    media = List.wrap(entry["supportingMedia"])
+
+    Enum.find_value(@media_priority, fn type ->
+      case Enum.find(media, &(&1["type"] == type)) do
+        nil -> nil
+        found -> found |> media_value() |> render_media(type)
+      end
+    end) || markdown(entry["value"] || "")
+  end
+
+  # `markdown/1` sanitizes its own output; supportingMedia may come straight
+  # from a MITRE import, so the html branch has to.
+  defp render_media(nil, _type), do: nil
+  defp render_media(value, "text/html"), do: MDExNative.Ammonia.safe_html(value)
+  defp render_media(value, _markdown_or_plain), do: markdown(value)
+
+  # Undecodable base64 falls through to the next media type rather than
+  # rendering the encoded value as prose.
+  defp media_value(%{"base64" => true, "value" => value}) when is_binary(value) do
+    case Base.decode64(value, ignore: :whitespace) do
+      {:ok, decoded} -> decoded
+      :error -> nil
+    end
+  end
+
+  defp media_value(%{"value" => value}) when is_binary(value), do: value
+  defp media_value(_media), do: nil
 
   defp english_entry(entries) do
     entries |> List.wrap() |> Enum.find(&(&1["lang"] == "en"))
