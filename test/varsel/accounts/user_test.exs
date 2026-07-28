@@ -65,10 +65,13 @@ defmodule Varsel.Accounts.UserTest do
   describe "list authorization" do
     test "a POC sees all users" do
       poc = register_poc()
+      # The test database is seeded, so compare against the whole table rather
+      # than a fixed count.
       register_user()
       register_user()
 
-      assert length(Accounts.list_users!(actor: poc)) == 3
+      assert length(Accounts.list_users!(actor: poc)) ==
+               Ash.count!(User, authorize?: false)
     end
 
     test "a non-POC sees only themselves" do

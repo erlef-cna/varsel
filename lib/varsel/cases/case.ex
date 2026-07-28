@@ -288,10 +288,11 @@ defmodule Varsel.Cases.Case do
       authorize_if always()
     end
 
-    # Nothing about a case is public. Oban is the bypass above, so
-    # every other path needs someone to be asking; the read policy below then
-    # narrows to what that someone may see.
-    policy always() do
+    # Nothing about a case is public: a read needs someone to be asking, and
+    # the read policy below then narrows to what that someone may see. Scoped
+    # to reads so an action no policy names is forbidden by default rather than
+    # granted to any signed-in user.
+    policy action_type(:read) do
       access_type :strict
       forbid_if actor_absent()
       authorize_if actor_attribute_equals(:role, :poc)
