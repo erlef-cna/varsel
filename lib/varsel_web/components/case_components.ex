@@ -498,7 +498,7 @@ defmodule VarselWeb.CaseComponents do
     """
   end
 
-  @doc "Renders case markdown (mdex, raw HTML escaped) with prose styling."
+  @doc "Renders case markdown with prose styling."
   attr :content, :string, required: true
   attr :class, :any, default: nil
 

@@ -56,7 +56,6 @@ defmodule VarselWeb.CaseDetailLive do
     proposals: [author: [:avatar_url], resolved_by: []],
     affected_packages: [:channels, :version_events],
     comments: [:author],
-    # The report read policy is POC-only; supporters get an empty list here.
     vulnerability_reports: [reporter: [:avatar_url]]
   ]
 

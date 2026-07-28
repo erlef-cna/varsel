@@ -114,9 +114,7 @@ defmodule VarselWeb.MarkdownInput do
         """
 
       markdown ->
-        # Comrak escapes raw HTML embedded in the markdown by default
-        # (render.unsafe is off in Varsel.Cases.Markdown), so the rendered
-        # output is safe to inject.
+        # `to_display_html/1` returns safe HTML.
         raw(Markdown.to_display_html(to_string(markdown)))
     end
   end

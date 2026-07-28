@@ -36,6 +36,8 @@ defmodule Varsel.Cases.Markdown do
   Renders markdown to HTML for on-site display: `to_html/1` plus Lumis
   syntax highlighting of fenced code blocks (`.lumis` / `.l-*` classes,
   styled by the generated `assets/vendor/css/lumis.css`).
+
+  The result is sanitized, so it is safe to render unescaped.
   """
   @spec to_display_html(String.t()) :: String.t()
   def to_display_html(markdown) when is_binary(markdown) do
