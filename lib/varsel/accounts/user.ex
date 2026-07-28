@@ -26,7 +26,6 @@ defmodule Varsel.Accounts.User do
   alias AshAuthentication.Checks.AshAuthenticationInteraction
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Accounts.User.Changes.ApplyProviderProfile
-  alias Varsel.Accounts.User.Changes.PromoteFirstUserToPoc
   alias Varsel.Accounts.User.Changes.ResolveOauthIdentity
   alias Varsel.Accounts.User.Role
   alias Varsel.Accounts.UserIdentity
@@ -188,7 +187,6 @@ defmodule Varsel.Accounts.User do
 
       change AshAuthentication.GenerateTokenChange
       change ApplyProviderProfile
-      change PromoteFirstUserToPoc
 
       # Last: it settles which account this is, and must not be undone by a
       # change that seeds from what the provider said.
@@ -205,7 +203,6 @@ defmodule Varsel.Accounts.User do
 
       change AshAuthentication.GenerateTokenChange
       change ApplyProviderProfile
-      change PromoteFirstUserToPoc
 
       # Last: it settles which account this is, and must not be undone by a
       # change that seeds from what the provider said.

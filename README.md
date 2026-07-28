@@ -86,6 +86,16 @@ The application is then available at [`localhost:4000`](http://localhost:4000).
 Run `mix precommit` before committing; it formats, lints and runs the test
 suite.
 
+Signing in creates an account with no role. To give yourself the POC role,
+open [AshAdmin](http://localhost:4000/dev/admin), find your user and set
+`role` to `poc`. From an `iex -S mix phx.server` session instead:
+
+```elixir
+Varsel.Accounts.User
+|> Ash.get!("<user-id>", authorize?: false)
+|> Ash.update!(%{role: :poc}, action: :set_role, authorize?: false)
+```
+
 ## Deployment
 
 Releases are deployed to [Fly.io](https://fly.io/) by the GitHub Actions
@@ -94,6 +104,16 @@ release workflow: the production container image is built with Nix
 out — pushes to `main` deploy to the test environment, `v*` tags to
 production. All runtime configuration lives in GitHub environment secrets and
 variables.
+
+A fresh deployment has no POC, and registration grants no role — setting one
+otherwise requires an actor who is already a POC. Sign in once to create the
+account, then promote it from a shell on the release:
+
+```shell
+bin/promote-to-poc <user-id>
+```
+
+That user can then set everyone else's role from the app.
 
 ## License
 

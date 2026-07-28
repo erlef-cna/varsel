@@ -1,0 +1,18 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+# Grant the POC role to a user, by id. How a deployment gets its first POC:
+# registration grants no role, and setting one otherwise requires an actor who
+# is already a POC.
+set -eu
+
+if [ $# -ne 1 ]; then
+	echo "usage: $(basename -- "$0") <user-id>" >&2
+	exit 2
+fi
+
+cd -P -- "$(dirname -- "$0")"
+# The id is passed as an argument rather than interpolated into the evaluated
+# expression, so a quote in it cannot close that string and run something else.
+exec ./varsel eval Varsel.Release.promote_to_poc "$1"

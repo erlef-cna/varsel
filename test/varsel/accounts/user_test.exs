@@ -27,22 +27,15 @@ defmodule Varsel.Accounts.UserTest do
     )
   end
 
-  describe "first-user auto-POC" do
-    test "the very first user to register becomes a POC" do
-      first = register_user()
-      assert first.role == :poc
-    end
-
-    test "subsequent users have no role" do
-      register_user()
-      second = register_user()
-      assert second.role == nil
-    end
+  defp register_poc(handle \\ nil) do
+    handle
+    |> register_user()
+    |> Ash.update!(%{role: :poc}, action: :set_role, authorize?: false)
   end
 
   describe ":set_role authorization" do
     test "a POC can change another user's role" do
-      poc = register_user()
+      poc = register_poc()
       other = register_user()
 
       updated = Accounts.set_user_role!(other, :supporter, actor: poc)
@@ -71,7 +64,7 @@ defmodule Varsel.Accounts.UserTest do
 
   describe "list authorization" do
     test "a POC sees all users" do
-      poc = register_user()
+      poc = register_poc()
       register_user()
       register_user()
 
