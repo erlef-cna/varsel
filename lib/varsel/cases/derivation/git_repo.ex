@@ -191,14 +191,19 @@ defmodule Varsel.Cases.Derivation.GitRepo do
     end
   end
 
-  # A `repo_url` is https by validation — `RepoUrlHttps` refuses to store any
-  # other scheme, which is what keeps exgit's `file://` local-file transport
-  # out of reach — and those clones are pinned to the address the check passed
-  # (see `PinnedTransport`). Anything else has no host to resolve and is handed
-  # to exgit as-is; in practice that is only the `file://` fixture the
-  # derivation tests clone.
-  defp remote("https://" <> _ = repo_url), do: PinnedTransport.build(repo_url)
-  defp remote(repo_url), do: {:ok, repo_url}
+  # Anything dialled over the network is pinned to the address it was checked
+  # at (see `PinnedTransport`); a URL with no host to resolve — `file://`, the
+  # fixture the derivation tests clone — has nothing to pin and goes to exgit
+  # as-is. Which schemes may be *stored* is the attribute's constraint.
+  defp remote(repo_url) do
+    case URI.new(repo_url) do
+      {:ok, %URI{scheme: scheme}} when scheme in ["https", "http"] ->
+        PinnedTransport.build(repo_url)
+
+      _nothing_to_pin ->
+        {:ok, repo_url}
+    end
+  end
 
   defp ref_tips(tags, heads) do
     (tags ++ heads) |> Enum.map(&elem(&1, 1)) |> Enum.uniq()

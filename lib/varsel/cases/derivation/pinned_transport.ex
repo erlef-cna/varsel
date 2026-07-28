@@ -7,19 +7,13 @@ defmodule Varsel.Cases.Derivation.PinnedTransport do
   Builds an `Exgit.Transport.HTTP` that keeps connecting to the address it
   checked.
 
-  `Varsel.Cases.Validations.RepoUrlHttps` rejects a `repo_url` whose host
-  resolves privately, but it does so when the URL is *saved*. Derivation
-  clones later, and a name that answered with a public address then can
-  answer with `127.0.0.1` now — the save-time check would have passed and the
-  clone would still reach an internal service.
-
-  So the host is resolved here, immediately before the clone, and the
-  connection is pinned to what that lookup returned: the request URL carries
-  the **address**, and the hostname is put back as a `Host` header, as the
-  TLS server name, and as the name the certificate must match. There is no
-  second lookup between the check and the connection for DNS to answer
-  differently, and the server still has to present a certificate valid for
-  the name the case names — pinning to an IP does not weaken that.
+  The host is resolved here, and the connection pinned to what that lookup
+  returned: the request URL carries the **address**, and the hostname is put
+  back as a `Host` header, as the TLS server name, and as the name the
+  certificate must match. There is no second lookup between the check and the
+  connection for DNS to answer differently, and the server still has to
+  present a certificate valid for the name the case names — pinning to an IP
+  does not weaken that.
 
   Only the first hop is pinned. Redirects stay off (exgit's default), so
   there is no later hop that could resolve somewhere else.
@@ -33,21 +27,25 @@ defmodule Varsel.Cases.Derivation.PinnedTransport do
   @doc """
   A transport for `repo_url` pinned to a public address, or `{:error,
   reason}` when the host does not resolve to one right now.
+
+  `repo_url` must be `https://` or `http://` with a host; anything else is
+  `{:error, :invalid_url}`.
   """
   @spec build(String.t(), keyword()) :: {:ok, Transport.HTTP.t()} | {:error, error()}
   def build(repo_url, opts \\ []) do
-    with {:ok, uri} <- https_uri(repo_url),
+    with {:ok, uri} <- web_uri(repo_url),
          {:ok, address} <- public_address(uri.host) do
       {:ok, transport(uri, address, opts)}
     end
   end
 
-  defp https_uri(repo_url) do
+  defp web_uri(repo_url) do
     case URI.new(repo_url) do
-      {:ok, %URI{scheme: "https", host: host} = uri} when is_binary(host) and host != "" ->
+      {:ok, %URI{scheme: scheme, host: host} = uri}
+      when scheme in ["https", "http"] and is_binary(host) and host != "" ->
         {:ok, uri}
 
-      _not_https ->
+      _not_a_web_url ->
         {:error, :invalid_url}
     end
   end
@@ -105,6 +103,8 @@ defmodule Varsel.Cases.Derivation.PinnedTransport do
   # address-pinned request still look and verify like a request to the name:
   # a forge serving many repos still routes it, and pinning cannot be used to
   # slip past certificate verification.
+  # On an `http` URL exgit adds no TLS options, so `transport_opts` is inert
+  # and only the `Host` header part applies.
   defp pin_to(host) do
     [
       hostname: host,

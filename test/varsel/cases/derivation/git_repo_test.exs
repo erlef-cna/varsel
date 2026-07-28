@@ -99,6 +99,27 @@ defmodule Varsel.Cases.Derivation.GitRepoTest do
     assert {:error, :commit_not_found} = GitRepo.tags_containing(url, String.duplicate("f", 40))
   end
 
+  # `NormalizeRepoUrl` lowercases the scheme on write, so a mixed-case value
+  # should no longer reach here — but rows stored before that existed still
+  # can, and the dispatch is the control that must not be spelling-sensitive.
+  # A prefix match sent these to exgit unpinned: validated at save time,
+  # never re-checked at connect time.
+  test "a mixed-case https scheme is pinned, not handed to exgit unpinned", %{c2: c2} do
+    # Loopback: reaching the pinning check at all means it is refused. A
+    # prefix match would skip pinning and let exgit dial it.
+    assert {:error, {:clone_failed, :private_address}} =
+             GitRepo.tags_containing("HTTPS://127.0.0.1/acme/lib", c2)
+  end
+
+  # The `repo_url` constraint rejects plaintext, so no stored row reaches this
+  # — but the
+  # dispatch pins it rather than passing it through, so widening the
+  # validation cannot silently produce an unpinned clone.
+  test "http is pinned too, not handed to exgit unpinned", %{c2: c2} do
+    assert {:error, {:clone_failed, :private_address}} =
+             GitRepo.tags_containing("http://127.0.0.1/acme/lib", c2)
+  end
+
   test "aborts when the commit graph exceeds the configured cap", %{url: url, c2: c2} do
     # The fixture has 4 commits; a cap of 2 trips the graph-walk bound.
     prev = Application.get_env(:varsel, :git_max_commits)

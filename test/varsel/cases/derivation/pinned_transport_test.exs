@@ -88,6 +88,23 @@ defmodule Varsel.Cases.Derivation.PinnedTransportTest do
              PinnedTransport.build("https://mixed.example/acme/pkg.git")
   end
 
+  describe "http" do
+    setup do
+      StubResolver.stub(%{"forge.example" => [@public]})
+    end
+
+    test "is pinned to the checked address, like https" do
+      assert {:ok, transport} = PinnedTransport.build("http://forge.example/acme/pkg.git")
+
+      assert %URI{scheme: "http", host: "93.184.216.34"} = URI.new!(transport.url)
+      assert transport.connect_options[:hostname] == "forge.example"
+    end
+
+    test "is refused when the host resolves privately" do
+      assert {:error, :private_address} = PinnedTransport.build("http://127.0.0.1/acme/pkg.git")
+    end
+  end
+
   describe "refusals" do
     test "an address literal in a private range is refused without a lookup" do
       for url <- [
@@ -107,12 +124,14 @@ defmodule Varsel.Cases.Derivation.PinnedTransportTest do
                PinnedTransport.build("https://nowhere.example/acme/pkg.git")
     end
 
-    test "anything but https is refused" do
+    test "anything but https/http is refused" do
       for url <- [
-            "http://forge.example/acme/pkg.git",
             "file:///etc/passwd",
             "git://forge.example/acme/pkg.git",
-            "not a url"
+            "ssh://forge.example/acme/pkg.git",
+            "not a url",
+            # A scheme with no host has nothing to resolve or pin to.
+            "https:///acme/pkg.git"
           ] do
         assert {:error, :invalid_url} = PinnedTransport.build(url), "expected #{url} refused"
       end
