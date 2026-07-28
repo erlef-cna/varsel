@@ -147,7 +147,7 @@ defmodule Varsel.Cases.CaseReference do
   attributes do
     uuid_primary_key :id
 
-    attribute :url, :string do
+    attribute :url, Varsel.Types.URI do
       allow_nil? false
       public? true
     end

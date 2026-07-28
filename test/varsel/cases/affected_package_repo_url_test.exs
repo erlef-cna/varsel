@@ -59,6 +59,30 @@ defmodule Varsel.Cases.AffectedPackageRepoUrlTest do
       end
     end
 
+    test "a mixed-case scheme is stored lowercased, not verbatim", %{poc: poc, case: case_record} do
+      # `URI.new/1` lowercases the scheme, so `HTTPS://` validates as https.
+      # Storing it verbatim is what let it miss `GitRepo.remote/1`'s dispatch
+      # and clone unpinned; the value kept has to be the one that was checked.
+      for spelling <- ["HTTPS://github.com/acme/lib", "Https://github.com/acme/lib"] do
+        assert {:ok, pkg} = add(case_record, poc, spelling)
+        assert pkg.repo_url == "https://github.com/acme/lib"
+      end
+    end
+
+    test "a mixed-case scheme still gets the private-host check", %{poc: poc, case: case_record} do
+      assert {:error, error} = add(case_record, poc, "HTTPS://127.0.0.1/x")
+      assert Exception.message(error) =~ "public host"
+    end
+
+    test "normalization applies on edit too", %{poc: poc, case: case_record} do
+      pkg = Fixtures.add_affected_package(poc, case_record)
+
+      assert {:ok, edited} =
+               Cases.edit_affected_package(pkg, %{repo_url: "HTTPS://github.com/acme/other"}, actor: poc)
+
+      assert edited.repo_url == "https://github.com/acme/other"
+    end
+
     test "rejects a bad repo_url on edit too", %{poc: poc, case: case_record} do
       pkg = Fixtures.add_affected_package(poc, case_record)
 

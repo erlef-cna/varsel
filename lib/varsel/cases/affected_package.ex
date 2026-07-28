@@ -310,10 +310,6 @@ defmodule Varsel.Cases.AffectedPackage do
     publish_all :destroy, [[:case_id]]
   end
 
-  validations do
-    validate Varsel.Cases.Validations.RepoUrlHttps
-  end
-
   attributes do
     uuid_primary_key :id
 
@@ -329,9 +325,10 @@ defmodule Varsel.Cases.AffectedPackage do
       public? true
     end
 
-    attribute :repo_url, :string do
+    attribute :repo_url, Varsel.Types.URI do
       description "Source repository URL (affected[].repo), https:// only. Nil for hosted services."
       public? true
+      constraints schemes: ["https"], absolute: true, public_host: true
     end
 
     attribute :cpe, :string do
