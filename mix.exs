@@ -121,7 +121,7 @@ defmodule Varsel.MixProject do
       {:picosat_elixir, "~> 0.2"},
       {:plug_content_security_policy, "~> 0.2"},
       {:postgrex, ">= 0.0.0"},
-      {:purl, "~> 0.4.0"},
+      {:purl, "~> 0.5.0"},
       {:remote_ip, "~> 1.2"},
       {:req, "~> 0.5"},
       {:saxy, "~> 1.6"},
