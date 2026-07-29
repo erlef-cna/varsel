@@ -5,8 +5,13 @@
 defmodule Varsel.CVE.CveRecordTest do
   use Varsel.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
+  alias Ash.Error.Changes.StaleRecord
+  alias Ash.Error.Invalid
   alias Varsel.CVE.CveRecord
   alias Varsel.CVE.MitreCveApi
+  alias Varsel.Fixtures
 
   @year Date.utc_today().year
   @cve_id "CVE-2025-12345"
@@ -149,6 +154,12 @@ defmodule Varsel.CVE.CveRecordTest do
     Ash.update!(published, %{cve_json: new_json}, action: :update, authorize?: false)
   end
 
+  defp run_import_from_mitre do
+    CveRecord
+    |> Ash.ActionInput.for_action(:import_from_mitre, %{}, authorize?: false)
+    |> Ash.run_action!()
+  end
+
   describe "reserve" do
     test "new record starts in :reserved" do
       record = reserved_record()
@@ -235,6 +246,14 @@ defmodule Varsel.CVE.CveRecordTest do
       draft = draft_record()
 
       assert {:error, _} = Ash.update(draft, %{}, action: :assign, authorize?: false)
+    end
+
+    test "a stale snapshot cannot re-run a transition" do
+      record = reserved_record()
+      Ash.update!(record, %{}, action: :assign, authorize?: false)
+
+      assert {:error, %Invalid{errors: [%StaleRecord{}]}} =
+               Ash.update(record, %{}, action: :assign, authorize?: false)
     end
   end
 
@@ -336,6 +355,17 @@ defmodule Varsel.CVE.CveRecordTest do
       assert_triggered(pending, :push_update)
     end
 
+    test "a stale snapshot cannot amend a record updated in the meantime" do
+      record = published_record()
+      new_json = %{@published_cve_json | "containers" => %{"cna" => @updated_cna_container}}
+      Ash.update!(record, %{cve_json: new_json}, action: :update, authorize?: false)
+
+      # Without the optimistic lock this would silently succeed: the stale
+      # snapshot still reads :published, a valid from-state for :update.
+      assert {:error, %Invalid{errors: [%StaleRecord{}]}} =
+               Ash.update(record, %{cve_json: new_json}, action: :update, authorize?: false)
+    end
+
     test "cannot update a non-published record" do
       publishing = publishing_record()
 
@@ -394,6 +424,24 @@ defmodule Varsel.CVE.CveRecordTest do
     end
   end
 
+  describe "pre-flight authorization" do
+    test "Ash.can? reflects transition validity without validate?: true" do
+      poc = Fixtures.register_user("preflight_poc", :poc)
+
+      published = published_record()
+      assert Ash.can?({published, :update, %{cve_json: @updated_cve_json}}, poc)
+      refute Ash.can?({published, :assign}, poc)
+
+      draft =
+        "CVE-2025-22222"
+        |> reserved_record()
+        |> Ash.update!(%{}, action: :assign, authorize?: false)
+
+      assert Ash.can?({draft, :request_publish, %{cve_json: @cve_json}}, poc)
+      refute Ash.can?({draft, :update, %{cve_json: @updated_cve_json}}, poc)
+    end
+  end
+
   describe "validation gating" do
     @invalid_cve_json %{"cveMetadata" => %{"cveId" => @cve_id, "state" => "BOGUS"}}
 
@@ -406,7 +454,7 @@ defmodule Varsel.CVE.CveRecordTest do
     test "request_publish rejects an invalid record" do
       draft = draft_record()
 
-      assert {:error, %Ash.Error.Invalid{} = error} =
+      assert {:error, %Invalid{} = error} =
                Ash.update(draft, %{cve_json: @invalid_cve_json},
                  action: :request_publish,
                  authorize?: false
@@ -561,16 +609,13 @@ defmodule Varsel.CVE.CveRecordTest do
       assert record.cve_id == @cve_id
     end
 
-    test "is idempotent: re-importing an existing CVE does not duplicate it" do
+    test "is idempotent: re-importing an existing CVE does not duplicate it or warn" do
       stub_mitre_list_ids([@cve_id])
 
-      CveRecord
-      |> Ash.ActionInput.for_action(:import_from_mitre, %{}, authorize?: false)
-      |> Ash.run_action!()
+      run_import_from_mitre()
 
-      CveRecord
-      |> Ash.ActionInput.for_action(:import_from_mitre, %{}, authorize?: false)
-      |> Ash.run_action!()
+      log = capture_log([level: :warning], fn -> run_import_from_mitre() end)
+      assert log == ""
 
       assert [_] =
                CveRecord
@@ -590,6 +635,64 @@ defmodule Varsel.CVE.CveRecordTest do
       assert imported.state == :published
       assert imported.cve_json == @published_cve_json
       assert Ash.count!(CveRecord, authorize?: false) == 1
+    end
+
+    test "skips a :draft row with a warning instead of force-publishing it" do
+      draft = draft_record()
+      stub_mitre_list_ids([@cve_id])
+
+      log = capture_log([level: :warning], fn -> run_import_from_mitre() end)
+
+      untouched = Ash.get!(CveRecord, draft.id, authorize?: false)
+      assert untouched.state == :draft
+      assert untouched.cve_json == nil
+      assert log =~ @cve_id
+    end
+
+    test "skips a :publishing row with a warning instead of preempting the publish job" do
+      publishing = publishing_record()
+      stub_mitre_list_ids([@cve_id])
+
+      log = capture_log([level: :warning], fn -> run_import_from_mitre() end)
+
+      untouched = Ash.get!(CveRecord, publishing.id, authorize?: false)
+      assert untouched.state == :publishing
+      assert untouched.cve_json == @cve_json
+      assert log =~ @cve_id
+    end
+
+    test "skips a :pending_update row with a warning instead of clobbering the amendment" do
+      pending = pending_record()
+      amended_json = pending.cve_json
+
+      # MITRE still serves the pre-amendment record: the queued push_update
+      # has not run yet. The sweep must not adopt it over the local amendment.
+      stub_mitre_list_ids([@cve_id])
+
+      log = capture_log([level: :warning], fn -> run_import_from_mitre() end)
+
+      untouched = Ash.get!(CveRecord, pending.id, authorize?: false)
+      assert untouched.state == :pending_update
+      assert untouched.cve_json == amended_json
+      assert log =~ @cve_id
+    end
+
+    test "the upsert_condition protects rows that entered a protected state after the sweep snapshot" do
+      pending = pending_record()
+      amended_json = pending.cve_json
+
+      # Direct chunk import, bypassing the sweep's snapshot filter — the race
+      # where a row enters a protected state between snapshot and upsert. The
+      # bulk upsert skips the row silently; only the enforcement in Postgres's
+      # ON CONFLICT ... WHERE stands between the sweep and the amendment.
+      assert %Ash.BulkResult{status: :success} =
+               Varsel.CVE.import_cve_record!([%{cve_json: @published_cve_json}],
+                 authorize?: false
+               )
+
+      untouched = Ash.get!(CveRecord, pending.id, authorize?: false)
+      assert untouched.state == :pending_update
+      assert untouched.cve_json == amended_json
     end
 
     test "import trigger runs on schedule" do

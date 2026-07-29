@@ -283,6 +283,12 @@ defmodule Varsel.Cases.Case do
   end
 
   policies do
+    # Pre-flight visibility only (`Ash.can?`): at runtime this passes and the
+    # `transition_state` validation stays the enforcement.
+    policy action_type(:update) do
+      authorize_if AshStateMachine.Checks.ValidNextState
+    end
+
     bypass AshOban.Checks.AshObanInteraction do
       authorize_if always()
     end
@@ -313,12 +319,6 @@ defmodule Varsel.Cases.Case do
     # Content freeze: case content may only change in :draft or :review.
     policy action([:edit, :apply_proposal]) do
       authorize_if expr(state in [:draft, :review])
-    end
-
-    # Pre-flight visibility only (`Ash.can?`): at runtime this passes and the
-    # `transition_state` validation stays the enforcement.
-    policy action_type(:update) do
-      authorize_if AshStateMachine.Checks.ValidNextState
     end
 
     # Case lifecycle decisions are POC-only.

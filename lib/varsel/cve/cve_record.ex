@@ -52,7 +52,9 @@ defmodule Varsel.CVE.CveRecord do
     raw MITRE reservation object.
 
   - `:import` — Upserts a record directly into the `:published` state from a full MITRE
-    record. Used by the scheduled `import_from_mitre` action.
+    record. Used by the scheduled `import_from_mitre` action. Only new rows and rows in
+    `:reserved` or `:published` are written; in-flight local work and `:rejected`
+    tombstones are never overwritten (upsert_condition).
 
   - `:assign` (update) — Transitions a `:reserved` record to `:draft`, taking it out of
     the open pool.
@@ -92,6 +94,7 @@ defmodule Varsel.CVE.CveRecord do
   alias Varsel.CVE.MitreCveApi
 
   require Ash.Query
+  require Logger
 
   graphql do
     type :cve_record
@@ -252,7 +255,7 @@ defmodule Varsel.CVE.CveRecord do
   paper_trail do
     change_tracking_mode :changes_only
     attributes_as_attributes [:state]
-    ignore_attributes [:last_synced_at, :inserted_at, :updated_at]
+    ignore_attributes [:last_synced_at, :inserted_at, :updated_at, :version]
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, Varsel.Accounts.User, domain: Varsel.Accounts
@@ -348,6 +351,8 @@ defmodule Varsel.CVE.CveRecord do
       description """
       Imports a CVE record from MITRE as already-published. Upserting an existing row
       (e.g. a local reservation published externally) fills cve_json and marks it published.
+      Rows in :draft, :publishing, :pending_update, or :rejected are never overwritten:
+      the upsert_condition turns those upserts into silent skips.
       """
 
       accept [:cve_json]
@@ -355,16 +360,45 @@ defmodule Varsel.CVE.CveRecord do
       upsert_identity :unique_cve_id
       upsert_fields [:state, :cve_json]
 
+      # In-flight local work (:draft, :publishing, :pending_update) and
+      # :rejected tombstones must never be overwritten by the import sweep.
+      # A skipped upsert errors (StaleRecord) on single-record use but is
+      # silent in the sweep's bulk path.
+      upsert_condition expr(state in [:reserved, :published])
+
       change set_attribute(:state, :published)
     end
 
     action :import_from_mitre, OkResult do
-      description "Fetches all CVE IDs from MITRE and imports any that do not exist locally."
+      description """
+      Fetches all published CVE IDs from MITRE and imports any that are new locally
+      or fill a local :reserved row. Rows in any other state are skipped with a
+      warning (see the :import upsert_condition).
+      """
 
       run fn _input, context ->
         opts = Varsel.ObanContext.forward(context)
 
+        # Warning and GET-saving only: a row that enters a protected state
+        # after this snapshot is still skipped (silently) by the :import
+        # upsert_condition, which stays the enforcement.
+        protected_ids =
+          __MODULE__
+          |> Ash.Query.filter(state not in [:reserved, :published])
+          |> Ash.Query.load(:cve_id)
+          |> Ash.read!(opts)
+          |> MapSet.new(& &1.cve_id)
+
         MitreCveApi.stream_ids()
+        |> Stream.reject(fn cve_id ->
+          skip? = MapSet.member?(protected_ids, cve_id)
+
+          if skip? do
+            Logger.warning("Skipped MITRE import of #{cve_id}: the local record is neither :reserved nor :published")
+          end
+
+          skip?
+        end)
         |> Enum.map(fn cve_id ->
           {:ok, cve_json} = MitreCveApi.get(cve_id)
           %{cve_json: cve_json}
@@ -580,6 +614,12 @@ defmodule Varsel.CVE.CveRecord do
   end
 
   policies do
+    # Pre-flight visibility only (`Ash.can?`): at runtime this passes and the
+    # `transition_state` validation stays the enforcement.
+    policy action_type(:update) do
+      authorize_if AshStateMachine.Checks.ValidNextState
+    end
+
     bypass AshOban.Checks.AshObanInteraction do
       authorize_if always()
     end
@@ -632,6 +672,15 @@ defmodule Varsel.CVE.CveRecord do
     publish_all :destroy, ["all"]
   end
 
+  changes do
+    # Updates always run against server-loaded snapshots. Rejecting any write
+    # whose row moved since that load (StaleRecord) is what entitles
+    # `transition_state` and the update policies to trust `changeset.data`.
+    # No exemptions: no CveRecord update runs nested inside another update on
+    # the same row (the Oban worker changes mutate the current changeset only).
+    change optimistic_lock(:version), on: [:update]
+  end
+
   validations do
     # Records are only required to be valid when handed to MITRE; earlier
     # lifecycle states may hold incomplete or invalid JSON.
@@ -642,6 +691,13 @@ defmodule Varsel.CVE.CveRecord do
 
   attributes do
     uuid_primary_key :id
+
+    attribute :version, :integer do
+      description "Optimistic lock counter; every update bumps it and rejects stale snapshots."
+      allow_nil? false
+      default 1
+      public? false
+    end
 
     attribute :reservation_json, :map do
       description "Raw MITRE reservation object. Present from the :reserved state onward."
