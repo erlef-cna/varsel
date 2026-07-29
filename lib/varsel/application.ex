@@ -24,7 +24,7 @@ defmodule Varsel.Application do
        )},
       {Phoenix.PubSub, name: Varsel.PubSub},
       {Varsel.Hammer, clean_period: to_timeout(minute: 10)},
-      {Varsel.Cases.Derivation.GitRepo, []},
+      Varsel.Cases.Derivation.GitRepo.Supervisor,
       # Start a worker by calling: Varsel.Worker.start_link(arg)
       # {Varsel.Worker, arg},
       # Start to serve requests, typically the last entry

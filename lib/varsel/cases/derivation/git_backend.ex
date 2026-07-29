@@ -28,6 +28,13 @@ defmodule Varsel.Cases.Derivation.GitBackend do
   """
   @callback all_tags(repo_url :: String.t()) :: {:ok, [String.t()]} | {:error, term()}
 
+  @doc """
+  Brings any cached state for `repo_url` up to date with the remote, so
+  refs and commits pushed since the last scan become visible without
+  waiting for expiry. A backend without cached state does nothing.
+  """
+  @callback refresh(repo_url :: String.t()) :: :ok
+
   @spec impl() :: module()
   def impl, do: Application.get_env(:varsel, :git_backend, Varsel.Cases.Derivation.GitRepo)
 
@@ -36,4 +43,7 @@ defmodule Varsel.Cases.Derivation.GitBackend do
 
   @spec all_tags(String.t()) :: {:ok, [String.t()]} | {:error, term()}
   def all_tags(repo_url), do: impl().all_tags(repo_url)
+
+  @spec refresh(String.t()) :: :ok
+  def refresh(repo_url), do: impl().refresh(repo_url)
 end

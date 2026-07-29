@@ -24,10 +24,12 @@ defmodule Varsel.Cases.Derivation.GitRepoTest do
 
   @person "Test <test@example.com> 1700000000 +0000"
 
-  # Commit graph (main holds only c3; everything else is tag/branch-only):
+  @registry Varsel.Cases.Derivation.GitRepo.Registry
+
+  # Commit graph (only c3/c4 are on main; everything else is tag/branch-only):
   #
-  #   c1 ── c2 ── c3            tags: v1.0.0 (annotated -> c2), v2.0.0 -> c3
-  #     └── b1                  tag:  v1.5.0 -> b1 (side branch)
+  #   c1 ── c2 ── c3 ── c4      tags: v1.0.0 (annotated -> c2), v2.0.0 -> c3
+  #     └── b1                  tag:  v1.5.0 -> b1 (side branch); c4 untagged
   setup do
     dir = Path.join(System.tmp_dir!(), "git_repo_fixture_#{System.unique_integer([:positive])}")
     {:ok, repo} = Exgit.init(path: dir)
@@ -55,6 +57,7 @@ defmodule Varsel.Cases.Derivation.GitRepoTest do
     {c1, store} = commit.(store, [], "c1")
     {c2, store} = commit.(store, [c1], "c2")
     {c3, store} = commit.(store, [c2], "c3")
+    {c4, store} = commit.(store, [c3], "c4")
     {b1, store} = commit.(store, [c1], "b1")
 
     {:ok, annotated, store} =
@@ -64,15 +67,23 @@ defmodule Varsel.Cases.Derivation.GitRepoTest do
       )
 
     ref_store = repo.ref_store
-    {:ok, ref_store} = RefStore.write(ref_store, "refs/heads/main", c3, [])
+    {:ok, ref_store} = RefStore.write(ref_store, "refs/heads/main", c4, [])
     {:ok, ref_store} = RefStore.write(ref_store, "refs/heads/backport", b1, [])
     {:ok, ref_store} = RefStore.write(ref_store, "refs/tags/v1.0.0", annotated, [])
     {:ok, ref_store} = RefStore.write(ref_store, "refs/tags/v1.5.0", b1, [])
-    {:ok, _ref_store} = RefStore.write(ref_store, "refs/tags/v2.0.0", c3, [])
+    {:ok, ref_store} = RefStore.write(ref_store, "refs/tags/v2.0.0", c3, [])
 
-    _ = store
-
-    %{url: "file://" <> dir, c1: hex(c1), c2: hex(c2), b1: hex(b1)}
+    %{
+      url: "file://" <> dir,
+      c1: hex(c1),
+      c2: hex(c2),
+      b1: hex(b1),
+      c4: hex(c4),
+      c4_raw: c4,
+      ref_store: ref_store,
+      store: store,
+      tree_sha: tree_sha
+    }
   end
 
   defp hex(sha), do: Base.encode16(sha, case: :lower)
@@ -115,9 +126,13 @@ defmodule Varsel.Cases.Derivation.GitRepoTest do
   # — but the
   # dispatch pins it rather than passing it through, so widening the
   # validation cannot silently produce an unpinned clone.
-  test "http is pinned too, not handed to exgit unpinned", %{c2: c2} do
+  test "http is pinned too, not handed to exgit unpinned", %{url: url, c2: c2} do
     assert {:error, {:clone_failed, :private_address}} =
              GitRepo.tags_containing("http://127.0.0.1/acme/lib", c2)
+
+    # A failed repository must not poison queries for other repositories.
+    assert {:ok, tags} = GitRepo.tags_containing(url, c2)
+    assert Enum.sort(tags) == ["v1.0.0", "v2.0.0"]
   end
 
   test "aborts when the commit graph exceeds the configured cap", %{url: url, c2: c2} do
@@ -131,4 +146,163 @@ defmodule Varsel.Cases.Derivation.GitRepoTest do
 
   defp restore_env(key, nil), do: Application.delete_env(:varsel, key)
   defp restore_env(key, value), do: Application.put_env(:varsel, key, value)
+
+  # INT-004 regression: commits and tags pushed after the first scan must
+  # become visible on BOTH query paths at once — memoized answers may never
+  # outlive the graph they were computed from. The refresh is incremental:
+  # the same server extends its graph in place.
+  test "refresh picks up commits and tags pushed after the first scan", %{
+    url: url,
+    c4: c4,
+    c4_raw: c4_raw,
+    ref_store: ref_store,
+    store: store,
+    tree_sha: tree_sha
+  } do
+    assert {:ok, []} = GitRepo.tags_containing(url, c4)
+    assert {:ok, tags} = GitRepo.all_tags(url)
+    refute "v3.0.0" in tags
+    [{pid, _value}] = Registry.lookup(@registry, url)
+
+    # Pushed after the scan: c5 on top of c4, plus release tags for both.
+    {:ok, c5, _store} =
+      ObjectStore.put(
+        store,
+        Commit.new(
+          tree: tree_sha,
+          parents: [c4_raw],
+          author: @person,
+          committer: @person,
+          message: "c5"
+        )
+      )
+
+    {:ok, ref_store} = RefStore.write(ref_store, "refs/tags/v3.0.0", c4_raw, [])
+    {:ok, _ref_store} = RefStore.write(ref_store, "refs/tags/v3.1.0", c5, [])
+
+    # Still the memoized answer — the push alone is not visible yet.
+    assert {:ok, []} = GitRepo.tags_containing(url, c4)
+
+    assert :ok = GitRepo.refresh(url)
+
+    # Same server, graph extended in place — not a restart.
+    assert [{^pid, _value}] = Registry.lookup(@registry, url)
+
+    # v3.1.0 contains c4 through the NEW edge c4 -> c5.
+    assert {:ok, tags} = GitRepo.tags_containing(url, c4)
+    assert Enum.sort(tags) == ["v3.0.0", "v3.1.0"]
+    assert {:ok, ["v3.1.0"]} = GitRepo.tags_containing(url, hex(c5))
+    assert {:ok, tags} = GitRepo.all_tags(url)
+    assert "v3.0.0" in tags
+    assert "v3.1.0" in tags
+  end
+
+  test "a failed refresh falls back to a restart", %{url: url, c2: c2} do
+    assert {:ok, _tags} = GitRepo.tags_containing(url, c2)
+    [{pid, _value}] = Registry.lookup(@registry, url)
+
+    # Shrink the cap below the already-walked commit count: the refresh's
+    # extension walk fails immediately, so the server must drop out and the
+    # next call must rescan fresh.
+    prev = Application.get_env(:varsel, :git_max_commits)
+    Application.put_env(:varsel, :git_max_commits, 2)
+    on_exit(fn -> restore_env(:git_max_commits, prev) end)
+
+    ref = Process.monitor(pid)
+    assert :ok = GitRepo.refresh(url)
+    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
+
+    restore_env(:git_max_commits, prev)
+
+    assert {:ok, tags} = GitRepo.tags_containing(url, c2)
+    assert Enum.sort(tags) == ["v1.0.0", "v2.0.0"]
+  end
+
+  test "refresh of a repository with no cached state is a no-op" do
+    url = "file:///absent_#{System.unique_integer([:positive])}"
+
+    assert :ok = GitRepo.refresh(url)
+    assert [] = Registry.lookup(@registry, url)
+  end
+
+  # The file transport treats a missing path as an empty repository, so the
+  # deterministic way to fail a build is the commit cap; the error path is
+  # the same one a failed clone takes.
+  test "a failed build is not pinned: the next call rescans and succeeds", %{url: url, c2: c2} do
+    prev = Application.get_env(:varsel, :git_max_commits)
+    Application.put_env(:varsel, :git_max_commits, 2)
+    on_exit(fn -> restore_env(:git_max_commits, prev) end)
+
+    assert {:error, :too_many_commits} = GitRepo.tags_containing(url, c2)
+
+    restore_env(:git_max_commits, prev)
+    await_server_exit(url)
+
+    assert {:ok, tags} = GitRepo.tags_containing(url, c2)
+    assert Enum.sort(tags) == ["v1.0.0", "v2.0.0"]
+  end
+
+  # The TTL expiry itself (not just refresh) must drop stale answers: the
+  # server unregisters and stops, and the next call rescans. This is the
+  # primary INT-004 mechanism — a new release tag becomes visible on both
+  # query paths after expiry, on a fresh server.
+  test "TTL expiry drops stale answers: the next call rescans and sees the new tag", %{
+    url: url,
+    c4: c4,
+    c4_raw: c4_raw,
+    ref_store: ref_store
+  } do
+    assert {:ok, []} = GitRepo.tags_containing(url, c4)
+    [{pid, _value}] = Registry.lookup(@registry, url)
+
+    {:ok, _ref_store} = RefStore.write(ref_store, "refs/tags/v3.0.0", c4_raw, [])
+
+    # Still the memoized answer within the server's life.
+    assert {:ok, []} = GitRepo.tags_containing(url, c4)
+
+    # Simulate the 900s GenServer timeout firing.
+    ref = Process.monitor(pid)
+    send(pid, :timeout)
+    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
+    assert [] = Registry.lookup(@registry, url)
+
+    assert {:ok, ["v3.0.0"]} = GitRepo.tags_containing(url, c4)
+    assert {:ok, tags} = GitRepo.all_tags(url)
+    assert "v3.0.0" in tags
+    assert [{new_pid, _value}] = Registry.lookup(@registry, url)
+    refute new_pid == pid
+  end
+
+  # The deadline is anchored to the clone/fetch, not to call activity:
+  # steady sub-TTL traffic must not postpone expiry.
+  test "calls do not extend the deadline", %{url: url, c2: c2} do
+    assert {:ok, _tags} = GitRepo.tags_containing(url, c2)
+    [{pid, _value}] = Registry.lookup(@registry, url)
+
+    # Age the graph past its deadline, then make one more call: the reply's
+    # remaining timeout is 0, so the server stops right after answering
+    # instead of getting a fresh 900s from the call.
+    :sys.replace_state(pid, fn state ->
+      %{state | deadline: System.monotonic_time(:millisecond) - 1}
+    end)
+
+    ref = Process.monitor(pid)
+    assert {:ok, _tags} = GitRepo.tags_containing(url, c2)
+    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
+    assert [] = Registry.lookup(@registry, url)
+  end
+
+  # A failed build answers already-queued callers, then stops at the first
+  # idle moment. Wait that stop out so the next call is guaranteed a fresh
+  # server instead of racing the dying one.
+  defp await_server_exit(url) do
+    case Registry.lookup(@registry, url) do
+      [{pid, _value}] ->
+        ref = Process.monitor(pid)
+        assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1000
+
+      [] ->
+        :ok
+    end
+  end
 end

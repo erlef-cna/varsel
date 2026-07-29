@@ -62,4 +62,7 @@ defmodule Varsel.Test.StubGitBackend do
 
     {:ok, Enum.uniq(from_commits ++ extra)}
   end
+
+  @impl GitBackend
+  def refresh(_repo_url), do: :ok
 end

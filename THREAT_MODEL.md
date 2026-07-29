@@ -334,17 +334,18 @@ claims:
 - **Writes to disk** — no. `cvelint` reads from stdin, and `exgit` and the
   catalog unzip are **in-memory** (`cvelint.ex`, `weakness.ex`, `git_repo.ex`).
 
-**Derivation is one process for the whole node.** Every git clone, fetch and
-graph walk runs inside a single named GenServer (`Varsel.Cases.Derivation.
-GitRepo`), so derivation is serialized: one slow or hostile `repo_url` delays
-derivation for every case until its 10-minute call timeout expires. The
-timeout, the 900 s cache TTL and the 250k commit cap bound a single
-derivation; they do not stop one repository from occupying the shared process.
-That process also keeps a commit-object store per distinct `repo_url`,
-replaced when stale but **never evicted by count**, so memory grows with the
-number of distinct URLs derived. Both are bounded in practice by the
-POC/assignee privilege needed to add a package (§9). (`git_repo.ex`,
-`application.ex`)
+**Derivation is one process per repository.** Every git clone, fetch and
+graph walk runs inside a per-`repo_url` GenServer
+(`Varsel.Cases.Derivation.GitRepo.Server`, started on demand under a
+Registry + DynamicSupervisor), so one slow or hostile `repo_url` occupies
+only its own server while other repositories derive concurrently. The
+10-minute call timeout, the 900 s server TTL and the 250k commit cap bound a
+single derivation. Each server holds its repository's commit-object store in
+memory for its lifetime and releases it when it expires, so memory grows with
+the number of **distinct URLs derived within one TTL window** — there is no
+count-based eviction. That is bounded in practice by the POC/assignee
+privilege needed to add a package (§9). (`git_repo.ex`,
+`git_repo/server.ex`, `application.ex`)
 
 ### 5a. Build-time and configuration variants
 
@@ -405,7 +406,7 @@ trusted reporters only: a role-less user gets 25 submissions per day
 unbounded in-app (§9, best effort). Git derivation fetches an entire
 commit graph
 (`tree:0`, no blobs) from `repo_url`, bounded by a 10-minute GenServer timeout,
-a 900s cache TTL, and a 250k commit-count cap on the graph walk
+a 900s per-repository server TTL, and a 250k commit-count cap on the graph walk
 (`report_json_size.ex`, `git_repo.ex`).
 
 ### 6a. Outputs and expected sinks
