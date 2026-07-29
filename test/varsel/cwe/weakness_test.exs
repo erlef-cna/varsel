@@ -8,6 +8,7 @@ defmodule Varsel.CWE.WeaknessTest do
   alias Varsel.CWE.CweMetadata
   alias Varsel.CWE.CweXmlParser
   alias Varsel.CWE.Weakness
+  alias Varsel.CWE.WeaknessRelationship
 
   @sample_xml """
   <?xml version="1.0" encoding="UTF-8"?>
@@ -201,6 +202,64 @@ defmodule Varsel.CWE.WeaknessTest do
 
       # CWE-79 PeerOf CWE-80, but CWE-80 is not in the sample catalog.
       refute Enum.any?(cwe79.related_weakness_relationships, &(&1.target_cwe_id == 80))
+    end
+
+    # INT-006 regression: the relationship set is a snapshot of the catalog —
+    # edges MITRE removed or reclassified must disappear, not accumulate.
+    test "removes and reclassifies relationships across catalog versions" do
+      stub_catalog(zip_xml(@sample_xml))
+      run_sync()
+
+      # v2: CWE-79's ChildOf 74 is reclassified to PeerOf; CWE-89 loses its
+      # relationship entirely.
+      v2_xml = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <Weakness_Catalog>
+        <Weaknesses>
+          <Weakness ID="74" Name="Injection" Abstraction="Class" Status="Stable">
+            <Description>Parent class.</Description>
+          </Weakness>
+          <Weakness ID="79" Name="XSS" Abstraction="Base" Status="Stable">
+            <Description>Cross-site scripting.</Description>
+            <Related_Weaknesses>
+              <Related_Weakness Nature="PeerOf" CWE_ID="74" View_ID="1000"/>
+            </Related_Weaknesses>
+          </Weakness>
+          <Weakness ID="89" Name="SQL Injection" Abstraction="Base" Status="Stable">
+            <Description>No relationships anymore.</Description>
+          </Weakness>
+        </Weaknesses>
+      </Weakness_Catalog>
+      """
+
+      stub_catalog(zip_xml(v2_xml), "Fri, 01 May 2026 00:00:00 GMT")
+
+      # The second sync runs through the real Oban path, so the diff's
+      # deletes are exercised under production authorization (the join
+      # resource's accessing_from policy, no bypass).
+      assert %{success: 1, failure: 0} =
+               AshOban.Test.schedule_and_run_triggers(
+                 {Weakness, :sync_cwe_catalog},
+                 scheduled_actions?: true,
+                 triggers?: false
+               )
+
+      edges =
+        WeaknessRelationship
+        |> Ash.read!(authorize?: false)
+        |> Enum.map(&{&1.source_cwe_id, &1.target_cwe_id, &1.nature, &1.view_id})
+        |> Enum.sort()
+
+      assert edges == [{79, 74, :peer_of, 1000}]
+    end
+
+    test "relationship writes outside the sync are forbidden" do
+      assert {:error, %Ash.Error.Forbidden{}} =
+               Ash.create(
+                 WeaknessRelationship,
+                 %{source_cwe_id: 79, target_cwe_id: 74, nature: :child_of, view_id: 1000},
+                 authorize?: true
+               )
     end
 
     test "stores last-modified header in CweMetadata" do

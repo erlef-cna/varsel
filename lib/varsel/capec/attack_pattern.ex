@@ -45,6 +45,9 @@ defmodule Varsel.CAPEC.AttackPattern do
   alias Varsel.CAPEC.AttackPatternWeakness
   alias Varsel.CAPEC.CapecMetadata
   alias Varsel.CAPEC.CapecXmlParser
+  alias Varsel.CWE.Weakness
+
+  require Ash.Query
 
   graphql do
     type :attack_pattern
@@ -144,25 +147,6 @@ defmodule Varsel.CAPEC.AttackPattern do
         :mitigations,
         :consequences
       ]
-
-      argument :related_weaknesses, {:array, :integer}, default: []
-
-      argument :related_attack_patterns, {:array, :map}, default: []
-
-      change manage_relationship(:related_weaknesses, :weaknesses,
-               on_lookup: :relate,
-               on_no_match: :ignore,
-               on_match: :ignore,
-               on_missing: :unrelate,
-               use_identities: [:_primary_key]
-             )
-
-      change manage_relationship(:related_attack_patterns, :related_attack_pattern_relationships,
-               on_no_match: :create,
-               on_match: :ignore,
-               on_missing: :unrelate,
-               use_identities: [:_primary_key]
-             )
 
       upsert? true
 
@@ -299,7 +283,7 @@ defmodule Varsel.CAPEC.AttackPattern do
   end
 
   relationships do
-    many_to_many :weaknesses, Varsel.CWE.Weakness do
+    many_to_many :weaknesses, Weakness do
       through AttackPatternWeakness
       source_attribute :capec_id
       source_attribute_on_join_resource :capec_id
@@ -359,15 +343,138 @@ defmodule Varsel.CAPEC.AttackPattern do
   defp upsert_all(attack_patterns, opts) do
     {:ok, _} =
       Ash.transact(__MODULE__, fn ->
-        attack_patterns
-        |> Stream.chunk_every(200)
-        |> Enum.each(fn chunk ->
-          Varsel.CAPEC.upsert_attack_pattern!(
-            chunk,
-            Keyword.put(opts, :bulk_options, return_errors?: true, stop_on_error?: true)
-          )
-        end)
+        # 1. Upsert the attack patterns themselves (without relationships) —
+        #    nested manage_relationship mis-maps targets under a chunked
+        #    bulk_create (see Varsel.CWE.Weakness) and its on_missing
+        #    handling never deletes in bulk. The stream is single-pass, so
+        #    keep each chunk's relationship facts for the flat sync below.
+        facts =
+          attack_patterns
+          |> Stream.chunk_every(200)
+          |> Enum.flat_map(fn chunk ->
+            chunk
+            |> Enum.map(&Map.drop(&1, [:related_attack_patterns, :related_weaknesses]))
+            |> Varsel.CAPEC.upsert_attack_pattern!(
+              Keyword.put(opts, :bulk_options, return_errors?: true, stop_on_error?: true)
+            )
+
+            Enum.map(
+              chunk,
+              &Map.take(&1, [:capec_id, :related_attack_patterns, :related_weaknesses])
+            )
+          end)
+
+        # 2. Sync both join tables as flat diffs, now that every source exists.
+        sync_pattern_relationships(facts, opts)
+        sync_weakness_joins(facts, opts)
       end)
+  end
+
+  # Syncs capec_attack_pattern_relationships to the catalog as a diff — only
+  # added and removed edges are written. Targets absent from the catalog are
+  # kept, matching the previous manage_relationship behavior.
+  defp sync_pattern_relationships(facts, opts) do
+    desired =
+      MapSet.new(
+        for %{capec_id: source} = fact <- facts,
+            related <- Map.get(fact, :related_attack_patterns, []),
+            do: {source, related.target_capec_id, related.nature}
+      )
+
+    current =
+      Map.new(
+        Varsel.CAPEC.list_attack_pattern_relationships!(opts),
+        &{{&1.source_capec_id, &1.target_capec_id, &1.nature}, &1}
+      )
+
+    stale = for {key, record} <- current, not MapSet.member?(desired, key), do: record
+
+    rows =
+      for {source, target, nature} <- desired,
+          not Map.has_key?(current, {source, target, nature}),
+          do: %{source_capec_id: source, target_capec_id: target, nature: nature}
+
+    apply_diff(
+      stale,
+      rows,
+      &Varsel.CAPEC.create_attack_pattern_relationship!/2,
+      %{source: __MODULE__, name: :related_attack_pattern_relationships},
+      opts
+    )
+  end
+
+  # Syncs the capec→cwe join table as a diff. Only weaknesses present in the
+  # local CWE catalog are linked, matching the previous on_lookup: :relate /
+  # on_no_match: :ignore behavior.
+  defp sync_weakness_joins(facts, opts) do
+    referenced =
+      for fact <- facts, cwe_id <- Map.get(fact, :related_weaknesses, []), uniq: true, do: cwe_id
+
+    known =
+      Weakness
+      |> Ash.Query.filter(cwe_id in ^referenced)
+      |> Ash.read!(opts)
+      |> MapSet.new(& &1.cwe_id)
+
+    desired =
+      MapSet.new(
+        for %{capec_id: capec_id} = fact <- facts,
+            cwe_id <- Map.get(fact, :related_weaknesses, []),
+            MapSet.member?(known, cwe_id),
+            do: {capec_id, cwe_id}
+      )
+
+    current =
+      Map.new(
+        Varsel.CAPEC.list_attack_pattern_weaknesses!(opts),
+        &{{&1.capec_id, &1.cwe_id}, &1}
+      )
+
+    stale = for {key, record} <- current, not MapSet.member?(desired, key), do: record
+
+    rows =
+      for {capec_id, cwe_id} <- desired,
+          not Map.has_key?(current, {capec_id, cwe_id}),
+          do: %{capec_id: capec_id, cwe_id: cwe_id}
+
+    apply_diff(
+      stale,
+      rows,
+      &Varsel.CAPEC.create_attack_pattern_weakness!/2,
+      %{source: __MODULE__, name: :weaknesses_join_assoc},
+      opts
+    )
+  end
+
+  # The join resources authorize writes by relationship provenance
+  # (accessing_from), which manage_relationship would stamp — the flat diff
+  # stamps it itself.
+  defp apply_diff(stale, rows, create, accessing_from, opts) do
+    opts =
+      Keyword.update(
+        opts,
+        :context,
+        %{accessing_from: accessing_from},
+        &Map.put(&1, :accessing_from, accessing_from)
+      )
+
+    Ash.bulk_destroy!(
+      stale,
+      :destroy,
+      %{},
+      Keyword.merge(opts, return_errors?: true, stop_on_error?: true, strategy: :stream)
+    )
+
+    create.(
+      rows,
+      Keyword.put(opts, :bulk_options,
+        return_errors?: true,
+        stop_on_error?: true,
+        batch_size: 500
+      )
+    )
+
+    :ok
   end
 
   defp update_metadata(last_modified, opts) do

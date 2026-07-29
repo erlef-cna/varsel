@@ -305,6 +305,63 @@ defmodule Varsel.CAPEC.AttackPatternTest do
       assert hd(rows).cwe_id == 89
     end
 
+    # INT-006 regression: both CAPEC join tables are snapshots of the catalog —
+    # edges MITRE removed or reclassified must disappear, not accumulate.
+    test "removes and reclassifies relationships across catalog versions" do
+      seed_weaknesses([89, 116])
+      stub_catalog(@sample_xml)
+      run_sync()
+
+      rel_rows = fn ->
+        Varsel.CAPEC.AttackPatternRelationship
+        |> Ash.read!(authorize?: false)
+        |> Enum.map(&{&1.source_capec_id, &1.target_capec_id, &1.nature})
+        |> Enum.sort()
+      end
+
+      assert rel_rows.() == [{66, 17, :can_precede}, {66, 225, :child_of}]
+
+      # v2: CAPEC-66 loses CanPrecede 17 and CWE-116; ChildOf 225 becomes
+      # PeerOf.
+      v2_xml = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <Attack_Pattern_Catalog>
+        <Attack_Patterns>
+          <Attack_Pattern ID="66" Name="SQL Injection" Abstraction="Meta" Status="Stable">
+            <Description>An adversary exploits insufficient input validation.</Description>
+            <Related_Attack_Patterns>
+              <Related_Attack_Pattern Nature="PeerOf" CAPEC_ID="225"/>
+            </Related_Attack_Patterns>
+            <Related_Weaknesses>
+              <Related_Weakness CWE_ID="89"/>
+            </Related_Weaknesses>
+          </Attack_Pattern>
+        </Attack_Patterns>
+      </Attack_Pattern_Catalog>
+      """
+
+      stub_catalog(v2_xml, "Fri, 01 May 2026 00:00:00 GMT")
+
+      # The second sync runs through the real Oban path, so the diff's
+      # deletes are exercised under production authorization (the join
+      # resources' accessing_from policies, no bypass).
+      assert %{success: 1, failure: 0} =
+               AshOban.Test.schedule_and_run_triggers(
+                 {AttackPattern, :sync_capec_catalog},
+                 scheduled_actions?: true,
+                 triggers?: false
+               )
+
+      assert rel_rows.() == [{66, 225, :peer_of}]
+
+      joins =
+        AttackPatternWeakness
+        |> Ash.read!(authorize?: false)
+        |> Enum.map(&{&1.capec_id, &1.cwe_id})
+
+      assert joins == [{66, 89}]
+    end
+
     test "loads weaknesses relationship on attack pattern" do
       seed_weaknesses([89, 116])
       stub_catalog(@sample_xml)

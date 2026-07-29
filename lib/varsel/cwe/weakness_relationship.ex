@@ -53,12 +53,15 @@ defmodule Varsel.CWE.WeaknessRelationship do
   end
 
   policies do
-    bypass AshOban.Checks.AshObanInteraction do
+    policy action_type(:read) do
       authorize_if always()
     end
 
-    policy action_type(:read) do
-      authorize_if always()
+    # These rows have no independent lifecycle: they are only ever written by
+    # the catalog sync's flat diff, which stamps the accessing_from context of
+    # the Weakness relationship it maintains.
+    policy action_type([:create, :update, :destroy]) do
+      authorize_if accessing_from(Weakness, :related_weakness_relationships)
     end
   end
 

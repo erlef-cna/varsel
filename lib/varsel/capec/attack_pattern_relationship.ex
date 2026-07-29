@@ -53,17 +53,13 @@ defmodule Varsel.CAPEC.AttackPatternRelationship do
   end
 
   policies do
-    bypass AshOban.Checks.AshObanInteraction do
-      authorize_if always()
-    end
-
     policy action_type(:read) do
       authorize_if always()
     end
 
-    # These rows have no independent lifecycle: they are only ever written as a
-    # side effect of managing an AttackPattern's related relationships (the
-    # catalog sync's manage_relationship), so authorize by that provenance.
+    # These rows have no independent lifecycle: they are only ever written by
+    # the catalog sync's flat diff, which stamps the accessing_from context of
+    # the AttackPattern relationship it maintains.
     policy action_type([:create, :update, :destroy]) do
       authorize_if accessing_from(
                      AttackPattern,

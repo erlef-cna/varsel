@@ -41,17 +41,13 @@ defmodule Varsel.CAPEC.AttackPatternWeakness do
   end
 
   policies do
-    bypass AshOban.Checks.AshObanInteraction do
-      authorize_if always()
-    end
-
     policy action_type(:read) do
       authorize_if always()
     end
 
     # These join rows have no independent lifecycle: they are only ever written
-    # as a side effect of managing an AttackPattern's :weaknesses (the catalog
-    # sync's manage_relationship), so authorize the write by that provenance.
+    # by the catalog sync's flat diff, which stamps the accessing_from context
+    # of the AttackPattern relationship it maintains.
     policy action_type([:create, :destroy]) do
       authorize_if accessing_from(AttackPattern, :weaknesses_join_assoc)
     end

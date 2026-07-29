@@ -361,24 +361,57 @@ defmodule Varsel.CWE.Weakness do
       end)
   end
 
-  # Rebuilds the relationship table from the parsed catalog. Relationships are
-  # inserted flat (with an explicit source_cwe_id) instead of through the
-  # weakness upsert's manage_relationship, which mis-maps targets under a
-  # chunked bulk_create. Rows referencing an unknown weakness are dropped
-  # (the target FK would reject them anyway).
+  # Syncs the relationship table to the parsed catalog as a diff: only rows
+  # MITRE added, changed or removed are written — the weekly steady state
+  # touches almost nothing. Relationships are inserted flat (with an explicit
+  # source_cwe_id) instead of through the weakness upsert's
+  # manage_relationship, which mis-maps targets under a chunked bulk_create.
+  # Rows referencing an unknown weakness are dropped (the target FK would
+  # reject them anyway).
   defp sync_relationships(weaknesses, opts) do
     known = MapSet.new(weaknesses, & &1.cwe_id)
 
-    rows =
-      Enum.flat_map(weaknesses, fn %{cwe_id: source_cwe_id} = weakness ->
+    desired =
+      weaknesses
+      |> Enum.flat_map(fn %{cwe_id: source_cwe_id} = weakness ->
         weakness
         |> Map.get(:related_weaknesses, [])
         |> Enum.filter(&MapSet.member?(known, &1.target_cwe_id))
         |> Enum.map(&Map.put(&1, :source_cwe_id, source_cwe_id))
       end)
+      |> Map.new(&{{&1.source_cwe_id, &1.target_cwe_id, &1.nature, &1.view_id}, &1})
+
+    current =
+      Map.new(
+        Varsel.CWE.list_weakness_relationships!(opts),
+        &{{&1.source_cwe_id, &1.target_cwe_id, &1.nature, &1.view_id}, &1}
+      )
+
+    stale = for {key, record} <- current, not Map.has_key?(desired, key), do: record
+
+    to_write =
+      for {key, row} <- desired,
+          (case current do
+             %{^key => record} -> record.ordinal != Map.get(row, :ordinal)
+             _absent -> true
+           end),
+          do: row
+
+    # The join resource authorizes writes by relationship provenance
+    # (accessing_from), which manage_relationship would stamp — the flat diff
+    # stamps it itself.
+    opts =
+      stamp_accessing_from(opts, %{source: __MODULE__, name: :related_weakness_relationships})
+
+    Ash.bulk_destroy!(
+      stale,
+      :destroy,
+      %{},
+      Keyword.merge(opts, return_errors?: true, stop_on_error?: true, strategy: :stream)
+    )
 
     Varsel.CWE.create_weakness_relationship!(
-      rows,
+      to_write,
       Keyword.put(opts, :bulk_options,
         return_errors?: true,
         stop_on_error?: true,
@@ -387,6 +420,15 @@ defmodule Varsel.CWE.Weakness do
     )
 
     :ok
+  end
+
+  defp stamp_accessing_from(opts, accessing_from) do
+    Keyword.update(
+      opts,
+      :context,
+      %{accessing_from: accessing_from},
+      &Map.put(&1, :accessing_from, accessing_from)
+    )
   end
 
   defp update_metadata(last_modified, opts) do
