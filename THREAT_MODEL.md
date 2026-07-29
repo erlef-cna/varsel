@@ -13,7 +13,7 @@ SPDX-License-Identifier: Apache-2.0
 - **Versioning:** the model is versioned with the project (it lives in the
   repo and moves with `main`): a report against a given version is triaged
   against the model as it stood at that version. Written against `main`,
-  last updated 2026-07-28.
+  last updated 2026-07-29.
 - **Relationship to `SECURITY.md`:** this document accompanies `SECURITY.md`
   (it does not replace it). `SECURITY.md` holds the disclosure policy and a
   short Scope section that links here; this document is the detailed model.
@@ -227,6 +227,18 @@ strict resources refuse, the filter-scoped ones return zero of the rows that
 exist. **An "empty list" is therefore not evidence of a missing policy**, and
 a report premised on a private resource returning `{:ok, []}` rather than an
 error is out of model. (all `policies do` blocks)
+
+**A write can also fail because the row moved.** The four state-machine
+resources (`Case`, `CveRecord`, `VulnerabilityReport`, `Proposal`) carry an
+optimistic lock on their updates: a write binds to the version of the row the
+caller loaded, and if the row has changed since, the write fails with a
+stale-record error and the whole transaction rolls back — including anything a
+hook already did inside it. State-machine transitions are likewise validated
+against the stored row, not the caller's copy. Both are correct outcomes of
+concurrent editing, not races: the caller reloads and retries against current
+state. The one update outside the lock is `Case.refresh_derivation`, which
+rewrites only derived caches and runs nested inside `:publish`. (`case.ex`,
+`cve_record.ex`, `vulnerability_report.ex`, `proposal.ex`)
 
 **The websocket carries the same login requirement as `/gql`.** A socket has
 no `conn`, so the `:graphql` pipeline's plugs cannot run on it. `/ws/gql`
@@ -495,7 +507,13 @@ dependency bump; it does not change the disposition, which is always
     is a property of the provider we rely on, so a report resting on it is
     escalated rather than closed.
   - **Email never selects an account.** Neither provider's address is trusted
-    as verified, so an address is only ever a notification target.
+    as verified, so an address is only ever a notification target — and only
+    while a linked identity still reports it. An identity change (a provider
+    reporting a new address, or an unlink) that leaves the chosen address
+    unattested re-points it to an address a remaining identity reports, or
+    clears it; a stale address never keeps receiving mail, and never squats on
+    the uniqueness that would block the account that legitimately holds it
+    next (`reconcile_user_notification_email.ex`).
 - **An attacker with database or host access.** Beneath the app's boundary.
 - **A network attacker without TLS-break capability.** TLS is assumed intact
   (terminated at the edge).
@@ -526,7 +544,11 @@ none of the authorization properties, by construction rather than by defect.
    system operations that legitimately bypass the actor's policy do so through
    a bypass the actor cannot reach — the `AshObanInteraction` bypass for Oban
    jobs (a caller cannot forge the `ash_oban?` context) or an `accessing_from`
-   policy for rows only ever written through a managed relationship.
+   policy for rows only ever written as an expression of their owning
+   resource's relationship. The internal writer stamps that provenance in the
+   changeset context, which no caller-supplied input reaches — the catalog
+   join tables and the notification-email reconcile authorize this way, and
+   carry no Oban bypass at all.
    - *Violation symptom:* an actor performs an action, or reads a row/field,
      the matrix forbids (e.g. a supporter approves a case, an anonymous
      client reads a `draft` CVE, a non-POC reads another user's email).
@@ -553,11 +575,16 @@ none of the authorization properties, by construction rather than by defect.
    which is what makes it hold for every caller — the console, GraphQL, MCP —
    and not only the one that happens to hide the button *(maintainer,
    2026-07)*.
+   The assignment also binds to the current row: the reservation's transition
+   and the case link commit or roll back as one transaction, and a write from
+   a stale copy of the case fails (§4) without consuming the reservation — a
+   reserved ID cannot be orphaned out of the pool by a lost race.
    - *Violation symptom:* a reserved ID is attached to a published or closed
-     case, or a second ID replaces one already assigned.
+     case, a second ID replaces one already assigned, or a failed assignment
+     leaves a reservation outside the pool.
    - *Severity:* `medium` (identifier waste and a misleading record, not a
      disclosure).
-   - (`case.ex`, `cve_id_assignable.ex`)
+   - (`case.ex`, `cve_id_assignable.ex`, `assign_cve_record.ex`)
 
 4. **Field-level PII redaction on `User`.**
    A non-POC who reaches a `User` row through a permitted relationship sees
@@ -710,8 +737,10 @@ none of the authorization properties, by construction rather than by defect.
    publicly. The clone re-resolves immediately before connecting and **pins to
    what that lookup returned**, so there is no window between the check and the
    connection for DNS to answer differently. Redirects stay off, so there is no
-   later hop to re-resolve. Pinning does not weaken TLS: the hostname is still
-   the name the certificate must match.
+   later hop to re-resolve. The incremental refresh a live derivation server
+   can run fetches over the same transport its clone pinned, so it connects to
+   the address that was checked — it never resolves on its own. Pinning does
+   not weaken TLS: the hostname is still the name the certificate must match.
    An address that carries an IPv4 one inside it — IPv4-mapped,
    IPv4-compatible, 6to4, NAT64 — is judged by the address it carries, since
    those prefixes are globally routable while the address inside need not be.
@@ -748,8 +777,42 @@ none of the authorization properties, by construction rather than by defect.
      non-reusable — for Hex.pm, on it offering no rename (§7).
    - (`resolve_oauth_identity.ex`, `user_identity.ex`)
 
+15. **Editorial state binds to the database row, not a caller's snapshot.**
+   Case content may change only in `:draft` and `:review`, and the freeze is a
+   policy that reads the stored state — on the case and on every child row —
+   so what a POC approves is what stays approved until someone reopens it.
+   Every update on the four state-machine resources carries the optimistic
+   lock described in §4: a write from a snapshot the database has moved past
+   is refused and rolls back whole, so no lifecycle decision or content edit
+   can silently overwrite a newer row. Transitions validate against the
+   stored row as well.
+   - *Violation symptom:* case content changes past `:review` without a
+     reopen, or a write from a stale snapshot lands over a newer row.
+   - *Severity:* `high` (integrity of the record behind a published
+     advisory — review evidence and published content must not diverge).
+   - *Bound:* enforcement is per-write against the current row. A child-row
+     write racing the case's approval inside the same check-to-commit window
+     (milliseconds, two legitimate collaborators) can still land after it;
+     that residue is accepted.
+   - (`case.ex`, the case child resources' freeze policies, `cve_record.ex`,
+     `vulnerability_report.ex`, `proposal.ex`)
+
+16. **The scheduled MITRE import cannot overwrite local in-flight work.**
+   The catalog sweep writes only rows that are absent locally or sit in
+   `:reserved`/`:published`; rows in `:draft`, `:publishing`,
+   `:pending_update` or `:rejected` are never touched. The condition rides
+   inside the database upsert itself, so it holds even against a row that
+   enters a protected state mid-sweep. A queued local amendment therefore
+   survives the sweep, and a wrongly re-`:published` row cannot falsely
+   advance a case out of its publish handoff.
+   - *Violation symptom:* an import replaces the state or `cve_json` of a row
+     in a protected state.
+   - *Severity:* `high` (silent loss of accepted editorial work).
+   - (`cve_record.ex`)
+
 **Resource bound (the one quantified DoS line we can state):** guardrails are
-the git-derivation timeout (10 min), cache TTL (900 s), and 250k commit-count
+the git-derivation timeout (10 min), per-repository server TTL (900 s), and
+250k commit-count
 cap, the Oban `Lifeline` rescue (30 min) for orphaned jobs, the `report_json`
 size cap (default
 256 KiB, property 10), the 25/day submission cap on role-less reporters
@@ -947,6 +1010,10 @@ both explained in §4:
   (§9): a Gravatar hash confirms a guessed address to someone who can already
   read that user's row, and display identity is not secret between
   collaborators. Reported regularly because the hash is recognisable.
+- **"A concurrent edit fails with a stale-record error."** The optimistic
+  lock doing its job (§4): the row moved between the caller's read and write,
+  the write rolled back whole, and a reload-and-retry succeeds. Not a data
+  race — it is what prevents one.
 
 **An entry here describes an outcome, not a promise to disregard the
 evidence.** Each says what the code does and why the flag is expected. A
@@ -991,6 +1058,11 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
   `action_type` list that picks up writes. A broad policy that grants decides
   every action no other policy names, which is what turns "an action nobody
   wrote a policy for" from refused into permitted (§4).
+- Adding a state-machine resource or update action **outside the
+  optimistic-lock pattern**, exempting one from it beyond
+  `Case.refresh_derivation`, or **widening the import's upsert condition** —
+  each reopens the stale-write and import-overwrite classes properties 15–16
+  close.
 - Re-introducing a **route-level role gate** in the router. The model rests
   on there being exactly one place that decides (§4); a second one that can
   drift from the policies is the condition this section exists to catch.
