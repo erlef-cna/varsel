@@ -8,7 +8,6 @@ defmodule VarselWeb.GraphqlTest do
   import Varsel.Fixtures
 
   alias AshAuthentication.Oauth2Server.Jwt
-  alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.CVE.CveRecord
 
   @year Date.utc_today().year
@@ -226,45 +225,6 @@ defmodule VarselWeb.GraphqlTest do
         |> post("/gql", %{"query" => "{ listPublishedCves { cveId } }"})
 
       assert response(conn, 401)
-    end
-  end
-
-  describe "playground" do
-    defp log_in(conn, user) do
-      conn
-      |> init_test_session(%{})
-      |> AuthPlug.store_in_session(user)
-    end
-
-    test "anonymous visitors are redirected to sign in", %{conn: conn} do
-      conn = get(conn, "/gql/playground")
-      assert redirected_to(conn) == "/sign-in"
-    end
-
-    test "renders for a logged-in user", %{conn: conn} do
-      user = register_user("alice")
-
-      conn =
-        conn
-        |> log_in(user)
-        |> put_req_header("accept", "text/html")
-        |> get("/gql/playground")
-
-      assert html_response(conn, 200) =~ ~r/graphiql/i
-    end
-
-    test "executes queries with the session actor", %{conn: conn} do
-      user = register_user("alice")
-      published_cve_record("CVE-#{@year}-3001", "Published thing")
-
-      body =
-        conn
-        |> log_in(user)
-        |> put_req_header("accept", "application/json")
-        |> post("/gql/playground", %{"query" => "{ listPublishedCves { cveId } }"})
-        |> json_response(200)
-
-      assert body["data"]["listPublishedCves"] == [%{"cveId" => "CVE-#{@year}-3001"}]
     end
   end
 end

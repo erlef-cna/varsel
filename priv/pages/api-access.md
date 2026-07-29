@@ -8,11 +8,10 @@
 
 The GraphQL API is served at `/gql` and requires authentication: every
 request must carry a bearer token. It exposes the published CVE data plus
-the CVE lifecycle, case, and user-management operations your role allows.
-Logged-in users can explore the schema in the interactive
-[GraphiQL playground](/gql/playground). The published data alone is also
-available without authentication as plain JSON under
-[`/cves/index.json`](/cves/index.json) and [`/osv/all.json`](/osv/all.json).
+the CVE lifecycle, case, and user-management operations your role allows. The
+published data alone is also available without authentication as plain JSON
+under [`/cves/index.json`](/cves/index.json) and
+[`/osv/all.json`](/osv/all.json).
 
 ```sh
 curl -X POST %BASE_URL%/gql \

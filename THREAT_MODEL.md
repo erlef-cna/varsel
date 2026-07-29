@@ -51,9 +51,7 @@ but shared/self-hosted operation is not a supported deployment shape today.
   editorial *cases*, and publish CVE records to MITRE (`README.md`).
 - The public consumes published CVE/OSV/CWE/CAPEC data **anonymously** over
   HTML pages, JSON feeds and Atom/RSS. The same data is also queryable over
-  GraphQL and MCP, but those endpoints **require a login** (API key, session,
-  or OAuth token) — they are not an anonymous surface. That covers all three
-  GraphQL entrances: `/gql`, the playground, and the `/ws/gql` websocket.
+  GraphQL and MCP, which **require a login** via an API key or an OAuth token.
   (`README.md`, `router.ex`, `graphql_socket.ex`)
 
 **Deployment context.** A public-facing web service behind TLS on Fly.io,
@@ -111,7 +109,6 @@ access says otherwise (`release.ex`).
 | `cvelint` subprocess (validates rendered CVE JSON) | `Varsel.CVE.Cvelint` | `Exile`, record piped to stdin | **Yes** |
 | Dev tooling (LiveDashboard, Oban Web, AshAdmin, Swoosh mailbox, storybook, error preview) | `/dev/*` | DB, mail | **No — §3 (absent from prod builds)** |
 | Mock login (unauthenticated sign-in as a dummy user of any role) | `/auth/user/mock/callback` | DB | **No — §3 (absent from prod builds)** |
-| GraphiQL playground | `/gql/playground` | DB | **Yes, but relaxed CSP — §5a** |
 
 There is **no plugin/extension/user-defined-function loader.** Tool exposure
 over MCP/GraphQL is a fixed, compile-time list (`router.ex`); there is no
@@ -129,14 +126,11 @@ dynamic code loading from any actor.
   operator with authority to publish to MITRE, assign roles, and reach every
   outbound integration. Threats that require *being* a POC (or convincing one
   to act) are governance/insider concerns, not product security boundaries.
-- **The developer tooling under `/dev/*`** — the dashboards
-  (`/dev/dashboard`, `/dev/oban`, `/dev/admin`, `/dev/mailbox`), the component
-  storybook (`/dev/storybook`) and the error-page preview
-  (`/dev/http-error/:status`). All of it lives in the `dev/` directory, which
-  `elixirc_paths/1` compiles **only** for `:dev` and `:test`, so none of these
-  modules — `VarselWeb.DevRouter`, its routes and the dev-nav component —
-  exist in a production build at all. The dashboards additionally run a
-  relaxed CSP; the storybook serves component fixtures, never real data.
+- **The developer tooling under `/dev/*`.** It lives in the `dev/` directory,
+  which `elixirc_paths/1` compiles **only** for `:dev` and `:test`, so
+  `VarselWeb.DevRouter`, its routes and the dev-nav component do not exist in
+  a production build at all. What those tools do is out of model; that they
+  are absent is the property.
 
 - **The mock login** (`/auth/user/mock/callback?role=…`) — a deliberate, total
   authentication bypass that signs the caller in as a dummy user of the
@@ -241,16 +235,17 @@ rewrites only derived caches and runs nested inside `:publish`. (`case.ex`,
 `cve_record.ex`, `vulnerability_report.ex`, `proposal.ex`)
 
 **The websocket carries the same login requirement as `/gql`.** A socket has
-no `conn`, so the `:graphql` pipeline's plugs cannot run on it. `/ws/gql`
-therefore authenticates the connection itself, accepting the same three
-credentials and refusing the handshake outright when none identifies a user:
-an `eefcna_` API key, a session (delegated to AshAuthentication, so a revoked
-or signed-out token stops working here too), or an OAuth 2.1 token that
-carries the `gql` scope — a token minted for MCP is refused, exactly as on the
-HTTP surface. The resolved actor is put into the Absinthe context, so policies
-apply to socket-borne documents as they do to posted ones. Credentials travel
-in the connect params because browsers cannot set headers on a websocket
-handshake. (`graphql_socket.ex`, `endpoint.ex`)
+no `conn`, so `/ws/gql` authenticates the connection itself in `connect/3`,
+from credentials in the connect params. The resolved actor is put into the
+Absinthe context, so policies apply to socket-borne documents as they do to
+posted ones. (`graphql_socket.ex`, `endpoint.ex`)
+
+**A socket's authority ends when its credential does.** A socket resolves its
+actor once at connect and keeps it, so withdrawal is pushed to the connection:
+deleting an API key closes the sockets it opened, a role change or account
+deletion closes that user's sockets, and a credential carrying an expiry (an
+OAuth token, or an API key with `expires_at`) closes its socket at that
+moment. (`socket_disconnect.ex`, `disconnect_sockets.ex`, `graphql_socket.ex`)
 
 **Data flow across the boundary:**
 
@@ -366,7 +361,6 @@ privilege needed to add a package (§9). (`git_repo.ex`,
 | `MIX_ENV` (compile) | `prod` for releases | The **only** switch governing the `/dev/*` tooling and the mock login (§3), through two mechanisms. `elixirc_paths/1` adds the `dev/` directory for `:dev` and `:test` only, so a prod build contains neither `VarselWeb.DevRouter` (dashboards, storybook, error preview) nor the dev-nav component. The mock login is instead gated by `Mix.env/0` checks *inside* `Varsel.Accounts.User`, which drop the `mock do` strategy declaration and the `register_with_mock` action — its modules compile, but nothing declares them, so there is no route and no action. The storybook, Oban Web and LiveDashboard **dependencies** are themselves `only: [:dev, :test]`, so a prod build cannot link them even by mistake. There is no runtime or configuration override — building with `MIX_ENV=prod` is the whole control. **A release built from any other env exposes an unauthenticated POC sign-in and this model no longer holds at all.** (`mix.exs`, `dev/`, `user.ex`) |
 | `TEST_DEPLOYMENT` (runtime) | `true` | When true, serves a disallow-all `robots.txt`, `X-Robots-Tag: noindex`, and a warning banner. **Must be set `false` on the real production instance.** Not a security control — an indexing/labeling one. (`config.exs`, `runtime.exs`) |
 | `MITRE_CVE_API_BASE_URL` | none (required) | Points the publish pipeline at a MITRE endpoint. Every configured endpoint (including MITRE's shared staging, `cveawg-test`) is a real remote system — the pipeline has no in-app dry-run or sandbox, so any publish leaves the machine (see §9, "false friend"). (`mitre_cve_api.ex`) |
-| GraphiQL relaxed CSP | route-scoped | `/gql/playground` serves `'unsafe-inline'` + a jsdelivr allowlist so GraphiQL boots. The rest of the site is deny-by-default (`default-src 'none'`, `script-src 'self'`, nonce'd). In a prod build this is the *only* CSP relaxation, and it is confined to that one login-gated route (the `/dev/*` relaxation lives in `VarselWeb.DevRouter`, which is not compiled). (`router.ex`, `dev/dev_router.ex`) |
 
 One build variant voids the §8 auth properties outright — a non-`prod`
 `MIX_ENV`, which ships the mock login: an intentional authentication bypass.
@@ -440,9 +434,9 @@ so injected script/handlers are stripped at the source. The app-wide
 **strict CSP** (`default-src 'none'`, `script-src 'self'` with per-request
 nonce, **no `unsafe-inline`/`unsafe-eval`**) is a second, independent layer:
 even a sanitizer bypass would need an inline `<script>`/event handler the
-browser refuses. (`config.exs`) In a prod build the only CSP relaxation is
-`/gql/playground`, which is login-gated and serves no user-authored content;
-the `/dev/*` relaxation compiles out (§5a).
+browser refuses. (`config.exs`) A prod build carries the strict policy on
+every route: the one relaxation, for the `/dev/*` dashboards, lives in
+`VarselWeb.DevRouter`, which is not compiled (§5a).
 
 ### 6b. Delegated and inherited surface
 
@@ -613,9 +607,9 @@ none of the authorization properties, by construction rather than by defect.
 6. **OAuth scope separation between surfaces.**
    An OAuth 2.1 access token carries a scope (`mcp` or `gql`); a token
    without the required scope for a surface gets `403 insufficient_scope`.
-   API keys and session JWTs (first-party credentials) are exempt by design.
-   This holds on the websocket too: `/ws/gql` refuses a token that lacks the
-   `gql` scope (§4).
+   API keys are first-party credentials and carry the user's own authority, so
+   the scope check applies to delegated grants alone. This holds on the
+   websocket too: `/ws/gql` refuses a token that lacks the `gql` scope (§4).
    The property constrains **use per surface, not issuance**: a token may
    legitimately carry both scopes, and holding both is not a violation. The
    token never exceeds the underlying user's role either way. Audience does

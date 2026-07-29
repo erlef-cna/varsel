@@ -10,7 +10,7 @@ defmodule Varsel.Accounts.User do
     domain: Varsel.Accounts,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
-    notifiers: [Ash.Notifier.PubSub],
+    notifiers: [Ash.Notifier.PubSub, Varsel.Accounts.Notifiers.DisconnectSockets],
     extensions: [
       AshAuthentication,
       Varsel.Accounts.Strategy.Github,

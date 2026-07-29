@@ -7,13 +7,11 @@ defmodule VarselWeb.GraphqlSocketTest do
 
   import Varsel.Fixtures
 
-  alias AshAuthentication.Jwt, as: SessionJwt
   alias AshAuthentication.Oauth2Server.Jwt
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
-  alias AshAuthentication.TokenResource.Actions, as: TokenActions
-  alias Varsel.Accounts.Token
-  alias Varsel.Accounts.User
+  alias Phoenix.Socket.Broadcast
   alias VarselWeb.GraphqlSocket
+  alias VarselWeb.SocketDisconnect
 
   defp connect(params, connect_info \\ %{}) do
     GraphqlSocket.connect(params, %Phoenix.Socket{}, connect_info)
@@ -57,11 +55,12 @@ defmodule VarselWeb.GraphqlSocketTest do
     assert opts[:context][:actor].id == user.id
   end
 
-  test "a signed-in browser session authenticates the socket" do
+  # Authority on every GraphQL entrance comes from a presented credential, so
+  # a browser carrying only a session is refused like any other caller.
+  test "a signed-in browser session does not authenticate the socket" do
     user = register_user("alice")
 
-    assert {:ok, socket} = connect(%{}, %{session: session_for(user)})
-    assert socket.assigns.current_user.id == user.id
+    assert :error = connect(%{}, %{session: session_for(user)})
   end
 
   test "an OAuth token carrying the gql scope authenticates the socket" do
@@ -93,24 +92,87 @@ defmodule VarselWeb.GraphqlSocketTest do
     assert :error = connect(%{"token" => token})
   end
 
-  # Sign-out revokes the stored token rather than only dropping the cookie, so
-  # a copied session must stop working here too.
-  test "a revoked session no longer authenticates the socket" do
-    user = register_user("alice")
-    session = session_for(user)
+  describe "authority ends when the credential does" do
+    test "the socket is named after the API key that opened it" do
+      user = register_user("alice", :poc)
+      {api_key, plaintext} = create_api_key(user)
 
-    assert {:ok, _socket} = connect(%{}, %{session: session})
+      assert {:ok, socket} = connect(%{"api_key" => plaintext})
+      assert GraphqlSocket.id(socket) == SocketDisconnect.api_key_topic(api_key.id)
+    end
 
-    {:ok, %{"jti" => jti}, _} = SessionJwt.verify(session["user_token"], User)
+    # An OAuth token is bounded by its expiry, which the socket schedules.
+    test "an OAuth socket is not named after a credential" do
+      user = register_user("alice", :poc)
 
-    :ok =
-      TokenActions.revoke_jti(
-        Token,
-        jti,
-        AshAuthentication.user_to_subject(user),
-        store_all_tokens?: true
-      )
+      {:ok, token, _claims} =
+        Jwt.mint(Varsel.Oauth2Server, sub: user.id, client_id: "test-client", scope: "gql")
 
-    assert :error = connect(%{}, %{session: session})
+      assert {:ok, socket} = connect(%{"token" => token})
+      assert GraphqlSocket.id(socket) == nil
+    end
+
+    test "deleting an API key closes the sockets it opened" do
+      user = register_user("alice", :poc)
+      {api_key, plaintext} = create_api_key(user)
+
+      VarselWeb.Endpoint.subscribe(SocketDisconnect.api_key_topic(api_key.id))
+      assert {:ok, _socket} = connect(%{"api_key" => plaintext})
+
+      Ash.destroy!(api_key, actor: user)
+
+      assert_receive %Broadcast{event: "disconnect"}
+    end
+
+    # A socket holds the role it resolved at connect, so a demotion reaches it
+    # whichever credential opened it.
+    test "a role change closes the user's sockets" do
+      user = register_user("alice", :poc)
+      {_api_key, plaintext} = create_api_key(user)
+
+      VarselWeb.Endpoint.subscribe(SocketDisconnect.user_topic(user.id))
+      assert {:ok, _socket} = connect(%{"api_key" => plaintext})
+
+      Ash.update!(user, %{role: :supporter}, action: :set_role, authorize?: false)
+
+      assert_receive %Broadcast{event: "disconnect"}
+    end
+
+    test "deleting the account closes the user's sockets" do
+      user = register_user("alice", :poc)
+      {_api_key, plaintext} = create_api_key(user)
+
+      VarselWeb.Endpoint.subscribe(SocketDisconnect.user_topic(user.id))
+      assert {:ok, _socket} = connect(%{"api_key" => plaintext})
+
+      Ash.destroy!(user, actor: user)
+
+      assert_receive %Broadcast{event: "disconnect"}
+    end
+
+    test "an ordinary update leaves open sockets alone" do
+      user = register_user("alice", :poc)
+
+      VarselWeb.Endpoint.subscribe(SocketDisconnect.user_topic(user.id))
+
+      Ash.update!(user, %{name: "Alice B."}, action: :update, actor: user)
+
+      refute_receive %Broadcast{event: "disconnect"}
+    end
+
+    test "an expiring credential schedules its own disconnect" do
+      user = register_user("alice", :poc)
+
+      {api_key, plaintext} =
+        create_api_key(user, %{expires_at: DateTime.add(DateTime.utc_now(), 50, :millisecond)})
+
+      assert {:ok, _socket} = connect(%{"api_key" => plaintext})
+      assert api_key.expires_at
+
+      # Delivered to the connecting process itself, in the shape the transport
+      # stops on.
+      assert_receive %Broadcast{event: "disconnect", topic: "credential_expiry"},
+                     1_000
+    end
   end
 end

@@ -26,18 +26,20 @@ defmodule VarselWeb.DevRouter do
   import Phoenix.LiveDashboard.Router
   import PhoenixStorybook.Router
 
-  # The dashboards all rely on inline scripts/styles and eval that the
+  # The tools all rely on inline scripts/styles, eval and CDN assets that the
   # app-wide strict CSP forbids. They never run in production, so the strict
   # header is replaced with Phoenix's own secure-browser default — enough to
   # keep the clickjacking and base-tag protections without constraining the
   # tools.
   pipeline :dev_browser do
-    plug :accepts, ["html"]
+    plug :accepts, ["html", "json"]
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {VarselWeb.Layouts, :root}
-    plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :load_from_session
+    plug :set_actor, :user
+    plug AshGraphql.Plug
 
     plug PlugContentSecurityPolicy,
       nonces_for: [],
@@ -71,5 +73,12 @@ defmodule VarselWeb.DevRouter do
     live_storybook "/dev/storybook",
       backend_module: VarselWeb.Storybook,
       assets_path: "/dev/storybook/assets"
+
+    # Irrelevant: compile time, not runtime.
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    forward "/dev/graphiql", Absinthe.Plug.GraphiQL,
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      schema: Module.concat(["VarselWeb.GraphqlSchema"]),
+      interface: :simple
   end
 end

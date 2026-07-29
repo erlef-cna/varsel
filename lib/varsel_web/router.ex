@@ -25,40 +25,6 @@ defmodule VarselWeb.Router do
     plug AshGraphql.Plug
   end
 
-  # The GraphiQL playground authenticates through the browser session
-  # instead of a bearer token. No CSRF protection (GraphiQL posts carry no
-  # token); cross-site POSTs are covered by the SameSite=Lax session cookie.
-  pipeline :graphql_playground do
-    plug :fetch_session
-    plug :load_from_session
-    plug :set_actor, :user
-    plug :require_login
-    # The bundled GraphiQL page (login-gated dev/POC debugging tool) loads
-    # React/GraphiQL from cdn.jsdelivr.net and relies on inline <script>/<style>,
-    # none of which the app-wide strict CSP permits. Re-run the CSP plug with a
-    # policy scoped just to what GraphiQL needs; its header replaces the
-    # endpoint's for this route only, leaving the rest of the site deny-by-default.
-    # nonces_for: [] overrides the app-level default (which nonces script_src);
-    # a script nonce here would make browsers ignore the 'unsafe-inline' that
-    # GraphiQL's inline bootstrap script depends on.
-    plug PlugContentSecurityPolicy,
-      nonces_for: [],
-      directives: %{
-        default_src: ~w('self' https://cdn.jsdelivr.net),
-        script_src: ~w('self' 'unsafe-inline' https://cdn.jsdelivr.net),
-        style_src: ~w('self' 'unsafe-inline' https://cdn.jsdelivr.net),
-        img_src: ~w('self' data: https://cdn.jsdelivr.net),
-        font_src: ~w('self' data: https://cdn.jsdelivr.net),
-        # jsdelivr for the sourcemap (.map) fetches devtools makes; 'self' for
-        # GraphiQL's same-origin WebSocket back to the app.
-        connect_src: ~w('self' https://cdn.jsdelivr.net),
-        base_uri: ~w('none'),
-        object_src: ~w('none')
-      }
-
-    plug AshGraphql.Plug
-  end
-
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -121,22 +87,9 @@ defmodule VarselWeb.Router do
   end
 
   scope "/gql" do
-    pipe_through [:graphql_playground]
-
-    # These Module.concat/1 calls take fixed compile-time module-name literals
-    # for modules that always exist, so they carry no runtime atom-exhaustion
-    # risk; safe_concat would only add a needless preload requirement.
-    forward "/playground", Absinthe.Plug.GraphiQL,
-      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-      schema: Module.concat(["VarselWeb.GraphqlSchema"]),
-      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-      socket: Module.concat(["VarselWeb.GraphqlSocket"]),
-      interface: :simple
-  end
-
-  scope "/gql" do
     pipe_through [:graphql]
 
+    # Irrelevant: compile time, not runtime.
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     forward "/", Absinthe.Plug, schema: Module.concat(["VarselWeb.GraphqlSchema"])
   end

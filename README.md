@@ -47,9 +47,8 @@ in Sweden.
   (GitHub OAuth; `poc` and `supporter` roles).
 - **JSON** — `GET /cves/index.json`, `/cves/:cve_id.json`, `/osv/all.json`
   and `/osv/:id.json`.
-- **GraphQL** — at `/gql` (playground at `/gql/playground`): public read
-  access to published data, plus lifecycle and user-management operations for
-  points of contact.
+- **GraphQL** — at `/gql`: public read access to published data, plus lifecycle
+  and user-management operations for points of contact.
 - **MCP** — at `/mcp`: public CVE/CWE/CAPEC tools, plus lifecycle tools gated
   by personal API keys (managed at `/settings/tokens`).
 

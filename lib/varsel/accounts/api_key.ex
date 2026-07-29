@@ -15,6 +15,7 @@ defmodule Varsel.Accounts.ApiKey do
     domain: Varsel.Accounts,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
+    notifiers: [Varsel.Accounts.Notifiers.DisconnectSockets],
     extensions: [AshPaperTrail.Resource]
 
   alias Varsel.Accounts.User
