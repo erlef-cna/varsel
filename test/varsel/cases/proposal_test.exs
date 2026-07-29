@@ -200,6 +200,20 @@ defmodule Varsel.Cases.ProposalTest do
     end
   end
 
+  describe "pre-flight authorization" do
+    test "Ash.can? reflects transition validity without validate?: true", %{
+      poc: poc,
+      case: case_record
+    } do
+      proposal = propose_set(poc, case_record, "title", "Better title")
+      assert Ash.can?({proposal, :accept, %{}}, poc)
+
+      accepted = Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+      refute Ash.can?({accepted, :accept, %{}}, poc)
+      refute Ash.can?({accepted, :decline, %{}}, poc)
+    end
+  end
+
   describe ":accept — :set" do
     test "applies the value to the case with the approver as paper-trail actor", %{
       poc: poc,

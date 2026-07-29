@@ -80,7 +80,7 @@ defmodule Varsel.Cases.Proposal do
     change_tracking_mode :changes_only
     reference_source? false
     attributes_as_attributes [:state]
-    ignore_attributes [:inserted_at, :updated_at]
+    ignore_attributes [:inserted_at, :updated_at, :version]
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, User, domain: Varsel.Accounts
@@ -205,6 +205,12 @@ defmodule Varsel.Cases.Proposal do
   end
 
   policies do
+    # Pre-flight visibility only (`Ash.can?`): at runtime this passes and the
+    # `transition_state` validation stays the enforcement.
+    policy action_type(:update) do
+      authorize_if AshStateMachine.Checks.ValidNextState
+    end
+
     # POCs and assigned supporters see a case's proposals; authors always see
     # their own.
     policy action_type(:read) do
@@ -250,6 +256,11 @@ defmodule Varsel.Cases.Proposal do
   # only declares its own payload and PackProposal change.
   changes do
     change relate_actor(:author), on: [:create]
+
+    # The state-changing updates re-read the row via get_and_lock_for_update(),
+    # so for them this lock can't fire; it protects any future update action
+    # that skips the pessimistic lock, and keeps the pattern uniform.
+    change optimistic_lock(:version), on: [:update]
   end
 
   validations do
@@ -263,6 +274,13 @@ defmodule Varsel.Cases.Proposal do
 
   attributes do
     uuid_primary_key :id
+
+    attribute :version, :integer do
+      description "Optimistic lock counter; every update bumps it and rejects stale snapshots."
+      allow_nil? false
+      default 1
+      public? false
+    end
 
     attribute :target, Target do
       description "Which kind of resource this proposal addresses."

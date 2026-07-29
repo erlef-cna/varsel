@@ -23,20 +23,33 @@ defmodule Varsel.Cases.Changes.SupersedeOrphanedProposals do
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
+    # On apply_proposal_delete the destroy is driven by a proposal that is
+    # still :open in the database until its accept commits — it is being
+    # resolved, not orphaned. Sweeping it would bump its version mid-accept
+    # and fail the outer update's optimistic lock.
+    driving_proposal_id = Ash.Changeset.get_argument(changeset, :proposal_id)
+
     Ash.Changeset.after_action(changeset, fn _changeset, record ->
-      sweep(record, context)
+      sweep(record, driving_proposal_id, context)
       {:ok, record}
     end)
   end
 
-  defp sweep(record, context) do
+  defp sweep(record, driving_proposal_id, context) do
     Proposal
     |> Ash.Query.filter(state == :open and target_id == ^record.id)
+    |> exclude_driving_proposal(driving_proposal_id)
     |> Varsel.Cases.supersede_case_proposal!(
       %{resolution_note: "the targeted row was deleted"},
       actor: context.actor,
       authorize?: false,
       bulk_options: [strategy: :stream, return_errors?: true]
     )
+  end
+
+  defp exclude_driving_proposal(query, nil), do: query
+
+  defp exclude_driving_proposal(query, proposal_id) do
+    Ash.Query.filter(query, id != ^proposal_id)
   end
 end
