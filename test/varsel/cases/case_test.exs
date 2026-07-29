@@ -207,6 +207,54 @@ defmodule Varsel.Cases.CaseTest do
       assert {:error, error} = Cases.assign_case_cve_id(case_record, %{}, actor: poc)
       assert Exception.message(error) =~ "no reserved CVE IDs"
     end
+
+    test "a stale snapshot cannot assign twice, and the failed pick rolls back", %{poc: poc} do
+      year = Date.utc_today().year
+      Fixtures.reserved_cve_record("CVE-#{year}-11114")
+      record_b = Fixtures.reserved_cve_record("CVE-#{year}-11115")
+
+      stale_case = Fixtures.open_case(poc)
+      Cases.assign_case_cve_id!(stale_case, %{}, actor: poc)
+
+      assert {:error, %Invalid{errors: errors}} =
+               Cases.assign_case_cve_id(stale_case, %{}, actor: poc)
+
+      assert Enum.any?(errors, &match?(%StaleRecord{}, &1))
+
+      # The before_action had already taken record B out of the pool; the
+      # failed case update must roll that reservation transition back with it.
+      assert Ash.get!(CveRecord, record_b.id, authorize?: false).state == :reserved
+    end
+
+    test "refuses a record another case already took", %{poc: poc} do
+      year = Date.utc_today().year
+      record = Fixtures.reserved_cve_record("CVE-#{year}-11116")
+
+      case1 = Fixtures.open_case(poc)
+      Cases.assign_case_cve_id!(case1, %{cve_record_id: record.id}, actor: poc)
+
+      case2 = Fixtures.open_case(poc)
+
+      assert {:error, error} =
+               Cases.assign_case_cve_id(case2, %{cve_record_id: record.id}, actor: poc)
+
+      assert Exception.message(error) =~ "CVE record is draft, not reserved"
+      assert Ash.get!(Cases.Case, case2.id, authorize?: false).cve_record_id == nil
+    end
+
+    test "two cases assigned in sequence get different IDs", %{poc: poc} do
+      year = Date.utc_today().year
+      Fixtures.reserved_cve_record("CVE-#{year}-11117")
+      Fixtures.reserved_cve_record("CVE-#{year}-11118")
+
+      case1 = Fixtures.open_case(poc)
+      case1 = Cases.assign_case_cve_id!(case1, %{}, actor: poc)
+
+      case2 = Fixtures.open_case(poc)
+      case2 = Cases.assign_case_cve_id!(case2, %{}, actor: poc)
+
+      assert case1.cve_record_id != case2.cve_record_id
+    end
   end
 
   describe "cvss_score / severity_bucket calculations" do
