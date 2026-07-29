@@ -65,6 +65,7 @@ defmodule Varsel.Accounts do
       end
 
       define :set_user_notification_email, action: :set_notification_email
+      define :reconcile_user_notification_email, action: :reconcile_notification_email
       define :delete_user, action: :destroy
       define :log_out_user_everywhere, action: :log_out_everywhere
     end

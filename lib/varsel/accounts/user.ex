@@ -65,10 +65,13 @@ defmodule Varsel.Accounts.User do
       authorize_if always()
     end
 
-    # Everything else is POC-or-self only.
+    # Everything else is POC-or-self only. The reconcile that runs after an
+    # identity write reads the address and the identities' emails with no
+    # actor; its stamped provenance admits it (see the read policies).
     field_policy [:notification_email, :identity_emails, :role] do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
+      authorize_if accessing_from(UserIdentity, :user)
     end
   end
 
@@ -218,6 +221,11 @@ defmodule Varsel.Accounts.User do
       change Varsel.Accounts.User.Changes.ValidateNotificationEmailIsLinked
     end
 
+    update :reconcile_notification_email do
+      description "Re-points the notification email after an identity change left it unattested."
+      accept [:notification_email]
+    end
+
     update :update do
       description "Updates a user's own editable profile fields (name)."
       # Role is intentionally NOT accepted here: :update is self-editable
@@ -289,6 +297,9 @@ defmodule Varsel.Accounts.User do
     policy action_type(:read) do
       access_type :strict
       authorize_if actor_present()
+      # The notification-email reconcile reads mid-sign-in, when there is no
+      # actor yet; it stamps this provenance itself, as the catalog syncs do.
+      authorize_if accessing_from(UserIdentity, :user)
     end
 
     policy action_type(:read) do
@@ -304,6 +315,7 @@ defmodule Varsel.Accounts.User do
       authorize_if accessing_from(Varsel.Cases.Comment, :author)
       authorize_if accessing_from(Varsel.Cases.CaseAssignment, :user)
       authorize_if accessing_from(Varsel.Cases.CaseCredit, :user)
+      authorize_if accessing_from(UserIdentity, :user)
     end
 
     policy action(:update) do
@@ -320,6 +332,13 @@ defmodule Varsel.Accounts.User do
     # their mail goes.
     policy action(:set_notification_email) do
       authorize_if expr(id == ^actor(:id))
+    end
+
+    # Written only by the reconcile that follows an identity upsert or unlink
+    # (`Varsel.Accounts.UserIdentity.Changes.ReconcileUserNotificationEmail`),
+    # which stamps this provenance itself. No caller reaches it directly.
+    policy action(:reconcile_notification_email) do
+      authorize_if accessing_from(UserIdentity, :user)
     end
 
     # Your own account, or a POC removing someone from the team — the same
@@ -348,8 +367,10 @@ defmodule Varsel.Accounts.User do
 
     # Seeded from the first provider to report one and thereafter chosen by the
     # user from their linked identities' emails (see :set_notification_email), so it
-    # is never silently re-pointed by a later sign-in. Nil for accounts whose
-    # providers reported no address.
+    # is never re-pointed by a later sign-in *while a linked identity still
+    # reports it* — once none does, the reconcile on identity writes falls back
+    # to an address one still reports (see ReconcileUserNotificationEmail).
+    # Nil for accounts whose providers reported no address.
     # Case-insensitive so the unique identity below actually holds: otherwise
     # two accounts could claim the same address by capitalising it
     # differently, and neither this nor the check against the addresses a

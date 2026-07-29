@@ -24,6 +24,7 @@ defmodule Varsel.Accounts.UserIdentity do
 
   alias Ash.Type.CiString
   alias Varsel.Accounts.User
+  alias Varsel.Accounts.UserIdentity.Changes.ReconcileUserNotificationEmail
 
   user_identity do
     user_resource User
@@ -99,11 +100,16 @@ defmodule Varsel.Accounts.UserIdentity do
 
       change AshAuthentication.UserIdentity.UpsertIdentityChange
       change Varsel.Accounts.UserIdentity.Changes.ApplyProviderFields
+      change ReconcileUserNotificationEmail
     end
 
     destroy :destroy do
       description "Unlinks a provider from the account it is linked to."
       primary? true
+      # The reconcile runs in an after_action hook, inside the transaction.
+      require_atomic? false
+
+      change ReconcileUserNotificationEmail
     end
   end
 
