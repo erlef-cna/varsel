@@ -20,7 +20,6 @@ defmodule Varsel.Cases.CaseWeakness do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
-  alias Varsel.Cases.Validations.CaseEditable
 
   graphql do
     type :case_weakness
@@ -53,14 +52,12 @@ defmodule Varsel.Cases.CaseWeakness do
       description "Classifies the case with a CWE."
       primary? true
       accept [:case_id, :cwe_id, :position]
-      validate CaseEditable
     end
 
     destroy :remove do
       description "Removes a CWE classification."
       primary? true
       require_atomic? false
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
 
@@ -69,8 +66,6 @@ defmodule Varsel.Cases.CaseWeakness do
       accept [:case_id, :cwe_id, :position]
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
     end
 
     destroy :apply_proposal_delete do
@@ -78,8 +73,6 @@ defmodule Varsel.Cases.CaseWeakness do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
   end
@@ -88,6 +81,11 @@ defmodule Varsel.Cases.CaseWeakness do
     policy action_type([:read, :create, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    # Content freeze: child rows may only change while the parent case is editable.
+    policy action_type([:create, :destroy]) do
+      authorize_if expr(case.state in [:draft, :review])
     end
   end
 

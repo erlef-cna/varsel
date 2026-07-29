@@ -5,7 +5,9 @@
 defmodule Varsel.Cases.CaseTest do
   use Varsel.DataCase, async: false
 
+  alias Ash.Error.Changes.StaleRecord
   alias Ash.Error.Forbidden
+  alias Ash.Error.Invalid
   alias Varsel.Cases
   alias Varsel.CVE.CveRecord
   alias Varsel.Fixtures
@@ -84,8 +86,29 @@ defmodule Varsel.Cases.CaseTest do
       case_record = Cases.request_case_review!(case_record, actor: poc)
       case_record = Cases.approve_case!(case_record, actor: poc)
 
-      assert {:error, error} = Cases.edit_case(case_record, %{title: "nope"}, actor: poc)
-      assert Exception.message(error) =~ "frozen"
+      assert {:error, %Forbidden{}} = Cases.edit_case(case_record, %{title: "nope"}, actor: poc)
+    end
+
+    test "a stale snapshot cannot edit a case approved in the meantime", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      in_review = Cases.request_case_review!(case_record, actor: poc)
+      Cases.approve_case!(in_review, actor: poc)
+
+      assert {:error, %Forbidden{}} =
+               Cases.edit_case(in_review, %{title: "changed after approval"}, actor: poc)
+
+      reloaded = Cases.get_case!(case_record.id, actor: poc)
+      assert reloaded.state == :approved
+      refute reloaded.title == "changed after approval"
+    end
+
+    test "a stale snapshot is rejected even when the case is still editable", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      in_review = Cases.request_case_review!(case_record, actor: poc)
+      Cases.request_case_changes!(in_review, actor: poc)
+
+      assert {:error, %Invalid{errors: [%StaleRecord{}]}} =
+               Cases.edit_case(in_review, %{title: "changed after moving back"}, actor: poc)
     end
 
     test "an assigned supporter can edit; an unassigned one cannot", %{
@@ -109,20 +132,26 @@ defmodule Varsel.Cases.CaseTest do
       case_record = Cases.request_case_review!(case_record, actor: poc)
       _case_record = Cases.approve_case!(case_record, actor: poc)
 
-      assert {:error, error} = Cases.edit_affected_package(package, %{vendor: "nope"}, actor: poc)
-      assert Exception.message(error) =~ "frozen"
+      assert {:error, %Forbidden{}} =
+               Cases.edit_affected_package(package, %{vendor: "nope"}, actor: poc)
 
-      assert {:error, error} =
+      assert {:error, %Forbidden{}} =
                Cases.add_case_reference(
                  %{case_id: case_record.id, url: "https://example.com/advisory"},
                  actor: poc
                )
-
-      assert Exception.message(error) =~ "frozen"
     end
   end
 
   describe "lifecycle transitions" do
+    test "a stale snapshot cannot re-run a transition", %{poc: poc} do
+      in_draft = Fixtures.open_case(poc)
+      Cases.request_case_review!(in_draft, actor: poc)
+
+      assert {:error, %Invalid{errors: [%StaleRecord{}]}} =
+               Cases.request_case_review(in_draft, actor: poc)
+    end
+
     test "request_changes and reopen return to draft", %{poc: poc} do
       case_record = Fixtures.open_case(poc)
       case_record = Cases.request_case_review!(case_record, actor: poc)

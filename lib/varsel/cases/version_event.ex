@@ -36,7 +36,6 @@ defmodule Varsel.Cases.VersionEvent do
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Proposable
-  alias Varsel.Cases.Validations.CaseEditable
   alias Varsel.Cases.VersionEvent.Event
   alias Varsel.Cases.VersionEvent.Validations.ConsistentBoundary
 
@@ -75,7 +74,6 @@ defmodule Varsel.Cases.VersionEvent do
       description "Records a vulnerability boundary fact for a logical product."
       primary? true
       accept [:case_id, :affected_package_id, :package_channel_id | Proposable.fields(__MODULE__)]
-      validate CaseEditable
       validate ConsistentBoundary
     end
 
@@ -84,7 +82,6 @@ defmodule Varsel.Cases.VersionEvent do
       primary? true
       accept Proposable.fields(__MODULE__)
       require_atomic? false
-      validate CaseEditable
       validate ConsistentBoundary
     end
 
@@ -92,7 +89,6 @@ defmodule Varsel.Cases.VersionEvent do
       description "Removes a boundary fact."
       primary? true
       require_atomic? false
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
 
@@ -104,8 +100,6 @@ defmodule Varsel.Cases.VersionEvent do
       argument :field, :string, allow_nil?: false
       argument :value, :term
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       validate ConsistentBoundary
       change ApplyProposedField
     end
@@ -115,8 +109,6 @@ defmodule Varsel.Cases.VersionEvent do
       accept [:case_id, :affected_package_id, :package_channel_id | Proposable.fields(__MODULE__)]
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       validate ConsistentBoundary
     end
 
@@ -125,8 +117,6 @@ defmodule Varsel.Cases.VersionEvent do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
   end
@@ -135,6 +125,11 @@ defmodule Varsel.Cases.VersionEvent do
     policy action_type([:read, :create, :update, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    # Content freeze: child rows may only change while the parent case is editable.
+    policy action_type([:create, :update, :destroy]) do
+      authorize_if expr(case.state in [:draft, :review])
     end
   end
 

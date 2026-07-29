@@ -34,8 +34,10 @@ defmodule Varsel.Cases.Case do
   ```
 
   Content (case fields and all child rows) is editable only in `:draft` and
-  `:review` — the `Varsel.Cases.Validations.CaseEditable` freeze. Amending a
-  published case means reopening it; the next publish pushes a MITRE update.
+  `:review` — enforced by the content-freeze policy on `:edit` /
+  `:apply_proposal`, with the `:version` optimistic lock rejecting writes from
+  stale snapshots. Amending a published case means reopening it; the next
+  publish pushes a MITRE update.
 
   ## Escape hatch
 
@@ -55,7 +57,6 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
-  alias Varsel.Cases.Validations.CaseEditable
   alias Varsel.Cases.Validations.CveIdAssignable
 
   @content_fields [
@@ -125,7 +126,7 @@ defmodule Varsel.Cases.Case do
     # rather than serializing it into the `changes` map (which AshPaperTrail
     # cannot do for enum types).
     attributes_as_attributes [:state]
-    ignore_attributes [:inserted_at, :updated_at]
+    ignore_attributes [:inserted_at, :updated_at, :version]
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, Varsel.Accounts.User, domain: Varsel.Accounts
@@ -163,7 +164,6 @@ defmodule Varsel.Cases.Case do
       primary? true
       accept @content_fields
       require_atomic? false
-      validate CaseEditable
     end
 
     update :apply_proposal do
@@ -180,7 +180,6 @@ defmodule Varsel.Cases.Case do
       argument :value, :term
       argument :proposal_id, :uuid, allow_nil?: false
 
-      validate CaseEditable
       change Varsel.Cases.Changes.ApplyProposedField
     end
 
@@ -311,6 +310,17 @@ defmodule Varsel.Cases.Case do
       authorize_if relates_to_actor_via([:assignments, :user])
     end
 
+    # Content freeze: case content may only change in :draft or :review.
+    policy action([:edit, :apply_proposal]) do
+      authorize_if expr(state in [:draft, :review])
+    end
+
+    # Pre-flight visibility only (`Ash.can?`): at runtime this passes and the
+    # `transition_state` validation stays the enforcement.
+    policy action_type(:update) do
+      authorize_if AshStateMachine.Checks.ValidNextState
+    end
+
     # Case lifecycle decisions are POC-only.
     policy action([:open, :request_changes, :approve, :assign_cve_id, :publish, :reopen, :close]) do
       authorize_if actor_attribute_equals(:role, :poc)
@@ -333,6 +343,17 @@ defmodule Varsel.Cases.Case do
     publish_all :destroy, ["all"]
   end
 
+  changes do
+    # Updates always run against server-loaded snapshots. Rejecting any write
+    # whose row moved since that load (StaleRecord) is what entitles the
+    # update policies to trust `changeset.data`. :refresh_derivation is exempt:
+    # it only rewrites derived caches and runs nested inside :publish, where a
+    # version bump would trip the outer changeset's own lock.
+    change optimistic_lock(:version),
+      on: [:update],
+      where: [negate(action_is(:refresh_derivation))]
+  end
+
   attributes do
     uuid_primary_key :id
 
@@ -341,6 +362,13 @@ defmodule Varsel.Cases.Case do
       allow_nil? false
       default :draft
       public? true
+    end
+
+    attribute :version, :integer do
+      description "Optimistic lock counter; every update bumps it and rejects stale snapshots."
+      allow_nil? false
+      default 1
+      public? false
     end
 
     attribute :title, :string do

@@ -36,7 +36,6 @@ defmodule Varsel.Cases.PackageChannel do
   alias Varsel.Cases.PackageChannel.PurlType
   alias Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage
   alias Varsel.Cases.Proposable
-  alias Varsel.Cases.Validations.CaseEditable
 
   graphql do
     type :case_package_channel
@@ -69,7 +68,6 @@ defmodule Varsel.Cases.PackageChannel do
       primary? true
       description "Adds a distribution channel to a logical product."
       accept [:case_id, :affected_package_id | Proposable.fields(__MODULE__)]
-      validate CaseEditable
       validate ConsistentWithPackage
     end
 
@@ -78,7 +76,6 @@ defmodule Varsel.Cases.PackageChannel do
       description "Edits a channel. Only allowed while the case is editable."
       accept Proposable.fields(__MODULE__)
       require_atomic? false
-      validate CaseEditable
       validate ConsistentWithPackage
     end
 
@@ -86,7 +83,6 @@ defmodule Varsel.Cases.PackageChannel do
       primary? true
       description "Removes a channel from a logical product."
       require_atomic? false
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
 
@@ -98,8 +94,6 @@ defmodule Varsel.Cases.PackageChannel do
       argument :field, :string, allow_nil?: false
       argument :value, :term
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       validate ConsistentWithPackage
       change ApplyProposedField
     end
@@ -109,8 +103,6 @@ defmodule Varsel.Cases.PackageChannel do
       accept [:case_id, :affected_package_id | Proposable.fields(__MODULE__)]
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       validate ConsistentWithPackage
     end
 
@@ -119,8 +111,6 @@ defmodule Varsel.Cases.PackageChannel do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
   end
@@ -129,6 +119,11 @@ defmodule Varsel.Cases.PackageChannel do
     policy action_type([:read, :create, :update, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    # Content freeze: child rows may only change while the parent case is editable.
+    policy action_type([:create, :update, :destroy]) do
+      authorize_if expr(case.state in [:draft, :review])
     end
   end
 

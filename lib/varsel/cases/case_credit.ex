@@ -24,7 +24,6 @@ defmodule Varsel.Cases.CaseCredit do
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Proposable
-  alias Varsel.Cases.Validations.CaseEditable
 
   graphql do
     type :case_credit
@@ -57,7 +56,6 @@ defmodule Varsel.Cases.CaseCredit do
       description "Adds a credit to a case."
       primary? true
       accept [:case_id, :user_id | Proposable.fields(__MODULE__)]
-      validate CaseEditable
     end
 
     update :edit do
@@ -65,14 +63,12 @@ defmodule Varsel.Cases.CaseCredit do
       primary? true
       accept [:user_id | Proposable.fields(__MODULE__)]
       require_atomic? false
-      validate CaseEditable
     end
 
     destroy :remove do
       description "Removes a credit from a case."
       primary? true
       require_atomic? false
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
 
@@ -84,8 +80,6 @@ defmodule Varsel.Cases.CaseCredit do
       argument :field, :string, allow_nil?: false
       argument :value, :term
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change ApplyProposedField
     end
 
@@ -94,8 +88,6 @@ defmodule Varsel.Cases.CaseCredit do
       accept [:case_id | Proposable.fields(__MODULE__)]
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
     end
 
     destroy :apply_proposal_delete do
@@ -103,8 +95,6 @@ defmodule Varsel.Cases.CaseCredit do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
   end
@@ -113,6 +103,11 @@ defmodule Varsel.Cases.CaseCredit do
     policy action_type([:read, :create, :update, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    # Content freeze: child rows may only change while the parent case is editable.
+    policy action_type([:create, :update, :destroy]) do
+      authorize_if expr(case.state in [:draft, :review])
     end
   end
 

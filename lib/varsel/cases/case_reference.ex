@@ -26,7 +26,6 @@ defmodule Varsel.Cases.CaseReference do
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Proposable
-  alias Varsel.Cases.Validations.CaseEditable
 
   # CVE 5.2 reference-tag vocabulary (tags/reference-tags.json), plus x_ custom tags.
   @reference_tags ~w(
@@ -70,7 +69,6 @@ defmodule Varsel.Cases.CaseReference do
       description "Adds a reference to a case."
       primary? true
       accept [:case_id | Proposable.fields(__MODULE__)]
-      validate CaseEditable
     end
 
     update :edit do
@@ -78,14 +76,12 @@ defmodule Varsel.Cases.CaseReference do
       primary? true
       accept Proposable.fields(__MODULE__)
       require_atomic? false
-      validate CaseEditable
     end
 
     destroy :remove do
       description "Removes a reference from a case."
       primary? true
       require_atomic? false
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
 
@@ -97,8 +93,6 @@ defmodule Varsel.Cases.CaseReference do
       argument :field, :string, allow_nil?: false
       argument :value, :term
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change ApplyProposedField
     end
 
@@ -107,8 +101,6 @@ defmodule Varsel.Cases.CaseReference do
       accept [:case_id | Proposable.fields(__MODULE__)]
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
     end
 
     destroy :apply_proposal_delete do
@@ -116,8 +108,6 @@ defmodule Varsel.Cases.CaseReference do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
   end
@@ -126,6 +116,11 @@ defmodule Varsel.Cases.CaseReference do
     policy action_type([:read, :create, :update, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    # Content freeze: child rows may only change while the parent case is editable.
+    policy action_type([:create, :update, :destroy]) do
+      authorize_if expr(case.state in [:draft, :review])
     end
   end
 

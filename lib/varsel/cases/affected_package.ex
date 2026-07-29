@@ -38,7 +38,6 @@ defmodule Varsel.Cases.AffectedPackage do
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Proposable
-  alias Varsel.Cases.Validations.CaseEditable
 
   graphql do
     type :case_affected_package
@@ -70,7 +69,6 @@ defmodule Varsel.Cases.AffectedPackage do
       description "Adds a logical product to a case."
       primary? true
       accept [:case_id | Proposable.fields(__MODULE__)]
-      validate CaseEditable
     end
 
     create :add_otp do
@@ -102,7 +100,6 @@ defmodule Varsel.Cases.AffectedPackage do
         constraints items: [match: Preset.commit_sha_regex()]
       end
 
-      validate CaseEditable
       change {FromPreset, preset: :otp}
     end
 
@@ -133,7 +130,6 @@ defmodule Varsel.Cases.AffectedPackage do
         constraints items: [match: Preset.commit_sha_regex()]
       end
 
-      validate CaseEditable
       change {FromPreset, preset: :elixir}
     end
 
@@ -158,7 +154,6 @@ defmodule Varsel.Cases.AffectedPackage do
         constraints items: [match: Preset.commit_sha_regex()]
       end
 
-      validate CaseEditable
       change {FromPreset, preset: :gleam}
     end
 
@@ -167,14 +162,12 @@ defmodule Varsel.Cases.AffectedPackage do
       primary? true
       accept Proposable.fields(__MODULE__)
       require_atomic? false
-      validate CaseEditable
     end
 
     destroy :remove do
       description "Removes a logical product (with all its channels and version events) from a case."
       primary? true
       require_atomic? false
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
 
@@ -186,8 +179,6 @@ defmodule Varsel.Cases.AffectedPackage do
       argument :field, :string, allow_nil?: false
       argument :value, :term
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change ApplyProposedField
     end
 
@@ -200,8 +191,6 @@ defmodule Varsel.Cases.AffectedPackage do
       argument :channels, {:array, :map}, default: []
       argument :version_events, {:array, :map}, default: []
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change Varsel.Cases.AffectedPackage.Changes.InsertChildren
     end
 
@@ -224,8 +213,6 @@ defmodule Varsel.Cases.AffectedPackage do
       end
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change {FromPreset, preset: :otp}
     end
 
@@ -248,8 +235,6 @@ defmodule Varsel.Cases.AffectedPackage do
       end
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change {FromPreset, preset: :elixir}
     end
 
@@ -267,8 +252,6 @@ defmodule Varsel.Cases.AffectedPackage do
       end
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change {FromPreset, preset: :gleam}
     end
 
@@ -277,8 +260,6 @@ defmodule Varsel.Cases.AffectedPackage do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-
-      validate CaseEditable
       change SupersedeOrphanedProposals
     end
 
@@ -298,6 +279,13 @@ defmodule Varsel.Cases.AffectedPackage do
     policy action_type([:read, :create, :update, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    # Content freeze: child rows may only change while the parent case is
+    # editable. :store_derivation is untouched — it runs with authorization
+    # disabled as a side effect of the already-gated derivation refresh.
+    policy action_type([:create, :update, :destroy]) do
+      authorize_if expr(case.state in [:draft, :review])
     end
   end
 
