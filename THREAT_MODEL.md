@@ -467,6 +467,20 @@ what already left the machine stays gone.
 
 ### 6a. Outputs and expected sinks
 
+**Taint.** Varsel is not a passthrough parser: most of what it serves is its
+own structured data, built from typed columns. Free-form prose is the
+exception, and it is exactly as trustworthy as whoever last wrote it.
+
+For a record in our own CNA container that is normally a POC or assignee. But
+**MITRE holds write access to the container too**, and the daily
+`import_from_mitre` sweep upserts published records back over ours. It rarely
+happens, and the model does not lean on that: prose read back from a published
+record — `supportingMedia` HTML especially — is treated as content we did not
+necessarily author, and sanitized on that basis (property 9). A finding that
+imported prose rendered unsanitized is `VALID`; a finding that MITRE *could
+alter* a record is `OUT-OF-MODEL: adversary-not-in-scope` (§7), since MITRE is
+a trusted integration partner.
+
 | Output | Expected sink | Sink-safe? | If not, caller must |
 | --- | --- | --- | --- |
 | Case markdown → on-site HTML (`Markdown.to_display_html`) | Browser HTML | **Yes** — rendered `unsafe: true` then run through the `sanitize` (ammonia) allow-list, so scripts/handlers/dangerous URLs are stripped while safe author HTML survives (`markdown.ex`) | — (sanitized) |
@@ -498,6 +512,12 @@ released** — nothing more. There is no per-dependency ownership adjudication
 to make. Patch status, pinning, and provenance are **build hygiene, out of
 scope** per §1.
 
+**Using one wrongly is still ours.** The rule above covers a dependency
+failing *its own* contract while Varsel used it as documented. A finding that
+Varsel feeds a dependency something its documentation says not to — or skips a
+check that documentation requires — is **in model**, and the fix is here
+rather than upstream.
+
 For orientation only, the dependencies that receive attacker-influenced input
 (so an upstream bug is actually *reachable* through Varsel, rather than dead
 code) are `exgit` (git data from a case's `repo_url`), `mdex` (author markdown
@@ -505,8 +525,7 @@ code) are `exgit` (git data from a case's `repo_url`), `mdex` (author markdown
 it — any authenticated caller can hand `validate_cve_record*` an arbitrary
 `cve_json` (§5). `saxy` and `req` are fed only trusted or fixed-host data, so
 their surface is not attacker-reachable. This list informs prioritization of a
-dependency bump; it does not change the disposition, which is always
-`OUT-OF-MODEL: report-upstream`.
+dependency bump; it does not change the disposition.
 
 ---
 
