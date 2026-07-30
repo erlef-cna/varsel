@@ -115,6 +115,10 @@ defmodule Varsel.Types.CVSS do
      }}
   end
 
+  # A calculation that selects the vector out of a JSON document hands over the
+  # bare string, which the parser derives the rest from.
+  def cast_stored(vector, constraints) when is_binary(vector), do: cast_input(vector, constraints)
+
   @impl Ash.Type
   def dump_to_native(nil, _), do: {:ok, nil}
 

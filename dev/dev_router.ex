@@ -32,10 +32,26 @@ defmodule VarselWeb.DevRouter do
   # keep the clickjacking and base-tag protections without constraining the
   # tools.
   pipeline :dev_browser do
-    plug :accepts, ["html", "json"]
+    plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {VarselWeb.Layouts, :root}
+    plug :put_secure_browser_headers
+    plug :protect_from_forgery
+    plug :load_from_session
+    plug :set_actor, :user
+
+    plug PlugContentSecurityPolicy,
+      nonces_for: [],
+      directives: %{
+        base_uri: ~w('self'),
+        frame_ancestors: ~w('self')
+      }
+  end
+
+  pipeline :gql_playground do
+    plug :accepts, ["html", "json"]
+    plug :fetch_session
     plug :put_secure_browser_headers
     plug :load_from_session
     plug :set_actor, :user
@@ -73,6 +89,10 @@ defmodule VarselWeb.DevRouter do
     live_storybook "/dev/storybook",
       backend_module: VarselWeb.Storybook,
       assets_path: "/dev/storybook/assets"
+  end
+
+  scope "/" do
+    pipe_through :gql_playground
 
     # Irrelevant: compile time, not runtime.
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom

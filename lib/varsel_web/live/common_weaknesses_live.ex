@@ -95,7 +95,9 @@ defmodule VarselWeb.CommonWeaknessesLive do
   defp load_cves(nil), do: []
 
   defp load_cves(%{cve_ids: cve_ids}) do
-    [load: [:cve_id, :title, :date_published, :purls], actor: nil]
+    query = Ash.Query.select(CVE.CveRecord, [])
+
+    [load: [:cve_id, :title, :date_published, :purls], actor: nil, query: query, strict?: true]
     |> CVE.list_published_cve_records!()
     |> Enum.filter(&(&1.cve_id in cve_ids))
   end

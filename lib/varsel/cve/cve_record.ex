@@ -107,8 +107,11 @@ defmodule Varsel.CVE.CveRecord do
     calculations_to_sql cve_id: "coalesce(cve_json->'cveMetadata'->>'cveId', reservation_json->>'cve_id')",
                         title: "cve_json->'containers'->'cna'->>'title'",
                         reserved_at: "(reservation_json->>'reserved')::timestamptz",
+                        date_published: "cve_record_published(cve_json)",
                         year: "(reservation_json->>'cve_year')::integer",
-                        search_vector: "search_vector"
+                        search_vector: "search_vector",
+                        cwe_ids: "cve_record_cwe_ids(cve_json)",
+                        capec_ids: "cve_record_capec_ids(cve_json)"
 
     custom_statements do
       statement :cve_record_search_vector_fn do
@@ -157,6 +160,44 @@ defmodule Varsel.CVE.CveRecord do
         down "ALTER TABLE cve_records DROP COLUMN IF EXISTS search_vector"
       end
 
+      statement :cve_record_published_fn do
+        up """
+        CREATE FUNCTION cve_record_published(cve_json jsonb)
+        RETURNS timestamp
+        LANGUAGE sql
+        IMMUTABLE PARALLEL SAFE
+        AS $$
+          SELECT (cve_json->'cveMetadata'->>'datePublished')::timestamp
+        $$
+        """
+
+        down "DROP FUNCTION IF EXISTS cve_record_published(jsonb)"
+      end
+
+      statement :cve_record_published_quarter_fn do
+        up """
+        CREATE FUNCTION cve_record_published_quarter(cve_json jsonb)
+        RETURNS date
+        LANGUAGE sql
+        IMMUTABLE PARALLEL SAFE
+        AS $$
+          SELECT date_trunc('quarter', (cve_json->'cveMetadata'->>'datePublished')::timestamp)::date
+        $$
+        """
+
+        down "DROP FUNCTION IF EXISTS cve_record_published_quarter(jsonb)"
+      end
+
+      statement :add_published_index do
+        up "CREATE INDEX cve_records_published ON cve_records (cve_record_published(cve_json)) WHERE state = 'published'"
+        down "DROP INDEX IF EXISTS cve_records_published"
+      end
+
+      statement :add_published_quarter_index do
+        up "CREATE INDEX cve_records_published_quarter ON cve_records (cve_record_published_quarter(cve_json)) WHERE state = 'published'"
+        down "DROP INDEX IF EXISTS cve_records_published_quarter"
+      end
+
       statement :add_search_vector_gin_index do
         up "CREATE INDEX cve_records_search_vector_gin ON cve_records USING GIN (search_vector)"
         down "DROP INDEX IF EXISTS cve_records_search_vector_gin"
@@ -165,6 +206,80 @@ defmodule Varsel.CVE.CveRecord do
       statement :add_affected_gin_index do
         up "CREATE INDEX cve_records_affected_gin ON cve_records USING GIN ((cve_json->'containers'->'cna'->'affected'))"
         down "DROP INDEX IF EXISTS cve_records_affected_gin"
+      end
+
+      statement :cve_record_cwe_ids_fn do
+        up """
+        CREATE FUNCTION cve_record_cwe_ids(document jsonb)
+        RETURNS text[]
+        LANGUAGE sql
+        IMMUTABLE
+        PARALLEL SAFE
+        STRICT
+        AS $$
+          SELECT COALESCE(
+            array_agg(DISTINCT cwe_id ORDER BY cwe_id),
+            ARRAY[]::text[]
+          )
+          FROM jsonb_array_elements(
+            COALESCE(
+              document #> '{containers,cna,problemTypes}',
+              '[]'::jsonb
+            )
+          ) AS problem_type
+          CROSS JOIN LATERAL jsonb_array_elements(
+            COALESCE(
+              problem_type -> 'descriptions',
+              '[]'::jsonb
+            )
+          ) AS description
+          CROSS JOIN LATERAL (
+            SELECT description ->> 'cweId' AS cwe_id
+          ) AS extracted
+          WHERE cwe_id IS NOT NULL;
+        $$;
+        """
+
+        down "DROP FUNCTION IF EXISTS cve_record_cwe_ids(jsonb)"
+      end
+
+      statement :add_cwe_ids_index do
+        up "CREATE INDEX cve_records_cwe_ids ON cve_records USING GIN (cve_record_cwe_ids(cve_json))"
+        down "DROP INDEX IF EXISTS cve_records_cwe_ids"
+      end
+
+      statement :cve_record_capec_ids_fn do
+        up """
+        CREATE FUNCTION cve_record_capec_ids(document jsonb)
+        RETURNS text[]
+        LANGUAGE sql
+        IMMUTABLE
+        PARALLEL SAFE
+        STRICT
+        AS $$
+          SELECT COALESCE(
+            array_agg(DISTINCT capec_id ORDER BY capec_id),
+            ARRAY[]::text[]
+          )
+          FROM jsonb_array_elements(
+            COALESCE(
+              document #> '{containers,cna,impacts}',
+              '[]'::jsonb
+            )
+          ) AS impact
+          CROSS JOIN LATERAL (
+            SELECT impact ->> 'capecId' AS capec_id
+          ) AS extracted
+          WHERE capec_id IS NOT NULL;
+        $$;
+        """
+
+        down "DROP FUNCTION IF EXISTS cve_record_capec_ids(jsonb)"
+      end
+
+      statement :add_capec_ids_index do
+        up "CREATE INDEX cve_records_capec_ids ON cve_records USING GIN (cve_record_capec_ids(cve_json))"
+        down "DROP INDEX IF EXISTS cve_records_capec_ids"
       end
     end
   end
@@ -274,6 +389,19 @@ defmodule Varsel.CVE.CveRecord do
               )
 
       filter expr(state == :published)
+    end
+
+    action :published_quarter_counts, {:array, :tuple} do
+      description "Counts published CVE records per calendar quarter of publication."
+
+      constraints items: [
+                    fields: [
+                      quarter: [type: :date, allow_nil?: false],
+                      count: [type: :integer, allow_nil?: false]
+                    ]
+                  ]
+
+      run Varsel.CVE.CveRecord.Actions.PublishedQuarterCounts
     end
 
     read :list_all do
@@ -478,8 +606,14 @@ defmodule Varsel.CVE.CveRecord do
 
       change before_action(fn changeset, _context ->
                cve_id =
-                 get_in(changeset.data.cve_json || %{}, ["cveMetadata", "cveId"]) ||
-                   get_in(changeset.data.reservation_json || %{}, ["cve_id"])
+                 case changeset.data.cve_id do
+                   %Ash.NotLoaded{} ->
+                     get_in(changeset.data.cve_json || %{}, ["cveMetadata", "cveId"]) ||
+                       get_in(changeset.data.reservation_json || %{}, ["cve_id"])
+
+                   cve_id ->
+                     cve_id
+                 end
 
                case MitreCveApi.reject(cve_id) do
                  {:ok, _} -> changeset
@@ -632,6 +766,12 @@ defmodule Varsel.CVE.CveRecord do
       authorize_if expr(state == :published)
     end
 
+    # Counts only published records, which the read policy above serves to
+    # anyone.
+    policy action(:published_quarter_counts) do
+      authorize_if always()
+    end
+
     # POC-only admin lifecycle actions, used by the CVE-management LiveView.
     # The three MITRE sync actions also run on the nightly schedule through the
     # AshOban bypass.
@@ -777,11 +917,17 @@ defmodule Varsel.CVE.CveRecord do
       public? true
     end
 
+    calculate :published_quarter,
+              :date,
+              expr(fragment("cve_record_published_quarter(?)", cve_json)) do
+      public? true
+    end
+
     calculate :date_published,
               :utc_datetime,
               expr(
                 fragment(
-                  "(?->'cveMetadata'->>'datePublished')::timestamptz",
+                  "cve_record_published(?)",
                   cve_json
                 )
               ) do
@@ -804,6 +950,25 @@ defmodule Varsel.CVE.CveRecord do
               expr(
                 fragment(
                   "ARRAY(SELECT a->>'packageURL' FROM jsonb_array_elements(coalesce(?->'containers'->'cna'->'affected', '[]'::jsonb)) AS a WHERE a->>'packageURL' IS NOT NULL)",
+                  cve_json
+                )
+              ) do
+      public? true
+    end
+
+    calculate :cvss,
+              Varsel.Types.CVSS,
+              expr(
+                fragment(
+                  """
+                  coalesce(
+                    jsonb_path_query_first(?, '$.containers.cna.metrics[*].cvssV4_0.vectorString'),
+                    jsonb_path_query_first(?, '$.containers.cna.metrics[*].cvssV3_1.vectorString'),
+                    jsonb_path_query_first(?, '$.containers.cna.metrics[*].cvssV3_0.vectorString')
+                  )
+                  """,
+                  cve_json,
+                  cve_json,
                   cve_json
                 )
               ) do
@@ -836,6 +1001,18 @@ defmodule Varsel.CVE.CveRecord do
       argument :query, :string do
         allow_nil? false
       end
+    end
+
+    calculate :cwe_ids,
+              {:array, :string},
+              expr(fragment("cve_record_cwe_ids(?)", cve_json)) do
+      public? true
+    end
+
+    calculate :capec_ids,
+              {:array, :string},
+              expr(fragment("cve_record_capec_ids(?)", cve_json)) do
+      public? true
     end
   end
 

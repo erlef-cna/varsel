@@ -18,11 +18,12 @@ defmodule VarselWeb.CveListLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
-  import VarselWeb.CveView, only: [best_cvss: 1, package_ref: 1]
+  import VarselWeb.CveView, only: [package_ref: 1]
   import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
 
   alias Varsel.CVE
   alias Varsel.CVE.CveRecord
+  alias Varsel.Types.CVSS
 
   require Ash.Query
 
@@ -106,6 +107,7 @@ defmodule VarselWeb.CveListLive do
         |> Ash.Query.filter(state == :reserved)
         |> Ash.Query.load([:cve_id, :reserved_at])
         |> Ash.Query.sort(reserved_at: :asc)
+        |> Ash.Query.select([:id, :state, :version])
     )
   end
 
@@ -121,8 +123,9 @@ defmodule VarselWeb.CveListLive do
       query:
         CveRecord
         |> Ash.Query.filter(state == :rejected)
-        |> Ash.Query.load([:cve_id])
+        |> Ash.Query.load([:cve_id, :rejected_at])
         |> Ash.Query.sort(rejected_at: :asc)
+        |> Ash.Query.select([:id, :state, :version])
     )
   end
 
@@ -265,16 +268,19 @@ defmodule VarselWeb.CveListLive do
   # editable) here as the manual escape hatch alongside the /cases flow.
   # Reserved and rejected records live in their own summary panels.
   defp records_query(filter, query, actor) do
+    base_loads = [:purls, :cvss, :title]
+
     # The case a record backs is only loadable by someone who may read cases;
     # for everyone else the row stands on its own.
     loads =
       if Ash.can?({Varsel.Cases.Case, :read}, actor),
-        do: [:purls, :cve_json, :case],
-        else: [:purls, :cve_json]
+        do: [:case | base_loads],
+        else: base_loads
 
     CveRecord
     |> Ash.Query.load(loads)
     |> Ash.Query.filter(state in ^@table_states)
+    |> Ash.Query.select([:id, :state, :version])
     |> filter_state(filter)
     |> filter_search(query)
   end
@@ -326,8 +332,8 @@ defmodule VarselWeb.CveListLive do
   # `:request_publish` for a draft, `:update` once published — so offering the
   # link is a question of whether either of them would run.
   defp editable?(actor, record) do
-    CVE.can_request_publish_cve_record?(actor, record, %{}, validate?: true) or
-      CVE.can_update_cve_record?(actor, record, %{}, validate?: true)
+    CVE.can_request_publish_cve_record?(actor, record, %{}) or
+      CVE.can_update_cve_record?(actor, record, %{})
   end
 
   # P3's search feedback reads as a sentence ("14 match “ssh”"), so the
@@ -338,16 +344,8 @@ defmodule VarselWeb.CveListLive do
     ~s(#{count} #{verb} “#{String.trim(query)}”)
   end
 
-  # A record's CVSS score, coerced to float for `severity_chip`, or nil when
-  # unscored (reserved/draft/publishing rows have no cve_json yet).
-  defp record_score(%{cve_json: nil}), do: nil
-
-  defp record_score(%{cve_json: cve_json}) do
-    case cve_json |> get_in(["containers", "cna"]) |> Kernel.||(%{}) |> best_cvss() do
-      %{"baseScore" => score} -> score / 1
-      nil -> nil
-    end
-  end
+  defp record_score(%{cvss: nil}), do: nil
+  defp record_score(%{cvss: %CVSS{score: score}}), do: score
 
   defp pool_id_range([]), do: nil
   defp pool_id_range([only]), do: only.cve_id

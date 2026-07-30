@@ -8,7 +8,8 @@ defmodule VarselWeb.OsvController do
   alias Varsel.CVE
 
   def index(conn, _params) do
-    records = CVE.list_osv_feed!(actor: nil)
+    query = Ash.Query.select(CVE.OsvRecord, [:modified_at, :osv_id])
+    records = CVE.list_osv_feed!(actor: nil, query: query, load: [], strict?: true)
     render(conn, :index, records: records)
   end
 
@@ -21,7 +22,8 @@ defmodule VarselWeb.OsvController do
   end
 
   defp show_json(conn, %{"osv_id" => osv_id}) do
-    record = CVE.get_osv_record!(osv_id, actor: nil)
+    query = Ash.Query.select(CVE.OsvRecord, [:osv_json])
+    record = CVE.get_osv_record!(osv_id, actor: nil, query: query, load: [], strict?: true)
     json(conn, record.osv_json)
   rescue
     Ash.Error.Invalid ->

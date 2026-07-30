@@ -31,6 +31,7 @@ defmodule Varsel.CVE.CveRecord.Validations.ValidCveRecord do
       # authorization dry-runs (e.g. `Ash.can?` when MCP filters visible tools)
       # from calling the external validators with no data.
       nil -> :ok
+      %Ash.NotLoaded{} -> :ok
       cve_json -> validate_cve_json(cve_json)
     end
   end

@@ -57,6 +57,7 @@ defmodule VarselWeb.SitemapController do
 
     cves =
       CVE.list_published_cve_records!(
+        query: Ash.Query.select(CVE.CveRecord, []),
         load: [:cve_id, :date_updated, :date_published],
         strict?: true,
         actor: nil

@@ -43,7 +43,14 @@ defmodule VarselWeb.FeedController do
   end
 
   defp feed_entries do
-    [load: [:cve_id, :title, :date_published, :date_updated], actor: nil]
+    query = Ash.Query.select(CVE.CveRecord, [:cve_json])
+
+    [
+      load: [:cve_id, :title, :date_published, :date_updated],
+      actor: nil,
+      strict?: true,
+      query: query
+    ]
     |> CVE.list_published_cve_records!()
     |> Enum.map(fn record ->
       %{

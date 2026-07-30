@@ -98,14 +98,19 @@ defmodule VarselWeb.CveListLiveTest do
 
   test "renders a compact severity chip, dashed when unscored", %{conn: conn} do
     published("CVE-2025-0001", "Alpha", [
-      %{"cvssV3_1" => %{"baseScore" => 7.5, "vectorString" => "CVSS:3.1/AV:N"}}
+      %{
+        "cvssV3_1" => %{
+          "baseScore" => 2.6,
+          "vectorString" => "CVSS:3.1/AV:A/AC:H/PR:L/UI:N/S:U/C:N/I:L/A:N"
+        }
+      }
     ])
 
     published("CVE-2025-0002", "Bravo")
 
     {:ok, _lv, html} = live(conn, ~p"/cves")
 
-    assert html =~ "H 7.5"
+    assert html =~ "L 2.6"
     assert html =~ "no score"
   end
 end

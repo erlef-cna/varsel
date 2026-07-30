@@ -10,9 +10,11 @@ defmodule VarselWeb.PageController do
 
   def home(conn, _params) do
     latest =
-      [load: [:cve_id, :title, :date_published, :purls], actor: nil]
-      |> CVE.list_published_cve_records!()
-      |> Enum.take(3)
+      CVE.list_published_cve_records!(
+        query: [limit: 3, select: []],
+        load: [:cve_id, :title, :date_published, :purls],
+        actor: nil
+      )
 
     render(conn, :home,
       activity_data: Charts.cve_activity_data(),

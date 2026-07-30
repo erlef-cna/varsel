@@ -16,6 +16,8 @@ defmodule VarselWeb.Charts do
   alias Varsel.CVE
   alias Varsel.CWE
 
+  require Ash.Query
+
   @color "#1b85cb"
   @axis_color "#6c757d"
   @grid_color "#e9ecef"
@@ -41,13 +43,16 @@ defmodule VarselWeb.Charts do
   """
   @spec cve_activity_data(DateTime.t()) :: map()
   def cve_activity_data(now \\ DateTime.utc_now()) do
-    cve_activity_data_from(published_dates(), now)
+    geometry(build_points(published_quarter_counts(), published_since(now, 60), now))
   end
 
   @doc "Builds activity-chart data from a precomputed list of published DateTimes."
   @spec cve_activity_data_from([DateTime.t()], DateTime.t()) :: map()
   def cve_activity_data_from(dates, now) do
-    %{points: points, y_max: y_max} = build_points(dates, now)
+    geometry(build_points(dates, now))
+  end
+
+  defp geometry(%{points: points, y_max: y_max}) do
     n = length(points)
 
     plotted =
@@ -79,26 +84,39 @@ defmodule VarselWeb.Charts do
     }
   end
 
-  defp published_dates do
-    [load: [:date_published], actor: nil]
-    |> CVE.list_published_cve_records!()
-    |> Enum.map(& &1.date_published)
-    |> Enum.reject(&is_nil/1)
+  defp published_quarter_counts do
+    [actor: nil]
+    |> CVE.count_published_cve_records_by_quarter!()
+    |> Map.new(fn {quarter, count} -> {{quarter.year, div(quarter.month - 1, 3) + 1}, count} end)
+  end
+
+  defp published_since(now, days) do
+    cutoff = DateTime.add(now, -days * 86_400, :second)
+
+    [actor: nil]
+    |> CVE.query_to_list_published_cve_records()
+    |> Ash.Query.filter(date_published >= ^cutoff)
+    |> Ash.count!()
   end
 
   # ---- aggregation
 
   @doc false
   def build_points(dates, now) do
-    counts = aggregate_quarters(dates)
+    build_points(aggregate_quarters(dates), count_last_60_days(dates, now), now)
+  end
+
+  @doc false
+  def build_points(counts, last_60_days, now) do
     {cur_year, cur_q} = quarter_of(now)
     cur_key = {cur_year, cur_q}
     counts = Map.put_new(counts, cur_key, 0)
 
-    sorted_keys = counts |> Map.keys() |> Enum.sort()
+    sorted_keys = quarter_range(Enum.min(Map.keys(counts)), cur_key)
+    counts = Map.merge(Map.new(sorted_keys, &{&1, 0}), counts)
     raw_count = counts[cur_key]
 
-    daily_rate = count_last_60_days(dates, now) / 60.0
+    daily_rate = last_60_days / 60.0
     days_remaining = max(days_remaining_in_quarter(now), 0)
     projected = round(raw_count + daily_rate * days_remaining)
     next_count = round(daily_rate * 91)
@@ -148,6 +166,21 @@ defmodule VarselWeb.Charts do
   end
 
   defp quarter_of(%DateTime{year: year, month: month}), do: {year, div(month - 1, 3) + 1}
+
+  # A quarter with no publications has no row to group, so the range is filled
+  # to keep the axis evenly spaced.
+  defp quarter_range(first, last) when first > last, do: [last]
+
+  defp quarter_range(first, last) do
+    fill_quarters(first, last, [last])
+  end
+
+  defp fill_quarters(first, first, acc), do: acc
+
+  defp fill_quarters(first, {year, q}, acc) do
+    prev = prev_quarter(year, q)
+    fill_quarters(first, prev, [prev | acc])
+  end
 
   defp prev_quarter(year, 1), do: {year - 1, 4}
   defp prev_quarter(year, q), do: {year, q - 1}
@@ -407,7 +440,9 @@ defmodule VarselWeb.Charts do
 
   # CWE catalog as %{id => weakness} with child_of edges loaded.
   defp cwe_catalog do
-    [load: [:related_weakness_relationships]]
+    query = Ash.Query.select(CWE.Weakness, [:cwe_id, :name])
+
+    [load: [related_weakness_relationships: []], query: query, actor: nil, strict?: true]
     |> CWE.list_weaknesses!()
     |> Map.new(fn w -> {w.cwe_id, w} end)
   rescue

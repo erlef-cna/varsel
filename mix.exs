@@ -92,6 +92,7 @@ defmodule Varsel.MixProject do
       {:cvss, "~> 0.1"},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:dns_cluster, "~> 0.2.0"},
+      {:ecto_psql_extras, "~> 0.6"},
       {:ecto_sql, "~> 3.13"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:ex_json_schema, "~> 0.10"},

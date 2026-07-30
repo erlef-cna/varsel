@@ -20,7 +20,16 @@ defmodule VarselWeb.CveController do
 
   # Machine-readable index of all published CVEs.
   def index(conn, _params) do
-    records = CVE.list_published_cve_records!(actor: nil)
+    query = Ash.Query.select(CVE.CveRecord, [:id])
+
+    records =
+      CVE.list_published_cve_records!(
+        actor: nil,
+        load: [:title, :date_published, :date_updated],
+        strict?: true,
+        query: query
+      )
+
     render(conn, :index, records: records)
   end
 
@@ -45,7 +54,11 @@ defmodule VarselWeb.CveController do
   end
 
   def show_json(conn, %{"cve_id" => cve_id}) do
-    record = CVE.get_published_cve_record!(cve_id, actor: nil)
+    query = Ash.Query.select(CVE.CveRecord, [:id, :cve_json])
+
+    record =
+      CVE.get_published_cve_record!(cve_id, actor: nil, query: query, load: [], strict?: true)
+
     json(conn, record.cve_json)
   rescue
     Invalid -> render_404(conn, :json)
