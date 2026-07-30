@@ -525,6 +525,22 @@ defmodule VarselWeb.CveView do
   def humanize_credit(type), do: type |> String.replace("_", " ") |> upcase_first()
 
   @doc """
+  Groups `credits[]` into one entry per person: `{value, [type]}`, in order of
+  first appearance, with each person's types deduplicated. A record commonly
+  credits the same person under several roles (finder and remediation
+  developer, say), which would otherwise render them once per role.
+  """
+  @spec credit_roles([map()]) :: [{String.t(), [String.t()]}]
+  def credit_roles(credits) when is_list(credits) do
+    credits
+    |> Enum.group_by(& &1["value"], & &1["type"])
+    |> Enum.map(fn {value, types} -> {value, types |> Enum.reject(&is_nil/1) |> Enum.uniq()} end)
+    |> Enum.sort_by(fn {value, _types} ->
+      Enum.find_index(credits, &(&1["value"] == value))
+    end)
+  end
+
+  @doc """
   Sorts references advisory-tagged (`vendor-advisory` or `third-party-advisory`)
   first, then patch-tagged, then everything else, preserving original
   relative order within each tier (stable sort) — the References card is

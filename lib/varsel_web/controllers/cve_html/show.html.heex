@@ -272,10 +272,16 @@ SPDX-License-Identifier: Apache-2.0
     <.panel :if={present["credits"]} id="credits">
       <:title>Credits</:title>
       <div class="flex flex-col gap-1.5 text-sm">
-        <div :for={credit <- @cna["credits"]} class="flex items-center gap-2">
-          <span>{credit["value"]}</span>
-          <span class="rounded-[5px] border border-base-300/70 px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-base-content/50">
-            {humanize_credit(credit["type"] || "")}
+        <div
+          :for={{value, types} <- credit_roles(@cna["credits"])}
+          class="flex items-center gap-2"
+        >
+          <span>{value}</span>
+          <span
+            :for={type <- types}
+            class="rounded-[5px] border border-base-300/70 px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-base-content/50"
+          >
+            {humanize_credit(type)}
           </span>
         </div>
       </div>

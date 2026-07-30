@@ -149,6 +149,43 @@ defmodule VarselWeb.CveViewTest do
     end
   end
 
+  describe "credit_roles/1" do
+    test "collapses a person credited under several roles into one entry" do
+      credits = [
+        %{"value" => "John Downey", "type" => "finder"},
+        %{"value" => "Louis Pilfold", "type" => "remediation_reviewer"},
+        %{"value" => "John Downey", "type" => "remediation_developer"}
+      ]
+
+      assert CveView.credit_roles(credits) == [
+               {"John Downey", ["finder", "remediation_developer"]},
+               {"Louis Pilfold", ["remediation_reviewer"]}
+             ]
+    end
+
+    test "deduplicates a role repeated for the same person" do
+      credits = [
+        %{"value" => "John Downey", "type" => "finder"},
+        %{"value" => "John Downey", "type" => "finder"}
+      ]
+
+      assert CveView.credit_roles(credits) == [{"John Downey", ["finder"]}]
+    end
+
+    test "keeps a person whose credit carries no type" do
+      assert CveView.credit_roles([%{"value" => "Anonymous"}]) == [{"Anonymous", []}]
+    end
+
+    test "orders people by first appearance" do
+      credits = [
+        %{"value" => "Zoe", "type" => "finder"},
+        %{"value" => "Adam", "type" => "finder"}
+      ]
+
+      assert Enum.map(CveView.credit_roles(credits), &elem(&1, 0)) == ["Zoe", "Adam"]
+    end
+  end
+
   describe "cwe / capec urls" do
     test "builds mitre definition urls" do
       assert CveView.cwe_url("CWE-22") == "https://cwe.mitre.org/data/definitions/22.html"
