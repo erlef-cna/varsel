@@ -314,6 +314,11 @@ defmodule VarselWeb.Charts do
   Slice `:pct`/arcs always stay proportional to the slice-sum regardless;
   only the displayed center number changes. Defaults to the slice-sum when
   absent, so existing callers are unaffected.
+
+  `:unsliced_count` is what `:center_total` counts but no slice does —
+  CVEs classified as the node itself rather than any of its children.
+  Floored at 0: overlapping sibling subtrees can push the slice-sum above
+  the recursive total.
   """
   @spec donut_geometry(map()) :: map()
   def donut_geometry(%{entries: entries} = dist) do
@@ -352,6 +357,7 @@ defmodule VarselWeb.Charts do
     Map.merge(dist, %{
       total: total,
       center_total: center_total,
+      unsliced_count: max(center_total - total, 0),
       center: center,
       size: @donut_size,
       colors: @donut_colors,

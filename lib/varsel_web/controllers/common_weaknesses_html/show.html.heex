@@ -44,7 +44,10 @@ SPDX-License-Identifier: Apache-2.0
   <div :if={@has_children?} class="cwe-chart-wrapper">
     <div class="cwe-donut"><.cwe_donut data={@dist} /></div>
     <div class="cwe-legend">
-      <.cwe_legend data={@dist} />
+      <.cwe_legend
+        data={@dist}
+        unsliced_label={"Classified as CWE-#{@weakness.cwe_id} itself, not a child weakness"}
+      />
     </div>
   </div>
 

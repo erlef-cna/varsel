@@ -326,6 +326,54 @@ defmodule VarselWeb.CommonWeaknessesControllerTest do
     refute center_text =~ ~r/^\s*4\s*$/
   end
 
+  describe "the legend's unsliced-remainder note" do
+    test "the drill-down names CVEs classified as the CWE itself, not a child", %{conn: conn} do
+      # 74's subtree total is 2 (8001 via child 79, 8002 on 74 itself), but its
+      # only child slice (79) accounts for 1 — the donut would otherwise read
+      # "Total 2" over slices summing to 1 with nothing explaining the gap.
+      conn = get(conn, ~p"/common-weaknesses/1000/74")
+      html = html_response(conn, 200)
+      doc = LazyHTML.from_document(html)
+
+      note = LazyHTML.query(doc, ".cwe-legend-note")
+      refute Enum.empty?(note)
+
+      assert LazyHTML.text(note) =~ "Classified as CWE-74 itself, not a child weakness"
+      assert note |> LazyHTML.query(".cwe-legend-cell-count") |> LazyHTML.text() =~ ~r/^\s*1\s*$/
+    end
+
+    test "the note row is not a link — the remainder has nowhere to drill into", %{conn: conn} do
+      conn = get(conn, ~p"/common-weaknesses/1000/74")
+      doc = conn |> html_response(200) |> LazyHTML.from_document()
+
+      assert doc |> LazyHTML.query("a.cwe-legend-note") |> Enum.empty?()
+    end
+
+    test "no note when every CVE in the subtree is accounted for by a child slice", %{conn: conn} do
+      # 707 carries no CVEs of its own: its total (2) is exactly its child
+      # 74's subtree count, so there is no remainder to report.
+      conn = get(conn, ~p"/common-weaknesses/1000/707")
+      doc = conn |> html_response(200) |> LazyHTML.from_document()
+
+      assert doc |> LazyHTML.query(".cwe-legend-note") |> Enum.empty?()
+    end
+
+    # The view root passes no label by design: its recursive total is seeded
+    # from exactly the declared members that become its slices, so a shortfall
+    # is structurally impossible there (overlapping subtrees can only push the
+    # slice-sum ABOVE the total, which floors to no remainder).
+    test "the view root never renders a note row", %{conn: conn} do
+      # The overlap case: one CVE tagged into two member subtrees pushes the
+      # slice-sum above the view total.
+      publish_cve_with_cwes("CVE-2025-8004", [707, 400])
+
+      conn = get(conn, ~p"/common-weaknesses/1000")
+      doc = conn |> html_response(200) |> LazyHTML.from_document()
+
+      assert doc |> LazyHTML.query(".cwe-legend-note") |> Enum.empty?()
+    end
+  end
+
   describe "empty-state matrix (children x recursive CVE total)" do
     test "children > 0, cves > 0 -> donut + legend + table", %{conn: conn} do
       conn = get(conn, ~p"/common-weaknesses/1000/707")
