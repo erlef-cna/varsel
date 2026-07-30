@@ -185,8 +185,15 @@ dynamic code loading from any actor.
 - **Correctness of the CVE/OSV data content.** Whether a published advisory
   is factually accurate or complete is an editorial/CNA-process matter, not a
   security property of this software.
-- **Availability guarantees / SLA.** No uptime, latency, or throughput
-  guarantee is made. DoS resistance is treated narrowly (§8).
+- **Availability, and denial of service by request volume.** No uptime,
+  latency or throughput guarantee is made, and resisting volume-based DoS is
+  **not a goal of this application**. Request-rate defense belongs at the
+  platform edge, which is where it exists today. Varsel bounds what a *single*
+  operation can consume (§8) and nothing more: a report that some endpoint can
+  be called often enough to degrade the service is out of model, whatever the
+  endpoint. The one in-app exception, a daily cap on report submission below a
+  CNA role, is an abuse mitigation for a surface that stores rows — not the
+  start of a general rate-limiting posture (property 10).
 
 ---
 
@@ -437,7 +444,7 @@ capped at a configurable serialized size by the `ReportJsonSize` validation —
 a single oversized payload is rejected. Submission *rate* is bounded for the
 least trusted reporters only: a role-less user gets a daily allowance
 (property 10). Users holding a CNA role, and every other endpoint, remain
-unbounded in-app (§9, best effort). Git derivation fetches an entire commit
+unbounded in-app (§3). Git derivation fetches an entire commit
 graph (`tree:0`, no blobs) from `repo_url`. Every one of these bounds is
 listed with its current value in §8. (`report_json_size.ex`, `git_repo.ex`)
 
@@ -457,7 +464,7 @@ into the first row: the runtime answers them.
 | Concurrency — derivation | **claimed** | One GenServer per `repo_url`, so a slow or hostile repository occupies only its own process. | §5, property 12 |
 | Concurrency — credential withdrawal | **claimed** | A socket or LiveView holds the actor it resolved at connect/mount; revoking the credential closes the connection rather than letting it act on. | property 8 |
 | Resource use — per operation | **claimed** | Each derivation, report and subprocess call carries a hard bound. | §8, resource bound |
-| Resource use — aggregate volume | **disclaimed** | Nothing bounds how many operations an actor starts, how many rows they create, or how much outbound traffic they drive. One exception: report submission below a CNA role. | §9 |
+| Resource use — aggregate volume | **out of scope** | Resisting volume-based DoS is not a goal (§3). Nothing bounds how many operations an actor starts, how many rows they create, or how much outbound traffic they drive. One exception: report submission below a CNA role. | §3, §9 |
 | Rate-limit accuracy | **disclaimed** | The one in-app limit counts in node-local ETS: it resets on restart and would count per node if scaled out. An abuse mitigation, not a guarantee. | property 10 |
 
 **Postconditions on failure.** A validation, policy or state-machine refusal
@@ -784,14 +791,15 @@ none of the authorization properties, by construction rather than by defect.
    MCP all draw from the same budget; POCs and supporters are deliberately
    exempt. The counter is node-local ETS (`Varsel.Hammer`): it resets on
    restart/deploy and would count per node if the app were ever scaled out.
-   The rate cap is therefore an **abuse mitigation, not a guarantee** — the
-   property claimed is that intake cannot be used to disrupt operation, not
-   that the counter is exact. A submission slipping past the cap (say,
-   after a restart cleared the counters) is not by itself a vulnerability.
-   - *Violation symptom:* an authenticated user stores an arbitrarily large
-     payload, or drives enough report volume to disrupt operation (exhaust
-     storage, drown triage) despite the caps.
-   - *Severity:* `moderate` (storage/DoS).
+   The rate cap is an **abuse mitigation, not a guarantee**: what is claimed
+   is that the two checks run on every path into `:submit`, not that the
+   counter is exact. A submission slipping past the cap (say, after a restart
+   cleared the counters) is not by itself a vulnerability, and report volume
+   as a route to denial of service is out of scope entirely (§3).
+   - *Violation symptom:* an oversized `report_json` is persisted, or a
+     role-less reporter submits past the cap by a route that skips it — a
+     surface reaching `:submit` without the checks, not a counter reset.
+   - *Severity:* `moderate` (storage).
    - (`report_json_size.ex`, `rate_limit_submit.ex`, `hammer.ex`)
 
 11. **CSRF / clickjacking / cross-origin hardening on the browser surface.**
@@ -907,14 +915,11 @@ number.
 
 ## 9. Security properties the project does *not* provide
 
-- **No general rate limiting or request-volume DoS defense at the
-  application layer.** One narrow exception exists — the daily cap on
-  report submission by role-less users (property 10). Everything else —
-  search queries (full-text `tsquery`), read endpoints, every other write,
-  and report submission by roled users — is not rate-limited in-app. The
-  posture is **best effort**: the platform's baseline DDoS protection plus
-  the §8 per-request bounds are what exist today, and in-app limits for
-  further surfaces will be investigated if they see actual misuse (§14).
+- **No general rate limiting at the application layer.** Search queries
+  (full-text `tsquery`), read endpoints, every write other than report
+  submission below a CNA role, and report submission by roled users are not
+  rate-limited in-app. Volume-based DoS is out of scope outright (§3); this
+  bullet records the mechanism, and §3 is the disposition.
 - **Outbound effects are not transactional.** Property 15 binds *database*
   writes to the row they were read from, and a failed action rolls back whole.
   Nothing rolls back an effect that already left the machine. A publish that
@@ -955,17 +960,16 @@ number.
   the same cases. Serving the picture through the app would only move the
   hash into a redirect, and proxying it would put a fetch to a third party on
   every avatar — neither is worth it for that.
-- **No availability/uptime guarantee.**
 - **Nothing bounds how much outbound traffic an authenticated user can drive.**
   The validation actions reach hex.pm, and derivation reaches a case's
   `repo_url`; neither is rate-limited in-app, so Varsel can be used to push
   volume at a third party. The per-call bounds (§8) limit a single request,
-  not how many are made. Same disclaimer as request-volume DoS: best effort,
-  investigated if misused.
+  not how many are made. Worth stating separately from §3 because the load
+  lands on someone else: a third party seeing traffic from Varsel is reporting
+  something real, even though the disposition here is the same.
 - **Nothing bounds how many rows an authenticated user can create for
   themselves.** API keys and sessions have no per-user cap; the §8 caps bound
-  the *size* of what is stored, never the count. This is the same disclaimer
-  as request-volume DoS.
+  the *size* of what is stored, never the count (§3).
 - **`cna_override` is an intentional escape hatch, not a validated surface.**
   A POC can override any rendered CNA field via a merge patch; correctness of
   the result is the POC's responsibility.
@@ -996,8 +1000,8 @@ number.
 
 **Well-known attack classes for this category, left to the caller/operator:**
 
-- **DoS by request volume / large payloads** (see above) — best effort,
-  investigated if misused.
+- **DoS by request volume / large payloads** — out of scope (§3); defended at
+  the platform edge, not here.
 - **OAuth 2.1 / DCR abuse** (open dynamic client registration) — a Byzantine
   client can register; scope + role enforcement bound what it can do, but
   registration itself is open by design to support AI/MCP client integration
@@ -1108,8 +1112,10 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 - Accepting a **new attacker-controllable input** that reaches a subprocess,
   a network egress, or an unsafe render sink — especially any new consumer of
   `report_json` beyond email/triage, or any new `unsafe: true` render path.
-- Implementing any **§14 planned follow-up** — each promotes a §9 disclaimer
-  toward a §8 property.
+- **Taking on volume-based DoS as a goal** — adding in-app rate limiting to a
+  surface beyond report submission, or otherwise defending request volume in
+  the application rather than at the edge. That moves the surface out of §3
+  and into a §8 property, and the model updates in the same change.
 - **Adding a GraphQL subscription.** None is declared today, so `/ws/gql`
   carries no live data path; adding one puts pushed data on a transport whose
   authentication is written by hand rather than inherited from the router
@@ -1157,9 +1163,10 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 | `OUT-OF-MODEL: trusted-input` | Requires control of an input the model marks trusted at that privilege (e.g. `repo_url`/`cve_json`/`cna_override` from below POC/assignee; catalog-sync URLs). | §6 |
 | `OUT-OF-MODEL: adversary-not-in-scope` | Requires POC privilege, DB/host access, TLS break, or control of MITRE/GitHub/SMTP. | §7 |
 | `OUT-OF-MODEL: unsupported-component` | Lands in the `/dev/*` tooling, or in the mock login (`/auth/user/mock/*`). | §3 |
+| `OUT-OF-MODEL: out-of-scope-goal` | Turns on something the application does not set out to do — today that is resisting volume-based DoS. Per-operation bounds (§8) still apply; a report that one is missing or ineffective is not this. | §3 |
 | `OUT-OF-MODEL: non-default-build` | Only manifests in a release built from a non-`prod` `MIX_ENV` (which ships `dev/`), or with `TEST_DEPLOYMENT` misconfigured. | §5a |
 | `OUT-OF-MODEL: report-upstream` | Lands in `exgit`/`mdex`/`cvelint`/`exile`/`saxy`/`req` internals; Varsel ships the fix by bumping the dep. | §6b |
-| `BY-DESIGN: property-disclaimed` | Concerns a §9 disclaimed property (rate limiting, `repo_url` egress to any public host within privilege, non-transactional outbound effects, at-rest sanitization, availability). | §9 |
+| `BY-DESIGN: property-disclaimed` | Concerns a §9 disclaimed property (`repo_url` egress to any public host within privilege, non-transactional outbound effects, at-rest sanitization, unbounded row/outbound-traffic counts). | §9 |
 | `KNOWN-NON-FINDING` | Matches a §11a recurring false positive. | §11a |
 | `MODEL-GAP` | Routes to none of the above; triggers a §12 revision. | §12 |
 
@@ -1188,18 +1195,3 @@ provider keeps a subject stable and non-reusable (§7). A report arguing that
 no longer holds is **escalated to the maintainers, not closed against the
 reporter** — record the disposition for tracking, but answer the reporter as
 an open question. Everything else in §13 closes on its own authority.
-
----
-
-## 14. Planned follow-ups
-
-Hardening accepted as future work. Implementing any of these promotes a §9
-disclaimer toward a §8 property, and the model updates in the same change.
-
-- **Application-level rate limiting on the remaining surfaces.** The first
-  slice landed: report submission by role-less users is capped in-app
-  (property 10, `ash_rate_limiter` on the `:submit` action). Search, reads,
-  and the other authenticated writes remain best effort; extending the same
-  mechanism to them will be investigated if those surfaces see actual
-  misuse, and each extension moves that surface from the §9 disclaimer into
-  property 10's pattern.
