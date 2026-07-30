@@ -12,8 +12,12 @@ SPDX-License-Identifier: Apache-2.0
   Ecosystem Foundation's CNA (CVE Numbering Authority).
 - **Versioning:** the model is versioned with the project (it lives in the
   repo and moves with `main`): a report against a given version is triaged
-  against the model as it stood at that version. Written against `main`,
-  last updated 2026-07-30.
+  against the model as it stood at that version.
+- **Status:** accepted. Every claim here is either verifiable in the code it
+  cites or ratified by the maintainer committing it.
+- **Triage policy:** `strict`. Every disposition in §13 closes on the
+  document's own authority, with one exception called out in that section: a
+  claim that rests on a login provider's behaviour is escalated, not closed.
 - **Relationship to `SECURITY.md`:** this document accompanies `SECURITY.md`
   (it does not replace it). `SECURITY.md` holds the disclosure policy and a
   short Scope section that links here; this document is the detailed model.
@@ -32,6 +36,24 @@ CVE, OSV, CWE and CAPEC data over HTML, JSON, GraphQL and MCP. It is the
 authoritative CNA workbench: authenticated points-of-contact drive CVE IDs
 through a state machine and, on publish, push CNA containers to MITRE's CVE
 Services API. Everyone else consumes the published data read-only.
+
+### Triager quick-start
+
+> Given an inbound finding:
+>
+> 1. **Find the privilege it needs.** Check it against the reachability
+>    preconditions in §4. A finding that assumes a lower privilege than the
+>    action actually requires is out of model.
+> 2. **Find the input.** Look up the sink in the §6 trust table.
+> 3. **Check the component.** If it lands in dev tooling or the mock login,
+>    §3 applies. If it needs a non-`prod` build, §5a applies.
+> 4. **Check the adversary.** §7 says who is in scope. POC privilege, host or
+>    database access, and a TLS break are all out.
+> 5. **If the root cause is in a dependency,** apply §6b.
+> 6. **Assign exactly one §13 disposition,** following that section's
+>    precedence order and citing the section that licenses it. If none fits,
+>    it is a `MODEL-GAP` — revise the model per §12 rather than making an
+>    ad-hoc call.
 
 ---
 
