@@ -7,7 +7,7 @@ defmodule VarselWeb.ApiKeyAuthTest do
 
   import Varsel.Fixtures
 
-  @query %{"query" => "{ listPublishedCves { cveId } }"}
+  @query %{"query" => "{ listPublishedCves { results { cveId } } }"}
 
   test "requests without a key are rejected", %{conn: conn} do
     conn = post(conn, "/gql", @query)

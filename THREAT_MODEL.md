@@ -13,7 +13,7 @@ SPDX-License-Identifier: Apache-2.0
 - **Versioning:** the model is versioned with the project (it lives in the
   repo and moves with `main`): a report against a given version is triaged
   against the model as it stood at that version. Written against `main`,
-  last updated 2026-07-29.
+  last updated 2026-07-30.
 - **Relationship to `SECURITY.md`:** this document accompanies `SECURITY.md`
   (it does not replace it). `SECURITY.md` holds the disclosure policy and a
   short Scope section that links here; this document is the detailed model.
@@ -97,7 +97,7 @@ access says otherwise (`release.ex`).
 
 | Family | Entry point | Touches outside process? | In model? |
 | --- | --- | --- | --- |
-| Anonymous read surface (CVE/OSV JSON, HTML, feeds, sitemap) | `/cves`, `/osv`, `/`, `/feed.*`, `/sitemap.xml` | DB reads | **Yes** |
+| Anonymous read surface (CVE/OSV JSON, HTML, feeds, sitemap, CWE browser) | `/cves`, `/osv`, `/`, `/feed.*`, `/sitemap.xml`, `/common-weaknesses/:view_id[/:cwe_id]` | DB reads | **Yes** |
 | Authenticated API (GraphQL, MCP) — login-gated even for read tools | `/gql`, `/mcp` | DB reads/writes, workbench tools | **Yes** |
 | GraphQL websocket — login-gated like `/gql` | `/ws/gql` | DB reads/writes under policy | **Yes** |
 | CVE validation actions — any authenticated user | `validate_cve_record*` (GraphQL + MCP) | **cvelint subprocess**, **hex.pm egress** | **Yes — §6** |
@@ -109,6 +109,17 @@ access says otherwise (`release.ex`).
 | `cvelint` subprocess (validates rendered CVE JSON) | `Varsel.CVE.Cvelint` | `Exile`, record piped to stdin | **Yes** |
 | Dev tooling (LiveDashboard, Oban Web, AshAdmin, Swoosh mailbox, storybook, error preview) | `/dev/*` | DB, mail | **No — §3 (absent from prod builds)** |
 | Mock login (unauthenticated sign-in as a dummy user of any role) | `/auth/user/mock/callback` | DB | **No — §3 (absent from prod builds)** |
+
+### Unauthenticated LiveViews
+
+Part of the anonymous surface is served over a socket rather than a plain
+response. Three LiveViews mount without a login:
+
+| LiveView | Reached by | Mounted with |
+| --- | --- | --- |
+| CVE list (`CveListLive`) | its own route, `/cves` | route params |
+| CWE browser's CVE table (`CommonWeaknessesCveTableLive`) | `live_render` from the `/common-weaknesses` pages | a view id and a CWE id |
+| Affected-version checker (`AffectedCheckerLive`) | `live_render` from the CVE detail page | the record's affected-package list |
 
 There is **no plugin/extension/user-defined-function loader.** Tool exposure
 over MCP/GraphQL is a fixed, compile-time list (`router.ex`); there is no
@@ -268,12 +279,12 @@ moment. (`socket_disconnect.ex`, `disconnect_sockets.ex`, `graphql_socket.ex`)
 For a finding to be **in model**, it must be reachable at the privilege it
 claims:
 
-- **Anonymous read surface** (HTML/JSON/feeds) — reachable from anonymous
-  HTTP. A finding is in-model only if it lets an anonymous caller read a
-  non-`published` record, or read a resource whose policy is not
-  `always()`-public. (GraphQL/MCP expose the same reads but require a login,
-  so a "public data over GraphQL/MCP" claim is really an *authenticated*-read
-  claim.)
+- **Anonymous read surface** (HTML/JSON/feeds, the CWE browser, and the
+  unauthenticated LiveViews of §2) — reachable from anonymous HTTP. A finding is
+  in-model only if it lets an anonymous caller read a non-`published` record, or
+  read a resource whose policy is not `always()`-public. (GraphQL/MCP expose the
+  same reads but require a login, so a "public data over GraphQL/MCP" claim is
+  really an *authenticated*-read claim.)
 - **`repo_url` git egress** — reachable only by a **POC or a supporter
   assigned to that case** (the `AffectedPackage` create/update policy is
   `role == :poc OR relates_to_actor_via([:case, :assignments, :user])` — the

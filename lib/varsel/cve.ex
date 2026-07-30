@@ -109,6 +109,8 @@ defmodule Varsel.CVE do
       define :sync_reserved_cves_from_mitre, action: :sync_reserved_from_mitre
       define :list_published_cve_records, action: :list_published
       define :count_published_cve_records_by_quarter, action: :published_quarter_counts
+      define :count_published_cve_records_by_cwe_subtree, action: :published_cwe_subtree_counts
+      define :count_published_cve_records_in_cwe_view, action: :published_cwe_view_total
       define :get_published_cve_record, action: :get_published, args: [:cve_id]
       define :search_cve_records, action: :search, args: [:query]
       define :list_cve_records_by_purl, action: :list_by_purl, args: [:purl]

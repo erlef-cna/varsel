@@ -90,6 +90,7 @@ defmodule Varsel.CVE.CveRecord do
   import Ash.Expr
 
   alias Varsel.CVE.CveRecord.OkResult
+  alias Varsel.CVE.CveRecord.Preparations.FilterByCwe
   alias Varsel.CVE.CveRecord.Validations.ValidCveRecord
   alias Varsel.CVE.MitreCveApi
 
@@ -211,7 +212,7 @@ defmodule Varsel.CVE.CveRecord do
       statement :cve_record_cwe_ids_fn do
         up """
         CREATE FUNCTION cve_record_cwe_ids(document jsonb)
-        RETURNS text[]
+        RETURNS bigint[]
         LANGUAGE sql
         IMMUTABLE
         PARALLEL SAFE
@@ -219,7 +220,7 @@ defmodule Varsel.CVE.CveRecord do
         AS $$
           SELECT COALESCE(
             array_agg(DISTINCT cwe_id ORDER BY cwe_id),
-            ARRAY[]::text[]
+            ARRAY[]::bigint[]
           )
           FROM jsonb_array_elements(
             COALESCE(
@@ -234,7 +235,7 @@ defmodule Varsel.CVE.CveRecord do
             )
           ) AS description
           CROSS JOIN LATERAL (
-            SELECT description ->> 'cweId' AS cwe_id
+            SELECT (regexp_match(description ->> 'cweId', '^CWE-([0-9]+)$'))[1]::bigint AS cwe_id
           ) AS extracted
           WHERE cwe_id IS NOT NULL;
         $$;
@@ -243,7 +244,7 @@ defmodule Varsel.CVE.CveRecord do
         down "DROP FUNCTION IF EXISTS cve_record_cwe_ids(jsonb)"
       end
 
-      statement :add_cwe_ids_index do
+      statement :add_cwe_ids_index_v2 do
         up "CREATE INDEX cve_records_cwe_ids ON cve_records USING GIN (cve_record_cwe_ids(cve_json))"
         down "DROP INDEX IF EXISTS cve_records_cwe_ids"
       end
@@ -251,7 +252,7 @@ defmodule Varsel.CVE.CveRecord do
       statement :cve_record_capec_ids_fn do
         up """
         CREATE FUNCTION cve_record_capec_ids(document jsonb)
-        RETURNS text[]
+        RETURNS bigint[]
         LANGUAGE sql
         IMMUTABLE
         PARALLEL SAFE
@@ -259,7 +260,7 @@ defmodule Varsel.CVE.CveRecord do
         AS $$
           SELECT COALESCE(
             array_agg(DISTINCT capec_id ORDER BY capec_id),
-            ARRAY[]::text[]
+            ARRAY[]::bigint[]
           )
           FROM jsonb_array_elements(
             COALESCE(
@@ -268,7 +269,7 @@ defmodule Varsel.CVE.CveRecord do
             )
           ) AS impact
           CROSS JOIN LATERAL (
-            SELECT impact ->> 'capecId' AS capec_id
+            SELECT (regexp_match(impact ->> 'capecId', '^CAPEC-([0-9]+)$'))[1]::bigint AS capec_id
           ) AS extracted
           WHERE capec_id IS NOT NULL;
         $$;
@@ -277,7 +278,7 @@ defmodule Varsel.CVE.CveRecord do
         down "DROP FUNCTION IF EXISTS cve_record_capec_ids(jsonb)"
       end
 
-      statement :add_capec_ids_index do
+      statement :add_capec_ids_index_v2 do
         up "CREATE INDEX cve_records_capec_ids ON cve_records USING GIN (cve_record_capec_ids(cve_json))"
         down "DROP INDEX IF EXISTS cve_records_capec_ids"
       end
@@ -381,14 +382,43 @@ defmodule Varsel.CVE.CveRecord do
     defaults [:read]
 
     read :list_published do
-      description "Lists published CVE records, newest first."
+      description """
+      Lists published CVE records, newest first. Optionally filtered to a
+      single CWE (or, with view_id, its whole closure subtree).
+      """
+
+      argument :cwe_id, :integer do
+        allow_nil? true
+
+        description """
+        Only CVEs directly assigned this CWE (numeric id). Combined with
+        view_id, matches the whole subtree instead.
+        """
+      end
+
+      argument :view_id, :integer do
+        allow_nil? true
+
+        description """
+        CWE view scoping the recursive filter; with no cwe_id, matches CVEs
+        with any CWE in the view.
+        """
+      end
 
       prepare build(
-                load: [:cve_id, :title, :date_published, :date_updated],
+                load: [:cve_id, :title, :date_published, :date_updated, :purls],
                 sort: [date_published: :desc]
               )
 
+      prepare FilterByCwe
+
       filter expr(state == :published)
+
+      pagination offset?: true,
+                 keyset?: true,
+                 countable: :by_default,
+                 default_limit: 25,
+                 required?: false
     end
 
     action :published_quarter_counts, {:array, :tuple} do
@@ -402,6 +432,55 @@ defmodule Varsel.CVE.CveRecord do
                   ]
 
       run Varsel.CVE.CveRecord.Actions.PublishedQuarterCounts
+    end
+
+    action :published_cwe_subtree_counts, {:array, :tuple} do
+      description """
+      Counts published CVE records recursively reachable under each of a set
+      of CWE ids, scoped to one view. Parents with zero matching CVEs are
+      absent from the result, not zero-valued rows.
+      """
+
+      public? false
+
+      constraints items: [
+                    fields: [
+                      cwe_id: [type: :integer, allow_nil?: false],
+                      count: [type: :integer, allow_nil?: false]
+                    ]
+                  ]
+
+      argument :view_id, :integer, allow_nil?: false
+
+      argument :cwe_ids, {:array, :integer} do
+        allow_nil? false
+        description "The parents (view members or a CWE's direct children) to count under."
+      end
+
+      run Varsel.CVE.CveRecord.Actions.PublishedCweSubtreeCounts
+    end
+
+    action :published_cwe_view_total, :integer do
+      description """
+      Counts published CVE records recursively reachable under one subject
+      within a view — a single CWE's subtree, or (with `cwe_id` absent) the
+      whole view. Unlike summing `published_cwe_subtree_counts` results,
+      this never over- or under-counts: sibling subtrees can overlap, and a
+      node's own CVEs (or those attached between it and its ancestors)
+      never appear in any child's slice count.
+      """
+
+      public? false
+
+      argument :view_id, :integer, allow_nil?: false
+
+      argument :cwe_id, :integer do
+        allow_nil? true
+
+        description "The subtree root; omitted means the whole view (its NULL-parent closure rows)."
+      end
+
+      run Varsel.CVE.CveRecord.Actions.PublishedCweViewTotal
     end
 
     read :list_all do
@@ -772,6 +851,12 @@ defmodule Varsel.CVE.CveRecord do
       authorize_if always()
     end
 
+    # Count only published records, same as published_quarter_counts —
+    # public aggregate data regardless of actor.
+    policy action([:published_cwe_subtree_counts, :published_cwe_view_total]) do
+      authorize_if always()
+    end
+
     # POC-only admin lifecycle actions, used by the CVE-management LiveView.
     # The three MITRE sync actions also run on the nightly schedule through the
     # AshOban bypass.
@@ -1004,15 +1089,66 @@ defmodule Varsel.CVE.CveRecord do
     end
 
     calculate :cwe_ids,
-              {:array, :string},
+              {:array, :integer},
               expr(fragment("cve_record_cwe_ids(?)", cve_json)) do
       public? true
     end
 
     calculate :capec_ids,
-              {:array, :string},
+              {:array, :integer},
               expr(fragment("cve_record_capec_ids(?)", cve_json)) do
       public? true
+    end
+
+    # Renders against the exact indexed expression (cve_record_cwe_ids(cve_json))
+    # so the GIN index cve_records_cwe_ids matches via the @> containment operator.
+    calculate :has_cwe,
+              :boolean,
+              expr(
+                fragment(
+                  "cve_record_cwe_ids(?) @> ARRAY[?::bigint]",
+                  cve_json,
+                  type(^arg(:cwe_id), :integer)
+                )
+              ) do
+      public? false
+
+      argument :cwe_id, :integer do
+        allow_nil? false
+      end
+    end
+
+    # Uncorrelated scalar subquery (planned as an InitPlan) intersected with
+    # the outer cwe_ids via &&, so the GIN index still applies to the outer
+    # column. A nil cwe_id means the view root: the NULL-parent closure rows,
+    # which cover every CWE anywhere in the view.
+    calculate :has_cwe_recursively,
+              :boolean,
+              expr(
+                fragment(
+                  """
+                  cve_record_cwe_ids(?) && (
+                    SELECT coalesce(array_agg(c.descendant_cwe_id), ARRAY[]::bigint[])
+                    FROM cwe_weakness_closure AS c
+                    WHERE c.view_id = ?
+                      AND ((?::bigint IS NULL AND c.parent_cwe_id IS NULL) OR c.parent_cwe_id = ?)
+                  )
+                  """,
+                  cve_json,
+                  type(^arg(:view_id), :integer),
+                  type(^arg(:cwe_id), :integer),
+                  type(^arg(:cwe_id), :integer)
+                )
+              ) do
+      public? false
+
+      argument :view_id, :integer do
+        allow_nil? false
+      end
+
+      argument :cwe_id, :integer do
+        allow_nil? true
+      end
     end
   end
 

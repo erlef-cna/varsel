@@ -179,7 +179,7 @@ defmodule VarselWeb.CveHtmlTest do
 
       assert body =~ "CWE-863"
       assert body =~ "Incorrect Authorization"
-      assert body =~ "/common-weaknesses?cwe=CWE-863"
+      assert body =~ "/common-weaknesses/1000/863"
       assert body =~ "cwe.mitre.org/data/definitions/863.html"
     end
 

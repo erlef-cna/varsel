@@ -503,7 +503,7 @@
 @media (min-width: 640px) {
   .cwe-chart-wrapper {
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
   }
 
   .cwe-donut {
@@ -537,16 +537,31 @@
   stroke-width: 1.5;
 }
 
+/* Zero-total donut (no entries, or entries that all count 0): one plain
+   greyed ring rather than per-entry degenerate zero-sweep arcs. */
+.cwe-donut-empty-ring {
+  fill: var(--color-base-300);
+}
+
+/* CSS-table (not a real <table>): an <a> row needs to sit directly in the
+   table's row position, and an <a> is not a valid child of <tbody> — a real
+   <table> foster-parents it out at parse time before any CSS runs. `display:
+   table[-row|-cell]` on plain divs/spans gets the same auto layout without
+   that constraint. */
 .cwe-legend-table {
+  display: table;
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
 }
 
 .cwe-legend-row {
+  display: table-row;
   border-bottom: 1px solid var(--color-base-300, #e9ecef);
   cursor: pointer;
   transition: background-color 0.12s ease;
+  color: inherit;
+  text-decoration: none;
 }
 
 .cwe-legend-row:hover {
@@ -557,8 +572,19 @@
   border-bottom: none;
 }
 
-.cwe-legend-row td {
+.cwe-legend-cell {
+  display: table-cell;
   padding: 0.4rem 0.5rem;
+  vertical-align: middle;
+}
+
+.cwe-legend-cell-swatch {
+  width: 1px;
+  white-space: nowrap;
+}
+
+.cwe-legend-cell-name {
+  width: 100%;
 }
 
 .cwe-legend-id {
@@ -575,10 +601,19 @@
   vertical-align: middle;
 }
 
-.cwe-legend-count {
+.cwe-legend-cell-count,
+.cwe-legend-cell-pct {
   text-align: right;
   white-space: nowrap;
   color: var(--color-base-content, #6c757d);
+}
+
+.cwe-legend-cell-count {
+  padding-right: 0;
+}
+
+.cwe-legend-cell-pct {
+  padding-left: 0.35rem;
 }
 
 /* ---------------------------------------------------------------- Content pages */

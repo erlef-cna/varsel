@@ -5,7 +5,13 @@
 defmodule VarselWeb.SitemapController do
   @moduledoc """
   Serves `/sitemap.xml`: the home page, the static content pages (canonical
-  extensionless URLs), and every published CVE at its canonical `.html` URL.
+  extensionless URLs), a common-weaknesses root per switchable CWE view, and
+  every published CVE at its canonical `.html` URL.
+
+  "Switchable" (same set the browser's own view switcher offers — a view
+  with at least one declared member, not deprecated/obsolete) rather than
+  every `Varsel.CWE.View` row: a memberless view's root renders an empty
+  donut with nothing under it, not a page worth a crawler's time.
 
   The document is rebuilt at most once every `@ttl_ms` and cached in
   `:persistent_term` — the CVE set changes rarely and rebuilding scans every
@@ -21,6 +27,8 @@ defmodule VarselWeb.SitemapController do
   import Saxy.XML
 
   alias Varsel.CVE
+  alias Varsel.CWE
+  alias Varsel.CWE.View
 
   @cache_key {__MODULE__, :xml}
   @ttl_ms to_timeout(minute: 10)
@@ -63,7 +71,17 @@ defmodule VarselWeb.SitemapController do
         actor: nil
       )
 
+    views =
+      CWE.list_switchable_views!(
+        query: Ash.Query.select(View, [:view_id]),
+        strict?: true,
+        actor: nil
+      )
+
     static = Enum.map(static_pages(), &url_entry(base <> &1, @compiled_at))
+
+    view_roots =
+      Enum.map(views, &url_entry(base <> ~p"/common-weaknesses/#{&1.view_id}", @compiled_at))
 
     published =
       Enum.map(cves, &url_entry(base <> ~p"/cves/#{&1.cve_id <> ".html"}", record_mod(&1)))
@@ -72,7 +90,7 @@ defmodule VarselWeb.SitemapController do
       element(
         "urlset",
         [{"xmlns", "http://www.sitemaps.org/schemas/sitemap/0.9"}],
-        static ++ published
+        static ++ view_roots ++ published
       )
 
     Saxy.encode!(urlset, version: "1.0", encoding: "UTF-8")
@@ -89,7 +107,6 @@ defmodule VarselWeb.SitemapController do
     [
       ~p"/",
       ~p"/cves",
-      ~p"/common-weaknesses",
       ~p"/scope",
       ~p"/cve-criteria",
       ~p"/coordinator-process",

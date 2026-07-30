@@ -4,14 +4,13 @@
 }
 ---
 
-The chart below shows the most common weakness classes found in vulnerabilities
-across the Erlang ecosystem. Understanding which weakness types recur most often
-helps library authors and application developers focus their security efforts
-where they matter most.
+The chart below shows the most common weaknesses found in vulnerabilities across
+the Erlang ecosystem. Understanding which weakness types recur most often helps
+library authors and application developers focus their security efforts where
+they matter most.
 
 Each CVE is mapped to its [CWE (Common Weakness Enumeration)](https://cwe.mitre.org/)
-class using the CWE hierarchy. Individual weakness types (Base and Variant level)
-are rolled up to their nearest **Class-level** ancestor, so related weaknesses are
-grouped together rather than scattered across many small slices. Weakness classes
-with fewer than 2 CVEs are folded into "Other". Each CVE is counted once per unique
-class it references.
+using the MITRE CWE hierarchy. A slice's count includes every CVE reachable
+anywhere below it in the hierarchy, not just CVEs assigned that exact CWE — click
+a slice or legend row to drill into its direct children and see the same
+breakdown one level down.

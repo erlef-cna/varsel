@@ -6,8 +6,8 @@ defmodule VarselWeb.ChartComponents do
   @moduledoc """
   HEEx function components that render the chart geometry produced by
   `VarselWeb.Charts`. No client JS — hover popovers are CSS-only (see
-  the `.chart-*` / `.cwe-*` rules in `app.css`); the CWE donut/legend carry
-  `phx-click` bindings handled by `CommonWeaknessesLive`.
+  the `.chart-*` / `.cwe-*` rules in `app.css`); the CWE donut/legend
+  navigate via plain links rather than any LiveView event.
   """
   use VarselWeb, :html
 
@@ -273,9 +273,20 @@ defmodule VarselWeb.ChartComponents do
   end
 
   @doc """
-  CWE distribution donut with clickable slices. `data` comes from
-  `Charts.donut_geometry/1`. Slices `phx-click="slice"` (drill down or select);
-  the LiveView decides based on `phx-value-drill`.
+  CWE distribution donut. `data` comes from `Charts.donut_geometry/1`; each
+  slice's `:href` is where clicking it navigates, or `nil` for a slice with
+  nowhere further to go (renders unlinked).
+
+  A `:total` of 0 has no meaningful sweeps to divide up (`entries` may still
+  be non-empty — every entry counting zero) — rather than per-entry
+  degenerate zero-sweep arcs stacked on each other, it renders `:empty_ring`
+  instead: one plain greyed full-circle stroke, so the empty state reads as
+  intentional rather than broken.
+
+  The center displays `:center_total`, not `:total` — they can differ (a
+  view/subtree's own recursive count double-counts differently than the
+  slice-sum does), while slice `:pct`/arcs always stay proportional to
+  `:total`.
   """
   attr :data, :map, required: true
 
@@ -287,30 +298,12 @@ defmodule VarselWeb.ChartComponents do
       aria-label="CWE distribution"
       class="cwe-donut-svg"
     >
-      <g
-        :for={slice <- @data.slices}
-        class="cwe-slice-group"
-        role="button"
-        tabindex="0"
-        phx-click="slice"
-        phx-value-cwe={slice.id}
-        phx-value-drill={to_string(slice.has_children?)}
-      >
-        <path d={slice.arc} fill={slice.color} fill-rule={slice.full_ring? && "evenodd"} />
-        <title>
-          {slice.name}: {slice.count} CVEs ({slice.pct}%) — click to {drill_verb(slice)}
-        </title>
+      <g :if={@data.total == 0}>
+        <path d={@data.empty_ring} fill-rule="evenodd" class="cwe-donut-empty-ring" />
+        <title>No CVEs to show</title>
       </g>
+      <.donut_slice :for={slice <- @data.slices} :if={@data.total > 0} slice={slice} />
 
-      <text
-        :if={@data.total == 0}
-        x={@data.center}
-        y={@data.center}
-        text-anchor="middle"
-        fill={@data.axis_color}
-      >
-        No data
-      </text>
       <text
         x={@data.center}
         y={@data.center - 6}
@@ -330,39 +323,91 @@ defmodule VarselWeb.ChartComponents do
         fill="currentColor"
         font-family="system-ui,sans-serif"
       >
-        {@data.total}
+        {@data.center_total}
       </text>
     </svg>
     """
   end
 
-  @doc "CWE distribution legend. Rows `phx-click=\"select\"` to filter the CVE list."
+  # SVG `<a>` behaves like HTML's for navigation purposes; a slice with no
+  # `:href` (nothing to drill into further) renders its arc bare.
+  attr :slice, :map, required: true
+
+  defp donut_slice(%{slice: %{href: href}} = assigns) when is_binary(href) do
+    ~H"""
+    <.link navigate={@slice.href} class="cwe-slice-group">
+      <path d={@slice.arc} fill={@slice.color} fill-rule={@slice.full_ring? && "evenodd"} />
+      <title>{@slice.name}: {@slice.count} CVEs ({@slice.pct}%) — click to drill down</title>
+    </.link>
+    """
+  end
+
+  defp donut_slice(assigns) do
+    ~H"""
+    <g class="cwe-slice-group">
+      <path d={@slice.arc} fill={@slice.color} fill-rule={@slice.full_ring? && "evenodd"} />
+      <title>{@slice.name}: {@slice.count} CVEs ({@slice.pct}%)</title>
+    </g>
+    """
+  end
+
+  @doc """
+  CWE distribution legend. Each row's `:href` is where clicking it
+  navigates; a row with no `:href` renders unlinked.
+
+  Built from CSS-table `<div>`/`<span>` markup rather than a real
+  `<table>`/`<tr>`: an `<a>` is not a valid child of `<tbody>`, and an HTML
+  parser foster-parents it (and its contents) OUT of the table at parse
+  time, before any CSS runs — `display: table-row` on a hoisted element has
+  no table ancestor left to lay out against, so a real `<table>` wrapper
+  can never make a linked row render as a row. `role="table"` etc. keep it
+  announced as a table to assistive tech despite the div/span markup.
+  """
   attr :data, :map, required: true
 
   def cwe_legend(assigns) do
     ~H"""
-    <table class="cwe-legend-table">
-      <tbody>
-        <tr
-          :for={slice <- @data.slices}
-          class="cwe-legend-row"
-          role="button"
-          phx-click="select"
-          phx-value-cwe={slice.id}
-        >
-          <td>
-            <span
-              class="cwe-swatch"
-              phx-hook="CssVars"
-              id={"cwe-swatch-#{slice.id}"}
-              data-css-background={slice.color}
-            ></span>
-          </td>
-          <td>{slice.name} <span class="cwe-legend-id">{slice.id}</span></td>
-          <td class="cwe-legend-count">{slice.count} ({slice.pct}%)</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="cwe-legend-table" role="table">
+      <.legend_row :for={slice <- @data.slices} slice={slice} />
+    </div>
+    """
+  end
+
+  attr :slice, :map, required: true
+
+  defp legend_row(%{slice: %{href: href}} = assigns) when is_binary(href) do
+    ~H"""
+    <.link navigate={@slice.href} class="cwe-legend-row" role="row">
+      <.legend_cells slice={@slice} />
+    </.link>
+    """
+  end
+
+  defp legend_row(assigns) do
+    ~H"""
+    <div class="cwe-legend-row" role="row">
+      <.legend_cells slice={@slice} />
+    </div>
+    """
+  end
+
+  attr :slice, :map, required: true
+
+  defp legend_cells(assigns) do
+    ~H"""
+    <span class="cwe-legend-cell cwe-legend-cell-swatch" role="cell">
+      <span
+        class="cwe-swatch"
+        phx-hook="CssVars"
+        id={"cwe-swatch-#{@slice.id}"}
+        data-css-background={@slice.color}
+      ></span>
+    </span>
+    <span class="cwe-legend-cell cwe-legend-cell-name" role="cell">
+      {@slice.name} <span class="cwe-legend-id">{@slice.id}</span>
+    </span>
+    <span class="cwe-legend-cell cwe-legend-cell-count" role="cell">{@slice.count}</span>
+    <span class="cwe-legend-cell cwe-legend-cell-pct" role="cell">({@slice.pct}%)</span>
     """
   end
 
@@ -379,9 +424,6 @@ defmodule VarselWeb.ChartComponents do
 
   defp pluralize(1), do: "CVE"
   defp pluralize(_), do: "CVEs"
-
-  defp drill_verb(%{has_children?: true}), do: "drill down"
-  defp drill_verb(_slice), do: "filter CVEs"
 
   defp clamp(value, min, max), do: value |> max(min) |> min(max)
 end

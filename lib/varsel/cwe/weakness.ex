@@ -41,9 +41,11 @@ defmodule Varsel.CWE.Weakness do
 
   alias Varsel.CAPEC.AttackPattern
   alias Varsel.CAPEC.AttackPatternWeakness
-  alias Varsel.CWE.CweMetadata
-  alias Varsel.CWE.CweXmlParser
+  alias Varsel.CWE.CatalogSync
+  alias Varsel.CWE.View
+  alias Varsel.CWE.ViewMembership
   alias Varsel.CWE.Weakness.OkResult
+  alias Varsel.CWE.WeaknessClosure
   alias Varsel.CWE.WeaknessRelationship
 
   graphql do
@@ -80,8 +82,6 @@ defmodule Varsel.CWE.Weakness do
       end
     end
   end
-
-  @catalog_url "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip"
 
   oban do
     scheduled_actions do
@@ -161,44 +161,12 @@ defmodule Varsel.CWE.Weakness do
     action :sync_cwe_catalog, OkResult do
       description """
       Downloads the CWE XML catalog ZIP from MITRE, checks Last-Modified to skip
-      re-processing if unchanged, unzips, parses, and bulk-upserts all weaknesses.
+      re-processing if unchanged, unzips, parses, and bulk-upserts all weaknesses,
+      views, and their relationships/memberships.
       """
 
       run fn _input, context ->
-        opts = Varsel.ObanContext.forward(context)
-
-        req = build_req()
-        stored_last_modified = fetch_stored_last_modified(opts)
-
-        headers =
-          if stored_last_modified do
-            [{"if-modified-since", stored_last_modified}]
-          else
-            []
-          end
-
-        case Req.get(req, url: @catalog_url, headers: headers) do
-          {:ok, %{status: 304}} ->
-            {:ok, :ok}
-
-          {:ok, %{status: 200, body: body, headers: resp_headers}} ->
-            {:ok, xml} = extract_xml(body)
-
-            xml
-            |> Varsel.Xml.chunk_binary()
-            |> CweXmlParser.stream()
-            |> upsert_all(opts)
-
-            new_last_modified = get_header(resp_headers, "last-modified")
-            update_metadata(new_last_modified, opts)
-            {:ok, :ok}
-
-          {:ok, %{status: status}} ->
-            {:error, "CWE catalog download failed with HTTP #{status}"}
-
-          {:error, exception} ->
-            {:error, "CWE catalog download failed: #{Exception.message(exception)}"}
-        end
+        CatalogSync.run(Varsel.ObanContext.forward(context))
       end
     end
   end
@@ -280,6 +248,68 @@ defmodule Varsel.CWE.Weakness do
       destination_attribute_on_join_resource :capec_id
       public? true
     end
+
+    many_to_many :member_of_views, View do
+      through ViewMembership
+      source_attribute :cwe_id
+      source_attribute_on_join_resource :cwe_id
+      destination_attribute :view_id
+      destination_attribute_on_join_resource :view_id
+      public? true
+    end
+
+    # Closure rows rooted at this weakness (parent_cwe_id = this cwe_id),
+    # excluding the self-pair — i.e. every CWE below it in some view's
+    # hierarchy. A weakness in more than one view has one subtree per view.
+    has_many :child_closure, WeaknessClosure do
+      source_attribute :cwe_id
+      destination_attribute :parent_cwe_id
+      filter expr(descendant_cwe_id != parent_cwe_id)
+      public? false
+    end
+
+    many_to_many :flat_children, __MODULE__ do
+      through WeaknessClosure
+      join_relationship :child_closure
+      source_attribute :cwe_id
+      source_attribute_on_join_resource :parent_cwe_id
+      destination_attribute :cwe_id
+      destination_attribute_on_join_resource :descendant_cwe_id
+      public? true
+
+      description """
+      Every weakness below this one in some view's hierarchy, flattened
+      across all levels (children, grandchildren, ...) — derived from the
+      closure rows rooted at this CWE.
+      """
+    end
+
+    # Closure rows where this weakness is the descendant (descendant_cwe_id
+    # = this cwe_id), excluding the self-pair and the NULL-parent view-root
+    # rows (NULL is not a weakness) — i.e. every CWE above it in some view's
+    # hierarchy.
+    has_many :parent_closure, WeaknessClosure do
+      source_attribute :cwe_id
+      destination_attribute :descendant_cwe_id
+      filter expr(not is_nil(parent_cwe_id) and parent_cwe_id != descendant_cwe_id)
+      public? false
+    end
+
+    many_to_many :flat_parents, __MODULE__ do
+      through WeaknessClosure
+      join_relationship :parent_closure
+      source_attribute :cwe_id
+      source_attribute_on_join_resource :descendant_cwe_id
+      destination_attribute :cwe_id
+      destination_attribute_on_join_resource :parent_cwe_id
+      public? true
+
+      description """
+      Every weakness above this one in some view's hierarchy, flattened
+      across all levels (parent, grandparent, ...) — derived from the
+      closure rows where this CWE is the descendant.
+      """
+    end
   end
 
   calculations do
@@ -309,147 +339,6 @@ defmodule Varsel.CWE.Weakness do
       argument :query, :string do
         allow_nil? false
       end
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Private sync helpers (used by the :sync_cwe_catalog action run fn)
-  # ---------------------------------------------------------------------------
-
-  defp fetch_stored_last_modified(opts) do
-    case Varsel.CWE.read_cwe_metadata(opts) do
-      {:ok, [%{last_modified: lm}]} -> lm
-      _ -> nil
-    end
-  end
-
-  # Req automatically unzips zip responses into a list of {filename, content} tuples.
-  # Handle both that case and a raw binary (e.g. in production with a real HTTP response).
-  defp extract_xml(files) when is_list(files) do
-    case Enum.find(files, fn {name, _} -> String.ends_with?(to_string(name), ".xml") end) do
-      {_name, xml} -> {:ok, xml}
-      nil -> {:error, "No XML file found in CWE ZIP archive"}
-    end
-  end
-
-  defp extract_xml(zip_binary) when is_binary(zip_binary) do
-    case :zip.unzip(zip_binary, [:memory]) do
-      {:ok, files} -> extract_xml(files)
-      {:error, reason} -> {:error, "Failed to unzip CWE catalog: #{inspect(reason)}"}
-    end
-  end
-
-  defp upsert_all(weaknesses, opts) do
-    {:ok, _} =
-      Ash.transact(__MODULE__, fn ->
-        # 1. Upsert the weaknesses themselves (without relationships). The
-        #    weakness stream is single-pass, so keep each chunk's (small)
-        #    relationship facts for the second step.
-        relationship_facts =
-          weaknesses
-          |> Stream.chunk_every(200)
-          |> Enum.flat_map(fn chunk ->
-            chunk
-            |> Enum.map(&Map.delete(&1, :related_weaknesses))
-            |> Varsel.CWE.upsert_weakness!(Keyword.put(opts, :bulk_options, return_errors?: true, stop_on_error?: true))
-
-            Enum.map(chunk, &Map.take(&1, [:cwe_id, :related_weaknesses]))
-          end)
-
-        # 2. Sync relationships as a flat set, now that every target exists.
-        sync_relationships(relationship_facts, opts)
-      end)
-  end
-
-  # Syncs the relationship table to the parsed catalog as a diff: only rows
-  # MITRE added, changed or removed are written — the weekly steady state
-  # touches almost nothing. Relationships are inserted flat (with an explicit
-  # source_cwe_id) instead of through the weakness upsert's
-  # manage_relationship, which mis-maps targets under a chunked bulk_create.
-  # Rows referencing an unknown weakness are dropped (the target FK would
-  # reject them anyway).
-  defp sync_relationships(weaknesses, opts) do
-    known = MapSet.new(weaknesses, & &1.cwe_id)
-
-    desired =
-      weaknesses
-      |> Enum.flat_map(fn %{cwe_id: source_cwe_id} = weakness ->
-        weakness
-        |> Map.get(:related_weaknesses, [])
-        |> Enum.filter(&MapSet.member?(known, &1.target_cwe_id))
-        |> Enum.map(&Map.put(&1, :source_cwe_id, source_cwe_id))
-      end)
-      |> Map.new(&{{&1.source_cwe_id, &1.target_cwe_id, &1.nature, &1.view_id}, &1})
-
-    current =
-      Map.new(
-        Varsel.CWE.list_weakness_relationships!(opts),
-        &{{&1.source_cwe_id, &1.target_cwe_id, &1.nature, &1.view_id}, &1}
-      )
-
-    stale = for {key, record} <- current, not Map.has_key?(desired, key), do: record
-
-    to_write =
-      for {key, row} <- desired,
-          (case current do
-             %{^key => record} -> record.ordinal != Map.get(row, :ordinal)
-             _absent -> true
-           end),
-          do: row
-
-    # The join resource authorizes writes by relationship provenance
-    # (accessing_from), which manage_relationship would stamp — the flat diff
-    # stamps it itself.
-    opts =
-      stamp_accessing_from(opts, %{source: __MODULE__, name: :related_weakness_relationships})
-
-    Ash.bulk_destroy!(
-      stale,
-      :destroy,
-      %{},
-      Keyword.merge(opts, return_errors?: true, stop_on_error?: true, strategy: :stream)
-    )
-
-    Varsel.CWE.create_weakness_relationship!(
-      to_write,
-      Keyword.put(opts, :bulk_options,
-        return_errors?: true,
-        stop_on_error?: true,
-        batch_size: 500
-      )
-    )
-
-    :ok
-  end
-
-  defp stamp_accessing_from(opts, accessing_from) do
-    Keyword.update(
-      opts,
-      :context,
-      %{accessing_from: accessing_from},
-      &Map.put(&1, :accessing_from, accessing_from)
-    )
-  end
-
-  defp update_metadata(last_modified, opts) do
-    Ash.create!(
-      CweMetadata,
-      %{last_modified: last_modified, last_synced_at: DateTime.utc_now()},
-      Keyword.put(opts, :action, :upsert)
-    )
-  end
-
-  @extra_req_opts Keyword.take(Application.compile_env(:varsel, :cwe_catalog, []), [:plug])
-
-  defp build_req do
-    Req.new([retry: false] ++ @extra_req_opts)
-  end
-
-  defp get_header(headers, name) do
-    case Map.fetch(headers, name) do
-      {:ok, [value | _]} -> value
-      {:ok, value} when is_binary(value) -> value
-      :error -> nil
     end
   end
 end

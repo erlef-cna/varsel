@@ -15,6 +15,7 @@ defmodule Varsel.CWE.WeaknessRelationship do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer
 
+  alias Varsel.CWE.View
   alias Varsel.CWE.Weakness
 
   postgres do
@@ -23,6 +24,12 @@ defmodule Varsel.CWE.WeaknessRelationship do
 
     references do
       reference :target, deferrable: :initially
+
+      # Pure catalog-derived join row, unlike :source/:target (which point at
+      # Weakness and must never silently vanish just because MITRE prunes a
+      # view) — safe to let the DB cascade so the sync doesn't have to order
+      # around it.
+      reference :view, deferrable: :initially, on_delete: :delete
     end
   end
 
@@ -30,6 +37,34 @@ defmodule Varsel.CWE.WeaknessRelationship do
     read :read do
       primary? true
       description "List directed relationships between CWE weaknesses."
+    end
+
+    read :list_children do
+      description "Lists a CWE's direct child_of relationships within a view, source CWE id ascending."
+
+      argument :view_id, :integer, allow_nil?: false
+      argument :cwe_id, :integer, allow_nil?: false
+
+      prepare build(load: [:source], sort: [source_cwe_id: :asc])
+
+      filter expr(
+               view_id == ^arg(:view_id) and target_cwe_id == ^arg(:cwe_id) and
+                 nature == :child_of
+             )
+    end
+
+    read :list_parents do
+      description "Lists a CWE's direct child_of parents within a view, target CWE id ascending."
+
+      argument :view_id, :integer, allow_nil?: false
+      argument :cwe_id, :integer, allow_nil?: false
+
+      prepare build(load: [:target], sort: [target_cwe_id: :asc])
+
+      filter expr(
+               view_id == ^arg(:view_id) and source_cwe_id == ^arg(:cwe_id) and
+                 nature == :child_of
+             )
     end
 
     create :create do
@@ -115,6 +150,14 @@ defmodule Varsel.CWE.WeaknessRelationship do
     belongs_to :target, Weakness do
       source_attribute :target_cwe_id
       destination_attribute :cwe_id
+      define_attribute? false
+      allow_nil? false
+      public? true
+    end
+
+    belongs_to :view, View do
+      source_attribute :view_id
+      destination_attribute :view_id
       define_attribute? false
       allow_nil? false
       public? true

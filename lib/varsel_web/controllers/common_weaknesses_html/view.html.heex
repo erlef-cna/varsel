@@ -1,0 +1,62 @@
+<%!--
+SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+SPDX-License-Identifier: Apache-2.0
+--%>
+<.page_header>
+  <:eyebrow>Analysis</:eyebrow>
+  <:title>{@page.title}</:title>
+  <:subtitle>{@page.description}</:subtitle>
+</.page_header>
+
+<.page_container>
+  <div class="prose prose-base max-w-none mb-6">{raw(@page.body)}</div>
+
+  <.panel class="mb-6">
+    <:title>Viewing · CWE-{@view.view_id}</:title>
+    <:actions>
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-eef-quiet btn-xs">
+          Switch view <.icon name="hero-chevron-down-micro" class="size-3.5" />
+        </div>
+        <ul
+          tabindex="0"
+          class="dropdown-content menu menu-sm bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-56 p-2 z-10"
+        >
+          <li :for={switchable <- @switchable_views}>
+            <span :if={switchable.view_id == @view.view_id} class="menu-active">
+              {switchable.name}
+            </span>
+            <.link
+              :if={switchable.view_id != @view.view_id}
+              navigate={~p"/common-weaknesses/#{switchable.view_id}"}
+            >
+              {switchable.name}
+            </.link>
+          </li>
+        </ul>
+      </div>
+      <.link href={@mitre_url} target="_blank" rel="noopener" class="link link-primary">
+        CWE-{@view.view_id} at MITRE
+      </.link>
+    </:actions>
+    <p class="text-sm text-base-content/70">
+      We're looking at the CWE hierarchy through the {@view.name} view.
+    </p>
+  </.panel>
+
+  <div class="cwe-chart-wrapper">
+    <div class="cwe-donut"><.cwe_donut data={@dist} /></div>
+    <div class="cwe-legend">
+      <.cwe_legend data={@dist} />
+    </div>
+  </div>
+
+  <section :if={@cve_total > 0} class="mt-8 pt-6 border-t border-base-300">
+    <p class="eef-eyebrow mb-1">CVEs</p>
+    <h2 class="text-xl font-bold mb-4">Every CVE in this view</h2>
+    {live_render(@conn, VarselWeb.CommonWeaknessesCveTableLive,
+      id: "cw-cve-table",
+      session: VarselWeb.CommonWeaknessesHTML.table_session(@view.view_id, nil)
+    )}
+  </section>
+</.page_container>
