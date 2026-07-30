@@ -545,14 +545,22 @@ defmodule VarselWeb.CveView do
   end
 
   @commit_url_regex ~r/^https:\/\/github\.com\/([^\/]+\/[^\/]+)\/commit\/([0-9a-f]{7,40})$/
+  @ghsa_url_regex ~r/^https:\/\/github\.com\/([^\/]+\/[^\/]+)\/security\/advisories\/(GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4})$/
+  @osv_url_regex ~r/^https:\/\/osv\.dev\/vulnerability\/([A-Za-z0-9][A-Za-z0-9.-]*)$/
 
   @doc """
   Presentation data for one References row: `%{kind:, url:, name:, owner_repo:,
-  sha:, tag:, tone:, faint?:}`. The template renders the body from `kind`:
+  sha:, id:, tag:, tone:, faint?:}`. The template renders the body from `kind`:
 
     * `:commit` — a GitHub commit URL (`github.com/owner/repo/commit/<sha>`)
       renders as `host/owner/repo · <7-char mono sha> ↗` in the text face —
       the raw URL never appears (full URL stays in `href`/`title`).
+    * `:ghsa` — a GitHub Security Advisory
+      (`github.com/owner/repo/security/advisories/GHSA-…`) renders as
+      `host/owner/repo · <mono GHSA id> ↗`, the same shape as a commit: the
+      identifier is what a reader recognises, not the path to it.
+    * `:osv` — an OSV entry (`osv.dev/vulnerability/<id>`) renders as
+      `osv.dev · <mono id> ↗`.
     * `:link` — everything else renders its `name` (falling back to the
       bare `url`) as the link text.
 
@@ -569,11 +577,7 @@ defmodule VarselWeb.CveView do
     tag = List.first(tags)
     url = ref["url"]
 
-    body =
-      case url && Regex.run(@commit_url_regex, url) do
-        [_full, owner_repo, sha] -> %{kind: :commit, owner_repo: owner_repo, sha: sha}
-        _no_match -> %{kind: :link, name: ref["name"] || url}
-      end
+    body = reference_body_data(url, ref["name"])
 
     Map.merge(body, %{
       url: url,
@@ -581,6 +585,27 @@ defmodule VarselWeb.CveView do
       tone: if(tag in ["vendor-advisory", "third-party-advisory"], do: :warn, else: :neutral),
       faint?: "broken-link" in tags
     })
+  end
+
+  defp reference_body_data(nil, name), do: %{kind: :link, name: name}
+
+  defp reference_body_data(url, name) do
+    cond do
+      match = Regex.run(@commit_url_regex, url) ->
+        [_full, owner_repo, sha] = match
+        %{kind: :commit, owner_repo: owner_repo, sha: sha}
+
+      match = Regex.run(@ghsa_url_regex, url) ->
+        [_full, owner_repo, id] = match
+        %{kind: :ghsa, owner_repo: owner_repo, id: id}
+
+      match = Regex.run(@osv_url_regex, url) ->
+        [_full, id] = match
+        %{kind: :osv, id: id}
+
+      true ->
+        %{kind: :link, name: name || url}
+    end
   end
 
   @doc "Component rendering a References row's body per `reference_row/1`'s `kind`."
@@ -596,6 +621,34 @@ defmodule VarselWeb.CveView do
       class={["truncate", @row.faint? && "text-base-content/40"]}
     >
       github.com/{@row.owner_repo} · <code>{short_sha7(@row.sha)}</code> ↗
+    </.link>
+    """
+  end
+
+  def reference_body(%{row: %{kind: :ghsa}} = assigns) do
+    ~H"""
+    <.link
+      href={@row.url}
+      title={@row.url}
+      target="_blank"
+      rel="noopener"
+      class={["truncate", @row.faint? && "text-base-content/40"]}
+    >
+      github.com/{@row.owner_repo} · <code>{@row.id}</code> ↗
+    </.link>
+    """
+  end
+
+  def reference_body(%{row: %{kind: :osv}} = assigns) do
+    ~H"""
+    <.link
+      href={@row.url}
+      title={@row.url}
+      target="_blank"
+      rel="noopener"
+      class={["truncate", @row.faint? && "text-base-content/40"]}
+    >
+      osv.dev · <code>{@row.id}</code> ↗
     </.link>
     """
   end

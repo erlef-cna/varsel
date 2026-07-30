@@ -271,6 +271,62 @@ defmodule VarselWeb.CveViewTest do
     end
   end
 
+  describe "reference_row/1" do
+    test "a GitHub commit URL renders as repo plus short sha" do
+      row =
+        CveView.reference_row(%{
+          "url" => "https://github.com/erlef/varsel/commit/0123456789abcdef0123456789abcdef01234567"
+        })
+
+      assert %{
+               kind: :commit,
+               owner_repo: "erlef/varsel",
+               sha: "0123456789abcdef0123456789abcdef01234567"
+             } = row
+    end
+
+    test "a GHSA advisory URL renders as repo plus advisory id" do
+      row =
+        CveView.reference_row(%{
+          "url" => "https://github.com/gleam-lang/gleam/security/advisories/GHSA-4vvc-458m-r82g"
+        })
+
+      assert %{kind: :ghsa, owner_repo: "gleam-lang/gleam", id: "GHSA-4vvc-458m-r82g"} = row
+    end
+
+    test "an OSV vulnerability URL renders as its id" do
+      row = CveView.reference_row(%{"url" => "https://osv.dev/vulnerability/EEF-CVE-2026-9012"})
+
+      assert %{kind: :osv, id: "EEF-CVE-2026-9012"} = row
+    end
+
+    test "a GitHub URL that is neither a commit nor an advisory stays a plain link" do
+      for url <- [
+            "https://github.com/erlef/varsel/security/advisories",
+            "https://github.com/erlef/varsel/issues/1",
+            "https://osv.dev/list"
+          ] do
+        assert %{kind: :link, name: ^url} = CveView.reference_row(%{"url" => url})
+      end
+    end
+
+    test "a named reference keeps its name as the link text" do
+      row = CveView.reference_row(%{"url" => "https://example.com/a", "name" => "Upstream notes"})
+
+      assert %{kind: :link, name: "Upstream notes"} = row
+    end
+
+    test "the first tag becomes the pill, and broken-link rows render faint" do
+      row =
+        CveView.reference_row(%{
+          "url" => "https://example.com/a",
+          "tags" => ["patch", "broken-link"]
+        })
+
+      assert %{tag: "patch", tone: :neutral, faint?: true} = row
+    end
+  end
+
   describe "sort_references/1" do
     test "advisory-tagged references sort first, stable within each group" do
       refs = [
