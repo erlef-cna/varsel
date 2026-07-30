@@ -90,6 +90,7 @@ defmodule Varsel.CVE.CveRecord do
   import Ash.Expr
 
   alias Varsel.CVE.CveRecord.OkResult
+  alias Varsel.CVE.CveRecord.Preparations.FilterByCwe
   alias Varsel.CVE.CveRecord.Validations.ValidCveRecord
   alias Varsel.CVE.MitreCveApi
 
@@ -405,13 +406,19 @@ defmodule Varsel.CVE.CveRecord do
       end
 
       prepare build(
-                load: [:cve_id, :title, :date_published, :date_updated],
+                load: [:cve_id, :title, :date_published, :date_updated, :purls],
                 sort: [date_published: :desc]
               )
 
-      prepare Varsel.CVE.CveRecord.Preparations.FilterByCwe
+      prepare FilterByCwe
 
       filter expr(state == :published)
+
+      pagination offset?: true,
+                 keyset?: true,
+                 countable: :by_default,
+                 default_limit: 25,
+                 required?: false
     end
 
     action :published_quarter_counts, {:array, :tuple} do
@@ -425,6 +432,55 @@ defmodule Varsel.CVE.CveRecord do
                   ]
 
       run Varsel.CVE.CveRecord.Actions.PublishedQuarterCounts
+    end
+
+    action :published_cwe_subtree_counts, {:array, :tuple} do
+      description """
+      Counts published CVE records recursively reachable under each of a set
+      of CWE ids, scoped to one view. Parents with zero matching CVEs are
+      absent from the result, not zero-valued rows.
+      """
+
+      public? false
+
+      constraints items: [
+                    fields: [
+                      cwe_id: [type: :integer, allow_nil?: false],
+                      count: [type: :integer, allow_nil?: false]
+                    ]
+                  ]
+
+      argument :view_id, :integer, allow_nil?: false
+
+      argument :cwe_ids, {:array, :integer} do
+        allow_nil? false
+        description "The parents (view members or a CWE's direct children) to count under."
+      end
+
+      run Varsel.CVE.CveRecord.Actions.PublishedCweSubtreeCounts
+    end
+
+    action :published_cwe_view_total, :integer do
+      description """
+      Counts published CVE records recursively reachable under one subject
+      within a view — a single CWE's subtree, or (with `cwe_id` absent) the
+      whole view. Unlike summing `published_cwe_subtree_counts` results,
+      this never over- or under-counts: sibling subtrees can overlap, and a
+      node's own CVEs (or those attached between it and its ancestors)
+      never appear in any child's slice count.
+      """
+
+      public? false
+
+      argument :view_id, :integer, allow_nil?: false
+
+      argument :cwe_id, :integer do
+        allow_nil? true
+
+        description "The subtree root; omitted means the whole view (its NULL-parent closure rows)."
+      end
+
+      run Varsel.CVE.CveRecord.Actions.PublishedCweViewTotal
     end
 
     read :list_all do
@@ -792,6 +848,12 @@ defmodule Varsel.CVE.CveRecord do
     # Counts only published records, which the read policy above serves to
     # anyone.
     policy action(:published_quarter_counts) do
+      authorize_if always()
+    end
+
+    # Count only published records, same as published_quarter_counts —
+    # public aggregate data regardless of actor.
+    policy action([:published_cwe_subtree_counts, :published_cwe_view_total]) do
       authorize_if always()
     end
 

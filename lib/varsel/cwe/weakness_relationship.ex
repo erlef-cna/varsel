@@ -39,6 +39,34 @@ defmodule Varsel.CWE.WeaknessRelationship do
       description "List directed relationships between CWE weaknesses."
     end
 
+    read :list_children do
+      description "Lists a CWE's direct child_of relationships within a view, source CWE id ascending."
+
+      argument :view_id, :integer, allow_nil?: false
+      argument :cwe_id, :integer, allow_nil?: false
+
+      prepare build(load: [:source], sort: [source_cwe_id: :asc])
+
+      filter expr(
+               view_id == ^arg(:view_id) and target_cwe_id == ^arg(:cwe_id) and
+                 nature == :child_of
+             )
+    end
+
+    read :list_parents do
+      description "Lists a CWE's direct child_of parents within a view, target CWE id ascending."
+
+      argument :view_id, :integer, allow_nil?: false
+      argument :cwe_id, :integer, allow_nil?: false
+
+      prepare build(load: [:target], sort: [target_cwe_id: :asc])
+
+      filter expr(
+               view_id == ^arg(:view_id) and source_cwe_id == ^arg(:cwe_id) and
+                 nature == :child_of
+             )
+    end
+
     create :create do
       primary? true
       description "Upsert a directed CWE weakness relationship from the catalog sync."

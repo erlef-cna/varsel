@@ -58,6 +58,8 @@ defmodule Varsel.CWE do
 
     resource Varsel.CWE.WeaknessRelationship do
       define :list_weakness_relationships, action: :read
+      define :list_weakness_children, action: :list_children
+      define :list_weakness_parents, action: :list_parents
       define :create_weakness_relationship, action: :create
       define :update_weakness_relationship, action: :update
       define :destroy_weakness_relationship, action: :destroy
@@ -65,6 +67,7 @@ defmodule Varsel.CWE do
 
     resource View do
       define :list_views, action: :read
+      define :list_switchable_views, action: :list_switchable
       define :get_view, action: :get_by_view_id, args: [:view_id]
       define :upsert_view, action: :upsert
       define :destroy_view, action: :destroy
@@ -72,6 +75,7 @@ defmodule Varsel.CWE do
 
     resource Varsel.CWE.ViewMembership do
       define :list_view_memberships, action: :read
+      define :list_view_memberships_by_view, action: :list_by_view
       define :create_view_membership, action: :create
       define :destroy_view_membership, action: :destroy
     end
@@ -84,6 +88,7 @@ defmodule Varsel.CWE do
     resource Varsel.CWE.WeaknessClosure do
       define :list_weakness_closure, action: :read
       define :refresh_weakness_closure, action: :refresh
+      define :cwe_in_view?, action: :in_view?
     end
   end
 end

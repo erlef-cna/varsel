@@ -121,7 +121,9 @@ defmodule VarselWeb.Router do
 
     get "/index.html", PageController, :legacy_redirect, assigns: %{to: "/"}
 
-    live "/common-weaknesses", CommonWeaknessesLive, :index
+    get "/common-weaknesses", CommonWeaknessesController, :index
+    get "/common-weaknesses/:view_id", CommonWeaknessesController, :view
+    get "/common-weaknesses/:view_id/:cwe_id", CommonWeaknessesController, :show
 
     get "/common-weaknesses.html", PageController, :legacy_redirect, assigns: %{to: "/common-weaknesses"}
 

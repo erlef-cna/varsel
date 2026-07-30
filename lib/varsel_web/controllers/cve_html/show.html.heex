@@ -83,7 +83,7 @@ SPDX-License-Identifier: Apache-2.0
           <span class="ml-auto flex flex-shrink-0 items-center gap-3">
             <.link
               :if={Map.get(@cwe_names, cwe_id_number(cwe["cweId"]))}
-              navigate={~p"/common-weaknesses?cwe=#{cwe["cweId"]}"}
+              navigate={~p"/common-weaknesses/1000/#{cwe_id_number(cwe["cweId"])}"}
               class="text-xs text-primary hover:underline"
             >
               in catalog →

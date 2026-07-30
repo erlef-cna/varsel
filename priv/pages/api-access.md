@@ -17,7 +17,7 @@ under [`/cves/index.json`](/cves/index.json) and
 curl -X POST %BASE_URL%/gql \
   -H "content-type: application/json" \
   -H "authorization: Bearer <token>" \
-  -d '{"query": "{ listPublishedCves { cveId title } }"}'
+  -d '{"query": "{ listPublishedCves { results { cveId title } } }"}'
 ```
 
 ## MCP

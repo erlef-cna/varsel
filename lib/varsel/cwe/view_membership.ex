@@ -36,6 +36,16 @@ defmodule Varsel.CWE.ViewMembership do
       description "List CWE view to weakness membership mappings."
     end
 
+    read :list_by_view do
+      description "Lists a view's declared members, with their weakness names, CWE id ascending."
+
+      argument :view_id, :integer, allow_nil?: false
+
+      prepare build(load: [:weakness], sort: [cwe_id: :asc])
+
+      filter expr(view_id == ^arg(:view_id))
+    end
+
     create :create do
       primary? true
       description "Upsert a CWE view membership from the catalog sync."

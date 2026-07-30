@@ -32,7 +32,7 @@ defmodule VarselWeb.GraphqlTest do
 
   describe "anonymous requests" do
     test "are rejected with the OAuth discovery challenge", %{conn: conn} do
-      conn = post(conn, "/gql", %{"query" => "{ listPublishedCves { cveId } }"})
+      conn = post(conn, "/gql", %{"query" => "{ listPublishedCves { results { cveId } } }"})
 
       assert response(conn, 401)
       assert [challenge] = get_resp_header(conn, "www-authenticate")
@@ -61,9 +61,9 @@ defmodule VarselWeb.GraphqlTest do
       body =
         conn
         |> with_api_key(poc)
-        |> gql("{ listPublishedCves { cveId title } }")
+        |> gql("{ listPublishedCves { results { cveId title } } }")
 
-      assert body["data"]["listPublishedCves"] == [
+      assert body["data"]["listPublishedCves"]["results"] == [
                %{"cveId" => "CVE-#{@year}-3001", "title" => "Published thing"}
              ]
     end
@@ -222,7 +222,7 @@ defmodule VarselWeb.GraphqlTest do
       conn =
         conn
         |> put_req_header("authorization", "Bearer not-a-valid-token")
-        |> post("/gql", %{"query" => "{ listPublishedCves { cveId } }"})
+        |> post("/gql", %{"query" => "{ listPublishedCves { results { cveId } } }"})
 
       assert response(conn, 401)
     end

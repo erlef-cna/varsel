@@ -37,6 +37,8 @@ defmodule Varsel.CWE.WeaknessClosure do
   alias Varsel.CWE.Weakness
   alias Varsel.CWE.WeaknessClosure.OkResult
 
+  require Ash.Query
+
   postgres do
     table "cwe_weakness_closure"
     repo Varsel.Repo
@@ -66,6 +68,29 @@ defmodule Varsel.CWE.WeaknessClosure do
         {:ok, :ok}
       end
     end
+
+    action :in_view?, :boolean do
+      description """
+      True when a CWE is reachable from a view's root — a descendant of its
+      NULL-parent closure row, which every declared member and everything
+      below them satisfies.
+      """
+
+      argument :view_id, :integer, allow_nil?: false
+      argument :cwe_id, :integer, allow_nil?: false
+
+      run fn input, context ->
+        exists? =
+          __MODULE__
+          |> Ash.Query.filter(
+            view_id == ^input.arguments.view_id and is_nil(parent_cwe_id) and
+              descendant_cwe_id == ^input.arguments.cwe_id
+          )
+          |> Ash.exists?(Ash.Context.to_opts(context))
+
+        {:ok, exists?}
+      end
+    end
   end
 
   policies do
@@ -74,6 +99,10 @@ defmodule Varsel.CWE.WeaknessClosure do
     end
 
     policy action_type(:read) do
+      authorize_if always()
+    end
+
+    policy action(:in_view?) do
       authorize_if always()
     end
   end

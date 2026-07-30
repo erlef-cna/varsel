@@ -49,6 +49,19 @@ defmodule Varsel.CWE.View do
       filter expr(view_id == ^arg(:view_id))
     end
 
+    read :list_switchable do
+      description """
+      Lists views usable as a switch destination from the common-weaknesses
+      browser: ones with at least one declared member (a view with nothing
+      to show has nowhere for the browser to land) and not deprecated or
+      obsolete, name ascending.
+      """
+
+      prepare build(sort: [name: :asc])
+
+      filter expr(exists(memberships, true) and status not in [:deprecated, :obsolete])
+    end
+
     create :upsert do
       description "Upserts a CWE view parsed from the CWE XML catalog."
       accept [:view_id, :name, :type, :status, :objective]

@@ -4,17 +4,17 @@
 
 defmodule VarselWeb.Charts do
   @moduledoc """
-  Data layer for the CVE-activity and CWE-distribution charts (the Phoenix port
-  of the Jekyll `cve_chart_generator.rb` / `cwe_chart_generator.rb`).
+  Data layer for the home page's CVE-activity chart (the Phoenix port of the
+  Jekyll `cve_chart_generator.rb`) plus the CWE donut's shared geometry
+  (`donut_geometry/1`), which takes already-aggregated entries rather than
+  scanning CVEs itself.
 
   These functions compute aggregations and SVG *geometry* only — pixel
-  coordinates, arc/area paths, projection points — and return plain maps.
-  `VarselWeb.ChartComponents` renders that data as HEEx `~H` markup.
-  Keeping the two apart makes the aggregation unit-testable with a fixed `now`
-  and keeps the markup out of string interpolation.
+  coordinates, arc/area paths, projection points — and return plain maps,
+  keeping markup out of string interpolation and the aggregation
+  unit-testable with a fixed `now`.
   """
   alias Varsel.CVE
-  alias Varsel.CWE
 
   require Ash.Query
 
@@ -38,8 +38,7 @@ defmodule VarselWeb.Charts do
   solid area/line path, the dashed projection (triangle to the current
   quarter's projected dot + extrapolation to the next-quarter forecast), and
   every plotted point with its pixel position. `now` defaults to the current
-  UTC time; pass one for deterministic rendering/tests. Consumed by
-  `VarselWeb.ChartComponents.cve_activity_chart/1`.
+  UTC time; pass one for deterministic rendering/tests.
   """
   @spec cve_activity_data(DateTime.t()) :: map()
   def cve_activity_data(now \\ DateTime.utc_now()) do
@@ -296,94 +295,68 @@ defmodule VarselWeb.Charts do
   @donut_colors ~w(#1b85cb #0d6efd #17a2b8 #198754 #20c997 #ffc107 #fd7e14 #dc3545 #e83e8c #6f42c1 #6610f2 #6c757d)
 
   @doc """
-  CWE distribution at a `focus` node, as `%{entries, focus, breadcrumb}`.
-
-  Each published CVE's CWE ids carry an ancestor chain (walking `child_of` to
-  the top of the tree). At the top level (`focus == nil`) each CVE-CWE is
-  grouped by the root of its chain; drilling into a node groups by the child
-  of that node on the chain. Every bucket is therefore CVE-backed. Entries
-  carry the set of contributing CVE ids so the caller can show a filtered
-  list, and `has_children?` marks entries that can be drilled into further.
-  """
-  @spec cwe_distribution(String.t() | nil) :: %{
-          entries: [map()],
-          focus: map() | nil,
-          breadcrumb: [map()]
-        }
-  def cwe_distribution(focus \\ nil) do
-    catalog = cwe_catalog()
-    focus_id = parse_cwe_id(focus)
-    refs = cwe_cve_refs(catalog)
-
-    entries =
-      refs
-      |> Enum.flat_map(fn %{chain: chain, cve_id: cve_id} ->
-        case bucket_for(chain, focus_id) do
-          nil -> []
-          node -> [{node, cve_id}]
-        end
-      end)
-      |> Enum.group_by(fn {node, _cve} -> node end, fn {_node, cve} -> cve end)
-      |> Enum.map(fn {node, cves} ->
-        cve_ids = Enum.uniq(cves)
-
-        %{
-          id: "CWE-#{node}",
-          name: cwe_name(catalog, node),
-          count: length(cve_ids),
-          cve_ids: cve_ids,
-          has_children?: any_child_below?(refs, focus_id, node)
-        }
-      end)
-      |> Enum.sort_by(& &1.count, :desc)
-
-    %{
-      entries: entries,
-      focus: focus_entry(catalog, focus_id),
-      breadcrumb: breadcrumb(catalog, focus_id)
-    }
-  end
-
-  @doc """
-  Enriches a distribution result with the geometry the donut component needs:
+  Enriches a distribution result with the geometry the donut/legend need:
   a `:total`, each entry gets `:color`, `:pct` and (for the donut) an `:arc`
-  path, and a `:full_ring?` flag for the single-100%-slice case. Consumed by
-  `VarselWeb.ChartComponents.cwe_donut/1` + `cwe_legend/1`.
+  path, and a `:full_ring?` flag for the single-100%-slice case.
+
+  A `:total` of 0 (no entries, or entries that all count 0) has nothing to
+  divide into per-entry sweeps — `entry.count / total` would be a division
+  by zero, and even guarding that only yields a stack of identical
+  zero-sweep arcs, not an empty state. Those cases get no `:slices` arcs at
+  all; instead `:empty_ring` carries one full-circle path for the component
+  to render as a single greyed ring, keeping the legend (still built from
+  `entries`, at 0% each) and the donut visually consistent.
+
+  `dist` may carry a `:center_total` — a distinct count to display in the
+  donut's center instead of the slice-sum `:total` (e.g. a view/subtree's
+  own recursive CVE total, which double-counts differently than summing
+  sibling slices — see `Varsel.CVE.CveRecord.Actions.PublishedCweViewTotal`).
+  Slice `:pct`/arcs always stay proportional to the slice-sum regardless;
+  only the displayed center number changes. Defaults to the slice-sum when
+  absent, so existing callers are unaffected.
   """
   @spec donut_geometry(map()) :: map()
   def donut_geometry(%{entries: entries} = dist) do
     total = entries |> Enum.map(& &1.count) |> Enum.sum()
+    center_total = Map.get(dist, :center_total, total)
     center = div(@donut_size, 2)
 
-    {slices, _angle} =
-      entries
-      |> Enum.with_index()
-      |> Enum.map_reduce(-90.0, fn {entry, idx}, start_angle ->
-        sweep = if total > 0, do: entry.count / total * 360, else: 0.0
-        end_angle = start_angle + sweep
-        full_ring? = sweep >= 359.999
+    slices =
+      if total > 0 do
+        entries
+        |> Enum.with_index()
+        |> Enum.map_reduce(-90.0, fn {entry, idx}, start_angle ->
+          sweep = entry.count / total * 360
+          end_angle = start_angle + sweep
+          full_ring? = sweep >= 359.999
 
-        slice =
-          Map.merge(entry, %{
-            color: Enum.at(@donut_colors, rem(idx, length(@donut_colors))),
-            pct: percentage(entry.count, total),
-            full_ring?: full_ring?,
-            arc:
-              if(full_ring?,
-                do: full_ring_path(center),
-                else: arc_path(center, start_angle, end_angle)
-              )
-          })
+          slice =
+            Map.merge(entry, %{
+              color: Enum.at(@donut_colors, rem(idx, length(@donut_colors))),
+              pct: percentage(entry.count, total),
+              full_ring?: full_ring?,
+              arc:
+                if(full_ring?,
+                  do: full_ring_path(center),
+                  else: arc_path(center, start_angle, end_angle)
+                )
+            })
 
-        {slice, end_angle}
-      end)
+          {slice, end_angle}
+        end)
+        |> elem(0)
+      else
+        Enum.map(entries, &Map.merge(&1, %{color: nil, pct: 0.0, full_ring?: false, arc: nil}))
+      end
 
     Map.merge(dist, %{
       total: total,
+      center_total: center_total,
       center: center,
       size: @donut_size,
       colors: @donut_colors,
       slices: slices,
+      empty_ring: if(total == 0, do: full_ring_path(center)),
       color: @color,
       axis_color: @axis_color
     })
@@ -391,123 +364,6 @@ defmodule VarselWeb.Charts do
 
   defp percentage(_count, 0), do: 0.0
   defp percentage(count, total), do: Float.round(count / total * 100, 1)
-
-  # For a CWE ancestor chain (leaf-first list of ids) and a focus id, the id
-  # of the bucket this chain contributes to: the chain element that is a direct
-  # child of focus (or the chain root when focus is nil). nil if the chain does
-  # not pass through focus.
-  defp bucket_for(chain, nil), do: List.last(chain)
-
-  defp bucket_for(chain, focus_id) do
-    case Enum.find_index(chain, &(&1 == focus_id)) do
-      nil -> nil
-      0 -> nil
-      idx -> Enum.at(chain, idx - 1)
-    end
-  end
-
-  # Whether drilling into `node` (under `focus`) would yield further buckets —
-  # i.e. some CVE chain has a descendant of `node` strictly below it.
-  defp any_child_below?(refs, _focus_id, node) do
-    Enum.any?(refs, fn %{chain: chain} ->
-      case Enum.find_index(chain, &(&1 == node)) do
-        nil -> false
-        0 -> false
-        _idx -> true
-      end
-    end)
-  end
-
-  # Per published-CVE CWE reference with its ancestor chain (leaf-first).
-  defp cwe_cve_refs(catalog) do
-    [actor: nil]
-    |> CVE.list_published_cve_records!()
-    |> Enum.flat_map(fn record ->
-      cve_id = record.cve_json["cveMetadata"]["cveId"]
-
-      record.cve_json
-      |> get_in(["containers", "cna", "problemTypes"])
-      |> List.wrap()
-      |> Enum.flat_map(&Map.get(&1, "descriptions", []))
-      |> Enum.map(& &1["cweId"])
-      |> Enum.reject(&is_nil/1)
-      |> Enum.map(&parse_cwe_id/1)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> Enum.map(fn id -> %{cve_id: cve_id, cwe_id: id, chain: ancestor_chain(catalog, id)} end)
-    end)
-  end
-
-  # CWE catalog as %{id => weakness} with child_of edges loaded.
-  defp cwe_catalog do
-    query = Ash.Query.select(CWE.Weakness, [:cwe_id, :name])
-
-    [load: [related_weakness_relationships: []], query: query, actor: nil, strict?: true]
-    |> CWE.list_weaknesses!()
-    |> Map.new(fn w -> {w.cwe_id, w} end)
-  rescue
-    _error -> %{}
-  end
-
-  # Ancestor chain for a CWE id, leaf-first (self, parent, …, root).
-  defp ancestor_chain(catalog, id), do: ancestor_chain(catalog, id, [])
-
-  defp ancestor_chain(catalog, id, acc) do
-    cond do
-      id in acc ->
-        Enum.reverse(acc)
-
-      is_nil(catalog[id]) ->
-        Enum.reverse([id | acc])
-
-      true ->
-        case parent_cwe_id(catalog[id]) do
-          nil -> Enum.reverse([id | acc])
-          parent -> ancestor_chain(catalog, parent, [id | acc])
-        end
-    end
-  end
-
-  defp parent_cwe_id(weakness) do
-    weakness.related_weakness_relationships
-    |> Enum.find(&(&1.nature == :child_of))
-    |> case do
-      nil -> nil
-      rel -> rel.target_cwe_id
-    end
-  end
-
-  defp cwe_name(catalog, id) do
-    case catalog[id] do
-      %{name: name} -> name
-      _ -> "CWE-#{id}"
-    end
-  end
-
-  defp focus_entry(_catalog, nil), do: nil
-
-  defp focus_entry(catalog, id), do: %{id: "CWE-#{id}", name: cwe_name(catalog, id)}
-
-  # Path from root down to (and including) the focus node, for a breadcrumb.
-  defp breadcrumb(_catalog, nil), do: []
-
-  defp breadcrumb(catalog, id) do
-    catalog
-    |> ancestor_chain(id)
-    |> Enum.reverse()
-    |> Enum.map(fn node -> %{id: "CWE-#{node}", name: cwe_name(catalog, node)} end)
-  end
-
-  defp parse_cwe_id(nil), do: nil
-  defp parse_cwe_id("CWE-" <> n), do: String.to_integer(n)
-  defp parse_cwe_id(n) when is_integer(n), do: n
-
-  defp parse_cwe_id(other) do
-    case Integer.parse(to_string(other)) do
-      {n, _} -> n
-      :error -> nil
-    end
-  end
 
   # ---- donut geometry (pure)
 

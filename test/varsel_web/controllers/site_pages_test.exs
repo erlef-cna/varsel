@@ -5,6 +5,10 @@
 defmodule VarselWeb.SitePagesTest do
   use VarselWeb.ConnCase, async: false
 
+  alias Varsel.CWE.View
+  alias Varsel.CWE.ViewMembership
+  alias Varsel.CWE.Weakness
+
   test "GET / renders the homepage with the activity chart", %{conn: conn} do
     conn = get(conn, ~p"/")
     body = html_response(conn, 200)
@@ -112,6 +116,61 @@ defmodule VarselWeb.SitePagesTest do
 
       # The document is encoded, not concatenated — so it parses.
       assert {:ok, {"urlset", _attrs, _children}} = Saxy.SimpleForm.parse_string(body)
+    end
+
+    test "lists a common-weaknesses root per switchable view, omitting memberless/deprecated/obsolete ones",
+         %{conn: conn} do
+      Ash.create!(
+        Weakness,
+        %{
+          cwe_id: 707,
+          name: "Improper Neutralization",
+          abstraction: :class,
+          status: :stable,
+          description: "d"
+        },
+        action: :upsert,
+        authorize?: false
+      )
+
+      # Has a member -> sitemap'd.
+      Ash.Seed.seed!(View, %{
+        view_id: 1000,
+        name: "Research Concepts",
+        type: :graph,
+        status: :stable,
+        objective: "o"
+      })
+
+      Ash.Seed.seed!(ViewMembership, %{view_id: 1000, cwe_id: 707})
+
+      # No declared members -> not sitemap'd (would render an empty root).
+      Ash.Seed.seed!(View, %{
+        view_id: 1003,
+        name: "No Members View",
+        type: :graph,
+        status: :stable,
+        objective: "o"
+      })
+
+      # Has a member but deprecated -> not sitemap'd.
+      Ash.Seed.seed!(View, %{
+        view_id: 1100,
+        name: "Retired View",
+        type: :graph,
+        status: :deprecated,
+        objective: "o"
+      })
+
+      Ash.Seed.seed!(ViewMembership, %{view_id: 1100, cwe_id: 707})
+
+      conn = get(conn, "/sitemap.xml")
+      body = response(conn, 200)
+
+      base = VarselWeb.Endpoint.url()
+      assert body =~ "<loc>#{base}/common-weaknesses/1000</loc>"
+      refute body =~ "<loc>#{base}/common-weaknesses/1003</loc>"
+      refute body =~ "<loc>#{base}/common-weaknesses/1100</loc>"
     end
   end
 end
