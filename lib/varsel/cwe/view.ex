@@ -25,6 +25,7 @@ defmodule Varsel.CWE.View do
   alias Varsel.CWE.View.Type
   alias Varsel.CWE.ViewMembership
   alias Varsel.CWE.Weakness
+  alias Varsel.CWE.WeaknessClosure
 
   graphql do
     type :cwe_view
@@ -117,6 +118,33 @@ defmodule Varsel.CWE.View do
       destination_attribute :cwe_id
       destination_attribute_on_join_resource :cwe_id
       public? true
+    end
+
+    # The view-root closure rows (parent_cwe_id IS NULL). Each row's
+    # descendant_cwe_id is a CWE reachable from the view's declared members,
+    # counting recursively through the whole view — see WeaknessClosure's
+    # moduledoc for the NULL-parent semantics.
+    has_many :closure, WeaknessClosure do
+      source_attribute :view_id
+      destination_attribute :view_id
+      filter expr(is_nil(parent_cwe_id))
+      public? true
+    end
+
+    many_to_many :flat_member_weaknesses, Weakness do
+      through WeaknessClosure
+      source_attribute :view_id
+      source_attribute_on_join_resource :view_id
+      destination_attribute :cwe_id
+      destination_attribute_on_join_resource :descendant_cwe_id
+      join_relationship :closure
+      public? true
+
+      description """
+      Every weakness reachable anywhere in the view, flattened across the
+      whole hierarchy (not just declared root members) — derived from the
+      NULL-parent closure rows via the :closure relationship.
+      """
     end
   end
 end

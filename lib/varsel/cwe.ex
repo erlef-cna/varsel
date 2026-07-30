@@ -80,5 +80,10 @@ defmodule Varsel.CWE do
       define :read_cwe_metadata, action: :read
       define :upsert_cwe_metadata, action: :upsert
     end
+
+    resource Varsel.CWE.WeaknessClosure do
+      define :list_weakness_closure, action: :read
+      define :refresh_weakness_closure, action: :refresh
+    end
   end
 end

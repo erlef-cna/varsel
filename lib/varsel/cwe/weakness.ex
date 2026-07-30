@@ -45,6 +45,7 @@ defmodule Varsel.CWE.Weakness do
   alias Varsel.CWE.View
   alias Varsel.CWE.ViewMembership
   alias Varsel.CWE.Weakness.OkResult
+  alias Varsel.CWE.WeaknessClosure
   alias Varsel.CWE.WeaknessRelationship
 
   graphql do
@@ -255,6 +256,59 @@ defmodule Varsel.CWE.Weakness do
       destination_attribute :view_id
       destination_attribute_on_join_resource :view_id
       public? true
+    end
+
+    # Closure rows rooted at this weakness (parent_cwe_id = this cwe_id),
+    # excluding the self-pair — i.e. every CWE below it in some view's
+    # hierarchy. A weakness in more than one view has one subtree per view.
+    has_many :child_closure, WeaknessClosure do
+      source_attribute :cwe_id
+      destination_attribute :parent_cwe_id
+      filter expr(descendant_cwe_id != parent_cwe_id)
+      public? false
+    end
+
+    many_to_many :flat_children, __MODULE__ do
+      through WeaknessClosure
+      join_relationship :child_closure
+      source_attribute :cwe_id
+      source_attribute_on_join_resource :parent_cwe_id
+      destination_attribute :cwe_id
+      destination_attribute_on_join_resource :descendant_cwe_id
+      public? true
+
+      description """
+      Every weakness below this one in some view's hierarchy, flattened
+      across all levels (children, grandchildren, ...) — derived from the
+      closure rows rooted at this CWE.
+      """
+    end
+
+    # Closure rows where this weakness is the descendant (descendant_cwe_id
+    # = this cwe_id), excluding the self-pair and the NULL-parent view-root
+    # rows (NULL is not a weakness) — i.e. every CWE above it in some view's
+    # hierarchy.
+    has_many :parent_closure, WeaknessClosure do
+      source_attribute :cwe_id
+      destination_attribute :descendant_cwe_id
+      filter expr(not is_nil(parent_cwe_id) and parent_cwe_id != descendant_cwe_id)
+      public? false
+    end
+
+    many_to_many :flat_parents, __MODULE__ do
+      through WeaknessClosure
+      join_relationship :parent_closure
+      source_attribute :cwe_id
+      source_attribute_on_join_resource :descendant_cwe_id
+      destination_attribute :cwe_id
+      destination_attribute_on_join_resource :parent_cwe_id
+      public? true
+
+      description """
+      Every weakness above this one in some view's hierarchy, flattened
+      across all levels (parent, grandparent, ...) — derived from the
+      closure rows where this CWE is the descendant.
+      """
     end
   end
 

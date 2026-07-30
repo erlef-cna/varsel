@@ -38,6 +38,10 @@ defmodule Varsel.CWE.CatalogSync do
   reject them anyway) rather than causing the whole sync to fail —
   Has_Member entries pointing at CWE Categories (not modeled in this app)
   are the expected source of such drops.
+
+  After the write transaction commits, the `cwe_weakness_closure` materialized
+  view is refreshed as a final step via `REFRESH MATERIALIZED VIEW
+  CONCURRENTLY`.
   """
 
   alias Varsel.CWE.CweMetadata
@@ -69,6 +73,7 @@ defmodule Varsel.CWE.CatalogSync do
 
         new_last_modified = get_header(resp_headers, "last-modified")
         update_metadata(new_last_modified, opts)
+        Varsel.CWE.refresh_weakness_closure!(opts)
         {:ok, :ok}
 
       {:ok, %{status: status}} ->

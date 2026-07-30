@@ -11,6 +11,7 @@ defmodule Varsel.CWE.WeaknessTest do
   alias Varsel.CWE.View
   alias Varsel.CWE.ViewMembership
   alias Varsel.CWE.Weakness
+  alias Varsel.CWE.WeaknessClosure
   alias Varsel.CWE.WeaknessRelationship
 
   @sample_xml """
@@ -108,6 +109,13 @@ defmodule Varsel.CWE.WeaknessTest do
     Weakness
     |> Ash.ActionInput.for_action(:sync_cwe_catalog, %{}, authorize?: false)
     |> Ash.run_action!()
+  end
+
+  defp read_closure do
+    WeaknessClosure
+    |> Ash.read!(authorize?: false)
+    |> Enum.map(&{&1.view_id, &1.parent_cwe_id, &1.descendant_cwe_id})
+    |> Enum.sort()
   end
 
   # Small chunks exercise XML tokens split across stream chunk boundaries.
@@ -284,6 +292,20 @@ defmodule Varsel.CWE.WeaknessTest do
       assert memberships == [{1000, 79}]
     end
 
+    test "refreshes the weakness closure" do
+      stub_catalog(zip_xml(@sample_xml))
+      run_sync()
+
+      assert read_closure() == [
+               {1000, 74, 74},
+               {1000, 74, 79},
+               {1000, 74, 89},
+               {1000, 79, 79},
+               {1000, 89, 89},
+               {1000, nil, 79}
+             ]
+    end
+
     # INT-006 regression: the relationship set is a snapshot of the catalog —
     # edges MITRE removed or reclassified must disappear, not accumulate.
     test "removes and reclassifies relationships across catalog versions" do
@@ -352,6 +374,75 @@ defmodule Varsel.CWE.WeaknessTest do
         |> Enum.sort()
 
       assert memberships == [{1000, 74}]
+
+      # The closure must reflect only the v2 relationships/memberships: the
+      # stale 79/89 child_of 74 rows are gone, proving the refresh drops
+      # stale closure rows rather than accumulating them.
+      assert read_closure() == [{1000, 74, 74}, {1000, nil, 74}]
+    end
+
+    test "closure NULL-parent rows cover the whole view recursively" do
+      deep_xml = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <Weakness_Catalog>
+        <Weaknesses>
+          <Weakness ID="707" Name="Improper Neutralization" Abstraction="Pillar" Status="Stable">
+            <Description>Top-level pillar weakness.</Description>
+          </Weakness>
+          <Weakness ID="74" Name="Injection" Abstraction="Class" Status="Stable">
+            <Description>Parent class.</Description>
+            <Related_Weaknesses>
+              <Related_Weakness Nature="ChildOf" CWE_ID="707" View_ID="1000"/>
+            </Related_Weaknesses>
+          </Weakness>
+          <Weakness ID="79" Name="XSS" Abstraction="Base" Status="Stable">
+            <Description>Cross-site scripting.</Description>
+            <Related_Weaknesses>
+              <Related_Weakness Nature="ChildOf" CWE_ID="74" View_ID="1000"/>
+            </Related_Weaknesses>
+          </Weakness>
+          <Weakness ID="89" Name="SQL Injection" Abstraction="Base" Status="Stable">
+            <Description>SQL injection.</Description>
+            <Related_Weaknesses>
+              <Related_Weakness Nature="ChildOf" CWE_ID="74" View_ID="1000"/>
+            </Related_Weaknesses>
+          </Weakness>
+        </Weaknesses>
+        <Views>
+          <View ID="1000" Name="Research Concepts" Type="Graph" Status="Draft">
+            <Objective>This view is intended to facilitate research into weaknesses.</Objective>
+            <Members>
+              <Has_Member CWE_ID="707" View_ID="1000"/>
+            </Members>
+          </View>
+        </Views>
+      </Weakness_Catalog>
+      """
+
+      stub_catalog(zip_xml(deep_xml))
+      run_sync()
+
+      null_parent_rows =
+        read_closure()
+        |> Enum.filter(fn {_view_id, parent_cwe_id, _descendant_cwe_id} ->
+          is_nil(parent_cwe_id)
+        end)
+        |> Enum.map(fn {view_id, _parent_cwe_id, descendant_cwe_id} ->
+          {view_id, descendant_cwe_id}
+        end)
+        |> Enum.sort()
+
+      # The declared member is only CWE-707; the grandchildren 79/89 (two
+      # levels below the member) appearing here proves the NULL-parent rows
+      # are fully recursive, not limited to the declared members themselves.
+      assert null_parent_rows == [{1000, 74}, {1000, 79}, {1000, 89}, {1000, 707}]
+    end
+
+    test "refresh is forbidden outside the catalog sync's Oban context" do
+      assert {:error, %Forbidden{}} =
+               WeaknessClosure
+               |> Ash.ActionInput.for_action(:refresh, %{}, authorize?: true)
+               |> Ash.run_action()
     end
 
     test "relationship writes outside the sync are forbidden" do
