@@ -90,7 +90,7 @@ defmodule VarselWeb.Charts do
   end
 
   defp published_since(now, days) do
-    cutoff = DateTime.add(now, -days * 86_400, :second)
+    cutoff = DateTime.shift(now, day: -days)
 
     [actor: nil]
     |> CVE.query_to_list_published_cve_records()
@@ -188,7 +188,7 @@ defmodule VarselWeb.Charts do
   defp next_quarter(year, q), do: {year, q + 1}
 
   defp count_last_60_days(dates, now) do
-    cutoff = DateTime.add(now, -60 * 86_400, :second)
+    cutoff = DateTime.shift(now, day: -60)
     Enum.count(dates, &(DateTime.compare(&1, cutoff) != :lt and DateTime.before?(&1, now)))
   end
 

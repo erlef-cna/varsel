@@ -12,7 +12,7 @@ defmodule VarselWeb.Storybook.Case.SuggestionCard do
 
   def container, do: {:div, class: "w-full"}
 
-  defp ago(seconds), do: DateTime.add(DateTime.utc_now(), -seconds, :second)
+  defp ago(seconds), do: DateTime.shift(DateTime.utc_now(), second: -seconds)
 
   # The card reads plain fields off the proposal, so a map stands in for the
   # Ash struct — no repo round-trip needed to render one.

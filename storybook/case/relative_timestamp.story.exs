@@ -8,7 +8,7 @@ defmodule VarselWeb.Storybook.Case.RelativeTimestamp do
 
   def function, do: &VarselWeb.CaseComponents.relative_timestamp/1
 
-  defp ago(seconds), do: DateTime.add(DateTime.utc_now(), -seconds, :second)
+  defp ago(seconds), do: DateTime.shift(DateTime.utc_now(), second: -seconds)
 
   def variations do
     [

@@ -78,7 +78,7 @@ defmodule Varsel.Accounts.ApiKeyTest do
 
     test "an expired key does not sign in" do
       user = register_user("alice")
-      expires_at = DateTime.add(DateTime.utc_now(), -1, :day)
+      expires_at = DateTime.shift(DateTime.utc_now(), day: -1)
       {_api_key, plaintext} = create_api_key(user, %{expires_at: expires_at})
 
       result = sign_in(plaintext)

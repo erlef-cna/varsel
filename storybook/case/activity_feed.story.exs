@@ -14,7 +14,7 @@ defmodule VarselWeb.Storybook.Case.ActivityFeed do
 
   # Timestamps are relative to render time, so the feed always reads "5m ago"
   # rather than drifting to an absolute date as the story ages.
-  defp ago(seconds), do: DateTime.add(DateTime.utc_now(), -seconds, :second)
+  defp ago(seconds), do: DateTime.shift(DateTime.utc_now(), second: -seconds)
 
   def variations do
     [

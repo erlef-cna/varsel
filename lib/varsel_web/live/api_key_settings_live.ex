@@ -128,7 +128,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
   defp expires_at("never"), do: nil
 
   defp expires_at(days) do
-    DateTime.add(DateTime.utc_now(), String.to_integer(days), :day)
+    DateTime.shift(DateTime.utc_now(), day: String.to_integer(days))
   end
 
   @impl Phoenix.LiveView

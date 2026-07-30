@@ -143,7 +143,7 @@ defmodule VarselWeb.CaseLiveTest do
       old = Fixtures.open_case(poc, %{title: "Older draft"})
       _new = Fixtures.open_case(poc, %{title: "Newer draft"})
 
-      Ash.Seed.update!(old, %{updated_at: DateTime.add(DateTime.utc_now(), -1, :day)})
+      Ash.Seed.update!(old, %{updated_at: DateTime.shift(DateTime.utc_now(), day: -1)})
 
       review_case = Fixtures.open_case(poc, %{title: "In review"})
       Cases.request_case_review!(review_case, actor: poc)
@@ -190,7 +190,7 @@ defmodule VarselWeb.CaseLiveTest do
       stale_review = Fixtures.open_case(poc, %{title: "Stale review case"})
       review_case = Cases.request_case_review!(stale_review, actor: poc)
 
-      Ash.Seed.update!(review_case, %{updated_at: DateTime.add(DateTime.utc_now(), -6, :day)})
+      Ash.Seed.update!(review_case, %{updated_at: DateTime.shift(DateTime.utc_now(), day: -6)})
 
       fresh_review = Fixtures.open_case(poc, %{title: "Fresh review case"})
       Cases.request_case_review!(fresh_review, actor: poc)
@@ -357,7 +357,7 @@ defmodule VarselWeb.CaseLiveTest do
         Fixtures.archived_case(
           :published,
           "Archived #{n}",
-          DateTime.add(DateTime.utc_now(), -n, :day)
+          DateTime.shift(DateTime.utc_now(), day: -n)
         )
       end
 
@@ -394,7 +394,7 @@ defmodule VarselWeb.CaseLiveTest do
         Fixtures.archived_case(
           :published,
           "Archived #{n}",
-          DateTime.add(DateTime.utc_now(), -n, :day)
+          DateTime.shift(DateTime.utc_now(), day: -n)
         )
       end
 

@@ -32,7 +32,7 @@ defmodule Varsel.Cases.Derivation.GitRepo.Server do
 
   @registry Varsel.Cases.Derivation.GitRepo.Registry
 
-  @ttl to_timeout(second: 900)
+  @ttl to_timeout(minute: 15)
 
   # How long a failed build keeps answering before the server stops. Not 0:
   # a build that fails instantly (e.g. a refused address) would otherwise

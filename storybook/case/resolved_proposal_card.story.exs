@@ -57,7 +57,7 @@ defmodule VarselWeb.Storybook.Case.ResolvedProposalCard do
     ]
   end
 
-  defp ago(seconds), do: DateTime.add(DateTime.utc_now(), -seconds, :second)
+  defp ago(seconds), do: DateTime.shift(DateTime.utc_now(), second: -seconds)
 
   defp proposal(state) do
     %{

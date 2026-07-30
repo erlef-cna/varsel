@@ -78,7 +78,7 @@ defmodule Varsel.CVE.OsvRecordTest do
   end
 
   defp backdate_sync(hours) do
-    stale = DateTime.add(DateTime.utc_now(), -hours, :hour)
+    stale = DateTime.shift(DateTime.utc_now(), hour: -hours)
     Varsel.Repo.update_all("osv_records", set: [synced_at: stale])
   end
 
@@ -177,7 +177,7 @@ defmodule Varsel.CVE.OsvRecordTest do
       create_missing()
       osv = get_osv()
 
-      future = DateTime.utc_now() |> DateTime.add(60, :second) |> DateTime.to_iso8601()
+      future = DateTime.utc_now() |> DateTime.shift(minute: 1) |> DateTime.to_iso8601()
       import_cve(cve_json(%{title: "Updated vulnerability", date_updated: future}))
 
       run_sync_triggers()
@@ -274,7 +274,7 @@ defmodule Varsel.CVE.OsvRecordTest do
       import_cve(cve_json())
       create_missing()
 
-      future = DateTime.utc_now() |> DateTime.add(60, :second) |> DateTime.to_iso8601()
+      future = DateTime.utc_now() |> DateTime.shift(minute: 1) |> DateTime.to_iso8601()
       import_cve(cve_json(%{affected: [], date_updated: future}))
 
       run_sync_triggers()
@@ -284,7 +284,7 @@ defmodule Varsel.CVE.OsvRecordTest do
       assert withdrawn.osv_json["withdrawn"]
 
       # the CVE is updated again to include the affected package
-      later = DateTime.utc_now() |> DateTime.add(120, :second) |> DateTime.to_iso8601()
+      later = DateTime.utc_now() |> DateTime.shift(minute: 2) |> DateTime.to_iso8601()
       import_cve(cve_json(%{date_updated: later}))
 
       run_sync_triggers()
