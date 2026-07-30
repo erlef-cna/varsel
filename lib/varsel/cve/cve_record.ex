@@ -211,7 +211,7 @@ defmodule Varsel.CVE.CveRecord do
       statement :cve_record_cwe_ids_fn do
         up """
         CREATE FUNCTION cve_record_cwe_ids(document jsonb)
-        RETURNS text[]
+        RETURNS bigint[]
         LANGUAGE sql
         IMMUTABLE
         PARALLEL SAFE
@@ -219,7 +219,7 @@ defmodule Varsel.CVE.CveRecord do
         AS $$
           SELECT COALESCE(
             array_agg(DISTINCT cwe_id ORDER BY cwe_id),
-            ARRAY[]::text[]
+            ARRAY[]::bigint[]
           )
           FROM jsonb_array_elements(
             COALESCE(
@@ -234,7 +234,7 @@ defmodule Varsel.CVE.CveRecord do
             )
           ) AS description
           CROSS JOIN LATERAL (
-            SELECT description ->> 'cweId' AS cwe_id
+            SELECT (regexp_match(description ->> 'cweId', '^CWE-([0-9]+)$'))[1]::bigint AS cwe_id
           ) AS extracted
           WHERE cwe_id IS NOT NULL;
         $$;
@@ -243,7 +243,7 @@ defmodule Varsel.CVE.CveRecord do
         down "DROP FUNCTION IF EXISTS cve_record_cwe_ids(jsonb)"
       end
 
-      statement :add_cwe_ids_index do
+      statement :add_cwe_ids_index_v2 do
         up "CREATE INDEX cve_records_cwe_ids ON cve_records USING GIN (cve_record_cwe_ids(cve_json))"
         down "DROP INDEX IF EXISTS cve_records_cwe_ids"
       end
@@ -251,7 +251,7 @@ defmodule Varsel.CVE.CveRecord do
       statement :cve_record_capec_ids_fn do
         up """
         CREATE FUNCTION cve_record_capec_ids(document jsonb)
-        RETURNS text[]
+        RETURNS bigint[]
         LANGUAGE sql
         IMMUTABLE
         PARALLEL SAFE
@@ -259,7 +259,7 @@ defmodule Varsel.CVE.CveRecord do
         AS $$
           SELECT COALESCE(
             array_agg(DISTINCT capec_id ORDER BY capec_id),
-            ARRAY[]::text[]
+            ARRAY[]::bigint[]
           )
           FROM jsonb_array_elements(
             COALESCE(
@@ -268,7 +268,7 @@ defmodule Varsel.CVE.CveRecord do
             )
           ) AS impact
           CROSS JOIN LATERAL (
-            SELECT impact ->> 'capecId' AS capec_id
+            SELECT (regexp_match(impact ->> 'capecId', '^CAPEC-([0-9]+)$'))[1]::bigint AS capec_id
           ) AS extracted
           WHERE capec_id IS NOT NULL;
         $$;
@@ -277,7 +277,7 @@ defmodule Varsel.CVE.CveRecord do
         down "DROP FUNCTION IF EXISTS cve_record_capec_ids(jsonb)"
       end
 
-      statement :add_capec_ids_index do
+      statement :add_capec_ids_index_v2 do
         up "CREATE INDEX cve_records_capec_ids ON cve_records USING GIN (cve_record_capec_ids(cve_json))"
         down "DROP INDEX IF EXISTS cve_records_capec_ids"
       end
@@ -381,12 +381,35 @@ defmodule Varsel.CVE.CveRecord do
     defaults [:read]
 
     read :list_published do
-      description "Lists published CVE records, newest first."
+      description """
+      Lists published CVE records, newest first. Optionally filtered to a
+      single CWE (or, with view_id, its whole closure subtree).
+      """
+
+      argument :cwe_id, :integer do
+        allow_nil? true
+
+        description """
+        Only CVEs directly assigned this CWE (numeric id). Combined with
+        view_id, matches the whole subtree instead.
+        """
+      end
+
+      argument :view_id, :integer do
+        allow_nil? true
+
+        description """
+        CWE view scoping the recursive filter; with no cwe_id, matches CVEs
+        with any CWE in the view.
+        """
+      end
 
       prepare build(
                 load: [:cve_id, :title, :date_published, :date_updated],
                 sort: [date_published: :desc]
               )
+
+      prepare Varsel.CVE.CveRecord.Preparations.FilterByCwe
 
       filter expr(state == :published)
     end
@@ -1004,15 +1027,66 @@ defmodule Varsel.CVE.CveRecord do
     end
 
     calculate :cwe_ids,
-              {:array, :string},
+              {:array, :integer},
               expr(fragment("cve_record_cwe_ids(?)", cve_json)) do
       public? true
     end
 
     calculate :capec_ids,
-              {:array, :string},
+              {:array, :integer},
               expr(fragment("cve_record_capec_ids(?)", cve_json)) do
       public? true
+    end
+
+    # Renders against the exact indexed expression (cve_record_cwe_ids(cve_json))
+    # so the GIN index cve_records_cwe_ids matches via the @> containment operator.
+    calculate :has_cwe,
+              :boolean,
+              expr(
+                fragment(
+                  "cve_record_cwe_ids(?) @> ARRAY[?::bigint]",
+                  cve_json,
+                  type(^arg(:cwe_id), :integer)
+                )
+              ) do
+      public? false
+
+      argument :cwe_id, :integer do
+        allow_nil? false
+      end
+    end
+
+    # Uncorrelated scalar subquery (planned as an InitPlan) intersected with
+    # the outer cwe_ids via &&, so the GIN index still applies to the outer
+    # column. A nil cwe_id means the view root: the NULL-parent closure rows,
+    # which cover every CWE anywhere in the view.
+    calculate :has_cwe_recursively,
+              :boolean,
+              expr(
+                fragment(
+                  """
+                  cve_record_cwe_ids(?) && (
+                    SELECT coalesce(array_agg(c.descendant_cwe_id), ARRAY[]::bigint[])
+                    FROM cwe_weakness_closure AS c
+                    WHERE c.view_id = ?
+                      AND ((?::bigint IS NULL AND c.parent_cwe_id IS NULL) OR c.parent_cwe_id = ?)
+                  )
+                  """,
+                  cve_json,
+                  type(^arg(:view_id), :integer),
+                  type(^arg(:cwe_id), :integer),
+                  type(^arg(:cwe_id), :integer)
+                )
+              ) do
+      public? false
+
+      argument :view_id, :integer do
+        allow_nil? false
+      end
+
+      argument :cwe_id, :integer do
+        allow_nil? true
+      end
     end
   end
 
