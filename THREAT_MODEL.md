@@ -517,6 +517,13 @@ dependency bump; it does not change the disposition, which is always
   Assumed to try: using a token minted for one surface on another (blocked by
   scope enforcement, `oauth_bearer_auth.ex`), or exceeding the user's role
   (blocked by Ash policies). **In scope.**
+- **Whoever controls a repository a case names.** A POC or assignee chooses
+  the `repo_url`, but the *contents* at that URL belong to whoever runs it,
+  who need not be either. So this actor reaches derivation without holding
+  any role here. Assumed to try: exhausting the deriving node with a hostile
+  commit graph (bounded per derivation, §8), or feeding `exgit` malformed git
+  data (§6b). **In scope**, at repository-contents privilege only — choosing
+  *which* host is reached stays a POC/assignee action (§4).
 
 **Explicitly out of scope:**
 
@@ -862,6 +869,18 @@ every other write are not bounded in-app, and "bounded resource use" is
   posture is **best effort**: the platform's baseline DDoS protection plus
   the §8 per-request bounds are what exist today, and in-app limits for
   further surfaces will be investigated if they see actual misuse (§14).
+- **Outbound effects are not transactional.** Property 15 binds *database*
+  writes to the row they were read from, and a failed action rolls back whole.
+  Nothing rolls back an effect that already left the machine. A publish that
+  reached MITRE, a mail the relay accepted, and a git fetch that already
+  connected all stand even when the surrounding transaction aborts. The
+  publish workers retry (three attempts), so a retry after a partial failure
+  can repeat a request MITRE already saw. Neither remote gives us a way to do
+  better: the CVE Services API offers no idempotency key to make a repeated
+  publish a no-op, and SMTP has no equivalent for a duplicate mail. This is
+  accepted rather than pending. A report that a rolled-back publish still
+  reached MITRE describes this, not a defect. (`cve_record.ex`,
+  `mitre_cve_api.ex`)
 - **No allowlist on which public host `repo_url` may name.** `repo_url` is
   constrained to `https://` (rejecting exgit's `file://` local-file read and
   plaintext `http://`) and to a host that resolves to a public address —
@@ -874,6 +893,11 @@ every other write are not bounded in-app, and "bounded resource use" is
   Credentials in the URL (`https://user:token@host/…`) and non-standard ports
   are likewise accepted; the check is on the scheme and the resolved address,
   not the rest of the URL.
+- **Stored content is not sanitized at rest.** Property 9 sanitizes at each
+  render sink, not on the way into the database. A consumer reading case
+  markdown or `supportingMedia` HTML from the JSON API gets the author's
+  original, and owns its own escaping (§10). Varsel's own pages are covered;
+  a downstream renderer is not.
 - **A user's identity is not treated as secret from other users.** Whoever can
   read a user row sees the display identity — name, provider usernames,
   avatar. Only the address, the linked-provider addresses and the role are
@@ -937,8 +961,9 @@ every other write are not bounded in-app, and "bounded resource use" is
 
 ## 10. Downstream responsibilities
 
-Here "downstream" means the **CNA operator/deployer** (there is no library
-integrator — Varsel is a deployed service).
+Varsel is a deployed service, so there is no library integrator. "Downstream"
+means the **CNA operator/deployer**, and — for the last item only — anyone
+**consuming the JSON API**.
 
 1. **Set `TEST_DEPLOYMENT=false`** on the real production instance (defaults
    to `true`, which noindexes the site). (see §5a)
@@ -974,6 +999,9 @@ integrator — Varsel is a deployed service).
    restrict which ones at the network layer if that matters (§9).
 7. **Do not publish from a non-production instance** expecting a sandbox —
    the test MITRE endpoint is real staging (§9).
+8. **API consumers: escape the markdown and HTML fields before rendering
+   them.** The JSON API serves stored author content as written; Varsel
+   sanitizes at its own render sinks, not at rest (§9).
 
 ---
 
@@ -1109,7 +1137,7 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 | `OUT-OF-MODEL: unsupported-component` | Lands in the `/dev/*` tooling, or in the mock login (`/auth/user/mock/*`). | §3 |
 | `OUT-OF-MODEL: non-default-build` | Only manifests in a release built from a non-`prod` `MIX_ENV` (which ships `dev/`), or with `TEST_DEPLOYMENT` misconfigured. | §5a |
 | `OUT-OF-MODEL: report-upstream` | Lands in `exgit`/`mdex`/`cvelint`/`exile`/`saxy`/`req` internals; Varsel ships the fix by bumping the dep. | §6b |
-| `BY-DESIGN: property-disclaimed` | Concerns a §9 disclaimed property (rate limiting, `repo_url` egress to any public host within privilege, availability). | §9 |
+| `BY-DESIGN: property-disclaimed` | Concerns a §9 disclaimed property (rate limiting, `repo_url` egress to any public host within privilege, non-transactional outbound effects, at-rest sanitization, availability). | §9 |
 | `KNOWN-NON-FINDING` | Matches a §11a recurring false positive. | §11a |
 | `MODEL-GAP` | Routes to none of the above; triggers a §12 revision. | §12 |
 
