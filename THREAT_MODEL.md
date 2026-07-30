@@ -44,13 +44,17 @@ Services API. Everyone else consumes the published data read-only.
 > 1. **Find the privilege it needs.** Check it against the reachability
 >    preconditions in §4. A finding that assumes a lower privilege than the
 >    action actually requires is out of model.
-> 2. **Find the input.** Look up the sink in the §6 trust table.
-> 3. **Check the component.** If it lands in dev tooling or the mock login,
+> 2. **Find the input.** Look up the sink in the §6 trust table. Note the
+>    control kind — controlling a payload's bytes is not the same finding as
+>    controlling only its size.
+> 3. **Find the contract dimension.** For atomicity, concurrency or resource
+>    exhaustion, follow the §6 matrix row to the claim that owns it.
+> 4. **Check the component.** If it lands in dev tooling or the mock login,
 >    §3 applies. If it needs a non-`prod` build, §5a applies.
-> 4. **Check the adversary.** §7 says who is in scope. POC privilege, host or
+> 5. **Check the adversary.** §7 says who is in scope. POC privilege, host or
 >    database access, and a TLS break are all out.
-> 5. **If the root cause is in a dependency,** apply §6b.
-> 6. **Assign exactly one §13 disposition,** following that section's
+> 6. **If the root cause is in a dependency,** apply §6b.
+> 7. **Assign exactly one §13 disposition,** following that section's
 >    precedence order and citing the section that licenses it. If none fits,
 >    it is a `MODEL-GAP` — revise the model per §12 rather than making an
 >    ad-hoc call.
@@ -415,18 +419,28 @@ Ash validates types and the policies gate who calls what. The exceptions
 worth tabulating — where the *content* of an input reaches a sensitive sink —
 are below.
 
-| Surface | Parameter | Attacker-controllable? | Sink / caller must |
-| --- | --- | --- | --- |
-| `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | **Yes — any authenticated user** | Persisted (size-capped, default 256 KiB; rate-capped at 25/day for a role-less reporter, §8); triage UI (escaped, §7/§8). The POC email is content-free (link only), so the payload never leaves the authenticated console. |
-| `AffectedPackage` create/update | `repo_url` | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
-| `VersionEvent` | `commit_sha` | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
-| `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
-| `CveValidation.validate*` | `cve_json` | **Yes — any authenticated user** | **cvelint subprocess** (piped to stdin; argv, not shell) and **hex.pm lookups** keyed on package names taken from the JSON. No policy authorizer on this resource; the login gate is the control (§4) |
-| `Case.cna_override` | RFC 7396 merge patch on rendered container | POC / assigned supporter | Applied as last render step; can override any rendered field (`case.ex`) |
-| GitHub OAuth | `user_info` (sub, preferred_username, name, email) | IdP-supplied, verified by GitHub | Stored as `github_id/handle/name/email`; `handle` later in a client-side `img`/link |
-| Hex.pm OAuth | `user_info` (username as `sub`, email) | IdP-supplied by Hex.pm | Identity keyed on the **username**, since Hex.pm exposes no numeric id and offers no way to rename an account (§7). Email is opt-in-public there, so it is usually absent and is never used to match an account |
-| Account linking | `:strategy` path segment; `linking_from_user_id` **from the session** | Any authenticated user | Names the account by id from the signed session, not from `current_user`. Linking an identity another account already owns is refused (`resolve_oauth_identity.ex`) |
-| MCP/GraphQL tool args | per tool | scope-gated bearer (mcp/gql) + role policy | Same Ash actions as above; no separate trust level |
+`Control kind` names what the actor actually controls, because the answer
+changes the disposition: controlling a payload's bytes is a different finding
+from controlling only its size.
+
+| Surface | Parameter | Control kind | Attacker-controllable? | Sink / caller must |
+| --- | --- | --- | --- | --- |
+| `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, default 256 KiB; rate-capped at 25/day for a role-less reporter, §8); triage UI (escaped, §7/§8). The POC email is content-free (link only), so the payload never leaves the authenticated console. |
+| `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
+| `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
+| `VersionEvent` | `commit_sha` | data | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
+| `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | data | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
+| `CveValidation.validate*` | `cve_json` | data | **Yes — any authenticated user** | **cvelint subprocess** (piped to stdin; argv, not shell) and **hex.pm lookups** keyed on package names taken from the JSON. No policy authorizer on this resource; the login gate is the control (§4) |
+| `Case.cna_override` | RFC 7396 merge patch on rendered container | data | POC / assigned supporter | Applied as last render step; can override any rendered field (`case.ex`) |
+| GitHub OAuth | `user_info` (sub, preferred_username, name, email) | data | IdP-supplied, verified by GitHub | Stored as `github_id/handle/name/email`; `handle` later in a client-side `img`/link |
+| Hex.pm OAuth | `user_info` (username as `sub`, email) | data | IdP-supplied by Hex.pm | Identity keyed on the **username**, since Hex.pm exposes no numeric id and offers no way to rename an account (§7). Email is opt-in-public there, so it is usually absent and is never used to match an account |
+| Account linking | `:strategy` path segment; `linking_from_user_id` **from the session** | data | Any authenticated user | Names the account by id from the signed session, not from `current_user`. Linking an identity another account already owns is refused (`resolve_oauth_identity.ex`) |
+| MCP/GraphQL tool args | per tool | data | scope-gated bearer (mcp/gql) + role policy | Same Ash actions as above; no separate trust level |
+
+**No caller supplies executable code.** No public action takes a callback,
+template, or expression parameter, and there is no dynamic code loading (§2).
+The `cna_override` merge patch is the closest thing to a caller-supplied
+program, and it is declarative data applied to a JSON document.
 
 **Persisted state as input.** Varsel reads back only its own PostgreSQL rows
 (guarded by policies) and its in-memory caches. It does **not** deserialize an
@@ -447,6 +461,30 @@ commit graph
 (`tree:0`, no blobs) from `repo_url`, bounded by a 10-minute GenServer timeout,
 a 900s per-repository server TTL, and a 250k commit-count cap on the graph walk
 (`report_json_size.ex`, `git_repo.ex`).
+
+### Contract dimensions
+
+One row per dimension a report might turn on, so that a finding about
+atomicity, concurrency or exhaustion routes to the claim that owns it rather
+than to `MODEL-GAP`. The dimensions that dominate C and Java models collapse
+into the first row: the runtime answers them.
+
+| Dimension | Status | Boundary / conditions | Owned by |
+| --- | --- | --- | --- |
+| Memory bounds, numeric limits, reference lifecycle, cyclic topology, callback execution, untrusted deserialization | **N/A** | Memory-safe runtime; no caller-supplied code (§6); nothing deserializes an untrusted object graph. Inputs are JSON and typed action arguments. | §5, §6 |
+| Failure atomicity — database writes | **claimed** | An action commits or rolls back whole, hooks included. A write bound to a row the database has moved past is refused, not merged. | property 15 |
+| Failure atomicity — outbound effects | **disclaimed** | Nothing rolls back a publish MITRE accepted, a mail the relay took, or a fetch that already connected. Retries may repeat them. | §9 |
+| Concurrency — editorial writes | **claimed** | Concurrent edits to the four state-machine resources serialize through an optimistic lock; the loser is refused. | property 15 |
+| Concurrency — derivation | **claimed** | One GenServer per `repo_url`, so a slow or hostile repository occupies only its own process. | §5, property 12 |
+| Concurrency — credential withdrawal | **claimed** | A socket or LiveView holds the actor it resolved at connect/mount; revoking the credential closes the connection rather than letting it act on. | property 8 |
+| Resource use — per operation | **claimed** | Each derivation, report and subprocess call carries a hard bound. | §8, resource bound |
+| Resource use — aggregate volume | **disclaimed** | Nothing bounds how many operations an actor starts, how many rows they create, or how much outbound traffic they drive. One exception: report submission below a CNA role. | §9 |
+| Rate-limit accuracy | **disclaimed** | The one in-app limit counts in node-local ETS: it resets on restart and would count per node if scaled out. An abuse mitigation, not a guarantee. | property 10 |
+
+**Postconditions on failure.** A validation, policy or state-machine refusal
+leaves the row untouched, and a failure partway through a multi-step action
+rolls the whole action back. The exception is the outbound-effects row above:
+what already left the machine stays gone.
 
 ### 6a. Outputs and expected sinks
 
