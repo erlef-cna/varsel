@@ -21,14 +21,12 @@ defmodule VarselWeb.Plugs.OauthBearerAuth do
   """
   @behaviour Plug
 
-  import Plug.Conn
-
   alias AshAuthentication.Phoenix.Oauth2Server.BearerPlug
+  alias AshAuthentication.Phoenix.Oauth2Server.RequireScopePlug
 
   @impl Plug
   def init(opts) do
-    {scope, opts} = Keyword.pop!(opts, :scope)
-    %{scope: scope, bearer: BearerPlug.init(opts)}
+    %{bearer: BearerPlug.init(opts), scope: RequireScopePlug.init(opts)}
   end
 
   @impl Plug
@@ -38,29 +36,10 @@ defmodule VarselWeb.Plugs.OauthBearerAuth do
     else
       conn
       |> BearerPlug.call(bearer)
-      |> enforce_scope(scope)
-    end
-  end
-
-  defp enforce_scope(%Plug.Conn{halted: true} = conn, _scope), do: conn
-
-  defp enforce_scope(conn, scope) do
-    granted =
-      conn.assigns
-      |> Map.get(:oauth_claims, %{})
-      |> Map.get("scope", "")
-      |> String.split(" ", trim: true)
-
-    if scope in granted do
-      conn
-    else
-      conn
-      |> put_resp_header(
-        "www-authenticate",
-        ~s|Bearer error="insufficient_scope", scope="#{scope}"|
-      )
-      |> send_resp(403, "")
-      |> halt()
+      |> case do
+        %Plug.Conn{halted: true} = conn -> conn
+        conn -> RequireScopePlug.call(conn, scope)
+      end
     end
   end
 end
