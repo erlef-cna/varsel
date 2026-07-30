@@ -163,6 +163,13 @@ dynamic code loading from any actor.
   operator with authority to publish to MITRE, assign roles, and reach every
   outbound integration. Threats that require *being* a POC (or convincing one
   to act) are governance/insider concerns, not product security boundaries.
+- **Attackers with access to the private cluster network.** The nodes cluster
+  over BEAM distribution on Fly's private 6PN segment (§5), which is trusted:
+  `RELEASE_COOKIE` guards against a node joining a cluster it was not meant to,
+  not against an attacker already on that network
+  (<https://www.erlang.org/doc/system/distributed.html>). Reports premised on
+  reaching the distribution port, or on observing inter-node traffic, are out
+  of model.
 - **The developer tooling under `/dev/*`.** It lives in the `dev/` directory,
   which `elixirc_paths/1` compiles **only** for `:dev` and `:test`, so
   `VarselWeb.DevRouter`, its routes and the dev-nav component do not exist in
@@ -350,6 +357,11 @@ claims:
   header with `includeSubDomains` and `preload`. TLS is terminated at the
   Fly.io edge, so the original scheme is read from `x-forwarded-proto`
   (`rewrite_on`) rather than the socket. (`prod.exs`)
+- **Clustering:** prod runs more than one machine, clustered over BEAM
+  distribution on Fly's private IPv6 network (6PN); peers are discovered by DNS
+  and admitted by a shared `RELEASE_COOKIE`. The app assumes that segment is
+  org-private — distribution is not exposed publicly, and reaching it is what
+  §3 puts out of scope. (`env.sh.eex`, `release.yml`, `fly.toml`)
 - **Time/clock:** the git-derivation cache and OAuth token expiry rely on a
   monotonic and wall clock respectively; no assumption beyond a
   correctly-set host clock.
@@ -465,7 +477,7 @@ into the first row: the runtime answers them.
 | Concurrency — credential withdrawal | **claimed** | A socket or LiveView holds the actor it resolved at connect/mount; revoking the credential closes the connection rather than letting it act on. | property 8 |
 | Resource use — per operation | **claimed** | Each derivation, report and subprocess call carries a hard bound. | §8, resource bound |
 | Resource use — aggregate volume | **out of scope** | Resisting volume-based DoS is not a goal (§3). Nothing bounds how many operations an actor starts, how many rows they create, or how much outbound traffic they drive. One exception: report submission below a CNA role. | §3, §9 |
-| Rate-limit accuracy | **disclaimed** | The one in-app limit counts in node-local ETS: it resets on restart and would count per node if scaled out. An abuse mitigation, not a guarantee. | property 10 |
+| Rate-limit accuracy | **disclaimed** | The one in-app limit counts in ETS replicated across the cluster over PubSub: it resets on restart, and asynchronous replication lets concurrent hits on different nodes race past the cap. An abuse mitigation, not a guarantee. | property 10 |
 
 **Postconditions on failure.** A validation, policy or state-machine refusal
 leaves the row untouched, and a failure partway through a multi-step action
@@ -789,13 +801,16 @@ none of the authorization properties, by construction rather than by defect.
    table below).
    The limit sits on the `:submit` action itself, so the form, GraphQL and
    MCP all draw from the same budget; POCs and supporters are deliberately
-   exempt. The counter is node-local ETS (`Varsel.Hammer`): it resets on
-   restart/deploy and would count per node if the app were ever scaled out.
+   exempt. The counter is ETS (`Varsel.Hammer`), replicated across the cluster
+   over PubSub: it resets on restart/deploy, and because replication is
+   asynchronous, concurrent hits on different nodes can each be allowed before
+   the other's broadcast lands.
    The rate cap is an **abuse mitigation, not a guarantee**: what is claimed
    is that the two checks run on every path into `:submit`, not that the
-   counter is exact. A submission slipping past the cap (say, after a restart
-   cleared the counters) is not by itself a vulnerability, and report volume
-   as a route to denial of service is out of scope entirely (§3).
+   counter is exact. A submission slipping past the cap — after a restart
+   cleared the counters, or by racing two nodes — is not by itself a
+   vulnerability, and report volume as a route to denial of service is out of
+   scope entirely (§3).
    - *Violation symptom:* an oversized `report_json` is persisted, or a
      role-less reporter submits past the cap by a route that skips it — a
      surface reaching `:submit` without the checks, not a counter reset.
@@ -1149,6 +1164,9 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 - Re-introducing a **route-level role gate** in the router. The model rests
   on there being exactly one place that decides (§4); a second one that can
   drift from the policies is the condition this section exists to catch.
+- **Exposing BEAM distribution beyond the private 6PN segment**, or clustering
+  across a boundary the org does not control — the §3 exclusion assumes that
+  port is unreachable, and nothing but the network keeps it so.
 - A report that **cannot be routed** to a §13 disposition — a `MODEL-GAP`;
   add the property to §8/§9 rather than making an ad-hoc call.
 
