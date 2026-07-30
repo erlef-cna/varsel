@@ -311,11 +311,11 @@ defmodule VarselWeb.CveView do
 
   @doc """
   Whether an affected entry's package is an OTP application (`pkg:otp/*`
-  purl type) — drives the checker's OTP-release-vs-application-version
+  purl type) — drives the checker's release-vs-application-version
   vocabulary choice (rev 3): even when a record's ranges are `semver`-typed
   (an OTP app version with no release mapping), an `pkg:otp/*` package
-  still speaks the "OTP application" fallback vocabulary rather than a bare
-  hex-style verdict.
+  still speaks the application-version fallback vocabulary rather than a
+  bare hex-style verdict.
   """
   @spec otp_package?(map()) :: boolean()
   def otp_package?(entry) when is_map(entry) do

@@ -120,10 +120,10 @@ defmodule VarselWeb.AffectedCheckerLiveTest do
       assert html =~ "type your bandit version to check"
     end
 
-    test "the input is full-width below sm, capped at sm:w-56", %{conn: conn} do
+    test "the input is full-width below sm, capped at sm:w-72", %{conn: conn} do
       {:ok, _view, html} = mount(conn, @packages)
       assert html =~ "w-full"
-      assert html =~ "sm:w-56"
+      assert html =~ "sm:w-72"
     end
   end
 
@@ -161,7 +161,7 @@ defmodule VarselWeb.AffectedCheckerLiveTest do
     end
   end
 
-  describe "OTP-release package speaks OTP vocabulary" do
+  describe "release-tagged package speaks Erlang release vocabulary" do
     @packages [
       %{
         "state" => "checkable",
@@ -186,20 +186,20 @@ defmodule VarselWeb.AffectedCheckerLiveTest do
       }
     ]
 
-    test "the placeholder reads 'OTP version, e.g. …'", %{conn: conn} do
+    test "the placeholder reads 'Erlang release, e.g. …'", %{conn: conn} do
       {:ok, _view, html} = mount(conn, @packages)
-      assert html =~ "OTP version, e.g."
+      assert html =~ "Erlang release, e.g."
     end
 
-    test "accepts the tag with or without the OTP- prefix, subject reads '<app> in OTP-<release>'",
+    test "accepts the tag with or without the OTP- prefix, subject reads '<app> in Erlang <rel>'",
          %{conn: conn} do
       {:ok, view, _html} = mount(conn, @packages)
 
       with_prefix = view |> form("form", %{version: "OTP-26.2.5.2"}) |> render_change()
-      assert with_prefix =~ "✗ ssh in OTP-26.2.5.2 is affected"
+      assert with_prefix =~ "✗ ssh in Erlang 26.2.5.2 is affected"
 
       without_prefix = view |> form("form", %{version: "26.2.5.2"}) |> render_change()
-      assert without_prefix =~ "✗ ssh in OTP-26.2.5.2 is affected"
+      assert without_prefix =~ "✗ ssh in Erlang 26.2.5.2 is affected"
     end
 
     test "names the user's own branch first, the sibling branch as 'also fixed in', every fix labeled",
@@ -208,7 +208,7 @@ defmodule VarselWeb.AffectedCheckerLiveTest do
 
       html = view |> form("form", %{version: "OTP-26.2.5.2"}) |> render_change()
 
-      assert html =~ "fixed in OTP-26.2.5.6 (maint-26); also fixed in OTP-27.3.4 (maint-27)"
+      assert html =~ "fixed in 26.2.5.6 (maint-26); also fixed in 27.3.4 (maint-27)"
     end
 
     test "a version outside every known branch is not affected, never fixed by accident", %{
@@ -218,7 +218,8 @@ defmodule VarselWeb.AffectedCheckerLiveTest do
 
       html = view |> form("form", %{version: "OTP-28.0"}) |> render_change()
 
-      assert html =~ "✓ ssh in OTP-28.0 is not affected"
+      assert html =~ "✓ ssh in Erlang 28.0 is not affected"
+      assert html =~ "introduced in 26.0"
     end
   end
 
@@ -246,12 +247,12 @@ defmodule VarselWeb.AffectedCheckerLiveTest do
       assert html =~ "ssh application version, e.g."
     end
 
-    test "the verdict subject reads '<app> <version> (OTP application)'", %{conn: conn} do
+    test "the verdict subject reads '<app> <version> (Erlang application)'", %{conn: conn} do
       {:ok, view, _html} = mount(conn, @packages)
 
       html = view |> form("form", %{version: "5.2.1"}) |> render_change()
 
-      assert html =~ "✗ ssh 5.2.1 (OTP application) is affected"
+      assert html =~ "✗ ssh 5.2.1 (Erlang application) is affected"
       assert html =~ "fixed in 5.2.2"
     end
   end

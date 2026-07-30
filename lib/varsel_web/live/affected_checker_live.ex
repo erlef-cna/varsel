@@ -116,6 +116,11 @@ defmodule VarselWeb.AffectedCheckerLive do
   defp package_body(%{package: %{"state" => "checkable"}} = assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-2.5">
+      <%!-- Password managers read a lone text input in a <form> as a
+            credential field and offer to fill it; each vendor needs its own
+            opt-out — 1Password, LastPass, Bitwarden, Dashlane in order.
+            Safari ignores all of them (and `autocomplete="url"`, tried and
+            dropped) — its trigger is the wording, see `checker_placeholder/1`. --%>
       <form id="checker-version-input" phx-change="check" phx-submit="check">
         <input
           type="text"
@@ -123,8 +128,12 @@ defmodule VarselWeb.AffectedCheckerLive do
           value={@input}
           phx-debounce="200"
           placeholder={checker_placeholder(@package)}
-          class="input input-sm w-full font-mono sm:w-56"
+          class="input input-sm w-full font-mono text-[0.71rem] sm:w-72"
           autocomplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          data-bwignore
+          data-form-type="other"
         />
       </form>
       <.verdict input={@input} package={@package} verdict={@verdict} />
@@ -185,7 +194,11 @@ defmodule VarselWeb.AffectedCheckerLive do
   # the checkable ranges are OTP release tags; an OTP package whose ranges
   # are plain semver (an application version with no release mapping)
   # falls back to app-version vocabulary. Never mixed within one checker.
-  defp checker_placeholder(%{"otp_release?" => true}), do: "OTP version, e.g. 26.2.5.6"
+  #
+  # Says "Erlang", never a bare "OTP": next to a numeric example that reads
+  # as a one-time-password prompt, and password managers offer to fill a 2FA
+  # code no matter what opt-outs the input carries.
+  defp checker_placeholder(%{"otp_release?" => true}), do: "Erlang release, e.g. 26.2.5.6"
 
   defp checker_placeholder(%{"otp_package?" => true} = package),
     do: "#{package["bare_name"]} application version, e.g. #{sample_version(package)}"
@@ -197,13 +210,15 @@ defmodule VarselWeb.AffectedCheckerLive do
   # input NEVER gets a colored verdict.
   defp verdict(%{verdict: {:empty}} = assigns) do
     ~H"""
-    <span class="text-base-content/40">type your {@package["bare_name"]} version to check</span>
+    <span class="text-sm text-base-content/40">
+      type your {@package["bare_name"]} version to check
+    </span>
     """
   end
 
   defp verdict(%{verdict: {:unparseable}} = assigns) do
     ~H"""
-    <span class="text-base-content/40">not a recognizable version</span>
+    <span class="text-sm text-base-content/40">not a recognizable version</span>
     """
   end
 
@@ -250,7 +265,10 @@ defmodule VarselWeb.AffectedCheckerLive do
 
   defp verdict(%{verdict: {:not_affected, intro}} = assigns) do
     assigns =
-      assign(assigns, subject: verdict_subject(assigns.package, assigns.input), intro: intro)
+      assign(assigns,
+        subject: verdict_subject(assigns.package, assigns.input),
+        intro: intro && fix_version(intro)
+      )
 
     ~H"""
     <span class="text-sm">
@@ -262,22 +280,24 @@ defmodule VarselWeb.AffectedCheckerLive do
     """
   end
 
-  # The verdict subject: OTP-release checkers read "<app> in OTP-<release>"
-  # (prefixing OTP- when the visitor typed it bare); everything else reads
-  # "<name> <version>". App-version-fallback OTP packages read "<name>
-  # <version> (OTP application)" (component appended by the callers below).
+  # The verdict subject: release checkers read "<app> in Erlang <release>";
+  # everything else reads "<name> <version>". App-version-fallback packages
+  # read "<name> <version> (Erlang application)" (component appended by the
+  # callers below).
   defp verdict_subject(%{"otp_release?" => true} = package, input) do
     "#{package["bare_name"]} in #{otp_release_label(input)}"
   end
 
   defp verdict_subject(%{"otp_package?" => true} = package, input) do
-    "#{package["bare_name"]} #{input} (OTP application)"
+    "#{package["bare_name"]} #{input} (Erlang application)"
   end
 
   defp verdict_subject(package, input), do: "#{package["bare_name"]} #{input}"
 
-  defp otp_release_label("OTP-" <> _rest = input), do: input
-  defp otp_release_label(input), do: "OTP-#{input}"
+  # A visitor may still TYPE "OTP-26.2.5.6" — the release's real tag, and
+  # what upstream advisories print — so it's accepted, not reflected back.
+  defp otp_release_label("OTP-" <> rest), do: "Erlang #{rest}"
+  defp otp_release_label(input), do: "Erlang #{input}"
 
   # "fixed in <own>" leads; every OTHER branch's fix is comma-listed after
   # a single "; also fixed in " — every fix (including the leading one)
@@ -300,8 +320,14 @@ defmodule VarselWeb.AffectedCheckerLive do
     end
   end
 
-  defp labelled_fix(%{raw: raw, branch_label: nil}), do: raw
-  defp labelled_fix(%{raw: raw, branch_label: label}), do: "#{raw} (#{label})"
+  # `raw` is the record's own version string — literally "OTP-26.2.5.6" for
+  # release-tagged records — so it's stripped here too; otherwise one verdict
+  # mixes both vocabularies ("in Erlang 26.2.5.2 — fixed in OTP-26.2.5.6").
+  defp labelled_fix(%{raw: raw, branch_label: nil}), do: fix_version(raw)
+  defp labelled_fix(%{raw: raw, branch_label: label}), do: "#{fix_version(raw)} (#{label})"
+
+  defp fix_version("OTP-" <> rest), do: rest
+  defp fix_version(raw), do: raw
 
   # Skips the "0"/"" zero-sentinel (an absent real lower bound, same
   # convention as `VarselWeb.CveHTML.zero_lower?/1`) — a placeholder reading
