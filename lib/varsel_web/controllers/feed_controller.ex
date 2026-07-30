@@ -30,20 +30,50 @@ defmodule VarselWeb.FeedController do
   @description "CVE records published by the Erlang Ecosystem Foundation CNA."
   @prolog [version: "1.0", encoding: "UTF-8"]
 
+  # A feed is a notification stream, not an archive: the window holds the
+  # latest publications, and /cves/index.json carries the full corpus.
+  @window 100
+
   def atom(conn, _params) do
     conn
     |> put_resp_content_type("application/atom+xml")
-    |> send_resp(200, Saxy.encode!(atom_feed(feed_entries()), @prolog))
+    |> respond(&atom_feed/2)
   end
 
   def rss(conn, _params) do
     conn
     |> put_resp_content_type("application/rss+xml")
-    |> send_resp(200, Saxy.encode!(rss_feed(feed_entries()), @prolog))
+    |> respond(&rss_feed/2)
   end
 
+  # Readers echo the Last-Modified we sent as If-Modified-Since, so an
+  # unchanged feed is answered 304 from the exact string match, body-free.
+  #
+  # The body is `Saxy.encode!` output — the encoder that escapes every value
+  # (see the moduledoc), which is what sobelow cannot see through.
+  # sobelow_skip ["XSS.SendResp"]
+  defp respond(conn, builder) do
+    entries = feed_entries()
+    last_modified = entries |> Enum.map(& &1.updated) |> latest()
+    http_date = http_date(last_modified)
+
+    if http_date != nil and http_date in get_req_header(conn, "if-modified-since") do
+      send_resp(conn, 304, "")
+    else
+      conn
+      |> put_last_modified(http_date)
+      |> send_resp(200, Saxy.encode!(builder.(entries, last_modified), @prolog))
+    end
+  end
+
+  defp put_last_modified(conn, nil), do: conn
+  defp put_last_modified(conn, http_date), do: put_resp_header(conn, "last-modified", http_date)
+
   defp feed_entries do
-    query = Ash.Query.select(CVE.CveRecord, [:cve_json])
+    query =
+      CVE.CveRecord
+      |> Ash.Query.select([:cve_json])
+      |> Ash.Query.limit(@window)
 
     [
       load: [:cve_id, :title, :date_published, :date_updated],
@@ -63,6 +93,10 @@ defmodule VarselWeb.FeedController do
     end)
   end
 
+  defp latest(datetimes) do
+    datetimes |> Enum.reject(&is_nil/1) |> Enum.max(DateTime, fn -> nil end)
+  end
+
   defp description(record) do
     record.cve_json
     |> get_in(["containers", "cna", "descriptions"])
@@ -74,8 +108,7 @@ defmodule VarselWeb.FeedController do
 
   ## ---------------------------------------------------------------- Atom
 
-  defp atom_feed(entries) do
-    updated = entries |> List.first(%{}) |> Map.get(:published)
+  defp atom_feed(entries, updated) do
     self_url = url(~p"/feed.atom")
 
     element("feed", [{"xmlns", "http://www.w3.org/2005/Atom"}], [
@@ -116,9 +149,7 @@ defmodule VarselWeb.FeedController do
 
   ## ---------------------------------------------------------------- RSS
 
-  defp rss_feed(entries) do
-    build_date = entries |> List.first(%{}) |> Map.get(:published)
-
+  defp rss_feed(entries, build_date) do
     channel =
       [
         element("title", [], text(@title)),
@@ -163,4 +194,11 @@ defmodule VarselWeb.FeedController do
 
   defp rfc822(nil), do: ""
   defp rfc822(%DateTime{} = dt), do: Calendar.strftime(dt, "%a, %d %b %Y %H:%M:%S +0000")
+
+  # HTTP-date (RFC 9110): second precision, GMT.
+  defp http_date(nil), do: nil
+
+  defp http_date(%DateTime{} = dt) do
+    dt |> DateTime.truncate(:second) |> Calendar.strftime("%a, %d %b %Y %H:%M:%S GMT")
+  end
 end

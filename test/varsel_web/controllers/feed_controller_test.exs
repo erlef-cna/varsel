@@ -112,6 +112,75 @@ defmodule VarselWeb.FeedControllerTest do
     end
   end
 
+  describe "feed window and conditional requests" do
+    defp publish_many(count) do
+      for n <- 1..count do
+        cve_json = %{
+          "dataType" => "CVE_RECORD",
+          "dataVersion" => "5.2",
+          "cveMetadata" => %{
+            "cveId" => "CVE-2025-2#{String.pad_leading(to_string(n), 4, "0")}",
+            "state" => "PUBLISHED",
+            "datePublished" => "2025-01-01T00:00:00.000Z",
+            "dateUpdated" => "2025-01-0#{rem(n, 5) + 1}T00:00:00.000Z"
+          },
+          "containers" => %{"cna" => %{"title" => "Record #{n}"}}
+        }
+
+        Ash.create!(CveRecord, %{cve_json: cve_json}, action: :import, authorize?: false)
+      end
+    end
+
+    test "the feed carries at most the latest 100 entries", %{conn: conn} do
+      publish_many(105)
+
+      body = conn |> get(~p"/feed.atom") |> response(200)
+
+      assert body |> String.split("<entry>") |> length() == 101
+    end
+
+    test "the newest dateUpdated of the window becomes Last-Modified", %{conn: conn} do
+      publish()
+
+      conn = get(conn, ~p"/feed.atom")
+
+      assert get_resp_header(conn, "last-modified") == ["Tue, 17 Jun 2025 12:00:00 GMT"]
+    end
+
+    test "an unchanged feed answers If-Modified-Since with 304 and no body", %{conn: conn} do
+      publish()
+
+      first = get(conn, ~p"/feed.atom")
+      [last_modified] = get_resp_header(first, "last-modified")
+
+      conn =
+        conn
+        |> put_req_header("if-modified-since", last_modified)
+        |> get(~p"/feed.atom")
+
+      assert response(conn, 304) == ""
+    end
+
+    test "a changed feed answers a stale If-Modified-Since with the document", %{conn: conn} do
+      publish()
+
+      conn =
+        conn
+        |> put_req_header("if-modified-since", "Mon, 16 Jun 2025 00:00:00 GMT")
+        |> get(~p"/feed.rss")
+
+      assert response(conn, 200) =~ "<rss"
+      assert get_resp_header(conn, "last-modified") == ["Tue, 17 Jun 2025 12:00:00 GMT"]
+    end
+
+    test "an empty feed serves without Last-Modified", %{conn: conn} do
+      conn = get(conn, ~p"/feed.atom")
+
+      assert response(conn, 200)
+      assert get_resp_header(conn, "last-modified") == []
+    end
+  end
+
   # Parses the document and returns every text node, which doubles as a
   # well-formedness check: malformed XML fails here rather than in a browser.
   defp text_nodes(xml) do
