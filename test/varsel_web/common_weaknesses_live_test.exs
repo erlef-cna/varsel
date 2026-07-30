@@ -13,6 +13,8 @@ defmodule VarselWeb.CommonWeaknessesLiveTest do
 
   # A tiny CWE tree: 707 (class) -> 74 (class) -> 79 (base).
   defp seed_cwe_tree do
+    Varsel.Fixtures.seed_view(1000, "Research Concepts")
+
     for {id, name, abstraction} <- [
           {707, "Improper Neutralization", :class},
           {74, "Injection", :class},

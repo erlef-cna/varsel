@@ -5,8 +5,11 @@
 defmodule Varsel.CWE.WeaknessTest do
   use Varsel.DataCase, async: false
 
+  alias Ash.Error.Forbidden
   alias Varsel.CWE.CweMetadata
   alias Varsel.CWE.CweXmlParser
+  alias Varsel.CWE.View
+  alias Varsel.CWE.ViewMembership
   alias Varsel.CWE.Weakness
   alias Varsel.CWE.WeaknessRelationship
 
@@ -46,6 +49,20 @@ defmodule Varsel.CWE.WeaknessTest do
         </Related_Weaknesses>
       </Weakness>
     </Weaknesses>
+    <Views>
+      <View ID="1000" Name="Research Concepts" Type="Graph" Status="Draft">
+        <Objective>This view is intended to facilitate research into weaknesses.</Objective>
+        <Members>
+          <Has_Member CWE_ID="79" View_ID="1000"/>
+          <Has_Member CWE_ID="284" View_ID="1000"/>
+        </Members>
+      </View>
+      <View ID="1040" Name="Quality Weaknesses with Indirect Security Impacts" Type="Implicit"
+            Status="Incomplete">
+        <Objective>CWE identifiers in this view (slice) are quality issues.</Objective>
+        <Filter>/Weakness_Catalog/Weaknesses/Weakness[Weakness_Ordinalities/Weakness_Ordinality/Ordinality='Indirect']</Filter>
+      </View>
+    </Views>
   </Weakness_Catalog>
   """
 
@@ -95,10 +112,14 @@ defmodule Varsel.CWE.WeaknessTest do
 
   # Small chunks exercise XML tokens split across stream chunk boundaries.
   defp parse_weaknesses(xml) do
-    xml |> Varsel.Xml.chunk_binary(64) |> CweXmlParser.stream() |> Enum.to_list()
+    xml |> Varsel.Xml.chunk_binary(64) |> CweXmlParser.stream_weaknesses() |> Enum.to_list()
   end
 
-  describe "CweXmlParser.stream/1" do
+  defp parse_views(xml) do
+    xml |> Varsel.Xml.chunk_binary(64) |> CweXmlParser.stream_views() |> Enum.to_list()
+  end
+
+  describe "CweXmlParser.stream_weaknesses/1" do
     test "parses all weaknesses from XML" do
       weaknesses = parse_weaknesses(@sample_xml)
       assert length(weaknesses) == 3
@@ -153,6 +174,34 @@ defmodule Varsel.CWE.WeaknessTest do
     end
   end
 
+  describe "CweXmlParser.stream_views/1" do
+    test "parses all views from XML" do
+      views = parse_views(@sample_xml)
+      assert length(views) == 2
+    end
+
+    test "parses a Graph view with members" do
+      views = parse_views(@sample_xml)
+      view = Enum.find(views, &(&1.view_id == 1000))
+
+      assert view.name == "Research Concepts"
+      assert view.type == :graph
+      assert view.status == :draft
+      assert view.objective =~ "facilitate research"
+      assert view.members == [79, 284]
+    end
+
+    test "parses an Implicit slice view without members" do
+      views = parse_views(@sample_xml)
+      view = Enum.find(views, &(&1.view_id == 1040))
+
+      assert view.name == "Quality Weaknesses with Indirect Security Impacts"
+      assert view.type == :implicit_slice
+      assert view.status == :incomplete
+      assert view.members == []
+    end
+  end
+
   describe "sync_cwe_catalog action" do
     test "downloads, parses, and upserts all weaknesses" do
       stub_catalog(zip_xml(@sample_xml))
@@ -204,6 +253,37 @@ defmodule Varsel.CWE.WeaknessTest do
       refute Enum.any?(cwe79.related_weakness_relationships, &(&1.target_cwe_id == 80))
     end
 
+    test "upserts views from the catalog" do
+      stub_catalog(zip_xml(@sample_xml))
+      run_sync()
+
+      views =
+        View
+        |> Ash.read!(authorize?: false)
+        |> Enum.map(&{&1.view_id, &1.name, &1.type, &1.status})
+        |> Enum.sort()
+
+      assert views == [
+               {1000, "Research Concepts", :graph, :draft},
+               {1040, "Quality Weaknesses with Indirect Security Impacts", :implicit_slice, :incomplete}
+             ]
+    end
+
+    test "syncs view memberships, dropping members that are not weaknesses" do
+      stub_catalog(zip_xml(@sample_xml))
+      run_sync()
+
+      memberships =
+        ViewMembership
+        |> Ash.read!(authorize?: false)
+        |> Enum.map(&{&1.view_id, &1.cwe_id})
+        |> Enum.sort()
+
+      # Has_Member CWE_ID="284" is a Category, not a Weakness in the sample
+      # catalog — it must be dropped, leaving only the 1000<->79 membership.
+      assert memberships == [{1000, 79}]
+    end
+
     # INT-006 regression: the relationship set is a snapshot of the catalog —
     # edges MITRE removed or reclassified must disappear, not accumulate.
     test "removes and reclassifies relationships across catalog versions" do
@@ -229,6 +309,14 @@ defmodule Varsel.CWE.WeaknessTest do
             <Description>No relationships anymore.</Description>
           </Weakness>
         </Weaknesses>
+        <Views>
+          <View ID="1000" Name="Research Concepts" Type="Graph" Status="Draft">
+            <Objective>This view is intended to facilitate research into weaknesses.</Objective>
+            <Members>
+              <Has_Member CWE_ID="74" View_ID="1000"/>
+            </Members>
+          </View>
+        </Views>
       </Weakness_Catalog>
       """
 
@@ -251,13 +339,35 @@ defmodule Varsel.CWE.WeaknessTest do
         |> Enum.sort()
 
       assert edges == [{79, 74, :peer_of, 1000}]
+
+      # View 1040 (the Implicit slice) was dropped from the catalog.
+      view_ids = View |> Ash.read!(authorize?: false) |> Enum.map(& &1.view_id) |> Enum.sort()
+      assert view_ids == [1000]
+
+      # Membership 1000<->79 was removed, 1000<->74 was added.
+      memberships =
+        ViewMembership
+        |> Ash.read!(authorize?: false)
+        |> Enum.map(&{&1.view_id, &1.cwe_id})
+        |> Enum.sort()
+
+      assert memberships == [{1000, 74}]
     end
 
     test "relationship writes outside the sync are forbidden" do
-      assert {:error, %Ash.Error.Forbidden{}} =
+      assert {:error, %Forbidden{}} =
                Ash.create(
                  WeaknessRelationship,
                  %{source_cwe_id: 79, target_cwe_id: 74, nature: :child_of, view_id: 1000},
+                 authorize?: true
+               )
+    end
+
+    test "view membership writes outside the sync are forbidden" do
+      assert {:error, %Forbidden{}} =
+               Ash.create(
+                 ViewMembership,
+                 %{view_id: 1000, cwe_id: 79},
                  authorize?: true
                )
     end

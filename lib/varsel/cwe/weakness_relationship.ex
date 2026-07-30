@@ -15,6 +15,7 @@ defmodule Varsel.CWE.WeaknessRelationship do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer
 
+  alias Varsel.CWE.View
   alias Varsel.CWE.Weakness
 
   postgres do
@@ -23,6 +24,12 @@ defmodule Varsel.CWE.WeaknessRelationship do
 
     references do
       reference :target, deferrable: :initially
+
+      # Pure catalog-derived join row, unlike :source/:target (which point at
+      # Weakness and must never silently vanish just because MITRE prunes a
+      # view) — safe to let the DB cascade so the sync doesn't have to order
+      # around it.
+      reference :view, deferrable: :initially, on_delete: :delete
     end
   end
 
@@ -115,6 +122,14 @@ defmodule Varsel.CWE.WeaknessRelationship do
     belongs_to :target, Weakness do
       source_attribute :target_cwe_id
       destination_attribute :cwe_id
+      define_attribute? false
+      allow_nil? false
+      public? true
+    end
+
+    belongs_to :view, View do
+      source_attribute :view_id
+      destination_attribute :view_id
       define_attribute? false
       allow_nil? false
       public? true

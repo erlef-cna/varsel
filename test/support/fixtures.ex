@@ -128,4 +128,15 @@ defmodule Varsel.Fixtures do
       description: "#{name} description"
     })
   end
+
+  @doc "Seeds a CWE view row (bypasses the sync pipeline)."
+  def seed_view(view_id, name) do
+    Ash.Seed.seed!(Varsel.CWE.View, %{
+      view_id: view_id,
+      name: name,
+      type: :graph,
+      status: :stable,
+      objective: "#{name} objective"
+    })
+  end
 end

@@ -5,15 +5,17 @@
 defmodule Varsel.CWE.CweXmlParser do
   @moduledoc """
   Parses the MITRE CWE XML catalog (cwec_latest.xml) as a SAX stream via
-  `Varsel.Xml`, one weakness subtree at a time.
+  `Varsel.Xml`, one weakness or view subtree at a time.
 
-  Produces weakness maps ready for bulk-upsert into `Weakness`.
+  Produces weakness maps ready for bulk-upsert into `Weakness`, and view maps
+  ready for bulk-upsert into `View`.
 
   Usage:
 
-      xml_binary |> Varsel.Xml.chunk_binary() |> CweXmlParser.stream()
+      xml_binary |> Varsel.Xml.chunk_binary() |> CweXmlParser.stream_weaknesses()
+      xml_binary |> Varsel.Xml.chunk_binary() |> CweXmlParser.stream_views()
 
-  Each map has the keys:
+  Each weakness map has the keys:
 
       %{
         cwe_id:                integer,
@@ -26,6 +28,17 @@ defmodule Varsel.CWE.CweXmlParser do
         potential_mitigations: string | nil,
         common_consequences:   string | nil
       }
+
+  Each view map has the keys:
+
+      %{
+        view_id:   integer,
+        name:      string,
+        type:      :graph | :explicit_slice | :implicit_slice,
+        status:    atom,
+        objective: string,
+        members:   [integer]
+      }
   """
 
   import Varsel.Xml
@@ -36,11 +49,24 @@ defmodule Varsel.CWE.CweXmlParser do
   The XML must be the content of `cwec_latest.xml` from the MITRE CWE ZIP.
   Raises `Saxy.ParseError` when the stream is run over malformed input.
   """
-  @spec stream(Enumerable.t(binary())) :: Enumerable.t(map())
-  def stream(chunks) do
+  @spec stream_weaknesses(Enumerable.t(binary())) :: Enumerable.t(map())
+  def stream_weaknesses(chunks) do
     chunks
     |> stream_subtrees("Weaknesses", "Weakness")
     |> Stream.map(&parse_weakness/1)
+  end
+
+  @doc """
+  Lazily parses a stream of XML binary chunks into a stream of view maps.
+
+  The XML must be the content of `cwec_latest.xml` from the MITRE CWE ZIP.
+  Raises `Saxy.ParseError` when the stream is run over malformed input.
+  """
+  @spec stream_views(Enumerable.t(binary())) :: Enumerable.t(map())
+  def stream_views(chunks) do
+    chunks
+    |> stream_subtrees("Views", "View")
+    |> Stream.map(&parse_view/1)
   end
 
   # ---------------------------------------------------------------------------
@@ -96,6 +122,38 @@ defmodule Varsel.CWE.CweXmlParser do
       related_weaknesses: related_weaknesses,
       potential_mitigations: potential_mitigations,
       common_consequences: common_consequences
+    }
+  end
+
+  defp parse_view(el) do
+    attrs = attributes(el)
+    children = child_elements(el)
+
+    objective =
+      children
+      |> find_child("Objective")
+      |> text_content()
+
+    members =
+      children
+      |> find_child("Members")
+      |> case do
+        nil ->
+          []
+
+        members_el ->
+          members_el
+          |> child_elements()
+          |> Enum.map(&(&1 |> attributes() |> Map.fetch!("CWE_ID") |> String.to_integer()))
+      end
+
+    %{
+      view_id: String.to_integer(attrs["ID"]),
+      name: attrs["Name"],
+      type: parse_type(attrs["Type"]),
+      status: parse_status(attrs["Status"]),
+      objective: objective,
+      members: members
     }
   end
 
@@ -161,6 +219,10 @@ defmodule Varsel.CWE.CweXmlParser do
   defp parse_status("Incomplete"), do: :incomplete
   defp parse_status("Deprecated"), do: :deprecated
   defp parse_status("Obsolete"), do: :obsolete
+
+  defp parse_type("Graph"), do: :graph
+  defp parse_type("Explicit"), do: :explicit_slice
+  defp parse_type("Implicit"), do: :implicit_slice
 
   # Map XML "Nature" attribute strings to our enum atoms
   defp parse_nature("ChildOf"), do: :child_of
