@@ -485,7 +485,7 @@ defmodule VarselWeb.CveListLive do
                       the binding closest to the click target, and inline
                       handlers are out (CSP). --%>
                 <td phx-click={%JS{}}>
-                  <div :for={purl <- record.purls || []} class="text-xs">
+                  <div :for={purl <- record.purls || []} class="text-xs break-all">
                     <.package_ref entry={%{"packageURL" => purl}} link={true} />
                   </div>
                 </td>
