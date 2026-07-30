@@ -27,5 +27,6 @@ defmodule Varsel.Oauth2Server do
     # `false` if your auth server is for a fixed set of first-party
     # clients only.
     dcr_enabled?: true,
+    cimd_enabled: true,
     sign_in_path: "/sign-in"
 end

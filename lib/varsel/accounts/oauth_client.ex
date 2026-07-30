@@ -49,6 +49,23 @@ defmodule Varsel.Accounts.OauthClient do
       accept []
       change atomic_update(:last_used_at, expr(now()))
     end
+
+    create :register_cimd do
+      description "Register a new OAuth client via CIMD."
+
+      upsert? true
+      upsert_identity :by_cimd_url
+
+      accept [
+        :cimd_url,
+        :client_name,
+        :redirect_uris,
+        :grant_types,
+        :response_types,
+        :token_endpoint_auth_method,
+        :scope
+      ]
+    end
   end
 
   policies do
@@ -90,6 +107,14 @@ defmodule Varsel.Accounts.OauthClient do
       public? true
     end
 
+    attribute :cimd_url, :string do
+      public? true
+    end
+
     timestamps()
+  end
+
+  identities do
+    identity :by_cimd_url, [:cimd_url]
   end
 end
