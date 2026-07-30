@@ -601,6 +601,16 @@
   vertical-align: middle;
 }
 
+/* The trailing "leftover" row: a footnote to the slices above, not another
+   slice. */
+.cwe-legend-note {
+  color: var(--color-base-content);
+  opacity: 0.6;
+  font-style: italic;
+  border-top: 1px solid var(--color-base-300, #e9ecef);
+  cursor: default;
+}
+
 .cwe-legend-cell-count,
 .cwe-legend-cell-pct {
   text-align: right;

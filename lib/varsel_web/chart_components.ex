@@ -362,13 +362,30 @@ defmodule VarselWeb.ChartComponents do
   no table ancestor left to lay out against, so a real `<table>` wrapper
   can never make a linked row render as a row. `role="table"` etc. keep it
   announced as a table to assistive tech despite the div/span markup.
+
+  A non-zero `:unsliced_count` gets a trailing note row, rendered only when
+  the caller passes an `unsliced_label` saying what the leftover means for
+  that page — a bare count with no explanation is worse than none.
   """
   attr :data, :map, required: true
+  attr :unsliced_label, :string, default: nil
 
   def cwe_legend(assigns) do
     ~H"""
     <div class="cwe-legend-table" role="table">
       <.legend_row :for={slice <- @data.slices} slice={slice} />
+      <div
+        :if={@unsliced_label && @data[:unsliced_count] not in [nil, 0]}
+        class="cwe-legend-row cwe-legend-note"
+        role="row"
+      >
+        <span class="cwe-legend-cell cwe-legend-cell-swatch" role="cell"></span>
+        <span class="cwe-legend-cell cwe-legend-cell-name" role="cell">{@unsliced_label}</span>
+        <span class="cwe-legend-cell cwe-legend-cell-count" role="cell">
+          {@data.unsliced_count}
+        </span>
+        <span class="cwe-legend-cell cwe-legend-cell-pct" role="cell"></span>
+      </div>
     </div>
     """
   end

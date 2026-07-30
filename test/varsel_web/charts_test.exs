@@ -68,6 +68,69 @@ defmodule VarselWeb.ChartsTest do
     end
   end
 
+  describe "donut_geometry/1 unsliced remainder" do
+    defp entries(counts) do
+      Enum.map(counts, fn {id, count} -> %{id: id, name: id, count: count, href: nil} end)
+    end
+
+    test "carries the CVEs a center total counts but no slice accounts for" do
+      data =
+        Charts.donut_geometry(%{entries: entries([{"CWE-79", 2}]), center_total: 35})
+
+      assert data.total == 2
+      assert data.unsliced_count == 33
+    end
+
+    test "floors at zero when overlapping subtrees push the slice-sum above the total" do
+      data =
+        Charts.donut_geometry(%{
+          entries: entries([{"CWE-79", 3}, {"CWE-74", 2}]),
+          center_total: 4
+        })
+
+      assert data.total == 5
+      assert data.unsliced_count == 0
+    end
+
+    test "is zero when the center total defaults to the slice-sum" do
+      data = Charts.donut_geometry(%{entries: entries([{"CWE-79", 3}])})
+
+      assert data.unsliced_count == 0
+    end
+  end
+
+  describe "ChartComponents.cwe_legend/1" do
+    import Phoenix.LiveViewTest
+
+    defp legend(entries, center_total, opts) do
+      data = Charts.donut_geometry(%{entries: entries, center_total: center_total})
+
+      render_component(&VarselWeb.ChartComponents.cwe_legend/1, Keyword.put(opts, :data, data))
+    end
+
+    test "renders the note row with the caller's label and the remainder count" do
+      note =
+        [{"CWE-789", 2}]
+        |> entries()
+        |> legend(35, unsliced_label: "on this weakness itself")
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(".cwe-legend-note")
+
+      assert LazyHTML.text(note) =~ "on this weakness itself"
+      assert note |> LazyHTML.query(".cwe-legend-cell-count") |> LazyHTML.text() =~ ~r/^\s*33\s*$/
+    end
+
+    test "omits the note row when the caller passes no label" do
+      refute legend(entries([{"CWE-789", 2}]), 35, []) =~ "cwe-legend-note"
+    end
+
+    test "omits the note row when nothing is left over" do
+      html = legend(entries([{"CWE-789", 2}]), 2, unsliced_label: "on this weakness itself")
+
+      refute html =~ "cwe-legend-note"
+    end
+  end
+
   describe "ChartComponents.cve_activity_chart/1" do
     import Phoenix.LiveViewTest
 
