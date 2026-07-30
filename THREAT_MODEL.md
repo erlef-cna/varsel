@@ -170,29 +170,15 @@ dynamic code loading from any actor.
   are absent is the property.
 
 - **The mock login** (`/auth/user/mock/callback?role=…`) — a deliberate, total
-  authentication bypass that signs the caller in as a dummy user of the
-  requested role (**including POC**) with no credential, so where it exists it
-  **voids every §8 authorization property**. The role is a plain query
-  parameter and the sign-in page links one per role; only the three roles the
-  strategy declares are accepted, but that is a typo guard, not a control —
-  every one of them is unauthenticated.
+  authentication bypass that signs the caller in as a dummy user of any
+  requested role, **POC included**, with no credential. Where it exists it
+  **voids every §8 authorization property**. A compile-time `Mix.env/0` check
+  is what keeps it out of a production build (§5a); there is no runtime flag
+  and no configuration override.
 
-  It is an ordinary authentication strategy: it registers through the same
-  action every provider does, and the account it creates carries a normal
-  identity row, so the linking and resolution paths (§8) are exercised in
-  development rather than bypassed.
-
-  Its modules compile into every build. What confines it to development is the
-  `mock do` block on `Varsel.Accounts.User` and its `register_with_mock`
-  action, both behind a `Mix.env/0` check evaluated at compile time. Undeclared
-  the strategy has no route and no action, so there is no way in. The guard is
-  that condition, not the presence of a file; widening it is what would expose
-  the bypass. There is no runtime flag and no configuration override.
-
-  Findings against any of this are `OUT-OF-MODEL: unsupported-component`; a
-  finding that a *production build declares the mock strategy* is a
-  build/deployment error (§10), not a code defect.
-  (`mix.exs`, `dev/`, `router.ex`, `user.ex`)
+  Findings against its behaviour are `OUT-OF-MODEL: unsupported-component`. A
+  finding that a *production build declares it* is a build/deployment error
+  (§10), not a code defect. (`router.ex`, `user.ex`)
 - **The `cvelint` and `exgit` third-party tools themselves.** Varsel invokes
   them; bugs *inside* them are upstream (see §6). Varsel owns only how it
   feeds them.
@@ -383,31 +369,27 @@ graph walk runs inside a per-`repo_url` GenServer
 (`Varsel.Cases.Derivation.GitRepo.Server`, started on demand under a
 Registry + DynamicSupervisor), so one slow or hostile `repo_url` occupies
 only its own server while other repositories derive concurrently. The
-10-minute call timeout, the 900 s server TTL and the 250k commit cap bound a
-single derivation. Each server holds its repository's commit-object store in
-memory for its lifetime and releases it when it expires, so memory grows with
-the number of **distinct URLs derived within one TTL window** — there is no
-count-based eviction. That is bounded in practice by the POC/assignee
-privilege needed to add a package (§9). (`git_repo.ex`,
-`git_repo/server.ex`, `application.ex`)
+per-derivation bounds in §8 cap a single walk. Each server holds its
+repository's commit-object store in memory for its lifetime and releases it
+when it expires, so memory grows with the number of **distinct URLs derived
+within one TTL window** — there is no count-based eviction. That is bounded
+in practice by the POC/assignee privilege needed to add a package (§9).
+(`git_repo.ex`, `git_repo/server.ex`, `application.ex`)
 
 ### 5a. Build-time and configuration variants
 
 | Knob | Default | Effect on model |
 | --- | --- | --- |
-| `MIX_ENV` (compile) | `prod` for releases | The **only** switch governing the `/dev/*` tooling and the mock login (§3), through two mechanisms. `elixirc_paths/1` adds the `dev/` directory for `:dev` and `:test` only, so a prod build contains neither `VarselWeb.DevRouter` (dashboards, storybook, error preview) nor the dev-nav component. The mock login is instead gated by `Mix.env/0` checks *inside* `Varsel.Accounts.User`, which drop the `mock do` strategy declaration and the `register_with_mock` action — its modules compile, but nothing declares them, so there is no route and no action. The storybook, Oban Web and LiveDashboard **dependencies** are themselves `only: [:dev, :test]`, so a prod build cannot link them even by mistake. There is no runtime or configuration override — building with `MIX_ENV=prod` is the whole control. **A release built from any other env exposes an unauthenticated POC sign-in and this model no longer holds at all.** (`mix.exs`, `dev/`, `user.ex`) |
+| `MIX_ENV` (compile) | `prod` for releases | **A release built from any other env exposes an unauthenticated POC sign-in, and this model no longer holds.** It is the **only** switch governing the `/dev/*` tooling and the mock login (§3): a non-`prod` build compiles the `dev/` directory and declares the mock strategy, and the dashboard dependencies are themselves `only: [:dev, :test]`. There is no runtime or configuration override — building with `MIX_ENV=prod` is the whole control. (`mix.exs`, `dev/`, `user.ex`) |
 | `TEST_DEPLOYMENT` (runtime) | `true` | When true, serves a disallow-all `robots.txt`, `X-Robots-Tag: noindex`, and a warning banner. **Must be set `false` on the real production instance.** Not a security control — an indexing/labeling one. (`config.exs`, `runtime.exs`) |
 | `MITRE_CVE_API_BASE_URL` | none (required) | Points the publish pipeline at a MITRE endpoint. Every configured endpoint (including MITRE's shared staging, `cveawg-test`) is a real remote system — the pipeline has no in-app dry-run or sandbox, so any publish leaves the machine (see §9, "false friend"). (`mitre_cve_api.ex`) |
 
-One build variant voids the §8 auth properties outright — a non-`prod`
-`MIX_ENV`, which ships the mock login: an intentional authentication bypass.
-It fails loudly rather than silently: there is no runtime or environment
-override that can enable it in a `prod` build (the strategy is not declared,
-the `/dev/*` code is not compiled, and its dependencies are not even linked),
-and where it *is* present the sign-in page lists it beside the real
-providers and every page carries a visible floating dev-tools launcher. The
-two variants that matter (a release built from a non-`prod` env,
-`TEST_DEPLOYMENT` left true) are operator-deployment errors, surfaced in §10.
+**Support posture.** Only `MIX_ENV=prod` is a supported production build. The
+mock login fails loudly rather than silently where it *is* present: the
+sign-in page lists it beside the real providers, and every page carries a
+visible dev-tools launcher. Both variants that matter — a release built from a
+non-`prod` env, and `TEST_DEPLOYMENT` left true — are operator-deployment
+errors rather than defects, and §10 states them as operator obligations.
 
 ---
 
@@ -425,7 +407,7 @@ from controlling only its size.
 
 | Surface | Parameter | Control kind | Attacker-controllable? | Sink / caller must |
 | --- | --- | --- | --- | --- |
-| `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, default 256 KiB; rate-capped at 25/day for a role-less reporter, §8); triage UI (escaped, §7/§8). The POC email is content-free (link only), so the payload never leaves the authenticated console. |
+| `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The POC email is content-free (link only), so the payload never leaves the authenticated console. |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
 | `VersionEvent` | `commit_sha` | data | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
@@ -451,16 +433,13 @@ the OTP versions table — all from fixed MITRE/GitHub hosts (§6a/§6b), not
 attacker-writable.
 
 **Size / rate.** `report_json` is free-form JSON from any authenticated user,
-**capped** at a configurable serialized size (default 256 KiB,
-`:max_report_json_bytes`) via the `ReportJsonSize` validation — a single
-oversized payload is rejected. Submission *rate* is bounded for the least
-trusted reporters only: a role-less user gets 25 submissions per day
-(property 10); users holding a CNA role, and every other endpoint, remain
-unbounded in-app (§9, best effort). Git derivation fetches an entire
-commit graph
-(`tree:0`, no blobs) from `repo_url`, bounded by a 10-minute GenServer timeout,
-a 900s per-repository server TTL, and a 250k commit-count cap on the graph walk
-(`report_json_size.ex`, `git_repo.ex`).
+capped at a configurable serialized size by the `ReportJsonSize` validation —
+a single oversized payload is rejected. Submission *rate* is bounded for the
+least trusted reporters only: a role-less user gets a daily allowance
+(property 10). Users holding a CNA role, and every other endpoint, remain
+unbounded in-app (§9, best effort). Git derivation fetches an entire commit
+graph (`tree:0`, no blobs) from `repo_url`. Every one of these bounds is
+listed with its current value in §8. (`report_json_size.ex`, `git_repo.ex`)
 
 ### Contract dimensions
 
@@ -777,10 +756,11 @@ none of the authorization properties, by construction rather than by defect.
    - (`feed_controller.ex`, `sitemap_controller.ex`)
 
 10. **Report intake is size-bounded, and rate-bounded below any CNA role.**
-   `report_json` is capped at a configurable serialized size (default
-   256 KiB); an oversized payload is rejected before persistence. A reporter
-   with **no role** (`role == nil` — what every fresh sign-up is) may
-   additionally submit at most **25 reports per 24 hours**, counted per user.
+   `report_json` is capped at a configurable serialized size; an oversized
+   payload is rejected before persistence. A reporter with **no role**
+   (`role == nil` — what every fresh sign-up is) additionally gets a daily
+   submission allowance, counted per user (both values in the resource-bound
+   table below).
    The limit sits on the `:submit` action itself, so the form, GraphQL and
    MCP all draw from the same budget; POCs and supporters are deliberately
    exempt. The counter is node-local ETS (`Varsel.Hammer`): it resets on
@@ -882,25 +862,34 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `high` (silent loss of accepted editorial work).
    - (`cve_record.ex`)
 
-**Resource bound (the one quantified DoS line we can state):** guardrails are
-the git-derivation timeout (10 min), per-repository server TTL (900 s), and
-250k commit-count
-cap, the Oban `Lifeline` rescue (30 min) for orphaned jobs, the `report_json`
-size cap (default
-256 KiB, property 10), the 25/day submission cap on role-less reporters
-(property 10), and `max_length` caps on every free-text/markdown field
-(title 500; `*_md`/comment/notes 20–50 KB; report body 200 KB) that bound the
-parser input. Beyond that one submission cap there is **no
-application-level request-rate limit** — read-endpoint volume, search, and
-every other write are not bounded in-app, and "bounded resource use" is
-**not** a general claim (§9).
+**Resource bound — the one quantified line.** Each guardrail below bounds a
+*single* operation. None bounds how many operations an actor starts, which is
+disclaimed in §9. These are the current values, and they are tuning knobs: a
+report turns on a bound being *absent or ineffective*, not on its exact
+number.
+
+| Guardrail | Bound |
+| --- | --- |
+| Git derivation, per call | 10 min timeout |
+| Derivation server, per repository | 900 s TTL |
+| Commit-graph walk | 250k commits |
+| Orphaned Oban jobs | `Lifeline` rescue at 30 min |
+| `report_json` | 256 KiB, configurable |
+| Report submissions, role-less reporter | 25 per 24 h |
+| Free-text and markdown fields | `max_length` on every one |
+
+- *Violation symptom:* an operation outruns its bound, or a bound the table
+  claims turns out to be absent.
+- *Severity:* `moderate` (DoS).
+- *Threshold:* a single request that outruns its bound is a bug. Volume across
+  many requests is not (§9).
 
 ---
 
 ## 9. Security properties the project does *not* provide
 
 - **No general rate limiting or request-volume DoS defense at the
-  application layer.** One narrow exception exists — the 25/day cap on
+  application layer.** One narrow exception exists — the daily cap on
   report submission by role-less users (property 10). Everything else —
   search queries (full-text `tsquery`), read endpoints, every other write,
   and report submission by roled users — is not rate-limited in-app. The
@@ -1069,44 +1058,20 @@ means the **CNA operator/deployer**, and — for the last item only — anyone
 
 Sobelow/credo suppressions are each documented at the suppression site —
 inline `sobelow_skip` with a reason, plus `.sobelow-skips`/`.sobelow-conf` — so
-a triager who hits one of those flags sees the justification there. The one
-model-level recurring flag, the SSRF shape of `Exgit.clone(repo_url)`, is
-addressed in §9: `repo_url` is constrained to https + a public-resolving host,
-and the residual is a POC/assignee privilege — `VALID` only if shown reachable
-below that privilege.
+a triager who hits one of those flags sees the justification there.
 
-Two shapes an automated reviewer reliably mistakes for missing authorization,
-both explained in §4:
-
-- **"Route X has no authentication check."** No route does. The router
-  resolves an actor and stops; the policy on the first action the page runs is
-  the check. Grepping the router for a role gate finds nothing by design.
-- **"Reading resource X as an anonymous caller returns success."** For a
-  filter-scoped resource it returns `{:ok, []}` — success with no rows, which
-  is how an Ash filter policy denies. `NOT-A-FINDING` unless rows actually
-  come back, and none do.
-- **"`authorize?: false` appears in the code."** Every remaining use is inside
-  a change, validation or notifier that runs *after* the enclosing action's
-  policy has already admitted the caller; none sits on a path a caller
-  selects. Caller-facing uses are banned by a credo check (§8, property 1).
-- **"The `cvelint` call passes user input to an external program."** The
-  binary is executed directly — no shell — with a fixed argument list, and the
-  record reaches it on stdin rather than as an argument, so no caller string
-  reaches a shell parsing context (§5).
-- **"A supporter can resolve proposals like a POC."** Accepting or declining a
-  proposal on an assigned case is intended supporter authority; assignment is
-  the grant (§11, "treating a supporter as low-trust").
-- **"A token carries both the `mcp` and `gql` scopes."** Not a scope-separation
-  violation: property 6 constrains what a token may *use*, per surface, not
-  what it may be issued.
-- **"An avatar URL exposes the MD5 of a user's email."** Known and accepted
-  (§9): a Gravatar hash confirms a guessed address to someone who can already
-  read that user's row, and display identity is not secret between
-  collaborators. Reported regularly because the hash is recognisable.
-- **"A concurrent edit fails with a stale-record error."** The optimistic
-  lock doing its job (§4): the row moved between the caller's read and write,
-  the write rolled back whole, and a reload-and-retry succeeds. Not a data
-  race — it is what prevents one.
+| Reported as | Why it is not a finding |
+| --- | --- |
+| "Route X has no authentication check." | No route does. The router resolves an actor and stops; the policy on the first action the page runs is the check. Grepping the router for a role gate finds nothing by design (§4). |
+| "Reading resource X as an anonymous caller returns success." | For a filter-scoped resource it returns `{:ok, []}` — success with no rows, which is how an Ash filter policy denies (§4). A finding only if rows actually come back, and none do. |
+| "`authorize?: false` appears in the code." | Every remaining use is inside a change, validation or notifier that runs *after* the enclosing action's policy admitted the caller; none sits on a path a caller selects. Caller-facing uses are banned by a credo check (property 1). |
+| "The `cvelint` call passes user input to an external program." | The binary is executed directly — no shell — with a fixed argument list, and the record reaches it on stdin rather than as an argument (property 13). |
+| "`Exgit.clone(repo_url)` is an SSRF sink." | Constrained to https and a public-resolving host, pinned at connect (property 12). The residual reach to *public* hosts is deliberate (§9) and needs POC/assignee privilege (§4). |
+| "A supporter can resolve proposals like a POC." | Accepting or declining a proposal on an assigned case is intended supporter authority; assignment is the grant (§11). |
+| "A token carries both the `mcp` and `gql` scopes." | Property 6 constrains what a token may *use*, per surface, not what it may be issued. |
+| "An avatar URL exposes the MD5 of a user's email." | Known and accepted (§9): the hash confirms a guessed address to someone who can already read that user's row. Reported often because the hash is recognisable. |
+| "A concurrent edit fails with a stale-record error." | The optimistic lock doing its job (§4): the row moved between read and write, the write rolled back whole, and a reload-and-retry succeeds. Not a data race — it is what prevents one. |
+| "Markdown from the JSON API is not escaped." | Sanitization runs at each render sink, not at rest (§9). Escaping is the consumer's obligation (§10). |
 
 **An entry here describes an outcome, not a promise to disregard the
 evidence.** Each says what the code does and why the flag is expected. A
