@@ -150,40 +150,7 @@ SPDX-License-Identifier: Apache-2.0
         All versions affected.
       </p>
 
-      <div :if={affected_ranges(entry) != []} class="flex flex-col gap-1 font-mono text-sm">
-        <div :for={range <- affected_ranges(entry)}>
-          <%= if range.kind == :git do %>
-            <span :if={range.intro_sha} class="font-sans text-sm text-base-content/60">
-              introduced by
-            </span>
-            <code :if={range.intro_sha} title={range.intro_sha_title}>{range.intro_sha}</code>
-            <span
-              :if={range.intro_sha && range.fix_sha}
-              class="font-sans text-sm text-base-content/60"
-            >
-              ·
-            </span>
-            <span :if={range.fix_sha} class="font-sans text-sm text-base-content/60">
-              fixed by
-            </span>
-            <code :if={range.fix_sha} title={range.fix_sha_title}>{range.fix_sha}</code>
-            <span class="font-sans text-sm text-base-content/60">· {range.note}</span>
-          <% else %>
-            <span :if={range.branch_label} class="mr-2 font-sans text-xs text-base-content/50">
-              {range.branch_label}
-            </span>
-            <span :if={range.lower}>
-              ≥ <span title={range.lower_title}>{range.lower}</span>
-            </span>
-            <span :if={range.fix}>
-              &lt; <span title={range.fix_title}>{range.fix}</span>
-            </span>
-            <span class="font-sans text-sm text-base-content/60">
-              · {range.note}<span :if={range.fix_paren_label}> ({range.fix_paren_label})</span>
-            </span>
-          <% end %>
-        </div>
-      </div>
+      <.affected_range_list :if={affected_ranges(entry) != []} ranges={affected_ranges(entry)} />
 
       <div class="mt-2 flex flex-col gap-0.5">
         <div class="flex items-baseline gap-3 py-0.5">

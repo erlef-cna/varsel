@@ -252,6 +252,94 @@ defmodule VarselWeb.CveView do
   end
 
   @doc """
+  Renders an affected package's version ranges — one line per range, as
+  `VarselWeb.CveHTML.affected_ranges/1` shapes them.
+
+  Two row shapes share the block. An `:ordered` row is a comparison against a
+  version scheme (`≥ 1.19.0 < 1.19.5`); a `:git` row names commits instead,
+  since shas don't order. Both tone the boundaries the same way — the lower
+  bound (where it starts being affected) warning, the fix (where it stops)
+  success — so a reader scanning the block sees the same colours mean the same
+  thing whichever shape the row takes. Operators, labels and notes stay muted.
+
+  The branch label ("1.19 series") sits in a reserved column so every row's
+  boundary starts at the same x, including rows that carry no label because
+  their range spans lines.
+  """
+  attr :ranges, :list, required: true, doc: "rows from `VarselWeb.CveHTML.affected_ranges/1`"
+
+  def affected_range_list(assigns) do
+    ~H"""
+    <div class="flex flex-col gap-1 font-mono text-sm">
+      <div :for={range <- @ranges}>
+        <%= if range.kind == :git do %>
+          <.commit_boundaries intro={range.intro_sha} fixes={range.fix_shas} />
+          <span class="font-sans text-sm text-base-content/60">· {range.note}</span>
+        <% else %>
+          <span class="mr-2 inline-block w-16 text-right font-sans text-xs text-base-content/50">
+            {range.branch_label}
+          </span>
+          <span :if={range.lower}>
+            <span class="text-base-content/60">≥</span>
+            <span title={range.lower_title} class="text-warning">{range.lower}</span>
+          </span>
+          <span :if={range.fix}>
+            <span class="text-base-content/60">&lt;</span>
+            <span title={range.fix_title} class="text-success">{range.fix}</span>
+          </span>
+          <span class="font-sans text-sm text-base-content/60">
+            · {range.note}<span :if={range.fix_paren_label}> ({range.fix_paren_label})</span>
+          </span>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a git range's commit boundaries: "introduced by <sha> · fixed by
+  <sha>, <sha>".
+
+  A git range carries as many fix commits as the record lists — a fix plus its
+  backports — and every one of them is real, so all of them print. Commit SHAs
+  don't order, so there is no "first" fix to single out and the list keeps
+  record order.
+
+  SHAs display shortened, each carrying its full value in a `title`, and are
+  toned the same way wherever they appear: the introduction warning, the fixes
+  success. Labels and separators stay muted so the commits themselves carry the
+  colour.
+
+  Both `intro` and `fixes` are optional: a range may name an introducing commit
+  with no fix yet, or fixes with no recorded introduction.
+  """
+  attr :intro, :string, default: nil, doc: "the introducing commit sha, full length"
+  attr :fixes, :list, default: [], doc: "every fixing commit sha, full length, in record order"
+  attr :class, :any, default: nil
+
+  def commit_boundaries(assigns) do
+    ~H"""
+    <span class={@class}>
+      <%!-- The labels are prose, so they read in the body font even though the
+      surrounding block is mono for the shas' sake. --%>
+      <span :if={@intro} class="font-sans text-sm text-base-content/60">introduced by </span>
+      <code :if={@intro} title={@intro} class="text-warning">
+        {short_sha7(@intro)}
+      </code>
+      <span :if={@intro && @fixes != []} class="font-sans text-sm text-base-content/60">·</span>
+      <span :if={@fixes != []} class="font-sans text-sm text-base-content/60">fixed by </span>
+      <%!-- Comma-separated. The separator is emitted as its own muted span, kept
+      flush against the shas: whitespace *between* tags would render as a space
+      before the comma, so the tags sit adjacent in the source. --%>
+      <span :for={{fix, index} <- Enum.with_index(@fixes)}><span
+        :if={index > 0}
+        class="text-base-content/60"
+      >,</span>{if index > 0, do: " "}<code title={fix} class="text-success">{short_sha7(fix)}</code></span>
+    </span>
+    """
+  end
+
+  @doc """
   Component rendering an affected entry's package reference as `<code>` text,
   optionally linked. Mirrors `_includes/package-link.html`.
   """
@@ -745,6 +833,29 @@ defmodule VarselWeb.CveView do
   def fix_boundary(%{"lessThan" => "*"}), do: nil
   def fix_boundary(%{"lessThan" => less_than}) when is_binary(less_than), do: less_than
   def fix_boundary(_version), do: nil
+
+  @doc """
+  *Every* fix boundary of a range, in record order.
+
+  `fix_boundary/1` answers "the first safe version of this line", which is the
+  right question for an ordered range — one line, one fix. A git range is
+  different: commit SHAs don't order, so its `changes[]` are not a line but a
+  set of equally-real fix commits (a fix plus its backports). Collapsing those
+  to one would drop the rest, so the git display asks this instead.
+
+  Ordered ranges keep the single-boundary answer, wrapped in a list.
+  """
+  @spec fix_boundaries(map()) :: [String.t()]
+  def fix_boundaries(%{"lessThan" => "*", "changes" => [_ | _] = changes}) do
+    for %{"status" => "unaffected", "at" => at} <- changes, is_binary(at), do: at
+  end
+
+  def fix_boundaries(version) do
+    case fix_boundary(version) do
+      nil -> []
+      boundary -> [boundary]
+    end
+  end
 
   # Comparator for `Enum.min_by/4`'s sorter: parsed versions order normally;
   # an unparseable (`:error`) boundary never outranks a parseable one, and

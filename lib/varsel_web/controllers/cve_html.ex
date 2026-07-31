@@ -153,10 +153,12 @@ defmodule VarselWeb.CveHTML do
       (`lower: nil`); R5: `branch_label` (leading prefix) is set only when
       the WHOLE range lies within that branch (`range_within_branch?/3`),
       otherwise the label moves into `fix_paren_label` alongside the fix note.
-    * `%{kind: :git, intro_sha:, intro_sha_title:, fix_sha:, fix_sha_title:,
-        note:}` — R4: no ≥/< operators (shas don't order), no repeated
-        "fixed in <same sha>"; shas shorten to 7 chars with the full sha in
-        a `title` attribute.
+    * `%{kind: :git, intro_sha:, fix_shas:, note:}` — R4: no ≥/< operators
+      (shas don't order), no repeated "fixed in <same sha>". Shas are full
+      length; `CoreComponents.commit_boundaries/1` shortens them for display
+      and keeps the full value in a `title`. `fix_shas` lists EVERY fix
+      commit — a fix and its backports are all real, and with no ordering
+      there is no "first" one to single out.
   """
   def affected_ranges(entry) do
     ranges = normalize_versions(entry["versions"] || [])
@@ -170,15 +172,13 @@ defmodule VarselWeb.CveHTML do
     # already strips from ordered ranges — a real ash-style git range has no
     # actual introduction sha, so "introduced by 0" must not render either.
     intro = if !zero_lower?(version["version"]), do: version["version"]
-    fix = fix_boundary(version)
+    fixes = fix_boundaries(version)
 
     %{
       kind: :git,
-      intro_sha: intro && short_sha7(intro),
-      intro_sha_title: intro,
-      fix_sha: fix && short_sha7(fix),
-      fix_sha_title: fix,
-      note: git_range_note(version, fix)
+      intro_sha: intro,
+      fix_shas: fixes,
+      note: git_range_note(version, List.first(fixes))
     }
   end
 
@@ -195,7 +195,7 @@ defmodule VarselWeb.CveHTML do
       lower_title: version["version_raw"],
       fix: fix,
       fix_title: version["lessThan_raw"] || version["lessThanOrEqual_raw"],
-      branch_label: within_branch? && label,
+      branch_label: (within_branch? && label) || nil,
       fix_paren_label: label && not within_branch? && label,
       note: ordered_range_note(fix)
     }
@@ -303,13 +303,14 @@ defmodule VarselWeb.CveHTML do
   # Same zero-sentinel as the Affected card's git range line (R4): a "0"
   # "version" is not a real introduction sha.
   defp git_only_package(base, git_range) do
-    fix = fix_boundary(git_range)
     intro = if !zero_lower?(git_range["version"]), do: git_range["version"]
 
+    # Full shas: the shared `commit_boundaries` component shortens for display
+    # and keeps the full value in each `title`.
     Map.merge(base, %{
       "state" => "git_only",
-      "intro_sha" => intro && short_sha7(intro),
-      "fix_sha" => fix && short_sha7(fix)
+      "intro_sha" => intro,
+      "fix_shas" => fix_boundaries(git_range)
     })
   end
 

@@ -27,6 +27,8 @@ defmodule VarselWeb.AffectedCheckerLive do
   """
   use VarselWeb, :live_view
 
+  import VarselWeb.CveView, only: [commit_boundaries: 1, short_sha7: 1]
+
   alias VarselWeb.CveView.AffectedChecker
 
   @impl Phoenix.LiveView
@@ -160,18 +162,13 @@ defmodule VarselWeb.AffectedCheckerLive do
       <p class="mb-1.5">
         This record tracks affected code by commit, not by release — automatic version checking isn't available.
       </p>
-      <p class="font-mono text-xs">
-        <span :if={@package["intro_sha"]} class="text-base-content/60">introduced by </span>
-        <code :if={@package["intro_sha"]} class="text-warning">{@package["intro_sha"]}</code>
-        <span :if={@package["intro_sha"] && @package["fix_sha"]} class="text-base-content/60">
-          ·
-        </span>
-        <span :if={@package["fix_sha"]} class="text-base-content/60">fixed by </span>
-        <code :if={@package["fix_sha"]} class="text-success">{@package["fix_sha"]}</code>
-      </p>
-      <p :if={@package["fix_sha"]} class="mt-1.5 text-xs text-base-content/60">
-        If your checkout includes <code>{@package["fix_sha"]}</code>
-        you have the fix.
+      <.commit_boundaries
+        intro={@package["intro_sha"]}
+        fixes={@package["fix_shas"] || []}
+        class="font-mono text-xs"
+      />
+      <p :if={(@package["fix_shas"] || []) != []} class="mt-1.5 text-xs text-base-content/60">
+        {fix_inclusion_hint(@package["fix_shas"])}
         <.link href="#affected" class="text-primary hover:underline">See the full range ↓</.link>
       </p>
     </div>
@@ -198,6 +195,17 @@ defmodule VarselWeb.AffectedCheckerLive do
   # Says "Erlang", never a bare "OTP": next to a numeric example that reads
   # as a one-time-password prompt, and password managers offer to fill a 2FA
   # code no matter what opt-outs the input carries.
+  # With several fix commits (a fix plus its backports) no single one settles it:
+  # which applies depends on the branch you track, so the reader is pointed at
+  # the set rather than told one sha means safety.
+  defp fix_inclusion_hint([single]) do
+    "If your checkout includes #{short_sha7(single)} you have the fix."
+  end
+
+  defp fix_inclusion_hint(fixes) do
+    "The fix landed across #{length(fixes)} commits — if your checkout includes the one for your branch, you have it."
+  end
+
   defp checker_placeholder(%{"otp_release?" => true}), do: "Erlang release, e.g. 26.2.5.6"
 
   defp checker_placeholder(%{"otp_package?" => true} = package),
