@@ -67,21 +67,47 @@ defmodule VarselWeb.FeedControllerTest do
     end
   end
 
-  # The feeds are built as XML and encoded, so a value that looks like markup
-  # has to survive as *text* — parseable, and identical to what went in.
+  # A value that looks like markup has to survive as *text*: parseable, and
+  # recoverable as what went in. How many escape layers that takes depends on
+  # whether the field is defined as HTML, so the expectation differs per field
+  # — see the moduledoc for why each one is what it is.
   describe "hostile content" do
-    for {name, path} <- [atom: "/feed.atom", rss: "/feed.rss"] do
+    # HTML-typed fields are escaped twice, so a reader peels the XML layer off
+    # in the parser and the HTML layer off when rendering.
+    defp assert_html_field(texts, raw) do
+      escaped = raw |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+
+      assert Enum.any?(texts, &String.contains?(&1, escaped)),
+             "no text node carried the HTML-escaped value"
+    end
+
+    # Plain-text fields are escaped once, by the encoder, so parsing alone
+    # gives back exactly what went in.
+    defp assert_text_field(texts, raw) do
+      assert Enum.any?(texts, &String.contains?(&1, raw)),
+             "no text node carried the value verbatim"
+    end
+
+    # RSS titles are the one plain-text field; everything else is HTML-typed.
+    for {name, path, title_kind} <- [
+          {:atom, "/feed.atom", :html},
+          {:rss, "/feed.rss", :text}
+        ] do
       test "#{name}: a title full of markup stays text", %{conn: conn} do
         publish(title: @hostile)
 
         body = conn |> get(unquote(path)) |> response(200)
 
         assert {:ok, texts} = text_nodes(body)
-        assert Enum.any?(texts, &String.contains?(&1, @hostile))
+
+        case unquote(title_kind) do
+          :html -> assert_html_field(texts, @hostile)
+          :text -> assert_text_field(texts, @hostile)
+        end
 
         # The dangerous shapes only ever appear escaped in the document.
         refute body =~ "<script>"
-        refute body =~ "]]>"
+        refute body =~ "<![CDATA["
       end
 
       test "#{name}: a description full of markup stays text", %{conn: conn} do
@@ -90,8 +116,10 @@ defmodule VarselWeb.FeedControllerTest do
         body = conn |> get(unquote(path)) |> response(200)
 
         assert {:ok, texts} = text_nodes(body)
-        assert Enum.any?(texts, &String.contains?(&1, @hostile))
+        assert_html_field(texts, @hostile)
+
         refute body =~ "<script>"
+        refute body =~ "<![CDATA["
       end
     end
 

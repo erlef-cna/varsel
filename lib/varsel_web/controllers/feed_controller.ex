@@ -18,7 +18,33 @@ defmodule VarselWeb.FeedController do
 
   Note that a bare string child of `Saxy.XML.element/3` is emitted **raw**;
   only `characters/1` escapes. Every text node below therefore goes through
-  `text/1`, which also maps `nil` to an empty node.
+  `text/1` or `html_text/1`, which also map `nil` to an empty node.
+
+  A CVE title or description is **plain text** that happens to contain markup
+  characters, so what it needs depends entirely on whether the field it lands
+  in is defined as HTML. The three cases below are what the W3C feed validator
+  accepts, and they are not interchangeable:
+
+    * **Atom `title`/`summary`** are typed constructs. They are declared
+      `type="html"` and escaped twice — `html_text/1` escapes as HTML, then the
+      encoder escapes as XML. Leaving them untyped fails whatever the encoding,
+      because the validator will not accept markup it was not told about.
+
+    * **RSS `description`** is HTML by definition, with no attribute to say
+      otherwise, so it takes the same double escape. Emitted as plain text it
+      fails "Invalid HTML" on the first stray `<`.
+
+    * **RSS `title`** is the opposite: the validator treats it as *non*-HTML
+      and flags any HTML entity in it, so an ordinary title like "Erlang's
+      parser" fails the moment `'` becomes `&#39;`. It stays on `text/1` and
+      lets the encoder do the single XML escape.
+
+  CDATA is deliberately not used. It is raw by definition, so an escaped entity
+  inside it reaches the wire verbatim and trips the same ContainsHTML rule.
+
+  What a reader ends up showing is the original text either way: a summary
+  reading `<script>` arrives as those visible characters rather than as a live
+  tag, which is what a CVE summary means by it.
   """
   use VarselWeb, :controller
 
@@ -49,8 +75,9 @@ defmodule VarselWeb.FeedController do
   # Readers echo the Last-Modified we sent as If-Modified-Since, so an
   # unchanged feed is answered 304 from the exact string match, body-free.
   #
-  # The body is `Saxy.encode!` output — the encoder that escapes every value
-  # (see the moduledoc), which is what sobelow cannot see through.
+  # The body is `Saxy.encode!` output — the encoder escapes every value in the
+  # tree, some of which were HTML-escaped first (see the moduledoc), which is
+  # what sobelow cannot see through.
   # sobelow_skip ["XSS.SendResp"]
   defp respond(conn, builder) do
     entries = feed_entries()
@@ -112,8 +139,8 @@ defmodule VarselWeb.FeedController do
     self_url = url(~p"/feed.atom")
 
     element("feed", [{"xmlns", "http://www.w3.org/2005/Atom"}], [
-      element("title", [], text(@title)),
-      element("subtitle", [], text(@description)),
+      element("title", [{"type", "html"}], html_text(@title)),
+      element("subtitle", [{"type", "html"}], html_text(@description)),
       element(
         "link",
         [{"href", self_url}, {"rel", "self"}, {"type", "application/atom+xml"}],
@@ -139,11 +166,11 @@ defmodule VarselWeb.FeedController do
 
     element("entry", [], [
       element("id", [], text(entry_url)),
-      element("title", [], text("#{entry.cve_id}: #{entry.title}")),
+      element("title", [{"type", "html"}], html_text("#{entry.cve_id}: #{entry.title}")),
       element("link", [{"href", entry_url}, {"rel", "alternate"}, {"type", "text/html"}], []),
       element("published", [], text(iso(entry.published))),
       element("updated", [], text(iso(entry.updated))),
-      element("summary", [], text(entry.summary))
+      element("summary", [{"type", "html"}], html_text(entry.summary))
     ])
   end
 
@@ -153,7 +180,7 @@ defmodule VarselWeb.FeedController do
     channel =
       [
         element("title", [], text(@title)),
-        element("description", [], text(@description)),
+        element("description", [], html_text(@description)),
         element("link", [], text(url(~p"/cves"))),
         element(
           "atom:link",
@@ -179,7 +206,7 @@ defmodule VarselWeb.FeedController do
       element("link", [], text(entry_url)),
       element("guid", [{"isPermaLink", "true"}], text(entry_url)),
       element("pubDate", [], text(rfc822(entry.published))),
-      element("description", [], text(entry.summary))
+      element("description", [], html_text(entry.summary))
     ])
   end
 
@@ -188,6 +215,24 @@ defmodule VarselWeb.FeedController do
   # `characters/1` is what escapes; a bare string child would be emitted raw.
   defp text(nil), do: []
   defp text(value), do: [characters(to_string(value))]
+
+  # Escaped twice — once as HTML here, then again as XML by the encoder — for
+  # the fields a reader renders as HTML. It undoes the XML layer when parsing,
+  # renders what is left as HTML, and displays the original text; a summary
+  # reading `<script>` therefore shows those characters instead of becoming a
+  # live tag. Emitting these as plain text instead makes the W3C validator
+  # parse the prose as HTML and fail on the first stray `<` ("Invalid HTML").
+  defp html_text(nil), do: []
+
+  defp html_text(value) do
+    escaped =
+      value
+      |> to_string()
+      |> Phoenix.HTML.html_escape()
+      |> Phoenix.HTML.safe_to_string()
+
+    [characters(escaped)]
+  end
 
   defp iso(nil), do: ""
   defp iso(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
