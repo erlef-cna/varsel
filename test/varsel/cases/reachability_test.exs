@@ -162,6 +162,105 @@ defmodule Varsel.Cases.ReachabilityTest do
     end
   end
 
+  describe "explicit versions (releases git never tagged)" do
+    alias Varsel.Test.StubGitBackend
+
+    @intro String.duplicate("a", 40)
+    @fix String.duplicate("b", 40)
+
+    # StubGitBackend keeps its state in a global :persistent_term, and all_tags/1
+    # unions every stubbed commit of a repo — so each async test needs its own
+    # repo URL or they clobber one another's universe.
+    setup context do
+      %{
+        repo: "https://github.com/acme/#{context.test |> to_string() |> String.replace(~r/\W+/, "-")}"
+      }
+    end
+
+    defp derive(repo, intros, fixes, explicit) do
+      {:ok, result} =
+        Reachability.derive(repo, intros, fixes,
+          comparator: :semver,
+          explicit_versions: explicit
+        )
+
+      result
+    end
+
+    # boruta_auth published 2.3.0/2.3.1 to Hex but tagged neither, so containment
+    # can only see 2.3.2 and the derived range understates the affected span.
+    test "an untagged intro version extends the range below the earliest tag", %{repo: repo} do
+      StubGitBackend.stub_tags(%{
+        {repo, @intro} => ["2.3.2", "2.3.4", "2.3.7"],
+        {repo, @fix} => ["2.3.7"]
+      })
+
+      assert versions(derive(repo, [@intro], [@fix], [{:introduced, "2.3.0"}])) ==
+               [{"2.3.0", "2.3.7"}]
+    end
+
+    test "without the explicit version the same facts start at the earliest tag", %{repo: repo} do
+      StubGitBackend.stub_tags(%{
+        {repo, @intro} => ["2.3.2", "2.3.4", "2.3.7"],
+        {repo, @fix} => ["2.3.7"]
+      })
+
+      assert versions(derive(repo, [@intro], [@fix], [])) == [{"2.3.2", "2.3.7"}]
+    end
+
+    test "an untagged fix version closes an otherwise open range", %{repo: repo} do
+      StubGitBackend.stub_tags(%{{repo, @intro} => ["1.0.0", "1.0.1", "1.0.2"]})
+
+      assert versions(derive(repo, [@intro], [], [{:fixed, "1.0.2"}])) == [{"1.0.0", "1.0.2"}]
+    end
+
+    test "an untagged intro opens a second range after a fix", %{repo: repo} do
+      StubGitBackend.stub_tags(%{
+        {repo, @intro} => ["1.0.0"],
+        {repo, @fix} => ["1.0.1", "2.0.0", "2.0.1"]
+      })
+
+      StubGitBackend.stub_all_tags(%{repo => ["1.0.0", "1.0.1", "2.0.0", "2.0.1"]})
+
+      assert versions(derive(repo, [@intro], [@fix], [{:introduced, "2.0.1"}])) ==
+               [{"1.0.0", "1.0.1"}, {"2.0.1", :unbounded}]
+    end
+
+    test "an explicit version overrides its own containment label", %{repo: repo} do
+      StubGitBackend.stub_tags(%{
+        {repo, @intro} => ["1.0.0", "1.0.1", "1.0.2"],
+        {repo, @fix} => ["1.0.2"]
+      })
+
+      # 1.0.1 is contained-affected, but the human asserts the fix landed there.
+      assert versions(derive(repo, [@intro], [@fix], [{:fixed, "1.0.1"}])) == [{"1.0.0", "1.0.1"}]
+    end
+
+    test "explicit versions alone bound a range without any commit facts", %{repo: repo} do
+      StubGitBackend.stub_all_tags(%{repo => ["1.0.0", "1.1.0", "1.2.0", "1.3.0"]})
+
+      explicit = [{:introduced, "1.1.0"}, {:fixed, "1.3.0"}]
+      assert versions(derive(repo, [], [], explicit)) == [{"1.1.0", "1.3.0"}]
+    end
+
+    test "an unresolvable intro is not an issue when an explicit version supplies the boundary",
+         %{repo: repo} do
+      StubGitBackend.stub_tags(%{{repo, @intro} => []})
+      StubGitBackend.stub_all_tags(%{repo => ["1.0.0", "1.1.0"]})
+
+      assert derive(repo, [@intro], [], [{:introduced, "1.0.0"}]).issues == []
+    end
+
+    test "an unresolvable intro still reports an issue without one", %{repo: repo} do
+      StubGitBackend.stub_tags(%{{repo, @intro} => []})
+      StubGitBackend.stub_all_tags(%{repo => ["1.0.0"]})
+
+      assert derive(repo, [@intro], [], []).issues == [
+               "the introducing commit is contained in no release tag"
+             ]
+    end
+  end
+
   describe "edge cases" do
     test "an affected span that is never fixed is open-ended" do
       result =
