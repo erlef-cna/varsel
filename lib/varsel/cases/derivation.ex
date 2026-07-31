@@ -38,6 +38,7 @@ defmodule Varsel.Cases.Derivation do
                                             "pending" => [...],
                                             "issues" => [...]}},
         "git" => %{"versions" => [...], "pending" => [...], "issues" => [...]} | nil,
+        # either bound is nil when the range is open on that side (the preview drops it)
         "cpe_matches" => [%{"versionStartIncluding" => _, "versionEndExcluding" => _}],
         "call_outs" => [%{...}],
         "issues" => ["..."]
@@ -89,7 +90,7 @@ defmodule Varsel.Cases.Derivation do
      %{
        "channels" => channels,
        "git" => git,
-       "cpe_matches" => Emit.cpe_matches(reach.ranges),
+       "cpe_matches" => Emit.cpe_matches(reach.ranges, emit_opts),
        "call_outs" => reach.call_outs,
        "issues" => reach.issues
      }}

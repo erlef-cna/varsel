@@ -98,15 +98,29 @@ defmodule Varsel.Cases.Derivation.Emit do
   @doc """
   cpeApplicability matches from the neutral ranges: each `[from, until)` is one
   non-overlapping `%{versionStartIncluding, versionEndExcluding}` (bare versions).
-  A range open below the versioning scheme keeps its concrete lower bound.
+
+  A range reaching back to the start of derivable history (`otp_root_intro?` —
+  the pre-R13B03 era) drops its lower bound instead of naming `R13B03`, matching
+  how NVD writes OTP's lowest affected line (`{versionEndExcluding: "23.3.4.15"}`,
+  no start). CPE has no way to say "unknown", so the pre-R13B03 span the
+  `versions[]` sentinel marks `unknown` is simply left unbounded below here — CPE
+  version comparison is consumer-defined and R-series tags do not collate against
+  numeric ones, so naming `R13B03` as a bound would be both unmatched and a
+  stronger claim than we can derive.
   """
-  @spec cpe_matches([range()]) :: [map()]
-  def cpe_matches(ranges) do
-    for range <- ranges do
+  @spec cpe_matches([range()], keyword()) :: [map()]
+  def cpe_matches(ranges, opts \\ []) do
+    # Reachability emits ranges in ascending release order, so the first one is
+    # the lowest — the only one that can reach back past R13B03.
+    drop_lower_bound? = otp_root_intro?(opts)
+
+    for {range, index} <- Enum.with_index(ranges) do
       # cpe has no "*" sentinel — an open range simply has no upper bound (nil,
       # which the preview drops).
       upper = if range.until == :unbounded, do: nil, else: bare(range.until)
-      %{"versionStartIncluding" => bare(range.from), "versionEndExcluding" => upper}
+      lower = if drop_lower_bound? and index == 0, do: nil, else: bare(range.from)
+
+      %{"versionStartIncluding" => lower, "versionEndExcluding" => upper}
     end
   end
 
@@ -207,7 +221,7 @@ defmodule Varsel.Cases.Derivation.Emit do
   defp sentinel_for(_channel, _opts), do: nil
 
   defp otp_root_intro?(opts) do
-    Keyword.get(opts, :otp_root_intro?, false) and Keyword.fetch!(opts, :otp_platform?)
+    Keyword.get(opts, :otp_root_intro?, false) and Keyword.get(opts, :otp_platform?, false)
   end
 
   defp unknown_range(upper, version_type) do

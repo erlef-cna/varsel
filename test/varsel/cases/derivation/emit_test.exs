@@ -156,7 +156,7 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
   end
 
-  describe "cpe_matches/1" do
+  describe "cpe_matches/2" do
     test "one non-overlapping match per range, bare bounds" do
       ranges = [range("v1.0.0", "v1.5.3"), range("v1.6.0", "v2.1.0")]
 
@@ -169,6 +169,37 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     test "an unbounded range has nil upper bound" do
       assert Emit.cpe_matches([range("v1.0.0", :unbounded)]) == [
                %{"versionStartIncluding" => "1.0.0", "versionEndExcluding" => nil}
+             ]
+    end
+
+    # NVD writes OTP's lowest affected line as a bare {versionEndExcluding: ...}
+    # (see CVE-2022-37026); R-series tags are never used as range bounds.
+    test "a root-commit intro drops the lowest range's lower bound" do
+      ranges = [range("OTP-26.0", "OTP-26.2.5.15"), range("OTP-27.0", "OTP-27.3.4.3")]
+      opts = [otp_platform?: true, otp_root_intro?: true]
+
+      assert Emit.cpe_matches(ranges, opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => "26.2.5.15"},
+               %{"versionStartIncluding" => "27.0", "versionEndExcluding" => "27.3.4.3"}
+             ]
+    end
+
+    test "a non-root intro keeps every lower bound" do
+      ranges = [range("OTP-26.0", "OTP-26.2.5.15")]
+      opts = [otp_platform?: true, otp_root_intro?: false]
+
+      assert Emit.cpe_matches(ranges, opts) == [
+               %{"versionStartIncluding" => "26.0", "versionEndExcluding" => "26.2.5.15"}
+             ]
+    end
+
+    # The root commit only exists in erlang/otp; a semver package must be unaffected.
+    test "a root-commit intro off the OTP platform keeps its lower bound" do
+      ranges = [range("v1.0.0", "v1.5.3")]
+      opts = [otp_platform?: false, otp_root_intro?: true]
+
+      assert Emit.cpe_matches(ranges, opts) == [
+               %{"versionStartIncluding" => "1.0.0", "versionEndExcluding" => "1.5.3"}
              ]
     end
   end
