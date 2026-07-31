@@ -13,13 +13,15 @@ defmodule Varsel.Cases.Derivation.Emit do
 
     * **semver / registry** (`:hex`, `:npm`, plain repo) — bare bounded ranges,
       versionType `"semver"`.
+    * **OTP release** (`:sid` on the erlang/otp repo) — the OTP release bounds as
+      published (`R13B03`, `27.3.4`), versionType `"otp"`.
     * **OTP application** (`:otp` on the erlang/otp repo) — each OTP release bound
       translated to the application's own version through
       `Varsel.Cases.Derivation.OtpVersionsTable`, versionType `"otp"`.
     * **OCI** (`:oci`) — one range per `tag_suffixes` flavor
       (`v<version>` / `v<version>-<suffix>`), versionType `"other"`.
-    * **git/forge** — a git-SHA range per fix commit from the raw facts, plus (for
-      OTP packages) the OTP release block ahead of it.
+    * **git/forge** — a git-SHA range per fix commit from the raw facts, and
+      nothing else: release versions belong to the release channel.
 
   Both semver and OTP publish **separate bounded ranges** — one `versions[]`
   object per range (`{version, lessThan, status, versionType}`), never a
@@ -60,6 +62,11 @@ defmodule Varsel.Cases.Derivation.Emit do
             do: otp_app_versions(channel.name, ranges),
             else: %{"versions" => semver_ranges(ranges), "issues" => []}
 
+        :sid ->
+          if Keyword.fetch!(opts, :otp_platform?),
+            do: %{"versions" => otp_release_ranges(ranges), "issues" => []},
+            else: %{"versions" => semver_ranges(ranges), "issues" => []}
+
         :oci ->
           %{"versions" => oci_ranges(channel, ranges), "issues" => []}
 
@@ -72,26 +79,18 @@ defmodule Varsel.Cases.Derivation.Emit do
 
   @doc """
   The implicit git/forge entry's `versions[]`: a git-SHA range from the raw facts
-  (`[intro_sha, fix_sha)` per fix, released or not), plus the OTP release block
-  ahead of it for OTP packages.
+  (`[intro_sha, fix_sha)` per fix, released or not).
+
+  Commit SHAs only — the entry says nothing about release versions (those are the
+  release channel's), and it carries no pre-root `unknown` sentinel: erlang/otp's
+  history *starts* at the root commit, so there is no earlier commit for such a
+  range to cover.
   """
-  @spec git([String.t()], [String.t()], [range()], keyword()) :: %{
+  @spec git([String.t()], [String.t()], keyword()) :: %{
           required(String.t()) => [map()]
         }
-  def git(intro_shas, fix_shas, ranges, opts) do
-    {git_sha_versions, issues} = git_sha_ranges(intro_shas, fix_shas)
-
-    # The git block speaks in commit SHAs, so its sentinel bounds the pre-root era
-    # by the root commit itself rather than the R13B03 tag.
-    git_versions = maybe_sentinel(sentinel("git", opts)) ++ git_sha_versions
-
-    versions =
-      if Keyword.fetch!(opts, :otp_platform?) do
-        otp_release = maybe_sentinel(sentinel("otp", opts)) ++ otp_release_ranges(ranges)
-        otp_release ++ git_versions
-      else
-        git_versions
-      end
+  def git(intro_shas, fix_shas, _opts) do
+    {versions, issues} = git_sha_ranges(intro_shas, fix_shas)
 
     %{"versions" => versions, "issues" => issues}
   end
@@ -182,13 +181,18 @@ defmodule Varsel.Cases.Derivation.Emit do
   ## ------------------------------------------------------------ root sentinel
 
   # The `unknown` range covering the pre-R13B03 era, prepended when the vuln was
-  # introduced at the OTP root commit. `nil` (no sentinel) otherwise.
+  # introduced at the OTP root commit — the squashed import that erlang/otp's
+  # history starts at, so anything earlier is genuinely underivable rather than
+  # unaffected. `nil` (no sentinel) otherwise.
   #
-  #   * otp app channel  -> {version:"0", lessThan:<app vsn at R13B03>, unknown}
-  #   * otp release block -> {version:"0", lessThan:"R13B03", unknown}
-  #   * plain semver      -> no sentinel (the root commit only exists in OTP)
+  #   * otp app channel     -> {version:"0", lessThan:<app vsn at R13B03>, unknown}
+  #   * otp release channel -> {version:"0", lessThan:"R13B03", unknown}
+  #   * plain semver        -> no sentinel (the root commit only exists in OTP)
+  #
+  # The git entry deliberately gets none: it is versioned in commit SHAs, and no
+  # commit precedes the root commit.
   defp sentinel_for(%{purl_type: :otp, name: app}, opts) do
-    if root_intro?(opts) and Keyword.fetch!(opts, :otp_platform?) do
+    if otp_root_intro?(opts) do
       case OtpVersionsTable.app_version(@first_otp_tag, app) do
         {:ok, version} -> unknown_range(version, "otp")
         :error -> nil
@@ -196,19 +200,15 @@ defmodule Varsel.Cases.Derivation.Emit do
     end
   end
 
+  defp sentinel_for(%{purl_type: :sid}, opts) do
+    if otp_root_intro?(opts), do: unknown_range(@first_otp_tag, "otp")
+  end
+
   defp sentinel_for(_channel, _opts), do: nil
 
-  # The sentinel for the git entry's OTP release block (release-tag versioned)
-  # and its git-SHA block (commit versioned — bounded by the root commit itself).
-  defp sentinel("otp", opts) do
-    if root_intro?(opts), do: unknown_range(@first_otp_tag, "otp")
+  defp otp_root_intro?(opts) do
+    Keyword.get(opts, :otp_root_intro?, false) and Keyword.fetch!(opts, :otp_platform?)
   end
-
-  defp sentinel("git", opts) do
-    if root_intro?(opts), do: unknown_range(@otp_root_commit, "git")
-  end
-
-  defp root_intro?(opts), do: Keyword.get(opts, :otp_root_intro?, false)
 
   defp unknown_range(upper, version_type) do
     %{"version" => "0", "lessThan" => upper, "status" => "unknown", "versionType" => version_type}
@@ -219,9 +219,6 @@ defmodule Varsel.Cases.Derivation.Emit do
   defp prepend_root_sentinel(%{"versions" => versions} = result, sentinel) do
     %{result | "versions" => [sentinel | versions]}
   end
-
-  defp maybe_sentinel(nil), do: []
-  defp maybe_sentinel(sentinel), do: [sentinel]
 
   ## ------------------------------------------------------------ shared
 

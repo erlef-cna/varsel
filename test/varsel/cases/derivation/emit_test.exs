@@ -112,13 +112,13 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
   end
 
-  describe "git/4" do
+  describe "git/3" do
     @intro String.duplicate("a", 40)
     @fix1 String.duplicate("b", 40)
     @fix2 String.duplicate("c", 40)
 
     test "single fix renders a bounded git-sha range" do
-      assert Emit.git([@intro], [@fix1], [], otp_platform?: false) == %{
+      assert Emit.git([@intro], [@fix1], otp_platform?: false) == %{
                "versions" => [
                  %{
                    "version" => @intro,
@@ -132,7 +132,7 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
 
     test "multiple fixes render a changes[] chain (SHAs aren't orderable)" do
-      assert Emit.git([@intro], [@fix1, @fix2], [], otp_platform?: false) == %{
+      assert Emit.git([@intro], [@fix1, @fix2], otp_platform?: false) == %{
                "versions" => [
                  %{
                    "version" => @intro,
@@ -149,20 +149,10 @@ defmodule Varsel.Cases.Derivation.EmitTest do
              }
     end
 
-    test "OTP packages prepend the OTP release block ahead of the git range" do
-      ranges = [range("OTP-26.0", "OTP-26.2.5.15")]
+    test "OTP packages get commit SHAs only — release versions live on the release channel" do
+      assert %{"versions" => versions} = Emit.git([@intro], [@fix1], otp_platform?: true)
 
-      assert %{"versions" => [otp_block, git_block]} =
-               Emit.git([@intro], [@fix1], ranges, otp_platform?: true)
-
-      assert otp_block == %{
-               "version" => "26.0",
-               "lessThan" => "26.2.5.15",
-               "status" => "affected",
-               "versionType" => "otp"
-             }
-
-      assert git_block["versionType"] == "git"
+      assert Enum.all?(versions, &(&1["versionType"] == "git"))
     end
   end
 
@@ -218,20 +208,42 @@ defmodule Varsel.Cases.Derivation.EmitTest do
              }
     end
 
-    test "prepends an unknown range bounded by R13B03 to the git entry's OTP release block, and by the root commit to the git-SHA block" do
+    test "prepends an unknown range bounded by R13B03 to the OTP release channel" do
+      channel = %PackageChannel{
+        purl_type: :sid,
+        namespace: "erlang.org",
+        name: "otp",
+        tag_suffixes: []
+      }
+
       opts = [otp_platform?: true, otp_root_intro?: true]
 
-      assert %{"versions" => versions} =
-               Emit.git([@root], ["fix"], [range("OTP-26.0", "OTP-26.2.5.15")], opts)
+      assert %{"versions" => [sentinel, released]} =
+               Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], opts)
 
-      otp_sentinel =
-        Enum.find(versions, &(&1["versionType"] == "otp" and &1["status"] == "unknown"))
+      assert sentinel == %{
+               "version" => "0",
+               "lessThan" => "R13B03",
+               "status" => "unknown",
+               "versionType" => "otp"
+             }
 
-      git_sentinel =
-        Enum.find(versions, &(&1["versionType"] == "git" and &1["status"] == "unknown"))
+      assert released == %{
+               "version" => "26.0",
+               "lessThan" => "26.2.5.15",
+               "status" => "affected",
+               "versionType" => "otp"
+             }
+    end
 
-      assert otp_sentinel["lessThan"] == "R13B03"
-      assert git_sentinel["lessThan"] == @root
+    # erlang/otp's history starts at the root commit, so "0 → <root sha>" would
+    # claim a span of commits that does not exist.
+    test "the git entry carries no sentinel even when the intro is the root commit" do
+      opts = [otp_platform?: true, otp_root_intro?: true]
+
+      assert %{"versions" => versions} = Emit.git([@root], ["fix"], opts)
+
+      refute Enum.any?(versions, &(&1["status"] == "unknown"))
     end
 
     test "no sentinel when the intro is not the root commit" do

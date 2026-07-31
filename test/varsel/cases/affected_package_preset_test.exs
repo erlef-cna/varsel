@@ -56,8 +56,9 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
              ] = package.program_files
 
       assert [
-               %{purl_type: :otp, name: "ssh", subpath: "lib/ssh", position: 0},
-               %{purl_type: :otp, name: "ssl", subpath: "lib/ssl", position: 1}
+               %{purl_type: :sid, namespace: "erlang.org", name: "otp", position: 0},
+               %{purl_type: :otp, name: "ssh", subpath: "lib/ssh", position: 1},
+               %{purl_type: :otp, name: "ssl", subpath: "lib/ssl", position: 2}
              ] = package.channels
 
       assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==
@@ -100,7 +101,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
           load: [:channels, :version_events]
         )
 
-      assert [%{name: "stdlib", subpath: "lib/stdlib"}] = package.channels
+      assert [%{name: "otp"}, %{name: "stdlib", subpath: "lib/stdlib"}] = package.channels
       assert package.version_events == []
     end
 
@@ -112,7 +113,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
           load: [:channels]
         )
 
-      assert [%{name: "erts", subpath: "erts"}] = package.channels
+      assert [%{name: "otp"}, %{name: "erts", subpath: "erts"}] = package.channels
     end
 
     test "an assigned supporter may use it, an unassigned one may not",
@@ -232,7 +233,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
       assert [%{path: "lib/ssh/src/ssh_sftpd.erl", modules: ["ssh_sftpd"]}] =
                package.program_files
 
-      assert [%{purl_type: :otp, name: "ssh"}] = package.channels
+      assert [%{purl_type: :sid, name: "otp"}, %{purl_type: :otp, name: "ssh"}] = package.channels
 
       assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==
                MapSet.new([{:introduced, @intro_sha}, {:fixed, @fix_sha}])
