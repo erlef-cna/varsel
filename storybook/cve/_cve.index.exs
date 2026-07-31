@@ -12,6 +12,4 @@ defmodule VarselWeb.Storybook.Cve do
   def folder_open?, do: true
 
   def entry("affected_range_list"), do: [name: "Affected range list", icon: {:local, "hero-bars-arrow-down"}]
-
-  def entry("commit_boundaries"), do: [name: "Commit boundaries", icon: {:local, "hero-hashtag"}]
 end

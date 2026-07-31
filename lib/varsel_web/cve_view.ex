@@ -252,92 +252,112 @@ defmodule VarselWeb.CveView do
   end
 
   @doc """
-  Renders an affected package's version ranges — one line per range, as
+  Renders an affected package's `versions[]` — one line per entry, as
   `VarselWeb.CveHTML.affected_ranges/1` shapes them.
 
-  Two row shapes share the block. An `:ordered` row is a comparison against a
-  version scheme (`≥ 1.19.0 < 1.19.5`); a `:git` row names commits instead,
-  since shas don't order. Both tone the boundaries the same way — the lower
-  bound (where it starts being affected) warning, the fix (where it stops)
-  success — so a reader scanning the block sees the same colours mean the same
-  thing whichever shape the row takes. Operators, labels and notes stay muted.
+  A line shows the interval the entry asserts and the status it asserts for it,
+  coloured by that status: affected red, unaffected green, unknown amber. The
+  record's own claim is what prints, never a derived one — an `unaffected` or
+  `unknown` entry is as real as an affected one and reads differently.
 
-  The branch label ("1.19 series") sits in a reserved column so every row's
-  boundary starts at the same x, including rows that carry no label because
-  their range spans lines.
+  An entry with `changes[]` lists its transitions beneath it, in the order the
+  record gives them, each carrying the status it switches to. That is the order
+  the resolution algorithm applies, so it is the order that explains the result.
+
+  `default_status` closes the block: whatever no entry covers takes it, which is
+  half of what the record says and is otherwise invisible.
+
+  The branch label ("1.19 series") sits in a reserved column so every line's
+  bound starts at the same x; the column disappears when no line has one.
   """
   attr :ranges, :list, required: true, doc: "rows from `VarselWeb.CveHTML.affected_ranges/1`"
+  attr :default_status, :string, default: nil, doc: "the entry's `defaultStatus`"
 
   def affected_range_list(assigns) do
+    assigns = assign(assigns, :labelled?, Enum.any?(assigns.ranges, & &1.branch_label))
+
     ~H"""
     <div class="flex flex-col gap-1 font-mono text-sm">
       <div :for={range <- @ranges}>
-        <%= if range.kind == :git do %>
-          <.commit_boundaries intro={range.intro_sha} fixes={range.fix_shas} />
-          <span class="font-sans text-sm text-base-content/60">· {range.note}</span>
-        <% else %>
-          <span class="mr-2 inline-block w-16 text-right font-sans text-xs text-base-content/50">
+        <div>
+          <span
+            :if={@labelled?}
+            class="mr-2 inline-block w-16 text-right font-sans text-xs text-base-content/50"
+          >
             {range.branch_label}
           </span>
-          <span :if={range.lower}>
+          <%!-- A single-version entry names one version, so it takes no operator. --%>
+          <span :if={range.single?} title={range.lower_title} class={status_tone(range.status)}>
+            {display(range, range.lower)}
+          </span>
+          <span :if={not range.single? and range.lower}>
             <span class="text-base-content/60">≥</span>
-            <span title={range.lower_title} class="text-warning">{range.lower}</span>
+            <span title={range.lower_title} class={status_tone(range.status)}>
+              {display(range, range.lower)}
+            </span>
           </span>
-          <span :if={range.fix}>
-            <span class="text-base-content/60">&lt;</span>
-            <span title={range.fix_title} class="text-success">{range.fix}</span>
+          <span :if={range.upper}>
+            <span class="text-base-content/60">{if range.upper_inclusive?, do: "≤", else: "<"}</span>
+            <span title={range.upper_title} class={status_tone(upper_status(range))}>
+              {display(range, range.upper)}
+            </span>
           </span>
-          <span class="font-sans text-sm text-base-content/60">
-            · {range.note}<span :if={range.fix_paren_label}> ({range.fix_paren_label})</span>
+          <span :if={range.open?} class="text-base-content/60">and up</span>
+          <span class={["ml-1 font-sans text-sm", status_tone(range.status)]}>
+            {status_word(range.status)}
           </span>
-        <% end %>
+        </div>
+        <%!-- Transitions read as a continuation of the line above them. --%>
+        <div :for={change <- range.changes} class="pl-6">
+          <span class="text-base-content/60">→</span>
+          <span title={change.at_title} class={status_tone(change.status)}>
+            {display(range, change.at)}
+          </span>
+          <span class={["ml-1 font-sans text-sm", status_tone(change.status)]}>
+            {status_word(change.status)}
+          </span>
+        </div>
+      </div>
+      <div :if={@default_status} class="font-sans text-sm text-base-content/60">
+        every other version:
+        <span class={status_tone(default_tone(@default_status))}>{@default_status}</span>
       </div>
     </div>
     """
   end
 
-  @doc """
-  Renders a git range's commit boundaries: "introduced by <sha> · fixed by
-  <sha>, <sha>".
+  # An exclusive `<` bound is the first version OUTSIDE the span, so it carries
+  # the status that follows, not the one that ends there — the version you
+  # upgrade to, in the colour of what it gets you. An inclusive `≤` bound is
+  # still inside the span and keeps the entry's own status.
+  #
+  # What follows is the record's own `defaultStatus` when nothing else covers
+  # it; the block passes that down so the bound never guesses.
+  defp upper_status(%{upper_inclusive?: true, status: status}), do: status
+  defp upper_status(%{after_status: nil}), do: :neutral
+  defp upper_status(%{after_status: after_status}), do: after_status
 
-  A git range carries as many fix commits as the record lists — a fix plus its
-  backports — and every one of them is real, so all of them print. Commit SHAs
-  don't order, so there is no "first" fix to single out and the list keeps
-  record order.
+  # One colour per status, everywhere it appears — a bound, a transition, or the
+  # default line. Amber for unknown is deliberate: it is neither safe nor unsafe.
+  # A bound we could not resolve (a commit sha, an unorderable scheme) takes no
+  # colour rather than a guessed one.
+  defp status_tone(:neutral), do: "text-base-content/70"
+  defp status_tone(:affected), do: "text-error"
+  defp status_tone(:unaffected), do: "text-success"
+  defp status_tone(:unknown), do: "text-warning"
 
-  SHAs display shortened, each carrying its full value in a `title`, and are
-  toned the same way wherever they appear: the introduction warning, the fixes
-  success. Labels and separators stay muted so the commits themselves carry the
-  colour.
+  defp status_word(:affected), do: "affected"
+  defp status_word(:unaffected), do: "not affected"
+  defp status_word(:unknown), do: "status unknown"
 
-  Both `intro` and `fixes` are optional: a range may name an introducing commit
-  with no fix yet, or fixes with no recorded introduction.
-  """
-  attr :intro, :string, default: nil, doc: "the introducing commit sha, full length"
-  attr :fixes, :list, default: [], doc: "every fixing commit sha, full length, in record order"
-  attr :class, :any, default: nil
+  defp default_tone("affected"), do: :affected
+  defp default_tone("unaffected"), do: :unaffected
+  defp default_tone(_unknown_or_absent), do: :unknown
 
-  def commit_boundaries(assigns) do
-    ~H"""
-    <span class={@class}>
-      <%!-- The labels are prose, so they read in the body font even though the
-      surrounding block is mono for the shas' sake. --%>
-      <span :if={@intro} class="font-sans text-sm text-base-content/60">introduced by </span>
-      <code :if={@intro} title={@intro} class="text-warning">
-        {short_sha7(@intro)}
-      </code>
-      <span :if={@intro && @fixes != []} class="font-sans text-sm text-base-content/60">·</span>
-      <span :if={@fixes != []} class="font-sans text-sm text-base-content/60">fixed by </span>
-      <%!-- Comma-separated. The separator is emitted as its own muted span, kept
-      flush against the shas: whitespace *between* tags would render as a space
-      before the comma, so the tags sit adjacent in the source. --%>
-      <span :for={{fix, index} <- Enum.with_index(@fixes)}><span
-        :if={index > 0}
-        class="text-base-content/60"
-      >,</span>{if index > 0, do: " "}<code title={fix} class="text-success">{short_sha7(fix)}</code></span>
-    </span>
-    """
-  end
+  # Commit shas shorten to the 7 characters git itself abbreviates to; version
+  # strings print as they are.
+  defp display(%{kind: :git}, value), do: short_sha7(value)
+  defp display(_range, value), do: value
 
   @doc """
   Component rendering an affected entry's package reference as `<code>` text,
@@ -835,27 +855,41 @@ defmodule VarselWeb.CveView do
   def fix_boundary(_version), do: nil
 
   @doc """
-  *Every* fix boundary of a range, in record order.
+  *Every* fix boundary of a range.
 
-  `fix_boundary/1` answers "the first safe version of this line", which is the
-  right question for an ordered range — one line, one fix. A git range is
-  different: commit SHAs don't order, so its `changes[]` are not a line but a
-  set of equally-real fix commits (a fix plus its backports). Collapsing those
-  to one would drop the rest, so the git display asks this instead.
+  `fix_boundary/1` answers "the first safe version of this line" — the right
+  question only when the range describes one line. A `changes[]` chain does not:
+  it is an open range carrying a fix per release line (the legacy shape, and
+  what a git range always looks like), and every one of those fixes is real.
+  Reducing them to the lowest would silently drop the rest, understating the
+  affected span, so anything rendering a whole range asks this instead.
 
-  Ordered ranges keep the single-boundary answer, wrapped in a list.
+  Orderable boundaries come back sorted, so a record whose `changes[]` arrive
+  shuffled (CVE-2098-0002's OTP range: `28.0.3, 27.3.4.3, 26.2.5.15`) still
+  reads low-to-high. Commit shas have no order and keep their record order.
   """
   @spec fix_boundaries(map()) :: [String.t()]
-  def fix_boundaries(%{"lessThan" => "*", "changes" => [_ | _] = changes}) do
-    for %{"status" => "unaffected", "at" => at} <- changes, is_binary(at), do: at
+  def fix_boundaries(%{"lessThan" => "*", "changes" => [_ | _] = changes} = version) do
+    type = version["versionType"]
+
+    changes
+    |> Enum.filter(&is_binary(&1["at"]))
+    |> Enum.sort_by(&AffectedChecker.parse(&1["at"], type), &orderable_or_last?/2)
+    |> Enum.map(&{&1["at"], boundary_status(&1["status"])})
   end
 
   def fix_boundaries(version) do
     case fix_boundary(version) do
       nil -> []
-      boundary -> [boundary]
+      # A plain upper bound ends the entry's own span, so what lies at or above
+      # it is not this entry's business — `nil` status, rendered neutrally.
+      boundary -> [{boundary, nil}]
     end
   end
+
+  defp boundary_status("affected"), do: :affected
+  defp boundary_status("unknown"), do: :unknown
+  defp boundary_status(_unaffected), do: :unaffected
 
   # Comparator for `Enum.min_by/4`'s sorter: parsed versions order normally;
   # an unparseable (`:error`) boundary never outranks a parseable one, and
@@ -929,8 +963,11 @@ defmodule VarselWeb.CveView do
   """
   @spec normalize_versions([map()]) :: [map()]
   def normalize_versions(versions) when is_list(versions) do
+    # EVERY row survives, whatever its status. Under the CVE resolution
+    # algorithm an `unaffected` or `unknown` row is a real answer for the
+    # versions it covers — dropping them would leave those versions answered by
+    # a later row or by `defaultStatus`, which is a different claim entirely.
     versions
-    |> Enum.filter(&(&1["status"] == "affected"))
     |> Enum.map(&normalize_entry/1)
     |> Enum.filter(& &1)
     |> dedup_normalized()

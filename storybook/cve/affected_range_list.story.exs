@@ -14,204 +14,178 @@ defmodule VarselWeb.Storybook.Cve.AffectedRangeList do
   # full width in the app, not centered in the sandbox.
   def container, do: {:div, class: "w-full"}
 
-  # The rows `VarselWeb.CveHTML.affected_ranges/1` produces, spelled out here so
-  # each shape can be seen without hunting for a record that happens to have it.
-  defp ordered(fields) do
+  # Every shape `versions[]` can take, spelled out as the rows
+  # `VarselWeb.CveHTML.affected_ranges/1` produces — several of these need a
+  # specific record to exist before they can be seen on a real page.
+  defp row(fields) do
     Map.merge(
       %{
         kind: :ordered,
         lower: nil,
         lower_title: nil,
-        fix: nil,
-        fix_title: nil,
-        branch_label: nil,
-        fix_paren_label: nil,
-        note: nil
+        upper: nil,
+        upper_title: nil,
+        upper_inclusive?: false,
+        open?: false,
+        single?: false,
+        status: :affected,
+        after_status: :unaffected,
+        changes: [],
+        branch_label: nil
       },
       fields
     )
   end
 
-  defp git(fields) do
-    Map.merge(%{kind: :git, intro_sha: nil, fix_shas: [], note: "git"}, fields)
-  end
+  defp change(at, status), do: %{at: at, at_title: at, status: status}
 
   def variations do
     [
       %Variation{
         id: :multi_line_semver,
         description:
-          "The common shape (CVE-2026-90120's hex entry): one row per maintenance line. " <>
-            "The first range spans lines, so it carries no branch label — its boundary " <>
-            "still lines up with the labelled rows below it.",
+          "The common shape (CVE-2026-90120's hex entry): one bounded range per maintenance " <>
+            "line, every one affected. The first spans every line from 0.1 to 1.16, so it " <>
+            "belongs to no single series and carries no label.",
         attributes: %{
+          default_status: "unaffected",
           ranges: [
-            ordered(%{
-              lower: "0.1.0",
-              fix: "1.16.6",
-              note: "fixed in 1.16.6",
-              fix_paren_label: "1.16 series"
-            }),
-            ordered(%{
-              lower: "1.17.0",
-              fix: "1.17.4",
-              branch_label: "1.17 series",
-              note: "fixed in 1.17.4"
-            }),
-            ordered(%{
-              lower: "1.18.0",
-              fix: "1.18.5",
-              branch_label: "1.18 series",
-              note: "fixed in 1.18.5"
-            }),
-            ordered(%{
-              lower: "1.19.0",
-              fix: "1.19.5",
-              branch_label: "1.19 series",
-              note: "fixed in 1.19.5"
-            }),
-            ordered(%{
-              lower: "1.20.0",
-              fix: "1.20.3",
-              branch_label: "1.20 series",
-              note: "fixed in 1.20.3"
-            })
+            row(%{lower: "0.1.0", upper: "1.16.6"}),
+            row(%{lower: "1.17.0", upper: "1.17.4", branch_label: "1.17 series"}),
+            row(%{lower: "1.18.0", upper: "1.18.5", branch_label: "1.18 series"}),
+            row(%{lower: "1.19.0", upper: "1.19.5", branch_label: "1.19 series"}),
+            row(%{lower: "1.20.0", upper: "1.20.3", branch_label: "1.20 series"})
           ]
         }
       },
       %Variation{
-        id: :single_range,
-        description: "One line, no branch labels — the label column still reserves its space.",
-        attributes: %{
-          ranges: [ordered(%{lower: "0.5.9", fix: "0.5.11", note: "fixed in 0.5.11"})]
-        }
-      },
-      %Variation{
-        id: :unfixed,
-        description: "An affected span with no fix yet: a lower bound alone, and the note says so.",
-        attributes: %{
-          ranges: [ordered(%{lower: "1.0.0", note: "no fix available"})]
-        }
-      },
-      %Variation{
-        id: :no_lower_bound,
+        id: :every_status,
         description:
-          "A zero/absent lower bound never prints (R3) — everything below the fix is affected, " <>
-            "so the row is upper-bound only.",
+          "Each status in turn. An `unaffected` or `unknown` entry is as real as an affected " <>
+            "one — colour carries the difference, and nothing is inferred.",
         attributes: %{
-          ranges: [ordered(%{fix: "23.3.4.15", note: "fixed in 23.3.4.15"})]
-        }
-      },
-      %Variation{
-        id: :git_single_fix,
-        description: "A git range with one fix commit.",
-        attributes: %{
+          default_status: "unaffected",
           ranges: [
-            git(%{
-              intro_sha: "f26876aa67aaeb38e616638aa3efbcc2fe2906a5",
-              fix_shas: ["3f00dfad4e20ba88472e315c90a25742bf178f8e"]
-            })
+            row(%{lower: "1.0.0", upper: "2.0.0", status: :affected}),
+            row(%{lower: "2.0.0", upper: "2.5.0", status: :unaffected}),
+            row(%{lower: "2.5.0", upper: "3.0.0", status: :unknown})
           ]
         }
       },
       %Variation{
-        id: :git_many_fixes,
+        id: :changes_chain,
         description:
-          "A fix plus its backports (CVE-2026-90120's github entry). Shas don't order, so " <>
-            "there is no \"first\" fix to single out — every one of them prints.",
+          "An open range refined by `changes[]`. Transitions print in the record's own array " <>
+            "order — the order the resolution algorithm applies them — each in the colour of " <>
+            "the status it switches to, including a switch BACK to affected.",
         attributes: %{
+          default_status: "unaffected",
           ranges: [
-            git(%{
-              intro_sha: "f26876aa67aaeb38e616638aa3efbcc2fe2906a5",
-              fix_shas: [
-                "3f00dfad4e20ba88472e315c90a25742bf178f8e",
-                "a6d1248659022749869963fd302687165ecf8c8b",
-                "4167981747fe9ce75f374b94a28861ae950ea992",
-                "149d9ed68fee0b4f77efd1e835ce5d785856697b",
-                "eceb8315ce9a31ef784943a95a8624ebd1bc7e06"
+            row(%{
+              lower: "0.6.0",
+              open?: true,
+              status: :affected,
+              changes: [
+                change("1.7.22", :unaffected),
+                change("1.8.0", :affected),
+                change("1.8.6", :unaffected)
               ]
             })
           ]
         }
       },
       %Variation{
-        id: :git_unreleased,
-        description: "A commit fix that no tagged release contains yet.",
-        attributes: %{
-          ranges: [
-            git(%{
-              intro_sha: "f26876aa67aaeb38e616638aa3efbcc2fe2906a5",
-              note: "git — no tagged release contains the fix yet"
-            })
-          ]
-        }
-      },
-      %Variation{
-        id: :otp_release_with_unknown_era,
+        id: :bounds,
         description:
-          "An OTP release channel whose vulnerability predates the repository's history: " <>
-            "the pre-R13B03 era renders as its own row, and R-series versions sort below " <>
-            "the modern numeric ones.",
+          "`lessThan` is exclusive and prints `<`; `lessThanOrEqual` includes its own value " <>
+            "and prints `≤`; `lessThan: \"*\"` has no upper bound at all.",
         attributes: %{
+          default_status: "unaffected",
           ranges: [
-            ordered(%{lower: "0", fix: "R13B03", note: "unknown before R13B03"}),
-            ordered(%{lower: "R13B03", fix: "27.3.4.15", note: "fixed in 27.3.4.15"}),
-            ordered(%{
-              lower: "28.0",
-              fix: "28.5.0.4",
-              branch_label: "28 series",
-              note: "fixed in 28.5.0.4"
-            }),
-            ordered(%{
-              lower: "29.0",
-              fix: "29.0.4",
-              branch_label: "29 series",
-              note: "fixed in 29.0.4"
-            })
+            row(%{lower: "1.0.0", upper: "2.0.0"}),
+            row(%{lower: "3.0.0", upper: "3.9.9", upper_inclusive?: true}),
+            row(%{lower: "4.0.0", open?: true})
           ]
         }
       },
       %Variation{
-        id: :mixed_ordered_and_git,
+        id: :single_version,
+        description: "An entry naming ONE version takes no operator at all.",
+        attributes: %{
+          default_status: "unaffected",
+          ranges: [row(%{lower: "1.2.3", single?: true})]
+        }
+      },
+      %Variation{
+        id: :zero_lower_bound,
         description:
-          "Both row shapes in one block — the tones line up across them: lower bound and " <>
-            "introducing commit warning, fix and fixing commits success.",
+          "The `0` sentinel means \"from the start\", so it prints as an upper-bound-only line " <>
+            "rather than a literal version.",
         attributes: %{
+          default_status: "unaffected",
+          ranges: [row(%{upper: "23.3.4.15"})]
+        }
+      },
+      %Variation{
+        id: :otp_with_unknown_era,
+        description:
+          "CVE-2026-900001's release channel: the pre-R13B03 era is explicitly unknown — the " <>
+            "repository's history does not reach back that far — then affected up two lines. " <>
+            "R-series tags sort below the numeric ones.",
+        attributes: %{
+          default_status: "unaffected",
           ranges: [
-            ordered(%{lower: "2.3.0", fix: "2.3.7", note: "fixed in 2.3.7"}),
-            ordered(%{
-              lower: "3.0.0-beta.1",
-              fix: "3.0.0-beta.29",
-              note: "fixed in 3.0.0-beta.29"
-            }),
-            git(%{
-              intro_sha: "5bfbe1c5443bffe71cf1bf954bbdff61327d9a83",
-              fix_shas: [
-                "5204f88f9b2cdd9637a755337ed5f99185be5474",
-                "69363432aa36760fc5438e4e17115d0f7c1b925a"
-              ]
+            row(%{upper: "R13B03", status: :unknown}),
+            row(%{lower: "R13B03", upper: "27.3.4.15"}),
+            row(%{lower: "28.0", upper: "28.5.0.4", branch_label: "maint-28"}),
+            row(%{lower: "29.0", upper: "29.0.4", branch_label: "maint-29"})
+          ]
+        }
+      },
+      %Variation{
+        id: :default_affected,
+        description:
+          "An inverted record: everything is affected EXCEPT the listed range. The closing " <>
+            "line carries that, and without it the block would read backwards.",
+        attributes: %{
+          default_status: "affected",
+          ranges: [row(%{lower: "4.2.0", open?: true, status: :unaffected})]
+        }
+      },
+      %Variation{
+        id: :default_unknown,
+        description:
+          "44 entries in the corpus default to `unknown`: the record speaks only about the " <>
+            "ranges it lists and says nothing about anything else.",
+        attributes: %{
+          default_status: "unknown",
+          ranges: [row(%{lower: "1.0.0", upper: "1.4.0"})]
+        }
+      },
+      %Variation{
+        id: :git_commits,
+        description:
+          "A commit-versioned entry. Shas shorten to 7 characters, each keeping its full value " <>
+            "in a title, and read in the same grammar as a version range.",
+        attributes: %{
+          default_status: "unaffected",
+          ranges: [
+            row(%{
+              kind: :git,
+              lower: "f26876aa67aaeb38e616638aa3efbcc2fe2906a5",
+              upper: "3f00dfad4e20ba88472e315c90a25742bf178f8e",
+              # Shas cannot be resolved, so the bound takes no colour.
+              after_status: nil
             })
           ]
         }
       },
       %Variation{
-        id: :long_version_strings,
-        description: "Long OTP-style versions and a long branch label, to check the column width holds.",
+        id: :dates,
+        description: "A hosted service versions itself by date; the same grammar applies.",
         attributes: %{
-          ranges: [
-            ordered(%{
-              lower: "26.2.5.14",
-              fix: "26.2.5.15",
-              branch_label: "26.2 series",
-              note: "fixed in 26.2.5.15"
-            }),
-            ordered(%{
-              lower: "27.3.4.2",
-              fix: "27.3.4.3",
-              branch_label: "27.3 series",
-              note: "fixed in 27.3.4.3"
-            })
-          ]
+          default_status: "unaffected",
+          ranges: [row(%{upper: "2026-03-10"})]
         }
       }
     ]

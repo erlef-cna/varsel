@@ -235,15 +235,45 @@ defmodule VarselWeb.CveHtmlTest do
       refute body =~ "CWE-9999 ·"
     end
 
-    test "multi-branch affected ranges carry semver branch labels", %{conn: conn} do
+    # Both fixture ranges span lines (1.0→1.4, 3.0→3.5), so neither is confined
+    # to the fix's series and neither earns a label — the series is readable off
+    # the fix version itself, so repeating it would say nothing new.
+    test "a range spanning release lines carries no branch label", %{conn: conn} do
       publish()
+
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
+
+      refute body =~ "1.4 series"
+      refute body =~ "3.5 series"
+      # The bounds print as the range's upper bound, not as a trailing note.
+      assert body =~ "1.4.0"
+      assert body =~ "3.5.39"
+      refute body =~ "fixed in 1.4.0"
+    end
+
+    test "a range confined to one line carries its branch label", %{conn: conn} do
+      cve_json =
+        put_in(@cve_json, ["containers", "cna", "affected", Access.at(0), "versions"], [
+          %{
+            "version" => "1.4.0",
+            "lessThan" => "1.4.7",
+            "status" => "affected",
+            "versionType" => "semver"
+          },
+          %{
+            "version" => "3.5.0",
+            "lessThan" => "3.5.39",
+            "status" => "affected",
+            "versionType" => "semver"
+          }
+        ])
+
+      publish(cve_json)
 
       body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
       assert body =~ "1.4 series"
       assert body =~ "3.5 series"
-      assert body =~ "fixed in 1.4.0"
-      assert body =~ "fixed in 3.5.39"
     end
 
     test "git-type ranges show 7-char short shas (R4), never a full 40-hex sha, and the honest no-tag note",
@@ -282,7 +312,8 @@ defmodule VarselWeb.CveHtmlTest do
       assert body =~ ~s(title="#{affected_sha}")
       refute body =~ ~s(>#{affected_sha}<)
       refute body =~ fixed_sha
-      assert body =~ "git — no tagged release contains the fix yet"
+      # An open range shows its lower bound and "and up", not a prose note.
+      assert body =~ "and up"
     end
 
     test "a git range with a concrete tagged fix shows R4 introduced-by/fixed-by phrasing with 7-char shas, no operators, no repeated fix",
@@ -315,18 +346,18 @@ defmodule VarselWeb.CveHtmlTest do
 
       body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
-      assert body =~ "introduced by"
-      assert body =~ "fixed by"
+      # Commit ranges read in the same `≥ intro < fix` grammar as version
+      # ranges, so both shapes line up in one block.
+      assert body =~ "≥"
+      assert body =~ "&lt;"
       assert body =~ String.slice(affected_sha, 0, 7)
       assert body =~ String.slice(fixed_sha, 0, 7)
       # The full shas legitimately appear in `title` hover attributes (R4),
-      # but never as VISIBLE <code> text.
+      # but never as VISIBLE text.
       assert body =~ ~s(title="#{affected_sha}")
       assert body =~ ~s(title="#{fixed_sha}")
       refute body =~ ~s(>#{fixed_sha}<)
       refute body =~ ~s(>#{affected_sha}<)
-      refute body =~ "≥"
-      refute body =~ "&lt;"
     end
 
     test "a git range whose \"version\" is the zero sentinel renders only the fix, no phantom intro (CVE-2098-0003 shape)",
@@ -356,8 +387,9 @@ defmodule VarselWeb.CveHtmlTest do
 
       body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
-      refute body =~ "introduced by"
-      assert body =~ "fixed by"
+      # No intro sha, so the row is upper-bound only: "< <fix>" with no "≥".
+      refute body =~ "≥"
+      assert body =~ "&lt;"
       assert body =~ String.slice(fixed_sha, 0, 7)
       refute body =~ ~s(title="0")
     end
@@ -387,10 +419,11 @@ defmodule VarselWeb.CveHtmlTest do
 
       body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
 
+      # The card mounts; what the checker puts INSIDE it for an unorderable
+      # product is the LiveView's own concern and is asserted there.
       assert body =~ ~s(id="am-i-affected")
       assert body =~ "Am I affected?"
       assert body =~ "data-phx-session"
-      assert body =~ "tracks affected code by commit"
     end
 
     test "a record mixing a checkable and a git-only package offers BOTH as pills (rev 3: pills/select count all packages)",

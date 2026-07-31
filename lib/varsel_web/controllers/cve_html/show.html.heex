@@ -150,7 +150,11 @@ SPDX-License-Identifier: Apache-2.0
         All versions affected.
       </p>
 
-      <.affected_range_list :if={affected_ranges(entry) != []} ranges={affected_ranges(entry)} />
+      <.affected_range_list
+        :if={affected_ranges(entry) != []}
+        ranges={affected_ranges(entry)}
+        default_status={entry["defaultStatus"]}
+      />
 
       <div class="mt-2 flex flex-col gap-0.5">
         <div class="flex items-baseline gap-3 py-0.5">
