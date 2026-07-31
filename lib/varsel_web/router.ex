@@ -55,6 +55,9 @@ defmodule VarselWeb.Router do
     plug :load_from_session, load: @nav_user_load
     # Tells the OAuth callback's register action that this sign-in is a link.
     plug VarselWeb.Plugs.OauthLinking
+    # Parks ?return_to= in the session, which survives the trip to the OAuth
+    # provider and back; AuthController.success/4 spends it.
+    plug VarselWeb.Plugs.ReturnPath
   end
 
   # Pages that only mean anything for a signed-in user; anonymous callers are
