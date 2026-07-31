@@ -21,8 +21,9 @@ defmodule Varsel.Cases.Derivation do
      affected/safe from git containment and flattens them into
      `[from, until)` ranges. `Varsel.Cases.Derivation.Emit` then shapes those
      neutral ranges into each channel's `versions[]` (registry semver, OTP
-     per-application versions via `OtpVersionsTable`, OCI tag flavours) and the
-     implicit git/forge entry.
+     release versions, OTP per-application versions via `OtpVersionsTable`, OCI
+     tag flavours) and the implicit git/forge entry, which carries commit SHAs
+     alone.
   2. Channel-scoped events (`package_channel_id` set, e.g. date boundaries on a
      `:hosted` channel) replace the repo derivation for that channel and are
      used verbatim.
@@ -37,6 +38,7 @@ defmodule Varsel.Cases.Derivation do
                                             "pending" => [...],
                                             "issues" => [...]}},
         "git" => %{"versions" => [...], "pending" => [...], "issues" => [...]} | nil,
+        # either bound is nil when the range is open on that side (the preview drops it)
         "cpe_matches" => [%{"versionStartIncluding" => _, "versionEndExcluding" => _}],
         "call_outs" => [%{...}],
         "issues" => ["..."]
@@ -80,7 +82,7 @@ defmodule Varsel.Cases.Derivation do
         {intros, fixes} = boundary_shas(global_events)
 
         intros
-        |> Emit.git(fixes, reach.ranges, emit_opts)
+        |> Emit.git(fixes, emit_opts)
         |> Map.put("pending", pending)
       end
 
@@ -88,7 +90,7 @@ defmodule Varsel.Cases.Derivation do
      %{
        "channels" => channels,
        "git" => git,
-       "cpe_matches" => Emit.cpe_matches(reach.ranges),
+       "cpe_matches" => Emit.cpe_matches(reach.ranges, emit_opts),
        "call_outs" => reach.call_outs,
        "issues" => reach.issues
      }}

@@ -12,9 +12,10 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
   records spell them (vendor/product/repo/CPE) and expands the user-supplied
   facts into child rows:
 
-  * `:otp` — one `pkg:otp/<application>` channel per affected OTP
-    application, subpath `lib/<application>` (`erts` for erts); boundaries
-    resolve to per-application versions through
+  * `:otp` — the `pkg:sid/erlang.org/otp` release channel (OTP release
+    versions, whole distribution) plus one `pkg:otp/<application>` channel per
+    affected OTP application, subpath `lib/<application>` (`erts` for erts);
+    the per-application boundaries resolve to per-application versions through
     `Varsel.Cases.Derivation.OtpVersionsTable`.
   * `:elixir` — one `pkg:otp/<application>` channel per affected Elixir
     application (elixir, eex, ex_unit, iex, logger, mix), subpath
@@ -106,9 +107,21 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
     ]
   end
 
-  def channels(_otp_or_elixir, applications) do
+  # OTP releases the whole distribution under its own release versions, so the
+  # release channel leads the per-application ones. Elixir's applications version
+  # with Elixir itself, so their per-application channels already carry the
+  # release version — no separate release channel there.
+  def channels(:otp, applications) do
+    release = %{purl_type: :sid, namespace: "erlang.org", name: "otp", position: 0}
+
+    [release | application_channels(applications, 1)]
+  end
+
+  def channels(:elixir, applications), do: application_channels(applications, 0)
+
+  defp application_channels(applications, offset) do
     applications
-    |> Enum.with_index()
+    |> Enum.with_index(offset)
     |> Enum.map(fn {application, position} ->
       %{
         purl_type: :otp,

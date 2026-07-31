@@ -758,7 +758,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert [package] = case_record.affected_packages
       assert package.vendor == "Erlang"
       assert package.product == "OTP"
-      assert [%{name: "ssh"}, %{name: "ssl"}] = package.channels
+      assert [%{name: "otp"}, %{name: "ssh"}, %{name: "ssl"}] = package.channels
 
       assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==
                MapSet.new([{:introduced, intro_sha}, {:fixed, fix_sha}])
@@ -776,7 +776,7 @@ defmodule VarselWeb.CaseLiveTest do
           load: [:channels]
         )
 
-      [inets_channel, _ftp_channel] = package.channels
+      [_release_channel, inets_channel, _ftp_channel] = package.channels
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 

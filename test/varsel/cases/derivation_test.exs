@@ -278,6 +278,18 @@ defmodule Varsel.Cases.DerivationTest do
         repo_url: otp_repo
       })
 
+    release_channel =
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: :sid,
+          namespace: "erlang.org",
+          name: "otp"
+        },
+        actor: poc
+      )
+
     otp_channel =
       Cases.add_package_channel!(
         %{
@@ -328,24 +340,24 @@ defmodule Varsel.Cases.DerivationTest do
              }
            ]
 
-    # The implicit git entry carries the OTP release block (bare, bounded) plus
-    # the git SHA changes[] chain.
-    assert [otp_low, otp_high, git_block] = derivation["git"]["versions"]
+    # The sid release channel carries the OTP release versions (bare, bounded).
+    assert derivation["channels"][release_channel.id]["versions"] == [
+             %{
+               "version" => "26.0",
+               "lessThan" => "26.2.5.13",
+               "status" => "affected",
+               "versionType" => "otp"
+             },
+             %{
+               "version" => "27.0",
+               "lessThan" => "27.3.4.1",
+               "status" => "affected",
+               "versionType" => "otp"
+             }
+           ]
 
-    assert otp_low == %{
-             "version" => "26.0",
-             "lessThan" => "26.2.5.13",
-             "status" => "affected",
-             "versionType" => "otp"
-           }
-
-    assert otp_high == %{
-             "version" => "27.0",
-             "lessThan" => "27.3.4.1",
-             "status" => "affected",
-             "versionType" => "otp"
-           }
-
+    # The implicit git entry is commit SHAs alone — no release versions.
+    assert [git_block] = derivation["git"]["versions"]
     assert git_block["versionType"] == "git"
     assert git_block["version"] == @intro_sha
   end
