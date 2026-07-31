@@ -231,7 +231,7 @@ defmodule VarselWeb.Layouts do
           </div>
           <.link
             :if={is_nil(@current_user)}
-            navigate={~p"/sign-in"}
+            navigate={VarselWeb.SignInPath.for(@current_path)}
             aria-label="Sign in"
             data-tip="Sign in"
             class="btn btn-ghost btn-sm btn-circle text-white hover:bg-white/10 tooltip tooltip-bottom"
