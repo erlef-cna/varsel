@@ -60,7 +60,7 @@ defmodule VarselWeb.Router do
   # Pages that only mean anything for a signed-in user; anonymous callers are
   # sent to sign in rather than shown an empty version.
   pipeline :logged_in_browser do
-    plug :require_login
+    plug VarselWeb.Plugs.RequireLogin
   end
 
   pipeline :api do
@@ -307,16 +307,6 @@ defmodule VarselWeb.Router do
     get "/feed.atom", FeedController, :atom
     get "/feed.rss", FeedController, :rss
     get "/sitemap.xml", SitemapController, :index
-  end
-
-  defp require_login(conn, _opts) do
-    if conn.assigns[:current_user] do
-      conn
-    else
-      conn
-      |> redirect(to: "/sign-in")
-      |> halt()
-    end
   end
 
   # The developer tooling (storybook, Oban Web, LiveDashboard, AshAdmin, the

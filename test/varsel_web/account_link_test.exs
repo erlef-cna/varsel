@@ -106,10 +106,11 @@ defmodule VarselWeb.AccountLinkTest do
       assert get_session(conn, OauthLinking.session_key()) == user.id
     end
 
-    test "an anonymous visitor is sent to sign in", %{conn: conn} do
+    test "an anonymous visitor is sent to sign in, and back here afterwards", %{conn: conn} do
       conn = get(conn, ~p"/settings/account/link/start/hex")
 
-      assert redirected_to(conn) == "/sign-in"
+      assert redirected_to(conn) ==
+               "/sign-in?return_to=" <> URI.encode_www_form("/settings/account/link/start/hex")
     end
   end
 
