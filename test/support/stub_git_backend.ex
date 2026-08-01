@@ -18,33 +18,37 @@ defmodule Varsel.Test.StubGitBackend do
   returns, per repo, the union of every tag mentioned across its commits — plus
   any extra tags declared with `stub_all_tags/1` for versions that contain
   neither the intro nor a fix (and so appear in no commit's list).
+
+  ## Ownership
+
+  A stub belongs to the test that declared it, so `async: true` tests cannot
+  overwrite one another's repo state. Lookups walk `$callers`/`$ancestors`, so
+  work a test hands to a Task still sees its owner's stubs.
+
+  This state used to live in one global `:persistent_term` slot, which made
+  every stub-using test flaky in proportion to what ran alongside it: a
+  concurrent `stub_tags/1` replaced the running test's tags wholesale, and its
+  `on_exit` then erased them regardless of which test had written them.
   """
 
   @behaviour Varsel.Cases.Derivation.GitBackend
 
   alias Varsel.Cases.Derivation.GitBackend
 
-  @key {__MODULE__, :tags}
+  @tags_key {__MODULE__, :tags}
   @universe_key {__MODULE__, :universe}
 
+  @doc "Declares, per `{repo, sha}`, the tags whose commit contains that sha."
   @spec stub_tags(%{{String.t(), String.t()} => [String.t()]}) :: :ok
-  def stub_tags(tags) do
-    :persistent_term.put(@key, tags)
-    ExUnit.Callbacks.on_exit(fn -> :persistent_term.erase(@key) end)
-    :ok
-  end
+  def stub_tags(tags), do: put(@tags_key, tags)
 
   @doc "Extra tags to include in `all_tags/1` for a repo (unaffected-everywhere tags)."
   @spec stub_all_tags(%{String.t() => [String.t()]}) :: :ok
-  def stub_all_tags(universe) do
-    :persistent_term.put(@universe_key, universe)
-    ExUnit.Callbacks.on_exit(fn -> :persistent_term.erase(@universe_key) end)
-    :ok
-  end
+  def stub_all_tags(universe), do: put(@universe_key, universe)
 
   @impl GitBackend
   def tags_containing(repo_url, sha) do
-    case Map.fetch(:persistent_term.get(@key, %{}), {repo_url, sha}) do
+    case Map.fetch(get(@tags_key), {repo_url, sha}) do
       {:ok, tags} -> {:ok, tags}
       :error -> {:error, :commit_not_found}
     end
@@ -53,16 +57,55 @@ defmodule Varsel.Test.StubGitBackend do
   @impl GitBackend
   def all_tags(repo_url) do
     from_commits =
-      for {{repo, _sha}, tags} <- :persistent_term.get(@key, %{}),
+      for {{repo, _sha}, tags} <- get(@tags_key),
           repo == repo_url,
           tag <- tags,
           do: tag
 
-    extra = Map.get(:persistent_term.get(@universe_key, %{}), repo_url, [])
+    extra = Map.get(get(@universe_key), repo_url, [])
 
     {:ok, Enum.uniq(from_commits ++ extra)}
   end
 
   @impl GitBackend
   def refresh(_repo_url), do: :ok
+
+  ## ----------------------------------------------------------------- storage
+
+  # ExUnit already gives each test its own process, so its dictionary is the
+  # isolation — and it dies with the test, which is why nothing has to clean up.
+  defp put(key, value) do
+    Process.put(key, value)
+    :ok
+  end
+
+  # This process if it declared the stub, else the nearest caller or ancestor
+  # that did. Presence decides, not truthiness, so a deliberately empty stub
+  # answers for its owner instead of falling through to an ancestor's.
+  defp get(key), do: get(key, owners())
+
+  defp get(_key, []), do: %{}
+
+  defp get(key, [pid | rest]) do
+    case dictionary(pid) do
+      %{^key => value} -> value
+      _undeclared -> get(key, rest)
+    end
+  end
+
+  defp owners do
+    callers = Process.get(:"$callers", [])
+    ancestors = Enum.filter(Process.get(:"$ancestors", []), &is_pid/1)
+
+    [self() | callers ++ ancestors]
+  end
+
+  defp dictionary(pid) when pid == self(), do: Map.new(Process.get())
+
+  defp dictionary(pid) do
+    case Process.info(pid, :dictionary) do
+      {:dictionary, entries} -> Map.new(entries)
+      nil -> %{}
+    end
+  end
 end
