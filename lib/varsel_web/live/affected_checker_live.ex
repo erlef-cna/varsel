@@ -7,27 +7,34 @@ defmodule VarselWeb.AffectedCheckerLive do
   The public CVE detail page's "Am I affected?" checker — a small LiveView
   mounted into the dead controller-rendered page (`cve_html/show.html.heex`)
   via `live_render/3`, since the page itself needs no other interactivity.
-  Matching runs server-side (`VarselWeb.CveView.AffectedChecker`) against the
-  SAME `versions[]` the page's Affected cards already render — no separate
-  data source.
 
-  Rev 3: the card ALWAYS renders for any record with an affected package —
-  no exception clause. `VarselWeb.CveHTML.checker_packages/1` classifies
-  every package into a `"state"` (`"checkable"`, `"all_affected"`,
-  `"git_only"`, `"unorderable"`); only `"checkable"` gets a version input,
-  the other three render a static/guidance body in its place. If NO
-  affected package qualifies at all, the caller doesn't mount this LiveView
-  — the "Am I affected?" card is absent from the page.
+  This module only renders. The answer comes from
+  `Varsel.CVE.VersionResolution`, which implements the resolution algorithm CVE
+  Record Format 5.1 specifies, against the SAME `versions[]` the page's Affected
+  cards render — no separate data source and no second interpretation of the
+  record.
+
+  A package carries `"askable?"`: whether its versions can be ordered at all.
+  False for a product versioned by commit sha or another scheme with no
+  comparison, and then no input is offered — the ranges are shown instead, since
+  a typed version could never be placed against them.
+
+  The verdict is the record's own status for that version — affected,
+  unaffected, or unknown. `unknown` is a real answer, rendered neither red nor
+  green: the record does not say, and dressing that as safe would be a guess.
 
   ## Session payload
 
   `live_render/3`'s session must be JSON-safe, so the mount receives one map
   per package rather than the raw CNA `affected[]` structs — see
-  `VarselWeb.CveHTML.checker_packages/1`'s doc for the full per-state shape.
+  `VarselWeb.CveHTML.checker_packages/1` for the shape.
   """
   use VarselWeb, :live_view
 
-  alias VarselWeb.CveView.AffectedChecker
+  import VarselWeb.CveHTML, only: [affected_ranges: 1]
+  import VarselWeb.CveView, only: [affected_range_list: 1]
+
+  alias Varsel.CVE.VersionResolution
 
   @impl Phoenix.LiveView
   def mount(_params, %{"packages" => packages}, socket) do
@@ -54,12 +61,15 @@ defmodule VarselWeb.AffectedCheckerLive do
   defp assign_verdict(socket) do
     package = Enum.at(socket.assigns.packages, socket.assigns.selected_index)
 
-    verdict =
-      if package["state"] == "checkable" do
-        AffectedChecker.match(socket.assigns.input, package["versions"])
-      end
+    assign(socket, package: package, verdict: resolve(package, socket.assigns.input))
+  end
 
-    assign(socket, package: package, verdict: verdict)
+  # `nil` (rather than a verdict) until something is typed — an empty box is
+  # not a question, so it gets the prompt instead of an answer.
+  defp resolve(_package, ""), do: nil
+
+  defp resolve(package, input) do
+    VersionResolution.resolve(package["versions"], package["default_status"], input)
   end
 
   @impl Phoenix.LiveView
@@ -113,14 +123,14 @@ defmodule VarselWeb.AffectedCheckerLive do
   attr :package, :map, required: true
   attr :verdict, :any, required: true
 
-  defp package_body(%{package: %{"state" => "checkable"}} = assigns) do
+  defp package_body(%{package: %{"askable?" => true}} = assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-2.5">
       <%!-- Password managers read a lone text input in a <form> as a
             credential field and offer to fill it; each vendor needs its own
-            opt-out — 1Password, LastPass, Bitwarden, Dashlane in order.
+            opt-out - 1Password, LastPass, Bitwarden, Dashlane in order.
             Safari ignores all of them (and `autocomplete="url"`, tried and
-            dropped) — its trigger is the wording, see `checker_placeholder/1`. --%>
+            dropped) - its trigger is the wording, see `checker_placeholder/1`. --%>
       <form id="checker-version-input" phx-change="check" phx-submit="check">
         <input
           type="text"
@@ -141,52 +151,24 @@ defmodule VarselWeb.AffectedCheckerLive do
     """
   end
 
-  # Rev 3 addendum (i): defaultStatus:affected with no versions[] at all —
-  # a static verdict, no input, red because it's the answer for everyone.
-  defp package_body(%{package: %{"state" => "all_affected"}} = assigns) do
-    ~H"""
-    <div class="text-sm">
-      <b class="font-bold text-error">✗ every version is affected</b>
-      <span class="text-base-content/60">— no fixed release yet; watch References for a fix</span>
-    </div>
-    """
-  end
+  # Nothing here can be ordered - a product versioned by commit sha, or by a
+  # scheme with no comparison. There is no version to type, so the ranges
+  # themselves are the answer, shown through the same block the Affected card
+  # renders rather than restated in the checker's words.
+  defp package_body(assigns) do
+    assigns = assign(assigns, :ranges, affected_ranges(assigns.package))
 
-  # Commit-only channel: no input (a disabled input is noise) — the fix
-  # commit in mono, warn/ok-toned, plus how to use it.
-  defp package_body(%{package: %{"state" => "git_only"}} = assigns) do
     ~H"""
     <div class="text-sm">
       <p class="mb-1.5">
-        This record tracks affected code by commit, not by release — automatic version checking isn't available.
+        This record states its affected versions in a form that can't be compared automatically.
       </p>
-      <p class="font-mono text-xs">
-        <span :if={@package["intro_sha"]} class="text-base-content/60">introduced by </span>
-        <code :if={@package["intro_sha"]} class="text-warning">{@package["intro_sha"]}</code>
-        <span :if={@package["intro_sha"] && @package["fix_sha"]} class="text-base-content/60">
-          ·
-        </span>
-        <span :if={@package["fix_sha"]} class="text-base-content/60">fixed by </span>
-        <code :if={@package["fix_sha"]} class="text-success">{@package["fix_sha"]}</code>
-      </p>
-      <p :if={@package["fix_sha"]} class="mt-1.5 text-xs text-base-content/60">
-        If your checkout includes <code>{@package["fix_sha"]}</code>
-        you have the fix.
-        <.link href="#affected" class="text-primary hover:underline">See the full range ↓</.link>
-      </p>
+      <.affected_range_list
+        :if={@ranges != []}
+        ranges={@ranges}
+        default_status={@package["default_status"]}
+      />
     </div>
-    """
-  end
-
-  # Rev 3 addendum (ii): vendor/product-only records with non-orderable
-  # custom ranges — no input, the honest line, anchored down to the
-  # Affected card's evidence.
-  defp package_body(%{package: %{"state" => "unorderable"}} = assigns) do
-    ~H"""
-    <p class="text-sm">
-      Version checking isn't available for this record — its versions can't be compared automatically.
-      <.link href="#affected" class="text-primary hover:underline">See the affected ranges ↓</.link>
-    </p>
     """
   end
 
@@ -198,6 +180,9 @@ defmodule VarselWeb.AffectedCheckerLive do
   # Says "Erlang", never a bare "OTP": next to a numeric example that reads
   # as a one-time-password prompt, and password managers offer to fill a 2FA
   # code no matter what opt-outs the input carries.
+  # With several fix commits (a fix plus its backports) no single one settles it:
+  # which applies depends on the branch you track, so the reader is pointed at
+  # the set rather than told one sha means safety.
   defp checker_placeholder(%{"otp_release?" => true}), do: "Erlang release, e.g. 26.2.5.6"
 
   defp checker_placeholder(%{"otp_package?" => true} = package),
@@ -205,10 +190,10 @@ defmodule VarselWeb.AffectedCheckerLive do
 
   defp checker_placeholder(package), do: "#{package["bare_name"]} version, e.g. #{sample_version(package)}"
 
-  # The verdict line: plain text (a sentence), never a pill. One token per
-  # direction (--bad/error for unsafe, --ok/success for safe); unparseable
-  # input NEVER gets a colored verdict.
-  defp verdict(%{verdict: {:empty}} = assigns) do
+  # The verdict line: plain text (a sentence), never a pill. Colour follows the
+  # record's own answer - error for affected, success for unaffected - and an
+  # input we could not place NEVER gets a coloured verdict.
+  defp verdict(%{verdict: nil} = assigns) do
     ~H"""
     <span class="text-sm text-base-content/40">
       type your {@package["bare_name"]} version to check
@@ -216,66 +201,55 @@ defmodule VarselWeb.AffectedCheckerLive do
     """
   end
 
-  defp verdict(%{verdict: {:unparseable}} = assigns) do
+  defp verdict(%{verdict: {:error, :unparseable}} = assigns) do
     ~H"""
     <span class="text-sm text-base-content/40">not a recognizable version</span>
     """
   end
 
-  # Verdict copy grammar (rev 3): single hit → own fix, no tail unless it's
-  # on a non-latest branch; multi-branch → own fix leads, every OTHER
-  # branch's fix follows "; also fixed in …", comma-listed, every fix
-  # (including the leading one) labeled.
-  defp verdict(%{verdict: {:affected, own_fix, other_fixes}} = assigns) do
-    assigns =
-      assign(assigns,
-        subject: verdict_subject(assigns.package, assigns.input),
-        own_fix: own_fix,
-        other_fixes: other_fixes
-      )
+  defp verdict(%{verdict: {:ok, :affected}} = assigns) do
+    assigns = assign(assigns, :subject, verdict_subject(assigns.package, assigns.input))
 
     ~H"""
     <span class="text-sm">
       <b class="font-bold text-error">✗ {@subject} is affected</b>
-      <span :if={@own_fix || @other_fixes != []} class="text-base-content/60">
-        — {affected_tail(@own_fix, @other_fixes)}
-      </span>
     </span>
     """
   end
 
-  defp verdict(%{verdict: {:fixed, via, latest}} = assigns) do
-    assigns =
-      assign(assigns,
-        subject: verdict_subject(assigns.package, assigns.input),
-        # "backported from" only when the matched fix is on a DIFFERENT
-        # branch than the latest — never names the version the user typed.
-        backport: latest && latest.raw != via.raw && latest
-      )
-
-    ~H"""
-    <span class="text-sm">
-      <b class="font-bold text-success">✓ {@subject} includes the fix</b>
-      <span :if={@backport} class="text-base-content/60">
-        — backported from {labelled_fix(@backport)}
-      </span>
-    </span>
-    """
-  end
-
-  defp verdict(%{verdict: {:not_affected, intro}} = assigns) do
-    assigns =
-      assign(assigns,
-        subject: verdict_subject(assigns.package, assigns.input),
-        intro: intro && fix_version(intro)
-      )
+  defp verdict(%{verdict: {:ok, :unaffected}} = assigns) do
+    assigns = assign(assigns, :subject, verdict_subject(assigns.package, assigns.input))
 
     ~H"""
     <span class="text-sm">
       <b class="font-bold text-success">✓ {@subject} is not affected</b>
-      <span :if={@intro} class="text-base-content/60">
-        — the flaw was introduced in {@intro}
+    </span>
+    """
+  end
+
+  # The record genuinely does not say - either the range covering this version
+  # is marked `unknown`, or nothing covers it and the product's own
+  # `defaultStatus` is `unknown`. Neither red nor green: claiming either way
+  # would be a guess, and "unknown" is not "safe".
+  defp verdict(%{verdict: {:ok, :unknown}} = assigns) do
+    assigns = assign(assigns, :subject, verdict_subject(assigns.package, assigns.input))
+
+    ~H"""
+    <span class="text-sm">
+      <b class="font-bold text-warning">? {@subject}</b>
+      <span class="text-base-content/60">
+        — this record doesn't say whether this version is affected
       </span>
+    </span>
+    """
+  end
+
+  # A product we could not order at all never reaches the input, so this is the
+  # residual case: an entry that declares a scheme it doesn't keep to.
+  defp verdict(%{verdict: {:error, :unsupported}} = assigns) do
+    ~H"""
+    <span class="text-sm text-base-content/40">
+      this record's versions can't be compared automatically
     </span>
     """
   end
@@ -298,36 +272,6 @@ defmodule VarselWeb.AffectedCheckerLive do
   # what upstream advisories print — so it's accepted, not reflected back.
   defp otp_release_label("OTP-" <> rest), do: "Erlang #{rest}"
   defp otp_release_label(input), do: "Erlang #{input}"
-
-  # "fixed in <own>" leads; every OTHER branch's fix is comma-listed after
-  # a single "; also fixed in " — every fix (including the leading one)
-  # carries its branch label via `labelled_fix/1`.
-  defp affected_tail(own_fix, other_fixes) do
-    others = Enum.map(other_fixes, &labelled_fix/1)
-
-    case {own_fix, others} do
-      {nil, []} ->
-        nil
-
-      {nil, others} ->
-        "fixed in " <> Enum.join(others, ", ")
-
-      {own_fix, []} ->
-        "fixed in #{labelled_fix(own_fix)}"
-
-      {own_fix, others} ->
-        "fixed in #{labelled_fix(own_fix)}; also fixed in " <> Enum.join(others, ", ")
-    end
-  end
-
-  # `raw` is the record's own version string — literally "OTP-26.2.5.6" for
-  # release-tagged records — so it's stripped here too; otherwise one verdict
-  # mixes both vocabularies ("in Erlang 26.2.5.2 — fixed in OTP-26.2.5.6").
-  defp labelled_fix(%{raw: raw, branch_label: nil}), do: fix_version(raw)
-  defp labelled_fix(%{raw: raw, branch_label: label}), do: "#{fix_version(raw)} (#{label})"
-
-  defp fix_version("OTP-" <> rest), do: rest
-  defp fix_version(raw), do: raw
 
   # Skips the "0"/"" zero-sentinel (an absent real lower bound, same
   # convention as `VarselWeb.CveHTML.zero_lower?/1`) — a placeholder reading

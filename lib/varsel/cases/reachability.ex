@@ -67,7 +67,25 @@ defmodule Varsel.Cases.Reachability do
 
     * `repo_url` — the repository the commits live in.
     * `intros` / `fixes` — introducing / fixing commit SHAs.
-    * `opts` — see `deduce/3` (`:comparator` required, `:include_prereleases`).
+    * `opts` — see `deduce/3` (`:comparator` required, `:include_prereleases`),
+      plus `:explicit_versions` (see below).
+
+  ## Explicit versions
+
+  `:explicit_versions` carries `{event, version}` boundary facts naming releases
+  git containment cannot see — a version published to the registry but never
+  tagged (`boruta_auth` shipped 2.3.0/2.3.1 to Hex with no matching tag), or a
+  boundary on a package whose releases are not tagged at all. Each is injected
+  into the tag universe as if the tag existed, then labelled: an `:introduced`
+  version marks itself *and every later release* affected up to the next explicit
+  fix — the same forward propagation a real introducing commit gets from
+  containment — while a `:fixed` version marks only itself safe. From there they
+  flow through the normal run-cutting, so they bound ranges exactly like tags —
+  which is what makes them work for a missing fix tag or a later range's intro,
+  not just the earliest bound.
+
+  An explicit version that *does* exist as a tag wins over its containment label:
+  the human asserted it, so it is not second-guessed.
 
   `{:error, reason}` if the tag universe cannot be obtained (clone/fetch failure).
   A commit that resolves to no tag is not fatal: an unresolvable intro yields an
@@ -77,19 +95,80 @@ defmodule Varsel.Cases.Reachability do
           {:ok, result()} | {:error, term()}
   def derive(repo_url, intros, fixes, opts) do
     with {:ok, all_tags} <- GitBackend.all_tags(repo_url) do
+      {explicit, opts} = Keyword.pop(opts, :explicit_versions, [])
+
       intro_tags = union_containing(repo_url, intros)
       {fix_tags, pending} = fix_containment(repo_url, fixes)
 
-      affected = MapSet.difference(intro_tags, fix_tags)
+      derived_affected = MapSet.difference(intro_tags, fix_tags)
 
+      # A commit-derived intro is only "contained in no release" when no explicit
+      # version supplies the boundary either.
       issues =
-        if intros != [] and MapSet.size(intro_tags) == 0,
+        if intros != [] and MapSet.size(intro_tags) == 0 and explicit_intros(explicit) == [],
           do: ["the introducing commit is contained in no release tag"],
           else: []
 
-      result = deduce(all_tags, affected, opts)
+      universe = Enum.uniq(all_tags ++ Enum.map(explicit, &elem(&1, 1)))
+      kind = Keyword.fetch!(opts, :comparator)
+
+      affected =
+        apply_explicit(derived_affected, explicit, universe, kind, derived_safe: fix_tags)
+
+      result = deduce(universe, affected, opts)
       {:ok, %{result | pending_fixes: pending, issues: result.issues ++ issues}}
     end
+  end
+
+  defp explicit_intros(explicit), do: for({:introduced, version} <- explicit, do: version)
+
+  # Explicit labels are asserted, so they override containment. An `:introduced`
+  # version propagates forward — it and every later release up to the next
+  # explicit fix — mirroring what git containment does for a real introducing
+  # commit; a `:fixed` version marks only itself safe, since later releases keep
+  # the fix. Applied newest-boundary-first so an intro/fix pair cuts cleanly.
+  defp apply_explicit(affected, [], _universe, _kind, _opts), do: affected
+
+  defp apply_explicit(affected, explicit, universe, kind, opts) do
+    fixes = for {:fixed, version} <- explicit, do: version
+
+    # A release git already knows carries the fix stays fixed — containment saw
+    # the fix commit in it, a stronger fact than propagating an earlier intro
+    # forward. Re-introduction is the exception: an explicit intro *newer* than
+    # the fixed release is asserting the vulnerability came back, so it wins.
+    derived_safe = Keyword.fetch!(opts, :derived_safe)
+
+    intro_affected =
+      for {:introduced, intro} <- explicit,
+          version <- universe,
+          at_or_after?(kind, version, intro),
+          not shadowed_by_derived_fix?(kind, derived_safe, version, intro),
+          not fixed_between?(kind, fixes, intro, version),
+          do: version
+
+    affected
+    |> MapSet.union(MapSet.new(intro_affected))
+    |> MapSet.difference(MapSet.new(fixes))
+  end
+
+  defp at_or_after?(kind, version, boundary) do
+    VersionComparator.compare(kind, version, boundary) != :lt
+  end
+
+  # Whether git's own "this release carries the fix" beats propagating `intro`
+  # onto `version`. It does unless the intro is the newer fact — an explicit
+  # intro at or after a fixed release is asserting a re-introduction.
+  defp shadowed_by_derived_fix?(kind, derived_safe, version, intro) do
+    MapSet.member?(derived_safe, version) and not at_or_after?(kind, intro, version)
+  end
+
+  # Whether an explicit fix lands in `(intro, version]` — i.e. the affected span
+  # opened at `intro` is already closed by the time we reach `version`.
+  defp fixed_between?(kind, fixes, intro, version) do
+    Enum.any?(fixes, fn fix ->
+      VersionComparator.compare(kind, fix, intro) != :lt and
+        at_or_after?(kind, version, fix)
+    end)
   end
 
   @doc """

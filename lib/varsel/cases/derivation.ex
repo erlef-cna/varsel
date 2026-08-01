@@ -102,13 +102,15 @@ defmodule Varsel.Cases.Derivation do
 
   defp reachability(package, platform, events) do
     {intros, fixes} = boundary_shas(events)
+    explicit = explicit_versions(events)
 
-    if intros == [] and fixes == [] do
+    if intros == [] and fixes == [] and explicit == [] do
       empty_reachability()
     else
       case Reachability.derive(package.repo_url, intros, fixes,
              comparator: platform.kind,
-             include_prereleases: package.include_prereleases
+             include_prereleases: package.include_prereleases,
+             explicit_versions: explicit
            ) do
         {:ok, result} ->
           result
@@ -121,6 +123,14 @@ defmodule Varsel.Cases.Derivation do
 
   defp empty_reachability do
     %{ranges: [], call_outs: [], open?: false, pending_fixes: [], issues: []}
+  end
+
+  # Explicit `{event, version}` boundaries from the global events — releases the
+  # repository never tagged, which git containment therefore cannot place. An
+  # event may carry both a SHA and a version: the SHA bounds the git entry, the
+  # version names the untagged release for the versioned channels.
+  defp explicit_versions(events) do
+    for %{version: version} = event <- events, is_binary(version), do: {event.event, version}
   end
 
   # Introduced / fixed commit SHAs from the global (non-channel-scoped) events.

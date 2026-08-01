@@ -12,7 +12,7 @@ defmodule VarselWeb.CveHTML do
 
   import VarselWeb.CveView
 
-  alias VarselWeb.CveView.AffectedChecker
+  alias Varsel.CVE.VersionResolution
 
   embed_templates "cve_html/*"
 
@@ -140,109 +140,130 @@ defmodule VarselWeb.CveHTML do
   end
 
   @doc """
-  One presentation row per DEDUPED range (rev 3, R1–R5) — `normalize_versions/1`
-  collapses purl/semver/otp duplicates of the same range and strips purl
-  prefixes to bare versions before this ever sees them, so a real CNA's
-  multi-representation `versions[]` renders as one line per REAL branch, not
-  one per representation.
+  One presentation row per `versions[]` entry, in record order.
 
-  Each row is one of:
+  A row mirrors the entry rather than interpreting it — the CVE resolution
+  algorithm reads `versions[]` as a list of status assertions, so the display
+  shows exactly those assertions and lets the reader see what the record
+  claims:
 
-    * `%{kind: :ordered, lower:, lower_title:, fix:, fix_title:, branch_label:,
-        fix_paren_label:, note:}` — R3 drops a zero/absent lower bound
-      (`lower: nil`); R5: `branch_label` (leading prefix) is set only when
-      the WHOLE range lies within that branch (`range_within_branch?/3`),
-      otherwise the label moves into `fix_paren_label` alongside the fix note.
-    * `%{kind: :git, intro_sha:, intro_sha_title:, fix_sha:, fix_sha_title:,
-        note:}` — R4: no ≥/< operators (shas don't order), no repeated
-        "fixed in <same sha>"; shas shorten to 7 chars with the full sha in
-        a `title` attribute.
+      %{
+        lower:, lower_title:,      # `version`, nil when it is the 0 sentinel
+        upper:, upper_title:,      # `lessThan` / `lessThanOrEqual`, nil if absent
+        upper_inclusive?:,         # `lessThanOrEqual` prints ≤, `lessThan` prints <
+        open?:,                    # `lessThan: "*"` — no upper bound at all
+        single?:,                  # neither bound: the entry names ONE version
+        status:,                   # :affected | :unaffected | :unknown
+        changes:,                  # [%{at:, at_title:, status:}] in ARRAY order
+        kind:, branch_label:
+      }
+
+  `changes` keep their array order, not a sorted one: the algorithm applies
+  them in the order given, so that is the order that explains the outcome.
+
+  `kind` is `:git` for commit-sha entries, whose values shorten at render;
+  `:ordered` otherwise.
   """
   def affected_ranges(entry) do
     ranges = normalize_versions(entry["versions"] || [])
     multi_branch? = length(ranges) > 1
 
-    Enum.map(ranges, &affected_range_row(&1, multi_branch?))
+    Enum.map(ranges, &affected_range_row(&1, multi_branch?, ranges, entry))
   end
 
-  defp affected_range_row(%{"versionType" => "git"} = version, _multi_branch?) do
-    # R4: a "0" (or absent) "version" is the same zero-sentinel `zero_lower?/1`
-    # already strips from ordered ranges — a real ash-style git range has no
-    # actual introduction sha, so "introduced by 0" must not render either.
-    intro = if !zero_lower?(version["version"]), do: version["version"]
-    fix = fix_boundary(version)
-
-    %{
-      kind: :git,
-      intro_sha: intro && short_sha7(intro),
-      intro_sha_title: intro,
-      fix_sha: fix && short_sha7(fix),
-      fix_sha_title: fix,
-      note: git_range_note(version, fix)
-    }
-  end
-
-  defp affected_range_row(version, multi_branch?) do
+  defp affected_range_row(version, multi_branch?, all_ranges, entry) do
     type = version["versionType"]
     lower = version["version"]
-    fix = fix_boundary(version)
-    {label, within_branch?} = range_branch_labelling(multi_branch?, lower, fix, type)
+    {upper, upper_title, inclusive?, open?} = upper_bound(version)
+    single? = is_nil(upper) and not open?
 
     %{
-      kind: :ordered,
-      # R3: a zero/absent lower bound never prints — upper-bound-only line.
+      kind: if(type == "git", do: :git, else: :ordered),
+      # R3: the "0" sentinel is not a real bound — it means "from the start".
       lower: if(zero_lower?(lower), do: nil, else: lower),
-      lower_title: version["version_raw"],
-      fix: fix,
-      fix_title: version["lessThan_raw"] || version["lessThanOrEqual_raw"],
-      branch_label: within_branch? && label,
-      fix_paren_label: label && not within_branch? && label,
-      note: ordered_range_note(fix)
+      lower_title: version["version_raw"] || lower,
+      upper: upper,
+      upper_title: upper_title,
+      upper_inclusive?: inclusive?,
+      open?: open?,
+      single?: single?,
+      status: row_status(version),
+      after_status: after_status(upper, all_ranges, entry["defaultStatus"]),
+      changes: entry_changes(version),
+      branch_label: branch_label_for(multi_branch?, lower, upper, type, entry)
     }
   end
+
+  # What the record says about the exclusive upper bound itself — the first
+  # version outside this entry. Asking the resolver keeps the colour honest: it
+  # may be covered by another entry, or fall through to `defaultStatus`.
+  defp after_status(nil, _all_ranges, _default_status), do: nil
+
+  defp after_status(upper, all_ranges, default_status) do
+    case VersionResolution.resolve(all_ranges, default_status, upper) do
+      {:ok, status} -> status
+      {:error, _reason} -> nil
+    end
+  end
+
+  # `lessThan: "*"` is an open range, not a bound; `lessThanOrEqual` includes
+  # its own value and prints ≤; neither present means the entry names exactly
+  # one version.
+  defp upper_bound(%{"lessThan" => "*"}), do: {nil, nil, false, true}
+  defp upper_bound(%{"lessThanOrEqual" => "*"}), do: {nil, nil, true, true}
+
+  defp upper_bound(%{"lessThan" => lt} = version) when is_binary(lt),
+    do: {lt, version["lessThan_raw"] || lt, false, false}
+
+  defp upper_bound(%{"lessThanOrEqual" => lte} = version) when is_binary(lte),
+    do: {lte, version["lessThanOrEqual_raw"] || lte, true, false}
+
+  defp upper_bound(_single_version), do: {nil, nil, false, false}
+
+  # Every transition, in the order the record lists them — that is the order the
+  # algorithm applies, so re-sorting would misexplain the result.
+  defp entry_changes(version) do
+    for change <- List.wrap(version["changes"]), is_binary(change["at"]) do
+      %{
+        at: change["at"],
+        at_title: change["at_raw"] || change["at"],
+        status: row_status(change)
+      }
+    end
+  end
+
+  # A row states its own status. Anything not explicitly `unaffected` or
+  # `unknown` is affected — an absent status is only legal on `changes`, and the
+  # schema requires one on every entry.
+  defp row_status(%{"status" => "unaffected"}), do: :unaffected
+  defp row_status(%{"status" => "unknown"}), do: :unknown
+  defp row_status(_affected), do: :affected
 
   defp zero_lower?(nil), do: true
   defp zero_lower?("0"), do: true
   defp zero_lower?(_other), do: false
 
-  defp ordered_range_note(nil), do: "no fix available"
-  defp ordered_range_note(fix), do: "fixed in #{fix}"
-
-  defp git_range_note(%{"lessThan" => "*"}, nil), do: "git — no tagged release contains the fix yet"
-
-  defp git_range_note(_version, fix) when is_binary(fix), do: "git"
-  defp git_range_note(_version, nil), do: "git — no tagged release contains the fix yet"
-
   @doc """
   Builds the `live_render/3` session payload for `VarselWeb.AffectedCheckerLive`:
-  one JSON-safe map per AFFECTED package (rev 3: every package gets an
-  entry — the checker card always renders, so pills/select must count
-  git-only and unorderable packages too, not just checkable ones), in the
-  same relative order the Affected cards below render.
+  one JSON-safe map per affected package, in the same relative order the
+  Affected cards below render.
 
-  Each package carries a `"state"`:
+  Each package carries:
 
-    * `"checkable"` — has deduped semver/otp ranges (`normalize_versions/1`,
-      the SAME dedup the render path uses, so the matcher never sees a
-      purl/git duplicate of a range it already has under its canonical
-      type); `"versions"` holds the normalized ranges, `"otp_release?"`
-      marks whether they're OTP release tags (vs. an OTP-app semver range
-      with no release mapping — `"otp_package?"` says whether the PACKAGE
-      is an OTP app at all, so the app-version fallback vocabulary applies
-      even when the ranges are plain `semver`) so the LiveView speaks the
-      right vocabulary.
-    * `"all_affected"` — `defaultStatus == "affected"` with no `versions[]`
-      at all: every version is affected, nothing to type (rev 3 addendum i).
-    * `"git_only"` — every affected range is `git`-typed: no input, the
-      commit-guidance line naming the affected/fixed shas.
-    * `"unorderable"` — has affected ranges, but none are semver/otp/git
-      (e.g. vendor/product-only `custom`-typed ranges): no input, the
-      honest "version checking isn't available" line (rev 3 addendum ii).
+    * `"versions"` — its normalized ranges (`normalize_versions/1`, the SAME
+      dedup the render path uses, so the checker never sees a purl duplicate of
+      a range it already has under its canonical type).
+    * `"default_status"` — the entry's `defaultStatus`, which the resolution
+      algorithm needs: it is the answer for every version no range covers.
+    * `"askable?"` — whether `Varsel.CVE.VersionResolution` can order these
+      ranges at all. False for a product versioned by commit sha, `custom`
+      string, or anything else with no comparison; the LiveView then shows the
+      ranges instead of an input, since it could never answer a typed version.
+    * `"otp_release?"` / `"otp_package?"` — vocabulary hints, so the input
+      placeholder and verdict read "Erlang 27.3.4" rather than a bare version.
 
-  A package with NO affected status at all (nothing in `versions[]` marked
-  `"affected"`, and `defaultStatus` isn't `"affected"`) is left out — there
-  is nothing to check. Empty when no package qualifies; the caller skips
-  mounting the checker in that case.
+  A package with nothing to say — no ranges and no `defaultStatus` — is left
+  out. Empty when no package qualifies; the caller skips mounting the checker.
   """
   @spec checker_packages([map()]) :: [map()]
   def checker_packages(affected) when is_list(affected) do
@@ -253,76 +274,58 @@ defmodule VarselWeb.CveHTML do
 
   defp checker_package(entry) do
     ranges = normalize_versions(entry["versions"] || [])
-    checkable = Enum.filter(ranges, &AffectedChecker.supported_type?(&1["versionType"]))
-    otp_release_ranges = Enum.filter(checkable, &(&1["versionType"] == "otp"))
 
-    base = %{
-      "purl" => elem(package_link(entry), 0),
-      "bare_name" => bare_package_name(entry)
-    }
-
-    if checkable == [] do
-      uncheckable_package(base, entry, ranges)
+    if ranges == [] and is_nil(entry["defaultStatus"]) do
+      nil
     else
-      checkable_package(base, entry, checkable, otp_release_ranges)
+      # Rule 3: never mix vocabularies in one checker — when a record carries
+      # BOTH an OTP-release-tagged range and a semver range (an OTP-app-version
+      # representation from a purl entry, e.g. CVE-2098-0002's ssh record), the
+      # release ranges are the ones readers actually type against.
+      otp_release_ranges = Enum.filter(ranges, &(&1["versionType"] == "otp"))
+      asked = if otp_release_ranges == [], do: ranges, else: otp_release_ranges
+
+      %{
+        "purl" => elem(package_link(entry), 0),
+        "bare_name" => bare_package_name(entry),
+        "versions" => asked,
+        "default_status" => entry["defaultStatus"],
+        "askable?" => VersionResolution.resolvable?(asked),
+        "otp_release?" => otp_release_ranges != [],
+        "otp_package?" => otp_package?(entry)
+      }
     end
   end
 
-  defp uncheckable_package(base, entry, ranges) do
-    cond do
-      (entry["versions"] || []) == [] and entry["defaultStatus"] == "affected" ->
-        Map.put(base, "state", "all_affected")
+  # R5: a leading branch label is only honest when the whole range lies within
+  # the fix's branch. A range spanning lines gets none — the label would claim a
+  # confinement it doesn't have, and it says nothing the fix version doesn't
+  # already (it IS the fix version, truncated).
+  #
+  # SEVERAL fixes mean the range crosses a line per fix by construction (an OTP
+  # range fixed in 27.3.4.15, 28.5.0.4 and 29.0.4 covers three majors), so there
+  # is no one branch to name.
+  defp branch_label_for(multi_branch?, lower, upper, type, entry) when is_binary(upper) do
+    label = multi_branch? && branch_labellable?(type, entry) && branch_label(upper, type)
 
-      ranges != [] and Enum.all?(ranges, &(&1["versionType"] == "git")) ->
-        git_only_package(base, List.first(ranges))
-
-      ranges != [] or has_affected_status?(entry) ->
-        Map.put(base, "state", "unorderable")
-
-      true ->
-        nil
-    end
+    if label && lower && range_within_branch?(lower, upper, type), do: label
   end
 
-  # Rule 3: never mix vocabularies in one checker — when a record carries
-  # BOTH an OTP-release-tagged range and a semver range (an OTP-app-version
-  # representation from a purl entry, e.g. CVE-2098-0002's ssh record), the
-  # release ranges are the ones readers actually type against, so they win
-  # outright rather than matching against both comparators.
-  defp checkable_package(base, entry, checkable, otp_release_ranges) do
-    matched_ranges = if otp_release_ranges == [], do: checkable, else: otp_release_ranges
+  defp branch_label_for(_multi_branch?, _lower, _upper, _type, _entry), do: nil
 
-    Map.merge(base, %{
-      "state" => "checkable",
-      "versions" => matched_ranges,
-      "otp_release?" => otp_release_ranges != [],
-      "otp_package?" => otp_package?(entry)
-    })
-  end
+  # OTP's `maint-N` branches track RELEASE versions, so only a product versioned
+  # by release may be labelled with one. An application's own version (ssh 5.3,
+  # from a `pkg:otp/ssh` entry) has no such branch — `maint-5` would name a git
+  # ref that does not exist. Semver products label by series and are unaffected
+  # by this.
+  defp branch_labellable?("otp", entry), do: otp_release_entry?(entry["packageURL"])
+  defp branch_labellable?(_type, _entry), do: true
 
-  # Same zero-sentinel as the Affected card's git range line (R4): a "0"
-  # "version" is not a real introduction sha.
-  defp git_only_package(base, git_range) do
-    fix = fix_boundary(git_range)
-    intro = if !zero_lower?(git_range["version"]), do: git_range["version"]
-
-    Map.merge(base, %{
-      "state" => "git_only",
-      "intro_sha" => intro && short_sha7(intro),
-      "fix_sha" => fix && short_sha7(fix)
-    })
-  end
-
-  # R5: a leading branch label is only honest when the whole range lies
-  # within the fix's branch; otherwise the label qualifies the fix note.
-  defp range_branch_labelling(multi_branch?, lower, fix, type) do
-    label = multi_branch? && fix && branch_label(fix, type)
-    {label, !!label && !!lower && range_within_branch?(lower, fix, type)}
-  end
-
-  defp has_affected_status?(entry) do
-    Enum.any?(entry["versions"] || [], &(&1["status"] == "affected"))
-  end
+  # The release channels: the repository itself, and the distribution as a whole.
+  defp otp_release_entry?(nil), do: false
+  defp otp_release_entry?("pkg:sid/erlang.org/otp" <> _rest), do: true
+  defp otp_release_entry?("pkg:github/" <> _rest), do: true
+  defp otp_release_entry?(_application), do: false
 
   @doc """
   DOM id for the Nth (0-indexed) per-package Affected card. Every card shares

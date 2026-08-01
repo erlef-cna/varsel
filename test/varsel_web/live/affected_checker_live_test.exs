@@ -13,96 +13,69 @@ defmodule VarselWeb.AffectedCheckerLiveTest do
     live_isolated(conn, AffectedCheckerLive, session: %{"packages" => packages})
   end
 
-  describe "single checkable package" do
-    @packages [
+  defp package(fields) do
+    Map.merge(
       %{
-        "state" => "checkable",
         "purl" => "pkg:hex/bandit",
         "bare_name" => "bandit",
-        "versions" => [
-          %{
-            "version" => "1.5.0",
-            "lessThan" => "1.5.8",
-            "status" => "affected",
-            "versionType" => "semver"
-          },
-          %{
-            "version" => "0.6.0",
-            "lessThan" => "*",
-            "status" => "affected",
-            "versionType" => "semver",
-            "changes" => [%{"at" => "1.4.11", "status" => "unaffected"}]
-          }
-        ]
-      }
-    ]
+        "versions" => [],
+        "default_status" => "unaffected",
+        "askable?" => true,
+        "otp_release?" => false,
+        "otp_package?" => false
+      },
+      fields
+    )
+  end
 
-    test "empty input shows the placeholder-toned line, no icon", %{conn: conn} do
-      {:ok, view, html} = mount(conn, @packages)
+  defp semver(version, less_than, status \\ "affected") do
+    %{
+      "version" => version,
+      "lessThan" => less_than,
+      "status" => status,
+      "versionType" => "semver"
+    }
+  end
+
+  describe "verdicts follow the record's own status" do
+    defp bandit_packages, do: [package(%{"versions" => [semver("1.5.0", "1.5.8")]})]
+
+    test "the empty box asks rather than answers", %{conn: conn} do
+      {:ok, view, html} = mount(conn, bandit_packages())
+
       assert html =~ "type your bandit version to check"
       refute render(view) =~ "✗"
       refute render(view) =~ "✓"
     end
 
-    test "renders no package selector for a single package", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-      refute html =~ "pksel"
-      refute html =~ "select-package"
+    test "a version inside an affected range is affected", %{conn: conn} do
+      {:ok, view, _html} = mount(conn, bandit_packages())
+
+      html = view |> form("form", %{version: "1.5.4"}) |> render_change()
+
+      assert html =~ "✗ bandit 1.5.4 is affected"
+      assert html =~ "text-error"
     end
 
-    test "typing an affected version shows the unsafe verdict naming the package, leading with its own branch's fix",
-         %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
-
-      html = view |> form("form", %{version: "1.4.9"}) |> render_change()
-
-      assert html =~ "✗ bandit 1.4.9 is affected"
-      assert html =~ "fixed in 1.4.11"
-    end
-
-    test "typing a fixed version on the latest branch shows the fixed verdict with no backport tail",
-         %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
+    test "the exclusive upper bound is not affected", %{conn: conn} do
+      {:ok, view, _html} = mount(conn, bandit_packages())
 
       html = view |> form("form", %{version: "1.5.8"}) |> render_change()
 
-      assert html =~ "✓ bandit 1.5.8 includes the fix"
-      refute html =~ "backported from"
+      assert html =~ "✓ bandit 1.5.8 is not affected"
+      assert html =~ "text-success"
     end
 
-    test "typing the backport branch's own fix verbatim never says 'backported from itself'",
-         %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
+    test "a version below every range takes the default", %{conn: conn} do
+      {:ok, view, _html} = mount(conn, bandit_packages())
 
-      html = view |> form("form", %{version: "1.4.11"}) |> render_change()
+      html = view |> form("form", %{version: "1.0.0"}) |> render_change()
 
-      assert html =~ "✓ bandit 1.4.11 includes the fix"
-      assert html =~ "backported from 1.5.8"
-      refute html =~ "backported from 1.4.11"
+      assert html =~ "✓ bandit 1.0.0 is not affected"
     end
 
-    test "a single-range-style input strictly above the fix still resolves fixed (bare, since only one branch)",
-         %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
-
-      html = view |> form("form", %{version: "1.5.8"}) |> render_change()
-
-      assert html =~ "✓ bandit 1.5.8 includes the fix"
-    end
-
-    test "typing a below-range version shows not-affected, distinct copy from fixed", %{
-      conn: conn
-    } do
-      {:ok, view, _html} = mount(conn, @packages)
-
-      html = view |> form("form", %{version: "0.5.2"}) |> render_change()
-
-      assert html =~ "✓ bandit 0.5.2 is not affected"
-      assert html =~ "the flaw was introduced in 0.6.0"
-    end
-
-    test "unparseable input never shows a colored verdict", %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
+    test "unparseable input never gets a coloured verdict", %{conn: conn} do
+      {:ok, view, _html} = mount(conn, bandit_packages())
 
       html = view |> form("form", %{version: "bandit-1.4"}) |> render_change()
 
@@ -111,409 +84,203 @@ defmodule VarselWeb.AffectedCheckerLiveTest do
       refute html =~ "text-success"
     end
 
-    test "clearing the input back to empty drops the verdict", %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
+    test "clearing the input drops the verdict", %{conn: conn} do
+      {:ok, view, _html} = mount(conn, bandit_packages())
 
-      view |> form("form", %{version: "1.4.9"}) |> render_change()
+      view |> form("form", %{version: "1.5.4"}) |> render_change()
       html = view |> form("form", %{version: ""}) |> render_change()
 
       assert html =~ "type your bandit version to check"
     end
+  end
 
-    test "the input is full-width below sm, capped at sm:w-72", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-      assert html =~ "w-full"
-      assert html =~ "sm:w-72"
+  describe "unknown is its own verdict, never dressed as safe" do
+    test "a version an unknown range covers reports unknown", %{conn: conn} do
+      packages = [package(%{"versions" => [semver("0.1.0", "1.0.0", "unknown")]})]
+      {:ok, view, _html} = mount(conn, packages)
+
+      html = view |> form("form", %{version: "0.5.0"}) |> render_change()
+
+      assert html =~ "doesn&#39;t say whether this version is affected"
+      assert html =~ "text-warning"
+      refute html =~ "text-success"
+    end
+
+    test "a version no range covers takes an unknown default", %{conn: conn} do
+      packages = [
+        package(%{"versions" => [semver("1.0.0", "2.0.0")], "default_status" => "unknown"})
+      ]
+
+      {:ok, view, _html} = mount(conn, packages)
+
+      html = view |> form("form", %{version: "5.0.0"}) |> render_change()
+
+      assert html =~ "doesn&#39;t say whether this version is affected"
+      refute html =~ "text-success"
     end
   end
 
-  describe "multi-branch verdict grammar: user's own branch leads, others follow '; also fixed in'" do
-    @packages [
-      %{
-        "state" => "checkable",
-        "purl" => "pkg:hex/bandit",
-        "bare_name" => "bandit",
-        "versions" => [
-          %{
-            "version" => "1.5.0",
-            "lessThan" => "1.5.8",
-            "status" => "affected",
-            "versionType" => "semver"
-          },
-          %{
-            "version" => "0.6.0",
-            "lessThan" => "1.4.11",
-            "status" => "affected",
-            "versionType" => "semver"
-          }
-        ]
-      }
-    ]
+  describe "defaultStatus is honoured, whatever it says" do
+    test "an affected-by-default record reports affected outside its ranges", %{conn: conn} do
+      packages = [
+        package(%{
+          "versions" => [semver("1.0.0", "2.0.0", "unaffected")],
+          "default_status" => "affected"
+        })
+      ]
 
-    test "affected on the 1.4 branch leads with its own fix, names the 1.5 branch as 'also fixed'",
-         %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
+      {:ok, view, _html} = mount(conn, packages)
 
-      html = view |> form("form", %{version: "0.6.5"}) |> render_change()
-
-      assert html =~ "✗ bandit 0.6.5 is affected"
-      assert html =~ "fixed in 1.4.11 (1.4 series); also fixed in 1.5.8 (1.5 series)"
+      assert view |> form("form", %{version: "1.5.0"}) |> render_change() =~ "is not affected"
+      assert view |> form("form", %{version: "9.9.9"}) |> render_change() =~ "is affected"
     end
   end
 
-  describe "release-tagged package speaks Erlang release vocabulary" do
-    @packages [
-      %{
-        "state" => "checkable",
-        "purl" => "pkg:github/erlang/otp",
-        "bare_name" => "ssh",
-        "otp_release?" => true,
-        "otp_package?" => true,
-        "versions" => [
-          %{
-            "version" => "OTP-27.0",
-            "lessThan" => "OTP-27.3.4",
-            "status" => "affected",
-            "versionType" => "otp"
-          },
-          %{
-            "version" => "OTP-26.0",
-            "lessThan" => "OTP-26.2.5.6",
-            "status" => "affected",
-            "versionType" => "otp"
-          }
-        ]
-      }
-    ]
+  describe "a product with no orderable versions takes no input" do
+    defp git_packages do
+      [
+        package(%{
+          "purl" => "pkg:github/acme/lib",
+          "bare_name" => "lib",
+          "askable?" => false,
+          "versions" => [
+            %{
+              "version" => String.duplicate("a", 40),
+              "lessThan" => String.duplicate("b", 40),
+              "status" => "affected",
+              "versionType" => "git"
+            }
+          ]
+        })
+      ]
+    end
+
+    test "renders the ranges instead of a version box", %{conn: conn} do
+      {:ok, _view, html} = mount(conn, git_packages())
+
+      refute html =~ "<input"
+      assert html =~ "can&#39;t be compared automatically"
+      # The same block the Affected card renders: shortened shas, full in title.
+      assert html =~ String.slice(String.duplicate("a", 40), 0, 7)
+      assert html =~ ~s(title="#{String.duplicate("a", 40)}")
+    end
+  end
+
+  describe "OTP release vocabulary" do
+    defp otp_packages do
+      [
+        package(%{
+          "purl" => "pkg:github/erlang/otp",
+          "bare_name" => "ssh",
+          "otp_release?" => true,
+          "otp_package?" => true,
+          "versions" => [
+            %{
+              "version" => "OTP-26.0",
+              "lessThan" => "OTP-26.2.5.6",
+              "status" => "affected",
+              "versionType" => "otp"
+            }
+          ]
+        })
+      ]
+    end
 
     test "the placeholder reads 'Erlang release, e.g. …'", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
+      {:ok, _view, html} = mount(conn, otp_packages())
       assert html =~ "Erlang release, e.g."
     end
 
-    test "accepts the tag with or without the OTP- prefix, subject reads '<app> in Erlang <rel>'",
-         %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
+    test "the tag is accepted with or without its OTP- prefix", %{conn: conn} do
+      {:ok, view, _html} = mount(conn, otp_packages())
 
-      with_prefix = view |> form("form", %{version: "OTP-26.2.5.2"}) |> render_change()
-      assert with_prefix =~ "✗ ssh in Erlang 26.2.5.2 is affected"
+      assert view |> form("form", %{version: "OTP-26.2.5.2"}) |> render_change() =~
+               "✗ ssh in Erlang 26.2.5.2 is affected"
 
-      without_prefix = view |> form("form", %{version: "26.2.5.2"}) |> render_change()
-      assert without_prefix =~ "✗ ssh in Erlang 26.2.5.2 is affected"
+      assert view |> form("form", %{version: "26.2.5.2"}) |> render_change() =~
+               "✗ ssh in Erlang 26.2.5.2 is affected"
     end
 
-    test "names the user's own branch first, the sibling branch as 'also fixed in', every fix labeled",
-         %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
-
-      html = view |> form("form", %{version: "OTP-26.2.5.2"}) |> render_change()
-
-      assert html =~ "fixed in 26.2.5.6 (maint-26); also fixed in 27.3.4 (maint-27)"
-    end
-
-    test "a version outside every known branch is not affected, never fixed by accident", %{
-      conn: conn
-    } do
-      {:ok, view, _html} = mount(conn, @packages)
-
-      html = view |> form("form", %{version: "OTP-28.0"}) |> render_change()
-
-      assert html =~ "✓ ssh in Erlang 28.0 is not affected"
-      assert html =~ "introduced in 26.0"
-    end
-  end
-
-  describe "OTP application-version fallback (no release mapping)" do
-    @packages [
-      %{
-        "state" => "checkable",
-        "purl" => "pkg:otp/ssh",
-        "bare_name" => "ssh",
-        "otp_release?" => false,
-        "otp_package?" => true,
-        "versions" => [
-          %{
-            "version" => "5.0.0",
-            "lessThan" => "5.2.2",
-            "status" => "affected",
-            "versionType" => "semver"
-          }
-        ]
-      }
-    ]
-
-    test "the placeholder reads '<app> application version, e.g. …'", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-      assert html =~ "ssh application version, e.g."
-    end
-
-    test "the verdict subject reads '<app> <version> (Erlang application)'", %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
-
-      html = view |> form("form", %{version: "5.2.1"}) |> render_change()
-
-      assert html =~ "✗ ssh 5.2.1 (Erlang application) is affected"
-      assert html =~ "fixed in 5.2.2"
-    end
-  end
-
-  describe "placeholder example skips the zero-sentinel lower bound (CVE-2098-0003 shape)" do
-    test "falls back to the first range with a real lower bound", %{conn: conn} do
+    # R-series tags don't parse as numeric releases; ordering them on one
+    # timeline is what makes a pre-17 record answerable at all.
+    test "an R-series range answers for modern releases inside it", %{conn: conn} do
       packages = [
-        %{
-          "state" => "checkable",
-          "purl" => "pkg:hex/ash",
-          "bare_name" => "ash",
+        package(%{
+          "bare_name" => "otp",
+          "otp_release?" => true,
           "versions" => [
             %{
-              "version" => "0",
-              "lessThan" => "3.5.39",
+              "version" => "R13B03",
+              "lessThan" => "27.3.4.15",
               "status" => "affected",
-              "versionType" => "semver"
-            },
-            %{
-              "version" => "4.0.0",
-              "lessThan" => "4.2.0",
-              "status" => "affected",
-              "versionType" => "semver"
+              "versionType" => "otp"
             }
           ]
-        }
+        })
       ]
 
-      {:ok, _view, html} = mount(conn, packages)
-      assert html =~ "ash version, e.g. 4.0.0"
-    end
+      {:ok, view, _html} = mount(conn, packages)
 
-    test "falls back to the generic 1.2.3 example when every range's lower bound is a sentinel",
-         %{conn: conn} do
-      packages = [
-        %{
-          "state" => "checkable",
-          "purl" => "pkg:hex/ash",
-          "bare_name" => "ash",
-          "versions" => [
-            %{
-              "version" => "0",
-              "lessThan" => "3.5.39",
-              "status" => "affected",
-              "versionType" => "semver"
-            }
-          ]
-        }
-      ]
-
-      {:ok, _view, html} = mount(conn, packages)
-      assert html =~ "ash version, e.g. 1.2.3"
+      assert view |> form("form", %{version: "19.2"}) |> render_change() =~ "is affected"
     end
   end
 
-  describe "checker presence: defaultStatus:affected with no versions[] renders a static verdict" do
-    @packages [
-      %{
-        "state" => "all_affected",
-        "purl" => "pkg:hex/release_tools",
-        "bare_name" => "release_tools"
-      }
-    ]
-
-    test "renders the red static verdict, no input", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-
-      assert html =~ "✗ every version is affected"
-      assert html =~ "no fixed release yet"
-      refute html =~ "<input"
-    end
-  end
-
-  describe "checker presence: git-only channel renders commit guidance, no input" do
-    @packages [
-      %{
-        "state" => "git_only",
-        "purl" => "pkg:github/umbrella/umbrella_native",
-        "bare_name" => "umbrella_native",
-        "intro_sha" => "aa11bb2",
-        "fix_sha" => nil
-      }
-    ]
-
-    test "renders the commit-tracking guidance line and the intro sha, no input", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-
-      assert html =~ "tracks affected code by commit"
-      assert html =~ "aa11bb2"
-      refute html =~ "<input"
-    end
-  end
-
-  describe "checker presence: non-orderable custom ranges render the honest unavailable line" do
-    @packages [
-      %{
-        "state" => "unorderable",
-        "purl" => "pkg:hex/provisioning-bridge",
-        "bare_name" => "provisioning-bridge"
-      }
-    ]
-
-    test "renders the honest line and an anchor to the Affected card, no input", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-
-      assert html =~ "Version checking isn&#39;t available"
-      assert html =~ "href=\"#affected\""
-      refute html =~ "<input"
-    end
-  end
-
-  describe "multi-package selector (pills, up to 4)" do
-    @packages [
-      %{
-        "state" => "checkable",
-        "purl" => "pkg:hex/cowlib",
-        "bare_name" => "cowlib",
-        "versions" => [
-          %{
-            "version" => "2.7.0",
-            "lessThan" => "2.12.3",
-            "status" => "affected",
-            "versionType" => "semver"
-          }
-        ]
-      },
-      %{
-        "state" => "checkable",
-        "purl" => "pkg:hex/cowboy",
-        "bare_name" => "cowboy",
-        "versions" => [
-          %{
-            "version" => "2.8.0",
-            "lessThan" => "2.13.1",
-            "status" => "affected",
-            "versionType" => "semver"
-          }
-        ]
-      }
-    ]
-
-    test "defaults to the first affected package", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-      assert html =~ "type your cowlib version to check"
+  describe "package selector" do
+    defp packages(count) do
+      for i <- 1..count do
+        package(%{
+          "purl" => "pkg:hex/pkg#{i}",
+          "bare_name" => "pkg#{i}",
+          "versions" => [semver("1.0.0", "2.0.0")]
+        })
+      end
     end
 
-    test "renders a round pill per package", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-      assert html =~ "pkg:hex/cowlib"
-      assert html =~ "pkg:hex/cowboy"
+    test "a single package renders no selector", %{conn: conn} do
+      {:ok, _view, html} = mount(conn, packages(1))
+
+      refute html =~ "select-package"
+    end
+
+    test "2–4 packages render pills, defaulting to the first", %{conn: conn} do
+      {:ok, _view, html} = mount(conn, packages(3))
+
+      assert html =~ "pkg:hex/pkg1"
+      assert html =~ "pkg:hex/pkg3"
       assert html =~ "rounded-full"
+      assert html =~ "type your pkg1 version to check"
     end
 
-    test "switching the pill swaps the placeholder, ranges and verdict but keeps the typed input",
-         %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
+    test "5+ packages render a select", %{conn: conn} do
+      {:ok, _view, html} = mount(conn, packages(5))
 
-      view |> form("form", %{version: "2.11.0"}) |> render_change()
-      html = view |> element("button", "pkg:hex/cowboy") |> render_click()
-
-      assert html =~ "value=\"2.11.0\""
-      assert html =~ "✗ cowboy 2.11.0 is affected"
-      refute html =~ "cowlib 2.11.0"
-    end
-  end
-
-  describe "pills/select count ALL packages, including non-checkable states" do
-    @packages [
-      %{
-        "state" => "checkable",
-        "purl" => "pkg:hex/umbrella_core",
-        "bare_name" => "umbrella_core",
-        "versions" => [
-          %{
-            "version" => "0.1.0",
-            "lessThan" => "2.1.0",
-            "status" => "affected",
-            "versionType" => "semver"
-          }
-        ]
-      },
-      %{
-        "state" => "git_only",
-        "purl" => "pkg:github/umbrella/umbrella_native",
-        "bare_name" => "umbrella_native",
-        "intro_sha" => "aa11bb2",
-        "fix_sha" => nil
-      }
-    ]
-
-    test "a git-only package still gets a pill alongside the checkable one", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-
-      assert html =~ "pkg:hex/umbrella_core"
-      assert html =~ "pkg:github/umbrella/umbrella_native"
-    end
-
-    test "selecting the git-only pill swaps the input for its guidance state", %{conn: conn} do
-      {:ok, view, _html} = mount(conn, @packages)
-
-      html = view |> element("button", "pkg:github/umbrella/umbrella_native") |> render_click()
-
-      assert html =~ "tracks affected code by commit"
-      refute html =~ "<input"
-    end
-  end
-
-  describe "5+ packages renders a native select instead of pills" do
-    @packages (for n <- 1..5 do
-                 %{
-                   "state" => "checkable",
-                   "purl" => "pkg:hex/pkg#{n}",
-                   "bare_name" => "pkg#{n}",
-                   "versions" => [
-                     %{
-                       "version" => "1.0.0",
-                       "lessThan" => "2.0.0",
-                       "status" => "affected",
-                       "versionType" => "semver"
-                     }
-                   ]
-                 }
-               end)
-
-    test "renders a select, not round pills, for 5 or more packages", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
       assert html =~ "<select"
       refute html =~ "rounded-full"
     end
-  end
 
-  describe "5+ packages including a non-checkable one still count toward the select threshold" do
-    @packages (for n <- 1..4 do
-                 %{
-                   "state" => "checkable",
-                   "purl" => "pkg:hex/pkg#{n}",
-                   "bare_name" => "pkg#{n}",
-                   "versions" => [
-                     %{
-                       "version" => "1.0.0",
-                       "lessThan" => "2.0.0",
-                       "status" => "affected",
-                       "versionType" => "semver"
-                     }
-                   ]
-                 }
-               end) ++
-                [
-                  %{
-                    "state" => "git_only",
-                    "purl" => "pkg:github/umbrella/native5",
-                    "bare_name" => "native5",
-                    "intro_sha" => "aa11bb2",
-                    "fix_sha" => nil
-                  }
-                ]
+    test "switching package swaps the verdict but keeps the typed input", %{conn: conn} do
+      packages = [
+        package(%{
+          "purl" => "pkg:hex/a",
+          "bare_name" => "a",
+          "versions" => [semver("1.0.0", "2.0.0")]
+        }),
+        package(%{
+          "purl" => "pkg:hex/b",
+          "bare_name" => "b",
+          "versions" => [semver("5.0.0", "6.0.0")]
+        })
+      ]
 
-    test "4 checkable + 1 git-only = 5 packages renders a select", %{conn: conn} do
-      {:ok, _view, html} = mount(conn, @packages)
-      assert html =~ "<select"
-      refute html =~ "rounded-full"
+      {:ok, view, _html} = mount(conn, packages)
+
+      assert view |> form("form", %{version: "1.5.0"}) |> render_change() =~
+               "✗ a 1.5.0 is affected"
+
+      html = view |> element(~s{button[phx-value-index="1"]}) |> render_click()
+
+      assert html =~ "✓ b 1.5.0 is not affected"
+      assert html =~ ~s(value="1.5.0")
     end
   end
 end

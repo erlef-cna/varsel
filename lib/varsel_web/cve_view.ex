@@ -252,6 +252,114 @@ defmodule VarselWeb.CveView do
   end
 
   @doc """
+  Renders an affected package's `versions[]` — one line per entry, as
+  `VarselWeb.CveHTML.affected_ranges/1` shapes them.
+
+  A line shows the interval the entry asserts and the status it asserts for it,
+  coloured by that status: affected red, unaffected green, unknown amber. The
+  record's own claim is what prints, never a derived one — an `unaffected` or
+  `unknown` entry is as real as an affected one and reads differently.
+
+  An entry with `changes[]` lists its transitions beneath it, in the order the
+  record gives them, each carrying the status it switches to. That is the order
+  the resolution algorithm applies, so it is the order that explains the result.
+
+  `default_status` closes the block: whatever no entry covers takes it, which is
+  half of what the record says and is otherwise invisible.
+
+  The branch label ("1.19 series") sits in a reserved column so every line's
+  bound starts at the same x; the column disappears when no line has one.
+  """
+  attr :ranges, :list, required: true, doc: "rows from `VarselWeb.CveHTML.affected_ranges/1`"
+  attr :default_status, :string, default: nil, doc: "the entry's `defaultStatus`"
+
+  def affected_range_list(assigns) do
+    assigns = assign(assigns, :labelled?, Enum.any?(assigns.ranges, & &1.branch_label))
+
+    ~H"""
+    <div class="flex flex-col gap-1 font-mono text-sm">
+      <div :for={range <- @ranges}>
+        <div>
+          <span
+            :if={@labelled?}
+            class="mr-2 inline-block w-16 text-right font-sans text-xs text-base-content/50"
+          >
+            {range.branch_label}
+          </span>
+          <%!-- A single-version entry names one version, so it takes no operator. --%>
+          <span :if={range.single?} title={range.lower_title} class={status_tone(range.status)}>
+            {display(range, range.lower)}
+          </span>
+          <span :if={not range.single? and range.lower}>
+            <span class="text-base-content/60">≥</span>
+            <span title={range.lower_title} class={status_tone(range.status)}>
+              {display(range, range.lower)}
+            </span>
+          </span>
+          <span :if={range.upper}>
+            <span class="text-base-content/60">{if range.upper_inclusive?, do: "≤", else: "<"}</span>
+            <span title={range.upper_title} class={status_tone(upper_status(range))}>
+              {display(range, range.upper)}
+            </span>
+          </span>
+          <span :if={range.open?} class="text-base-content/60">and up</span>
+          <span class={["ml-1 font-sans text-sm", status_tone(range.status)]}>
+            {status_word(range.status)}
+          </span>
+        </div>
+        <%!-- Transitions read as a continuation of the line above them. --%>
+        <div :for={change <- range.changes} class="pl-6">
+          <span class="text-base-content/60">→</span>
+          <span title={change.at_title} class={status_tone(change.status)}>
+            {display(range, change.at)}
+          </span>
+          <span class={["ml-1 font-sans text-sm", status_tone(change.status)]}>
+            {status_word(change.status)}
+          </span>
+        </div>
+      </div>
+      <div :if={@default_status} class="font-sans text-sm text-base-content/60">
+        every other version:
+        <span class={status_tone(default_tone(@default_status))}>{@default_status}</span>
+      </div>
+    </div>
+    """
+  end
+
+  # An exclusive `<` bound is the first version OUTSIDE the span, so it carries
+  # the status that follows, not the one that ends there — the version you
+  # upgrade to, in the colour of what it gets you. An inclusive `≤` bound is
+  # still inside the span and keeps the entry's own status.
+  #
+  # What follows is the record's own `defaultStatus` when nothing else covers
+  # it; the block passes that down so the bound never guesses.
+  defp upper_status(%{upper_inclusive?: true, status: status}), do: status
+  defp upper_status(%{after_status: nil}), do: :neutral
+  defp upper_status(%{after_status: after_status}), do: after_status
+
+  # One colour per status, everywhere it appears — a bound, a transition, or the
+  # default line. Amber for unknown is deliberate: it is neither safe nor unsafe.
+  # A bound we could not resolve (a commit sha, an unorderable scheme) takes no
+  # colour rather than a guessed one.
+  defp status_tone(:neutral), do: "text-base-content/70"
+  defp status_tone(:affected), do: "text-error"
+  defp status_tone(:unaffected), do: "text-success"
+  defp status_tone(:unknown), do: "text-warning"
+
+  defp status_word(:affected), do: "affected"
+  defp status_word(:unaffected), do: "not affected"
+  defp status_word(:unknown), do: "status unknown"
+
+  defp default_tone("affected"), do: :affected
+  defp default_tone("unaffected"), do: :unaffected
+  defp default_tone(_unknown_or_absent), do: :unknown
+
+  # Commit shas shorten to the 7 characters git itself abbreviates to; version
+  # strings print as they are.
+  defp display(%{kind: :git}, value), do: short_sha7(value)
+  defp display(_range, value), do: value
+
+  @doc """
   Component rendering an affected entry's package reference as `<code>` text,
   optionally linked. Mirrors `_includes/package-link.html`.
   """
@@ -746,6 +854,43 @@ defmodule VarselWeb.CveView do
   def fix_boundary(%{"lessThan" => less_than}) when is_binary(less_than), do: less_than
   def fix_boundary(_version), do: nil
 
+  @doc """
+  *Every* fix boundary of a range.
+
+  `fix_boundary/1` answers "the first safe version of this line" — the right
+  question only when the range describes one line. A `changes[]` chain does not:
+  it is an open range carrying a fix per release line (the legacy shape, and
+  what a git range always looks like), and every one of those fixes is real.
+  Reducing them to the lowest would silently drop the rest, understating the
+  affected span, so anything rendering a whole range asks this instead.
+
+  Orderable boundaries come back sorted, so a record whose `changes[]` arrive
+  shuffled (CVE-2098-0002's OTP range: `28.0.3, 27.3.4.3, 26.2.5.15`) still
+  reads low-to-high. Commit shas have no order and keep their record order.
+  """
+  @spec fix_boundaries(map()) :: [String.t()]
+  def fix_boundaries(%{"lessThan" => "*", "changes" => [_ | _] = changes} = version) do
+    type = version["versionType"]
+
+    changes
+    |> Enum.filter(&is_binary(&1["at"]))
+    |> Enum.sort_by(&AffectedChecker.parse(&1["at"], type), &orderable_or_last?/2)
+    |> Enum.map(&{&1["at"], boundary_status(&1["status"])})
+  end
+
+  def fix_boundaries(version) do
+    case fix_boundary(version) do
+      nil -> []
+      # A plain upper bound ends the entry's own span, so what lies at or above
+      # it is not this entry's business — `nil` status, rendered neutrally.
+      boundary -> [{boundary, nil}]
+    end
+  end
+
+  defp boundary_status("affected"), do: :affected
+  defp boundary_status("unknown"), do: :unknown
+  defp boundary_status(_unaffected), do: :unaffected
+
   # Comparator for `Enum.min_by/4`'s sorter: parsed versions order normally;
   # an unparseable (`:error`) boundary never outranks a parseable one, and
   # ties (both `:error`, e.g. a git range with several shas) keep the
@@ -818,8 +963,11 @@ defmodule VarselWeb.CveView do
   """
   @spec normalize_versions([map()]) :: [map()]
   def normalize_versions(versions) when is_list(versions) do
+    # EVERY row survives, whatever its status. Under the CVE resolution
+    # algorithm an `unaffected` or `unknown` row is a real answer for the
+    # versions it covers — dropping them would leave those versions answered by
+    # a later row or by `defaultStatus`, which is a different claim entirely.
     versions
-    |> Enum.filter(&(&1["status"] == "affected"))
     |> Enum.map(&normalize_entry/1)
     |> Enum.filter(& &1)
     |> dedup_normalized()
