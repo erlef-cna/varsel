@@ -34,6 +34,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.DerivationFreshness
+  alias Varsel.Cases.Description.AffectedSummary
   alias Varsel.Cases.Markdown
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.VersionEvent
@@ -74,7 +75,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     cna =
       %{"providerMetadata" => provider_metadata()}
       |> put_present("title", case_record.title)
-      |> put_prose("descriptions", case_record.description_md)
+      |> put_prose("descriptions", description_markdown(case_record.description_md, affected))
       |> put_prose("workarounds", case_record.workarounds_md)
       |> put_prose("configurations", case_record.configurations_md)
       |> put_prose("solutions", case_record.solutions_md)
@@ -151,6 +152,25 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
         ]
       }
     ])
+  end
+
+  # The description alone among the prose fields gains a derived tail: the
+  # "This issue affects …" sentence, built from the very `affected[]` this
+  # record publishes so the two can never disagree. Authors never write it —
+  # see `Varsel.Cases.Case`'s `description_md`.
+  #
+  # It is appended as markdown and handed to `put_prose/3`, so every
+  # representation renders through the same path as any other prose field: the
+  # renderer turns the sentence's U+00A0 into `&nbsp;` for the HTML value and
+  # leaves it a bare codepoint elsewhere.
+  defp description_markdown(authored, affected) do
+    [authored, AffectedSummary.summarize(affected)]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join("\n\n")
+    |> case do
+      "" -> nil
+      markdown -> markdown
+    end
   end
 
   defp put_timeline(cna, []), do: cna

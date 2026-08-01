@@ -47,6 +47,7 @@ defmodule VarselWeb.CaseDetailLive do
   @case_loads [
     :cve_id,
     :cve_record,
+    :affected_summary,
     # :avatar_url wherever a user is drawn as an avatar disc.
     assignments: [user: [:avatar_url]],
     references: [],
@@ -1435,6 +1436,7 @@ defmodule VarselWeb.CaseDetailLive do
       <.case_content
         :if={!@content_form}
         description={@case_record.description_md}
+        affected_summary={@case_record.affected_summary}
         configurations={@case_record.configurations_md}
         workarounds={@case_record.workarounds_md}
         solutions={@case_record.solutions_md}

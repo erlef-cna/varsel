@@ -378,7 +378,15 @@ defmodule Varsel.Cases.Case do
     end
 
     attribute :description_md, :string do
-      description "Markdown source of the CVE description. Required to publish."
+      description """
+      Markdown source of the CVE description — what the vulnerability IS. Required to publish.
+
+      Do not list the affected versions here. The published record appends them
+      itself ("This issue affects plug: from 0.1.0 before 1.16.6."), derived
+      from the case's affected packages, so writing that sentence yourself would
+      publish it twice.
+      """
+
       constraints max_length: 50_000
       public? true
     end
@@ -524,6 +532,18 @@ defmodule Varsel.Cases.Case do
 
       public? true
       constraints one_of: [:none, :low, :medium, :high, :critical]
+    end
+
+    calculate :affected_summary,
+              :string,
+              Varsel.Cases.Case.Calculations.AffectedSummary do
+      public? true
+
+      description """
+      The "This issue affects …" sentence the published record appends to the
+      description, derived from the case's affected packages. Read it to see
+      what will ship; never write it into `description_md` yourself.
+      """
     end
 
     calculate :preview,

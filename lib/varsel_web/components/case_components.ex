@@ -943,8 +943,14 @@ defmodule VarselWeb.CaseComponents do
 
   Each of `configurations`, `workarounds` and `solutions` appears only when
   the case has something to say there, under its own heading.
+
+  `affected_summary` is the "This issue affects …" sentence the published
+  record appends to the description. It is shown here, muted and labelled, so
+  an author can see what the reader will get without being able to edit it —
+  and so nobody writes it a second time by hand.
   """
   attr :description, :string, default: nil
+  attr :affected_summary, :string, default: nil
   attr :configurations, :string, default: nil
   attr :workarounds, :string, default: nil
   attr :solutions, :string, default: nil
@@ -954,6 +960,13 @@ defmodule VarselWeb.CaseComponents do
     <div class="space-y-4">
       <.markdown :if={@description} content={@description} />
       <p :if={is_nil(@description)} class="text-base-content/60">No description yet.</p>
+
+      <div :if={@affected_summary} class="rounded border border-base-300/70 bg-base-200/40 p-3">
+        <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+          appended on publish
+        </p>
+        <p class="text-sm text-base-content/70">{@affected_summary}</p>
+      </div>
 
       <div :for={
         {label, content} <- [
