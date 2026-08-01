@@ -46,8 +46,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
         title: "Missing Session Revocation on Logout in ash_authentication_phoenix",
         description_md:
           "Insufficient Session Expiration vulnerability in ash-project " <>
-            "ash_authentication_phoenix allows Session Hijacking.\n\n" <>
-            "This issue affects ash_authentication_phoenix until 2.10.0.",
+            "ash_authentication_phoenix allows Session Hijacking.",
         cvss_v4: @vector
       })
 
@@ -310,15 +309,36 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
              cna(result)["descriptions"]
 
     assert plaintext =~ "Insufficient Session Expiration vulnerability"
-    assert plaintext =~ "\n\nThis issue affects"
+    # The affected versions are appended by the renderer, not written by the
+    # author — see Varsel.Cases.Description.AffectedSummary.
+    assert plaintext =~ "\n\nThis issue affects ash_authentication_phoenix:"
 
     assert html["type"] == "text/html"
     assert html["base64"] == false
     assert html["value"] =~ "<p>"
+    assert html["value"] =~ "<p>This issue affects ash_authentication_phoenix:"
 
     assert markdown["type"] == "text/markdown"
     assert markdown["base64"] == false
-    assert markdown["value"] =~ "This issue affects ash_authentication_phoenix until 2.10.0."
+    assert markdown["value"] =~ "This issue affects ash_authentication_phoenix:"
+  end
+
+  # Clients read the calculation to see what will ship, so that they know not to
+  # write the sentence into `description_md` themselves.
+  test "the sentence is loadable on its own", %{poc: poc, case: case_record} do
+    case_record = Ash.load!(case_record, :affected_summary, actor: poc)
+
+    assert case_record.affected_summary =~ "This issue affects ash_authentication_phoenix:"
+    refute case_record.affected_summary =~ "Insufficient Session Expiration"
+  end
+
+  test "the appended sentence names every affected range, once", %{poc: poc, case: case_record} do
+    result = render!(case_record, poc)
+    [%{"value" => plaintext}] = cna(result)["descriptions"]
+
+    # Exactly one — an author who also typed it would publish it twice, which is
+    # what the description docs warn against.
+    assert length(String.split(plaintext, "This issue affects")) == 2
   end
 
   test "assembles the full record and it passes schema validation", %{poc: poc, case: case_record} do

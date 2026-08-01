@@ -36,7 +36,13 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
     end
 
     create :propose_description do
-      description "Proposes setting the case description (markdown)."
+      description """
+      Proposes setting the case description (markdown) — what the vulnerability IS.
+
+      Do not list the affected versions: the published record appends them
+      automatically from the case's affected packages.
+      """
+
       accept [:case_id, :reasoning]
       argument :value, :string, allow_nil?: false
       change {PackProposal, target: :case, operation: :set, field: :description_md}
