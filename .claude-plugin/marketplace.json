@@ -11,7 +11,7 @@
       "name": "varsel-poc",
       "source": "./",
       "description": "Varsel CNA point-of-contact skills: file, verify, and summarize CVEs as Varsel cases through the Varsel MCP.",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "author": {
         "name": "Erlang Ecosystem Foundation"
       },
