@@ -537,6 +537,50 @@ defmodule VarselWeb.VarselLiveTest do
     assert html =~ ~s(id="rejected-panel")
   end
 
+  describe "manage as case" do
+    test "a record with no case offers the action, and taking it lands on the case", %{conn: conn} do
+      poc = register("poc", :poc)
+      record = published_record("CVE-#{@year}-1006", "Legacy thing")
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+      assert has_element?(lv, ~s{button[phx-value-id="#{record.id}"]}, "manage as case")
+
+      {:error, {:live_redirect, %{to: to}}} =
+        lv |> element(~s{button[phx-value-id="#{record.id}"]}, "manage as case") |> render_click()
+
+      case_record =
+        Ash.load!(Ash.reload!(record, authorize?: false), [:case], authorize?: false).case
+
+      assert to == "/cases/#{case_record.id}"
+      assert case_record.state == :draft
+      assert case_record.title == "Legacy thing"
+    end
+
+    test "the action is gone once the record has a case", %{conn: conn} do
+      poc = register("poc", :poc)
+      record = published_record("CVE-#{@year}-1007", "Already managed")
+
+      Varsel.Cases.adopt_cve_record!(%{cve_record_id: record.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+      refute has_element?(lv, ~s{button[phx-value-id="#{record.id}"]}, "manage as case")
+      # The row points at the case it now has instead.
+      assert has_element?(lv, ~s{a[href^="/cases/"]}, "case")
+    end
+
+    test "a supporter is never offered the action", %{conn: conn} do
+      register("first", :poc)
+      supporter = register("supporter", :supporter)
+      published_record("CVE-#{@year}-1009", "Not yours")
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cves")
+
+      refute has_element?(lv, "button", "manage as case")
+    end
+  end
+
   test "a non-POC sees only published records and no management controls", %{conn: conn} do
     register("first", :poc)
     supporter = register("supporter", :supporter)
