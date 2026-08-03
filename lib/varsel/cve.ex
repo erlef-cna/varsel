@@ -117,6 +117,7 @@ defmodule Varsel.CVE do
       define :search_cve_records, action: :search, args: [:query]
       define :list_cve_records_by_purl, action: :list_by_purl, args: [:purl]
       define :available_cve_records, action: :available, args: [:year]
+      define :list_assignable_cve_records, action: :assignable
 
       # Reservation-pool + MITRE sync management.
       define :reserve_cve_record, action: :reserve

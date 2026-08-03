@@ -430,6 +430,118 @@ defmodule VarselWeb.CaseLiveTest do
     end
   end
 
+  describe "assigning a CVE ID" do
+    test "the button opens a picker without assigning anything", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      Fixtures.reserved_cve_record("CVE-#{year}-31001")
+      case_record = Fixtures.open_case(poc, %{title: "Picker case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      html = lv |> element("button", "Assign CVE ID") |> render_click()
+
+      assert html =~ "cve-picker-modal"
+      assert html =~ "Take the next free ID"
+      assert html =~ "Or choose a specific ID"
+      # Opening the picker must not have taken an ID.
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == nil
+    end
+
+    test "the auto path takes the next free ID", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      next = Fixtures.reserved_cve_record("CVE-#{year}-31002")
+      Fixtures.reserved_cve_record("CVE-#{year}-31003")
+      case_record = Fixtures.open_case(poc, %{title: "Auto case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      lv |> element("button", "Assign CVE ID") |> render_click()
+      lv |> element("button", "Assign CVE-#{year}-31002") |> render_click()
+
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == next.id
+      assert render(lv) =~ "CVE ID assigned."
+    end
+
+    test "a chosen ID wins over the next free one", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      Fixtures.reserved_cve_record("CVE-#{year}-31004")
+      chosen = Fixtures.reserved_cve_record("CVE-#{year}-31005")
+      case_record = Fixtures.open_case(poc, %{title: "Chosen case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      lv |> element("button", "Assign CVE ID") |> render_click()
+
+      lv
+      |> form(~s{#cve-picker-modal form}, %{cve_record_id: chosen.id})
+      |> render_submit()
+
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == chosen.id
+      assert render(lv) =~ "CVE ID assigned."
+    end
+
+    test "withheld IDs are offered below the free ones, with their reason", %{
+      conn: conn,
+      poc: poc
+    } do
+      year = Date.utc_today().year
+      Fixtures.reserved_cve_record("CVE-#{year}-31006")
+      held = Fixtures.reserved_cve_record("CVE-#{year}-31007")
+
+      Ash.update!(held, %{withhold_reason: "Held by the old system"},
+        action: :withhold,
+        authorize?: false
+      )
+
+      case_record = Fixtures.open_case(poc, %{title: "Withheld pick case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      html = lv |> element("button", "Assign CVE ID") |> render_click()
+
+      assert html =~ "withheld"
+      assert html =~ "Held by the old system"
+      # Both the reason and when the hold started, so overriding it is an
+      # informed choice rather than a guess.
+      assert html =~ "withheld #{Date.utc_today()}"
+      # The auto path still offers only the free ID.
+      assert html =~ "Assign CVE-#{year}-31006"
+
+      lv
+      |> form(~s{#cve-picker-modal form}, %{cve_record_id: held.id})
+      |> render_submit()
+
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == held.id
+      assert Ash.get!(Varsel.CVE.CveRecord, held.id, authorize?: false).state == :draft
+    end
+
+    test "an empty pool says so instead of offering a broken button", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Empty pool case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      html = lv |> element("button", "Assign CVE ID") |> render_click()
+
+      assert html =~ "No CVE IDs are available to assign."
+      refute html =~ "Or choose a specific ID"
+    end
+
+    test "cancelling closes the picker and assigns nothing", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      Fixtures.reserved_cve_record("CVE-#{year}-31008")
+      case_record = Fixtures.open_case(poc, %{title: "Cancel case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      lv |> element("button", "Assign CVE ID") |> render_click()
+      lv |> element(~s{#cve-picker-modal button}, "Cancel") |> render_click()
+
+      html = render(lv)
+      refute html =~ "cve-picker-modal"
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == nil
+    end
+  end
+
   describe "case detail" do
     test "view mode renders markdown content and cached derived ranges", %{conn: conn, poc: poc} do
       case_record =

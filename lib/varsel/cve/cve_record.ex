@@ -557,6 +557,18 @@ defmodule Varsel.CVE.CveRecord do
              )
     end
 
+    read :assignable do
+      description """
+      Every CVE ID a case may take: the open pool plus withheld IDs, which are
+      never offered automatically but may be named explicitly. Oldest first;
+      grouping free before withheld is left to whoever presents them.
+      """
+
+      prepare build(load: [:cve_id, :reserved_at], sort: [reserved_at: :asc])
+
+      filter expr(state in [:reserved, :withheld])
+    end
+
     read :available do
       description """
       Returns open (unassigned) reservations in the pool for a given year.
