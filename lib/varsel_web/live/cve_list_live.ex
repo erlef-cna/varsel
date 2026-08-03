@@ -21,6 +21,8 @@ defmodule VarselWeb.CveListLive do
   import VarselWeb.CveView, only: [package_display_name: 1]
   import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
 
+  alias Varsel.Cases
+  alias Varsel.Cases.Validations.CveRecordAdoptable
   alias Varsel.CVE
   alias Varsel.CVE.CveRecord
   alias Varsel.Types.CVSS
@@ -31,6 +33,8 @@ defmodule VarselWeb.CveListLive do
   # records live in their own summary panels) — also the table's filter-scope
   # order.
   @table_states [:draft, :publishing, :published, :pending_update]
+
+  @adoptable_states CveRecordAdoptable.adoptable_states()
 
   @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
@@ -45,6 +49,9 @@ defmodule VarselWeb.CveListLive do
       |> assign(
         page_title: if(console?, do: "CVE records", else: "Issued CVEs"),
         console?: console?,
+        # Row-independent half of the adoption affordance; the per-row half is
+        # adoptable?/1 (see there for why it is split).
+        may_adopt?: Ash.can?({Cases.Case, :adopt_cve_record}, socket.assigns.current_user),
         mitre_syncing?: false,
         query: "",
         filter: "all",
@@ -271,6 +278,18 @@ defmodule VarselWeb.CveListLive do
     {:noreply, socket}
   end
 
+  def handle_event("adopt", %{"id" => record_id}, socket) do
+    actor = socket.assigns.current_user
+
+    case Cases.adopt_cve_record(%{cve_record_id: record_id}, actor: actor) do
+      {:ok, case_record} ->
+        {:noreply, push_navigate(socket, to: ~p"/cases/#{case_record.id}")}
+
+      {:error, error} ->
+        {:noreply, put_flash(socket, :error, "Could not open a case: #{errors_to_string(error)}")}
+    end
+  end
+
   def handle_event("reject_prompt", %{"id" => record_id}, socket) do
     {:noreply, assign(socket, :confirming_reject_id, record_id)}
   end
@@ -419,6 +438,21 @@ defmodule VarselWeb.CveListLive do
   defp editable?(actor, record) do
     CVE.can_request_publish_cve_record?(actor, record, %{}) or
       CVE.can_update_cve_record?(actor, record, %{})
+  end
+
+  # Whether this record is still waiting for a case.
+  #
+  # Asked in two halves so the table does not run a query per row: whether the
+  # actor may adopt *anything* is a policy question with no particular record
+  # in it (resolved once in mount), and whether this record is adoptable is
+  # answered by the row itself — the same two conditions
+  # `Varsel.Cases.Validations.CveRecordAdoptable` enforces, which stays the
+  # authority when the button is actually pressed.
+  #
+  # `:case` is only loaded for an actor who may read cases, so an unloaded
+  # value means "not for you to know", not "no case" (see records_query/3).
+  defp adoptable?(record) do
+    match?(nil, Map.get(record, :case)) and record.state in @adoptable_states
   end
 
   # P3's search feedback reads as a sentence ("14 match “ssh”"), so the
@@ -579,7 +613,7 @@ defmodule VarselWeb.CveListLive do
                   <.severity_chip score={record_score(record)} />
                 </td>
                 <td :if={@console?}>
-                  <.record_state_cell record={record} />
+                  <.record_state_cell record={record} may_adopt?={@may_adopt?} />
                 </td>
                 <td class="whitespace-nowrap tabular-nums text-xs">
                   {format_date(record.date_published)}
@@ -691,11 +725,18 @@ defmodule VarselWeb.CveListLive do
   end
 
   attr :record, :any, required: true
+  attr :may_adopt?, :boolean, required: true
 
   # P1: state text (dot + label, state-toned, non-interactive) on the left,
   # a quiet bordered case chip pinned to the cell's right edge when an
   # owning case exists — one hover treatment regardless of state tone,
   # instead of the state color bleeding into an appended "· case →" link.
+  #
+  # A record with no case gets the chip's counterpart in the same slot: the
+  # cell says either where this record's case is or how to give it one, and
+  # never both. That keeps the case relationship in one column instead of
+  # splitting it between here and the actions cell, where a third stacked verb
+  # crowds the row and the label collides with the date.
   defp record_state_cell(assigns) do
     ~H"""
     <div class="flex flex-col items-start gap-1">
@@ -705,12 +746,29 @@ defmodule VarselWeb.CveListLive do
       <.link
         :if={match?(%Varsel.Cases.Case{}, @record.case)}
         navigate={~p"/cases/#{@record.case.id}"}
-        class="inline-flex items-center gap-[0.32rem] text-[0.67rem] font-semibold text-base-content/60 bg-base-100 border border-base-300 rounded-[5px] px-[0.45rem] py-[0.07rem] whitespace-nowrap transition-colors hover:text-primary hover:border-primary/60 hover:bg-primary/10"
+        class={chip_class()}
       >
         case <span class="text-[0.7rem] leading-none">→</span>
       </.link>
+      <button
+        :if={@may_adopt? and adoptable?(@record)}
+        type="button"
+        class={chip_class()}
+        phx-click="adopt"
+        phx-value-id={@record.id}
+      >
+        manage as case
+      </button>
     </div>
     """
+  end
+
+  # The quiet bordered chip both case affordances wear: one hover treatment,
+  # unaffected by the state tone beside it.
+  defp chip_class do
+    "inline-flex items-center gap-[0.32rem] text-[0.67rem] font-semibold text-base-content/60 " <>
+      "bg-base-100 border border-base-300 rounded-[5px] px-[0.45rem] py-[0.07rem] whitespace-nowrap " <>
+      "transition-colors hover:text-primary hover:border-primary/60 hover:bg-primary/10"
   end
 
   defp state_dot_class(:draft), do: "bg-warning"

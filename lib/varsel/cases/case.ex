@@ -57,6 +57,7 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
+  alias Varsel.Cases.Changes.AssignOpener
   alias Varsel.Cases.Validations.CveIdAssignable
 
   @content_fields [
@@ -149,14 +150,43 @@ defmodule Varsel.Cases.Case do
 
     create :open do
       description "Opens a new case in the :draft state, assigned to whoever opened it."
+      # Opening an empty case is how a case normally starts; :adopt_cve_record
+      # is the narrower path for a record that already exists elsewhere.
+      primary? true
       accept @content_fields
 
       argument :assignments, {:array, :map} do
         public? false
       end
 
-      change Varsel.Cases.Changes.AssignOpener
+      change AssignOpener
       change manage_relationship(:assignments, type: :create)
+    end
+
+    create :adopt_cve_record do
+      description """
+      Opens a draft case around an existing CVE record — one created by hand or
+      in the legacy management system — filling it in from the record's
+      published CNA container. See `Varsel.Cases.Case.Import` for what a
+      container can and cannot be read back into.
+      """
+
+      accept []
+
+      argument :cve_record_id, :uuid do
+        allow_nil? false
+        description "The existing CVE record to manage as a case. It must not already have one."
+      end
+
+      argument :assignments, {:array, :map} do
+        public? false
+      end
+
+      validate Varsel.Cases.Validations.CveRecordAdoptable
+
+      change AssignOpener
+      change manage_relationship(:assignments, type: :create)
+      change Varsel.Cases.Case.Changes.AdoptCveRecord
     end
 
     update :edit do
@@ -322,7 +352,16 @@ defmodule Varsel.Cases.Case do
     end
 
     # Case lifecycle decisions are POC-only.
-    policy action([:open, :request_changes, :approve, :assign_cve_id, :publish, :reopen, :close]) do
+    policy action([
+             :open,
+             :adopt_cve_record,
+             :request_changes,
+             :approve,
+             :assign_cve_id,
+             :publish,
+             :reopen,
+             :close
+           ]) do
       authorize_if actor_attribute_equals(:role, :poc)
     end
 

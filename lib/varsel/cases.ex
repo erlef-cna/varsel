@@ -188,6 +188,7 @@ defmodule Varsel.Cases do
   resources do
     resource Case do
       define :open_case, action: :open
+      define :adopt_cve_record, action: :adopt_cve_record
       define :list_cases, action: :list_cases
       define :get_case, action: :read, get_by: [:id]
       define :edit_case, action: :edit
