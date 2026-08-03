@@ -12,8 +12,8 @@ defmodule VarselWeb.CveView do
 
     * plain helpers returning data (`best_cvss/1`,
       `package_link/1` → `{label, url}`) used from templates and tests, and
-    * `Phoenix.Component` function components (`package_ref/1`, `version_ref/1`)
-      that render the same markup the site produced.
+    * `Phoenix.Component` function components (`package_display_name/1`,
+      `version_ref/1`) that render the same markup the site produced.
   """
   use Phoenix.Component
 
@@ -184,29 +184,30 @@ defmodule VarselWeb.CveView do
   then renders just the label). Falls back to `vendor / product`.
   """
   @spec package_link(map()) :: {String.t(), String.t() | nil}
-  def package_link(entry) when is_map(entry) do
-    case parse_purl(entry["packageURL"]) do
-      {:ok, %Purl{type: "hex"} = purl} ->
+  def package_link(%{"packageURL" => package_url} = entry) when not is_nil(package_url) do
+    case Purl.new!(package_url) do
+      %Purl{type: "hex"} = purl ->
         name = purl_name(purl)
         {"pkg:hex/#{name}", "https://hex.pm/packages/#{name}"}
 
-      {:ok, %Purl{type: "npm"} = purl} ->
+      %Purl{type: "npm"} = purl ->
         name = purl_name(purl)
         {"pkg:npm/#{name}", "https://www.npmjs.com/package/#{name}"}
 
-      {:ok, %Purl{type: "github"} = purl} ->
+      %Purl{type: "github"} = purl ->
         path = purl_name(purl)
         {"pkg:github/#{path}", "https://github.com/#{path}"}
 
-      {:ok, %Purl{type: "oci"} = purl} ->
+      %Purl{type: "oci"} = purl ->
         oci_link(entry, purl)
 
-      {:ok, purl} ->
+      purl ->
         {Purl.to_string(%{purl | version: nil, qualifiers: %{}, subpath: []}), nil}
-
-      :error ->
-        {"#{entry["vendor"]} / #{entry["product"]}", nil}
     end
+  end
+
+  def package_link(entry) when is_map(entry) do
+    {"#{entry["vendor"]} / #{entry["product"]}", nil}
   end
 
   defp oci_link(entry, purl) do
@@ -228,21 +229,23 @@ defmodule VarselWeb.CveView do
   "GitHub ↗" registry entry (`entry["repo"]` renders separately).
   """
   @spec registry_link(map()) :: {String.t(), String.t()} | nil
-  def registry_link(entry) when is_map(entry) do
-    case parse_purl(entry["packageURL"]) do
-      {:ok, %Purl{type: "hex"} = purl} ->
+  def registry_link(%{"packageURL" => package_url} = entry) when not is_nil(package_url) do
+    case Purl.new!(package_url) do
+      %Purl{type: "hex"} = purl ->
         {"Hex.pm", "https://hex.pm/packages/#{purl_name(purl)}"}
 
-      {:ok, %Purl{type: "npm"} = purl} ->
+      %Purl{type: "npm"} = purl ->
         {"npm", "https://www.npmjs.com/package/#{purl_name(purl)}"}
 
-      {:ok, %Purl{type: "oci"} = purl} ->
+      %Purl{type: "oci"} = purl ->
         oci_registry_link(entry, purl)
 
       _other ->
         nil
     end
   end
+
+  def registry_link(_entry), do: nil
 
   defp oci_registry_link(entry, purl) do
     case oci_link(entry, purl) do
@@ -360,49 +363,6 @@ defmodule VarselWeb.CveView do
   defp display(_range, value), do: value
 
   @doc """
-  Component rendering an affected entry's package reference as `<code>` text,
-  optionally linked. Mirrors `_includes/package-link.html`.
-  """
-  attr :entry, :map, required: true
-  attr :link, :boolean, default: false
-
-  def package_ref(assigns) do
-    {label, url} = package_link(assigns.entry)
-    linked? = assigns.link and not is_nil(url)
-    assigns = assign(assigns, label: label, url: url, linked?: linked?)
-
-    ~H"""
-    <.link :if={@linked?} href={@url} target="_blank" rel="noopener">
-      <code>{@label}</code>
-    </.link>
-    <code :if={not @linked?}>{@label}</code>
-    """
-  end
-
-  @doc """
-  Renders an affected entry's package as the `.pkg` mono chip (base surface,
-  soft border, ~5px radius) — used in the header band's chip row and the
-  Affected card heading, distinct from `package_ref/1`'s plain `<code>` text.
-  """
-  attr :entry, :map, required: true
-  attr :class, :any, default: nil
-
-  def package_chip(assigns) do
-    {label, _url} = package_link(assigns.entry)
-    assigns = assign(assigns, label: label)
-
-    ~H"""
-    <code class={[
-      "inline-block whitespace-nowrap rounded-[5px] border border-base-300/70 bg-base-100",
-      "px-[0.4rem] py-[0.07rem] text-[0.71rem] text-base-content/70",
-      @class
-    ]}>
-      {@label}
-    </code>
-    """
-  end
-
-  @doc """
   The bare package name for an affected entry — `bandit`, `erlang/otp`, no
   `pkg:type/` prefix — for spots that need a short name rather than the full
   purl chip label (the checker's placeholder and verdict copy: `bandit
@@ -410,11 +370,14 @@ defmodule VarselWeb.CveView do
   `vendor/product` when there's no parseable purl.
   """
   @spec bare_package_name(map()) :: String.t()
+  def bare_package_name(%{"packageURL" => package_url}) do
+    package_url
+    |> Purl.new!()
+    |> purl_name()
+  end
+
   def bare_package_name(entry) when is_map(entry) do
-    case parse_purl(entry["packageURL"]) do
-      {:ok, purl} -> purl_name(purl)
-      :error -> "#{entry["vendor"]}/#{entry["product"]}"
-    end
+    "#{entry["vendor"]}/#{entry["product"]}"
   end
 
   @doc """
@@ -426,9 +389,11 @@ defmodule VarselWeb.CveView do
   bare hex-style verdict.
   """
   @spec otp_package?(map()) :: boolean()
-  def otp_package?(entry) when is_map(entry) do
-    match?({:ok, %Purl{type: "otp"}}, parse_purl(entry["packageURL"]))
+  def otp_package?(%{"packageURL" => package_url}) do
+    match?(%Purl{type: "otp"}, Purl.new!(package_url))
   end
+
+  def otp_package?(_entry), do: false
 
   ## ---------------------------------------------------------------- id·name chips
 
@@ -496,9 +461,9 @@ defmodule VarselWeb.CveView do
   def version_link(version, "otp", %{"packageName" => "erlang/otp"}),
     do: {version, "https://www.erlang.org/patches/otp-#{version}"}
 
-  def version_link(version, "semver", entry) do
-    case parse_purl(entry["packageURL"]) do
-      {:ok, %Purl{type: "hex"} = purl} ->
+  def version_link(version, "semver", %{"packageURL" => package_url}) do
+    case Purl.new!(package_url) do
+      %Purl{type: "hex"} = purl ->
         {version, "https://hex.pm/packages/#{purl_name(purl)}/#{version}"}
 
       _other ->
@@ -509,8 +474,8 @@ defmodule VarselWeb.CveView do
   def version_link(version, _type, entry) do
     with purl_string when is_binary(purl_string) <- entry["packageURL"],
          true <-
-           String.contains?(purl_string, "pkg:oci/") and String.contains?(purl_string, "ghcr.io"),
-         {:ok, purl} <- parse_purl(purl_string) do
+           String.contains?(purl_string, "pkg:oci/") and String.contains?(purl_string, "ghcr.io") do
+      purl = Purl.new!(purl_string)
       {version, "https://github.com/#{entry["packageName"]}/pkgs/container/#{purl_name(purl)}"}
     else
       _other -> {version, nil}
@@ -973,27 +938,6 @@ defmodule VarselWeb.CveView do
     |> dedup_normalized()
   end
 
-  defp normalize_entry(%{"version" => version, "versionType" => "purl"} = entry) do
-    case parse_purl(version || "") do
-      {:ok, purl} ->
-        type = purl_base_type(purl)
-
-        Map.merge(entry, %{
-          "version" => purl_bare_version(version),
-          "version_raw" => version,
-          "versionType" => type,
-          "lessThan" => entry["lessThan"] && purl_bare_version(entry["lessThan"]),
-          "lessThan_raw" => entry["lessThan"],
-          "lessThanOrEqual" => entry["lessThanOrEqual"] && purl_bare_version(entry["lessThanOrEqual"]),
-          "lessThanOrEqual_raw" => entry["lessThanOrEqual"],
-          "changes" => normalize_changes(entry["changes"])
-        })
-
-      _error ->
-        nil
-    end
-  end
-
   defp normalize_entry(%{"version" => version} = entry) do
     Map.merge(entry, %{
       "version_raw" => version,
@@ -1029,14 +973,6 @@ defmodule VarselWeb.CveView do
 
   defp purl_bare_version(other), do: other
 
-  # Every purl type's bare version compares as semver — including
-  # `pkg:otp/*`, whose numbers are the OTP APPLICATION's own version scheme
-  # (never OTP release tags; those only ever arrive as plain
-  # `versionType: "otp"` entries, a genuinely separate representation of
-  # the same real vulnerability, not a duplicate — see CVE-2098-0002's
-  # shape, board addendum item 3).
-  defp purl_base_type(%Purl{}), do: "semver"
-
   # R2: group by {type family, normalized lower, normalized fix}. `git`
   # keeps its own type as the family key (never merges with numeric
   # ranges); everything else that normalizes to "semver"/"otp" via R1
@@ -1060,13 +996,174 @@ defmodule VarselWeb.CveView do
       entry["lessThan_raw"] != entry["lessThan"]
   end
 
-  ## ---------------------------------------------------------------- purl helpers
+  @doc """
+  A package's name as a reader recognises it, from its purl alone.
 
-  defp parse_purl(purl_string) when is_binary(purl_string) do
-    purl_string |> String.split("?") |> hd() |> Purl.new()
+  Tables list packages by purl, which spends most of its width on syntax: of
+  `pkg:hex/plug` only `plug` is the package, and
+  `pkg:otp/ssh?repository_url=https:%2F%2Fgithub.com%2Ferlang%2Fotp&vcs_url=…`
+  runs past 100 characters to say "ssh". This names the ecosystem and the
+  package instead — `Hex / plug`, `Erlang / ssh`, `GitHub / erlang/otp` — and
+  keeps the full purl in a `title` for anyone who needs it.
+
+  The ecosystem is what a reader knows the package by, not the purl's type: an
+  OTP application from the erlang/otp repository is Erlang's, while one from
+  elixir-lang/elixir is Elixir's, and the same `pkg:otp` type covers both.
+
+  Shortening is strictly whitelisted, and a purl that does not match a rule
+  prints verbatim — better a long name than a wrong one. `package_name/1`
+  carries the rules; this only renders them.
+  """
+  attr :purl, :string, required: true
+
+  attr :link, :boolean,
+    default: false,
+    doc: "link to the package's registry page, when it has one"
+
+  attr :class, :any, default: nil
+
+  attr :fallback, :string,
+    default: nil,
+    doc: "name for an entry with no purl at all, e.g. a hosted service's vendor/product"
+
+  def package_display_name(assigns) do
+    {_label, url} = package_link(%{"packageURL" => assigns.purl})
+
+    assigns =
+      assign(assigns,
+        parts: package_name(assigns.purl, assigns.fallback),
+        url: assigns.link && url
+      )
+
+    ~H"""
+    <.link :if={@url} href={@url} target="_blank" rel="noopener" class={@class} title={@purl}>
+      <.package_parts parts={@parts} />
+    </.link>
+    <span :if={!@url} class={@class} title={@purl}>
+      <.package_parts parts={@parts} />
+    </span>
+    """
   end
 
-  defp parse_purl(_other), do: :error
+  attr :parts, :map, required: true
+
+  defp package_parts(assigns) do
+    ~H"""
+    <span :if={@parts.ecosystem} class="text-base-content/50">{@parts.ecosystem} / </span>{@parts.name}
+    """
+  end
+
+  @doc """
+  Splits a purl into `%{ecosystem: name | nil, name: String.t()}` for display.
+
+  `ecosystem` is nil when the name stands on its own — either because the purl
+  names an ecosystem rather than a package (`pkg:sid/gleam.run/gleam` is just
+  "Gleam"), or because nothing matched and `name` is the untouched purl.
+  """
+  @spec package_name(String.t() | nil, String.t() | nil) :: %{
+          ecosystem: String.t() | nil,
+          name: String.t()
+        }
+  def package_name(purl, fallback \\ nil)
+
+  # A hosted service has no package to name — the caller's vendor/product is all
+  # there is to say.
+  def package_name(nil, fallback), do: fallback(fallback || "")
+
+  def package_name(purl, _fallback) when is_binary(purl) do
+    purl |> Purl.new!() |> display_parts() || fallback(purl)
+  end
+
+  defp fallback(purl), do: %{ecosystem: nil, name: to_string(purl)}
+
+  # `nil` from any clause means "no rule matched" and falls back to the purl.
+
+  # A hex package shortens only when nothing qualifies where it came from: a
+  # namespace or a `repository_url` means some other registry, and "Hex / plug"
+  # would then name the wrong one.
+  defp display_parts(%Purl{type: "hex", namespace: [], name: name, qualifiers: q}) when q == %{} do
+    %{ecosystem: "Hex", name: name}
+  end
+
+  # `pkg:otp` covers every OTP application, whoever ships it, so the repository
+  # it comes from is what names the ecosystem.
+  defp display_parts(%Purl{type: "otp", namespace: [], name: name} = purl) do
+    case repository(purl) do
+      "github.com/erlang/otp" -> %{ecosystem: "Erlang", name: name}
+      "github.com/elixir-lang/elixir" -> elixir_parts(name)
+      "github.com/erlang/rebar3" -> %{ecosystem: nil, name: "rebar3"}
+      # Both ship an OTP application whose own name says too little: `hex` is
+      # the Mix task, not the registry, and `nerves_hub` is the device service.
+      "github.com/hexpm/hex" -> %{ecosystem: nil, name: "Hex Mix Integration"}
+      "github.com/nerves-hub/nerves_hub_web" -> %{ecosystem: nil, name: "Nerves Hub"}
+      _unknown_repository -> nil
+    end
+  end
+
+  # An org is what tells four forks of the same project apart (esaml has four),
+  # so a github purl keeps `owner/repo` whole.
+  defp display_parts(%Purl{type: "github", namespace: [owner], name: name}) do
+    %{ecosystem: "GitHub", name: owner <> "/" <> name}
+  end
+
+  defp display_parts(%Purl{type: "npm", namespace: [], name: name}) do
+    %{ecosystem: "npm", name: name}
+  end
+
+  # An image name alone is not an address — any registry could host a `gleam`.
+  # `repository_url` holds the rest, so the host names the ecosystem and its
+  # path joins the image, spelling out what you would actually pull.
+  defp display_parts(%Purl{type: "oci", namespace: [], name: name} = purl) do
+    case purl |> repository() |> split_registry() do
+      {host, path} -> %{ecosystem: host, name: path <> "/" <> name}
+      nil -> nil
+    end
+  end
+
+  # A software id names a project, not a package within one, so it reads as the
+  # project alone. Whitelisted per purl — there is no general rule for a domain.
+  defp display_parts(%Purl{type: "sid", namespace: ["erlang.org"], name: "otp"}) do
+    %{ecosystem: nil, name: "Erlang"}
+  end
+
+  defp display_parts(%Purl{type: "sid", namespace: ["gleam.run"], name: "gleam"}) do
+    %{ecosystem: nil, name: "Gleam"}
+  end
+
+  defp display_parts(_unrecognised), do: nil
+
+  # Elixir ships as OTP applications; `elixir` itself is the language, the rest
+  # (mix, ex_unit, …) are applications within it.
+  defp elixir_parts("elixir"), do: %{ecosystem: nil, name: "Elixir"}
+  defp elixir_parts(name), do: %{ecosystem: "Elixir", name: name}
+
+  # A registry reference into its host and the path beneath it; `nil` when
+  # there is no path to speak of, since the host alone locates nothing.
+  defp split_registry(nil), do: nil
+
+  defp split_registry(reference) do
+    case String.split(reference, "/", parts: 2) do
+      [host, path] when path != "" -> {host, path}
+      _host_only -> nil
+    end
+  end
+
+  # The repository a purl came from, reduced to host and path so the same repo
+  # matches however it was spelled — `hexpm/hex` and `hexpm/hex.git` are one.
+  defp repository(%Purl{qualifiers: qualifiers}) do
+    case qualifiers["repository_url"] do
+      nil ->
+        nil
+
+      url ->
+        url
+        |> String.replace(~r{^[a-z+]+://}, "")
+        |> String.replace_suffix(".git", "")
+        |> String.trim_trailing("/")
+    end
+  end
+
+  ## ---------------------------------------------------------------- purl helpers
 
   # Full package name including namespace, joined with "/".
   defp purl_name(%Purl{namespace: [], name: name}), do: name

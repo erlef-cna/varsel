@@ -10,6 +10,8 @@ defmodule VarselWeb.PageHTML do
   """
   use VarselWeb, :html
 
+  import VarselWeb.CveView, only: [package_display_name: 1]
+
   alias VarselWeb.ChartComponents
 
   embed_templates "page_html/*"

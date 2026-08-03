@@ -12,4 +12,6 @@ defmodule VarselWeb.Storybook.Cve do
   def folder_open?, do: true
 
   def entry("affected_range_list"), do: [name: "Affected range list", icon: {:local, "hero-bars-arrow-down"}]
+
+  def entry("package_display_name"), do: [name: "Package display name", icon: {:local, "hero-cube"}]
 end

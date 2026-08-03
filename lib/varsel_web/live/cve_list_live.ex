@@ -18,7 +18,7 @@ defmodule VarselWeb.CveListLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
-  import VarselWeb.CveView, only: [package_ref: 1]
+  import VarselWeb.CveView, only: [package_display_name: 1]
   import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
 
   alias Varsel.CVE
@@ -486,7 +486,7 @@ defmodule VarselWeb.CveListLive do
                       handlers are out (CSP). --%>
                 <td phx-click={%JS{}}>
                   <div :for={purl <- record.purls || []} class="text-xs break-all">
-                    <.package_ref entry={%{"packageURL" => purl}} link={true} />
+                    <.package_display_name purl={purl} link={true} />
                   </div>
                 </td>
                 <td>

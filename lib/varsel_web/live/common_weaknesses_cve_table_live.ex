@@ -32,7 +32,7 @@ defmodule VarselWeb.CommonWeaknessesCveTableLive do
   """
   use VarselWeb, :live_view
 
-  import VarselWeb.CveView, only: [package_ref: 1]
+  import VarselWeb.CveView, only: [package_display_name: 1]
 
   alias AshPhoenix.LiveView, as: AshLiveView
   alias Varsel.CVE
@@ -102,7 +102,7 @@ defmodule VarselWeb.CommonWeaknessesCveTableLive do
               </td>
               <td phx-click={%JS{}}>
                 <div :for={purl <- record.purls || []} class="text-sm">
-                  <.package_ref entry={%{"packageURL" => purl}} link={true} />
+                  <.package_display_name purl={purl} link={true} />
                 </div>
               </td>
               <td class="whitespace-nowrap font-mono text-xs">{record.cve_id}</td>

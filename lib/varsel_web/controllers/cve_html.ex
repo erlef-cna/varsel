@@ -286,7 +286,8 @@ defmodule VarselWeb.CveHTML do
       asked = if otp_release_ranges == [], do: ranges, else: otp_release_ranges
 
       %{
-        "purl" => elem(package_link(entry), 0),
+        "purl" => entry["packageURL"],
+        "package_fallback" => "#{entry["vendor"]} / #{entry["product"]}",
         "bare_name" => bare_package_name(entry),
         "versions" => asked,
         "default_status" => entry["defaultStatus"],

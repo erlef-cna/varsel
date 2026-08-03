@@ -5,7 +5,6 @@
 defmodule VarselWeb.CveView.AffectedCheckerTest do
   use ExUnit.Case, async: true
 
-  alias VarselWeb.CveView
   alias VarselWeb.CveView.AffectedChecker, as: Checker
 
   describe "parse/2 — semver" do
