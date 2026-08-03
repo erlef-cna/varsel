@@ -299,6 +299,37 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     assert List.first(cna(result)["references"])["tags"] == ["vendor-advisory", "related"]
   end
 
+  test "keeps the self reference merely `related` while a vendor advisory is stored", %{
+    poc: poc,
+    case: case_record
+  } do
+    result = render!(case_record, poc)
+
+    assert %{"tags" => ["related"]} = self_reference(result)
+  end
+
+  test "tags the self reference `third-party-advisory` when no vendor advisory is stored", %{
+    poc: poc,
+    case: case_record
+  } do
+    {:ok, references} = Cases.list_case_references(actor: poc)
+
+    references
+    |> Enum.filter(&("vendor-advisory" in &1.tags))
+    |> Enum.each(&Cases.remove_case_reference!(&1, actor: poc))
+
+    result = render!(case_record, poc)
+
+    assert %{"tags" => ["related", "third-party-advisory"]} = self_reference(result)
+  end
+
+  defp self_reference(result) do
+    Enum.find(
+      cna(result)["references"],
+      &(&1["url"] == "https://cna.erlef.org/cves/CVE-2025-4754.html")
+    )
+  end
+
   test "derives prose from markdown with plaintext, HTML and markdown representations", %{
     poc: poc,
     case: case_record

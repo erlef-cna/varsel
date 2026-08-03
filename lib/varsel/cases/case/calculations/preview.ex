@@ -277,6 +277,8 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   # the leading vendor advisory and derived fix-commit links appended last —
   # the published convention: advisory, cna.erlef.org, osv.dev, stored
   # patches/extras, fix commits. Stored rows win over derived on URL conflict.
+  # With no stored `vendor-advisory`, our own page becomes the advisory of
+  # record and is tagged `third-party-advisory`.
   defp references(case_record) do
     stored =
       case_record.references
@@ -286,7 +288,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     {advisory, rest} = Enum.split(stored, 1)
 
     Enum.uniq_by(
-      advisory ++ self_links(case_record.cve_id) ++ rest ++ patch_links(case_record),
+      advisory ++ self_links(case_record.cve_id, stored) ++ rest ++ patch_links(case_record),
       & &1["url"]
     )
   end
@@ -294,15 +296,26 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   defp render_reference(url, []), do: %{"url" => url}
   defp render_reference(url, tags), do: %{"tags" => tags, "url" => url}
 
-  defp self_links(nil), do: []
+  defp self_links(nil, _stored), do: []
 
-  defp self_links(cve_id) do
+  defp self_links(cve_id, stored) do
     website = Application.get_env(:varsel, :cna_website_base_url, "https://cna.erlef.org")
 
     [
-      %{"tags" => ["related"], "url" => "#{website}/cves/#{cve_id}.html"},
+      %{"tags" => self_tags(stored), "url" => "#{website}/cves/#{cve_id}.html"},
       %{"tags" => ["related"], "url" => "https://osv.dev/vulnerability/EEF-#{cve_id}"}
     ]
+  end
+
+  # Without a vendor advisory among the stored references our own CVE page is
+  # the advisory of record, so it carries `third-party-advisory` (we are not the
+  # vendor) on top of `related`.
+  defp self_tags(stored) do
+    if Enum.any?(stored, &("vendor-advisory" in Map.get(&1, "tags", []))) do
+      ["related"]
+    else
+      ["related", "third-party-advisory"]
+    end
   end
 
   defp patch_links(case_record) do
