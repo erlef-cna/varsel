@@ -32,7 +32,9 @@ defmodule VarselWeb.AffectedCheckerLive do
   use VarselWeb, :live_view
 
   import VarselWeb.CveHTML, only: [affected_ranges: 1]
-  import VarselWeb.CveView, only: [affected_range_list: 1]
+
+  import VarselWeb.CveView,
+    only: [affected_range_list: 1, package_display_name: 1, package_name: 2]
 
   alias Varsel.CVE.VersionResolution
 
@@ -64,6 +66,15 @@ defmodule VarselWeb.AffectedCheckerLive do
     assign(socket, package: package, verdict: resolve(package, socket.assigns.input))
   end
 
+  # An <option> renders text, not markup, so the component's parts are joined
+  # by hand here.
+  defp package_option_label(package) do
+    case package_name(package["purl"], package["package_fallback"]) do
+      %{ecosystem: nil, name: name} -> name
+      %{ecosystem: ecosystem, name: name} -> "#{ecosystem} / #{name}"
+    end
+  end
+
   # `nil` (rather than a verdict) until something is typed — an empty box is
   # not a question, so it gets the prompt instead of an answer.
   defp resolve(_package, ""), do: nil
@@ -93,7 +104,7 @@ defmodule VarselWeb.AffectedCheckerLive do
             )
           ]}
         >
-          {pkg["purl"]}
+          <.package_display_name purl={pkg["purl"]} fallback={pkg["package_fallback"]} />
         </button>
       </div>
 
@@ -109,7 +120,7 @@ defmodule VarselWeb.AffectedCheckerLive do
             value={index}
             selected={index == @selected_index}
           >
-            {pkg["purl"]}
+            {package_option_label(pkg)}
           </option>
         </select>
       </form>

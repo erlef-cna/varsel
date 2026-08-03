@@ -111,8 +111,10 @@
             {record.cve_id} · {format_home_date(record.date_published)}
           </div>
           <h3 class="font-medium text-sm mt-1">{record.title || record.cve_id}</h3>
-          <div :if={record.purls != []} class="text-xs text-base-content/60 mt-2 truncate">
-            {List.first(record.purls)}
+          <div :if={record.purls != []} class="text-xs text-base-content/60 mt-2">
+            <div :for={purl <- record.purls}>
+              <.package_display_name purl={purl} />
+            </div>
           </div>
         </div>
       </.link>

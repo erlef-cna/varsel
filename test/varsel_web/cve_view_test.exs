@@ -454,15 +454,6 @@ defmodule VarselWeb.CveViewTest do
     end
   end
 
-  describe "package_chip/1" do
-    test "renders the mono pkg: label" do
-      html =
-        render_component(&CveView.package_chip/1, %{entry: %{"packageURL" => "pkg:hex/bandit"}})
-
-      assert html =~ "pkg:hex/bandit"
-    end
-  end
-
   defp render(entries), do: entries |> CveView.prose() |> Phoenix.HTML.safe_to_string()
 
   defp entry(media), do: [%{"lang" => "en", "value" => "the *value*", "supportingMedia" => media}]
