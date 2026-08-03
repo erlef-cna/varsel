@@ -1,6 +1,6 @@
 {
   "name": "varsel-assets",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Frontend build dependencies for the EEF CNA CVE management app.",
   "license": "Apache-2.0",
   "private": true,
