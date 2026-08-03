@@ -45,9 +45,12 @@ defmodule Varsel.Cases.Case.Changes.AssignCveRecord do
     end
   end
 
+  # Naming an ID explicitly also reaches withheld ones: the auto-pick above
+  # never offers them (:available is reserved-only), but someone who types the
+  # ID of an ID they are holding has said what they mean.
   defp pick_record(cve_record_id, actor) do
     case Varsel.CVE.get_cve_record(cve_record_id, actor: actor) do
-      {:ok, %{state: :reserved} = record} -> {:ok, record}
+      {:ok, %{state: state} = record} when state in [:reserved, :withheld] -> {:ok, record}
       {:ok, %{state: state}} -> {:error, "CVE record is #{state}, not reserved"}
       {:error, _} -> {:error, "CVE record does not exist"}
     end

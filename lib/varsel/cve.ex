@@ -59,6 +59,7 @@ defmodule Varsel.CVE do
     end
 
     tool :assign_cve, CveRecord, :assign
+    tool :withhold_cve, CveRecord, :withhold
     tool :update_cve, CveRecord, :update
     tool :request_publish_cve, CveRecord, :request_publish
     tool :reject_cve, CveRecord, :reject
@@ -93,6 +94,7 @@ defmodule Varsel.CVE do
       update VulnerabilityReport, :withdraw_vulnerability_report, :withdraw
 
       update CveRecord, :assign_cve, :assign
+      update CveRecord, :withhold_cve, :withhold
       update CveRecord, :update_cve, :update
       update CveRecord, :request_publish_cve, :request_publish
       update CveRecord, :reject_cve, :reject
@@ -115,6 +117,7 @@ defmodule Varsel.CVE do
       define :search_cve_records, action: :search, args: [:query]
       define :list_cve_records_by_purl, action: :list_by_purl, args: [:purl]
       define :available_cve_records, action: :available, args: [:year]
+      define :list_assignable_cve_records, action: :assignable
 
       # Reservation-pool + MITRE sync management.
       define :reserve_cve_record, action: :reserve
@@ -126,6 +129,7 @@ defmodule Varsel.CVE do
       define :list_all_cve_records, action: :list_all
       define :get_cve_record, action: :read, get_by: [:id]
       define :assign_cve_record, action: :assign
+      define :withhold_cve_record, action: :withhold
       define :request_publish_cve_record, action: :request_publish
       define :update_cve_record, action: :update
       define :publish_cve_record, action: :publish

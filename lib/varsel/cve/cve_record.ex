@@ -24,7 +24,11 @@ defmodule Varsel.CVE.CveRecord do
     [*] --> reserved : reserve (pool top-up)
     [*] --> published : import
     reserved --> draft : assign
+    reserved --> withheld : withhold (user)
     reserved --> rejected : reject (stale / external)
+    withheld --> draft : assign (named explicitly)
+    withheld --> published : import (published elsewhere)
+    withheld --> rejected : reject
     draft --> publishing : request_publish (user)
     draft --> rejected : reject
     publishing --> published : publish (Oban)
@@ -36,15 +40,28 @@ defmodule Varsel.CVE.CveRecord do
   | State | Meaning |
   | --- | --- |
   | `reserved` | Reserved from MITRE, open in the pool |
+  | `withheld` | Withheld from the pool for use outside this system |
   | `draft` | Taken out of the pool for drafting, not yet published |
   | `publishing` | Publish job enqueued; pushing the CNA container to MITRE |
   | `published` | MITRE accepted the record; `cve_json` set |
   | `pending_update` | Local edits to `cve_json` awaiting push to MITRE |
   | `rejected` | Terminal — rejected at MITRE; the ID is burned and never reused |
 
-  At MITRE both `reserved` and `draft` are simply `RESERVED`; the distinction is
-  purely local. `draft` is one-way — an assigned CVE is never returned to the open
-  pool; it can only be published or rejected.
+  At MITRE `reserved`, `withheld` and `draft` are all simply `RESERVED`; the
+  distinction is purely local. `draft` is one-way — an assigned CVE is never
+  returned to the open pool; it can only be published or rejected.
+
+  `withheld` marks an ID spoken for outside this system — the primary case being
+  the migration period, where the old management system still hands out IDs from
+  the same MITRE pool. A withheld ID is never *offered*: it stays out of the open
+  pool, so nothing auto-picks it for a case or counts it toward a pool top-up.
+
+  It leaves the state three ways: the MITRE sync finds it published and imports
+  the record (unlike `draft`, it is not blocked from that import — whoever
+  published it did so outside this system, so the incoming record is the first
+  thing we know about it); someone discards it (`reject`); or someone names it
+  explicitly when assigning a case, which pulls it back into `draft`. Only the
+  last is a deliberate reversal of the hold — auto-assignment can never reach it.
 
   ## Actions
 
@@ -53,11 +70,15 @@ defmodule Varsel.CVE.CveRecord do
 
   - `:import` — Upserts a record directly into the `:published` state from a full MITRE
     record. Used by the scheduled `import_from_mitre` action. Only new rows and rows in
-    `:reserved` or `:published` are written; in-flight local work and `:rejected`
-    tombstones are never overwritten (upsert_condition).
+    `:reserved`, `:withheld` or `:published` are written; in-flight local work and
+    `:rejected` tombstones are never overwritten (upsert_condition).
 
   - `:assign` (update) — Transitions a `:reserved` record to `:draft`, taking it out of
     the open pool.
+
+  - `:withhold` (update) — Transitions a `:reserved` record to `:withheld`, holding the ID
+    for use outside this system so nothing here assigns it. Requires a non-blank
+    `withhold_reason`.
 
   - `:request_publish` (update) — Accepts the `cve_json` for a `:draft` record, transitions
     it to `:publishing`, and enqueues a publish job. The Oban `:publish` worker then calls
@@ -66,8 +87,9 @@ defmodule Varsel.CVE.CveRecord do
   - `:update` (update) — Transitions a `:published` record to `:pending_update` with new
     `cve_json` and enqueues a push_update job.
 
-  - `:reject` (update) — Transitions a `:reserved`, `:draft`, or `:published` record to
-    the terminal `:rejected` state, rejecting the ID at MITRE and recording the reason.
+  - `:reject` (update) — Transitions a `:reserved`, `:withheld`, `:draft`, or `:published`
+    record to the terminal `:rejected` state, rejecting the ID at MITRE and recording the
+    reason.
 
   - `:import_from_mitre` / `:sync_from_mitre` — Scheduled daily; keep published records
     in sync with MITRE.
@@ -290,14 +312,15 @@ defmodule Varsel.CVE.CveRecord do
     default_initial_state :reserved
 
     transitions do
-      transition :assign, from: :reserved, to: :draft
+      transition :assign, from: [:reserved, :withheld], to: :draft
+      transition :withhold, from: :reserved, to: :withheld
       transition :request_publish, from: :draft, to: :publishing
       transition :publish, from: :publishing, to: :published
       transition :update, from: :published, to: :pending_update
       transition :update, from: :pending_update, to: :pending_update
       transition :push_update, from: :pending_update, to: :published
-      transition :reject, from: [:reserved, :draft, :published], to: :rejected
-      transition :mark_rejected, from: [:reserved, :draft, :published], to: :rejected
+      transition :reject, from: [:reserved, :withheld, :draft, :published], to: :rejected
+      transition :mark_rejected, from: [:reserved, :withheld, :draft, :published], to: :rejected
     end
   end
 
@@ -534,8 +557,23 @@ defmodule Varsel.CVE.CveRecord do
              )
     end
 
+    read :assignable do
+      description """
+      Every CVE ID a case may take: the open pool plus withheld IDs, which are
+      never offered automatically but may be named explicitly. Oldest first;
+      grouping free before withheld is left to whoever presents them.
+      """
+
+      prepare build(load: [:cve_id, :reserved_at], sort: [reserved_at: :asc])
+
+      filter expr(state in [:reserved, :withheld])
+    end
+
     read :available do
-      description "Returns open (unassigned) reservations in the pool for a given year."
+      description """
+      Returns open (unassigned) reservations in the pool for a given year.
+      Withheld IDs are spoken for elsewhere and never appear here.
+      """
 
       argument :year, :integer, allow_nil?: false
 
@@ -571,7 +609,12 @@ defmodule Varsel.CVE.CveRecord do
       # :rejected tombstones must never be overwritten by the import sweep.
       # A skipped upsert errors (StaleRecord) on single-record use but is
       # silent in the sweep's bulk path.
-      upsert_condition expr(state in [:reserved, :published])
+      #
+      # :withheld is deliberately importable: the whole point of withholding an
+      # ID is that it gets published outside this system, so the sync finding a
+      # published record for it is the expected end of the hold, not a clash
+      # with local work.
+      upsert_condition expr(state in [:reserved, :withheld, :published])
 
       change set_attribute(:state, :published)
     end
@@ -579,8 +622,8 @@ defmodule Varsel.CVE.CveRecord do
     action :import_from_mitre, OkResult do
       description """
       Fetches all published CVE IDs from MITRE and imports any that are new locally
-      or fill a local :reserved row. Rows in any other state are skipped with a
-      warning (see the :import upsert_condition).
+      or fill a local :reserved or :withheld row. Rows in any other state are skipped
+      with a warning (see the :import upsert_condition).
       """
 
       run fn _input, context ->
@@ -591,7 +634,7 @@ defmodule Varsel.CVE.CveRecord do
         # upsert_condition, which stays the enforcement.
         protected_ids =
           __MODULE__
-          |> Ash.Query.filter(state not in [:reserved, :published])
+          |> Ash.Query.filter(state not in [:reserved, :withheld, :published])
           |> Ash.Query.load(:cve_id)
           |> Ash.read!(opts)
           |> MapSet.new(& &1.cve_id)
@@ -601,7 +644,9 @@ defmodule Varsel.CVE.CveRecord do
           skip? = MapSet.member?(protected_ids, cve_id)
 
           if skip? do
-            Logger.warning("Skipped MITRE import of #{cve_id}: the local record is neither :reserved nor :published")
+            Logger.warning(
+              "Skipped MITRE import of #{cve_id}: the local record is none of :reserved, :withheld or :published"
+            )
           end
 
           skip?
@@ -620,9 +665,38 @@ defmodule Varsel.CVE.CveRecord do
     end
 
     update :assign do
-      description "Takes a reserved CVE ID out of the open pool, moving it into the draft state."
+      description """
+      Takes a reserved CVE ID out of the open pool, moving it into the draft state.
+      Also valid from :withheld, releasing a held ID back into local work — nothing
+      auto-picks a withheld ID, so this only happens when one is named explicitly.
+      """
+
       accept []
       change transition_state(:draft)
+    end
+
+    update :withhold do
+      description """
+      Withholds a reserved CVE ID for use outside this system — the migration period,
+      where the old management system issues IDs from the same MITRE pool, being the
+      motivating case. The ID leaves the open pool without being drafted here: nothing
+      in this system assigns it, and it stays withheld until it is rejected or the MITRE
+      sync imports a published record for it. The reason is required — it is what makes
+      the hold reviewable once the migration it was made for is over.
+      """
+
+      accept [:withhold_reason]
+
+      # Required and non-blank: a hold can outlive the migration that motivated
+      # it, and months later the reason is the only thing that says whether the
+      # ID is still spoken for or was simply forgotten. Ash casts "" to nil
+      # before validation, so `present` is what rejects a blank submission —
+      # string_length alone would let it through.
+      validate present(:withhold_reason)
+      validate string_length(:withhold_reason, min: 1)
+
+      change transition_state(:withheld)
+      change set_attribute(:withheld_at, &DateTime.utc_now/0)
     end
 
     update :update do
@@ -862,6 +936,7 @@ defmodule Varsel.CVE.CveRecord do
     # AshOban bypass.
     policy action([
              :assign,
+             :withhold,
              :request_publish,
              :update,
              :reject,
@@ -945,6 +1020,16 @@ defmodule Varsel.CVE.CveRecord do
 
     attribute :rejection_reason, :string do
       description "Why this CVE ID was rejected."
+      public? true
+    end
+
+    attribute :withheld_at, :utc_datetime do
+      description "When this CVE ID was withheld from the pool."
+      public? true
+    end
+
+    attribute :withhold_reason, :string do
+      description "What this CVE ID is being held for outside this system."
       public? true
     end
 
@@ -1158,7 +1243,7 @@ defmodule Varsel.CVE.CveRecord do
 
   defp reject_pool_row(cve_id, reason, opts) do
     __MODULE__
-    |> Ash.Query.filter(cve_id == ^cve_id and state == :reserved)
+    |> Ash.Query.filter(cve_id == ^cve_id and state in [:reserved, :withheld])
     |> Varsel.CVE.mark_cve_record_rejected!(
       %{rejection_reason: reason},
       Keyword.put(opts, :bulk_options,

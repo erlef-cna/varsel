@@ -257,6 +257,178 @@ defmodule Varsel.CVE.CveRecordTest do
     end
   end
 
+  describe "withhold" do
+    test "transitions reserved → withheld and records the reason" do
+      record = reserved_record()
+
+      withheld =
+        Ash.update!(record, %{withhold_reason: "Reserved in the old system"},
+          action: :withhold,
+          authorize?: false
+        )
+
+      assert withheld.state == :withheld
+      assert withheld.withhold_reason == "Reserved in the old system"
+      assert withheld.withheld_at
+    end
+
+    test "requires a non-blank reason" do
+      record = reserved_record()
+
+      assert {:error, _} = Ash.update(record, %{}, action: :withhold, authorize?: false)
+
+      assert {:error, _} =
+               Ash.update(record, %{withhold_reason: ""}, action: :withhold, authorize?: false)
+
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :reserved
+    end
+
+    test "a withheld ID is not offered by :available" do
+      reserved_record("CVE-#{@year}-3001")
+      other = reserved_record("CVE-#{@year}-3002")
+
+      Ash.update!(other, %{withhold_reason: "held"}, action: :withhold, authorize?: false)
+
+      available =
+        CveRecord
+        |> Ash.Query.for_read(:available, %{year: @year}, authorize?: false)
+        |> Ash.read!(load: [:cve_id])
+
+      assert Enum.map(available, & &1.cve_id) == ["CVE-#{@year}-3001"]
+    end
+
+    test "a withheld ID can be assigned back into draft" do
+      record = reserved_record()
+
+      withheld =
+        Ash.update!(record, %{withhold_reason: "held"}, action: :withhold, authorize?: false)
+
+      draft = Ash.update!(withheld, %{}, action: :assign, authorize?: false)
+
+      assert draft.state == :draft
+      # The hold's history stays on the row — it explains the gap.
+      assert draft.withhold_reason == "held"
+    end
+
+    test "cannot withhold a record that already left the pool" do
+      draft = draft_record()
+
+      assert {:error, _} =
+               Ash.update(draft, %{withhold_reason: "held"}, action: :withhold, authorize?: false)
+    end
+
+    test "the sync moves a withheld ID to :published once MITRE has published it" do
+      record = reserved_record()
+
+      withheld =
+        Ash.update!(record, %{withhold_reason: "held"}, action: :withhold, authorize?: false)
+
+      stub_mitre_list_ids([@cve_id])
+
+      log = capture_log([level: :warning], fn -> run_import_from_mitre() end)
+
+      published = Ash.get!(CveRecord, withheld.id, authorize?: false)
+      assert published.state == :published
+      assert published.cve_json == @published_cve_json
+      assert Ash.count!(CveRecord, authorize?: false) == 1
+      # Unlike a :draft row, a withheld one is expected to be published
+      # elsewhere — picking it up is the happy path, not a skipped clash.
+      assert log == ""
+    end
+
+    test "the sync marks a withheld ID rejected when MITRE has rejected it externally" do
+      record = reserved_record("CVE-#{@year}-8101")
+      Ash.update!(record, %{withhold_reason: "held"}, action: :withhold, authorize?: false)
+
+      Req.Test.stub(MitreCveApi, fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+
+        cond do
+          conn.method == "GET" && conn.query_params["state"] == "RESERVED" ->
+            Req.Test.json(conn, %{"cve_ids" => []})
+
+          conn.method == "GET" && conn.query_params["state"] == "REJECTED" ->
+            entries =
+              if conn.query_params["page"] == "1",
+                do: [%{"cve_id" => "CVE-#{@year}-8101"}],
+                else: []
+
+            Req.Test.json(conn, %{"cve_ids" => entries})
+
+          true ->
+            Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+        end
+      end)
+
+      CveRecord
+      |> Ash.ActionInput.for_action(:sync_reserved_from_mitre, %{}, authorize?: false)
+      |> Ash.run_action!()
+
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :rejected
+    end
+
+    test "the reserved sync does not pull a withheld ID back into the pool" do
+      record = reserved_record("CVE-#{@year}-8201")
+      Ash.update!(record, %{withhold_reason: "held"}, action: :withhold, authorize?: false)
+
+      stub_mitre_reserve_and_list_reserved([], ["CVE-#{@year}-8201"])
+
+      CveRecord
+      |> Ash.ActionInput.for_action(:sync_reserved_from_mitre, %{}, authorize?: false)
+      |> Ash.run_action!()
+
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :withheld
+      assert Ash.count!(CveRecord, authorize?: false) == 1
+    end
+
+    test "can be discarded by rejecting it at MITRE" do
+      record = reserved_record()
+
+      withheld =
+        Ash.update!(record, %{withhold_reason: "held"}, action: :withhold, authorize?: false)
+
+      stub_mitre_reject()
+
+      rejected =
+        Ash.update!(withheld, %{rejection_reason: "no longer needed"},
+          action: :reject,
+          authorize?: false
+        )
+
+      assert rejected.state == :rejected
+    end
+
+    test "the yearly stale sweep leaves prior-year withheld IDs alone" do
+      prior_year = @year - 1
+      record = reserved_record("CVE-#{prior_year}-9101", prior_year)
+      Ash.update!(record, %{withhold_reason: "held"}, action: :withhold, authorize?: false)
+
+      # A hold may legitimately outlive the year it was made in; burning the
+      # ID at MITRE would strand whatever is still using it outside the app.
+      Req.Test.stub(MitreCveApi, fn conn ->
+        flunk("MITRE should not be called for withheld reservations, got: #{conn.method} #{conn.request_path}")
+      end)
+
+      CveRecord
+      |> Ash.ActionInput.for_action(:run_reject_stale, %{}, authorize?: false)
+      |> Ash.run_action!()
+
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :withheld
+    end
+
+    test "records a paper-trail version" do
+      record = reserved_record()
+
+      withheld =
+        Ash.update!(record, %{withhold_reason: "Reserved in the old system"},
+          action: :withhold,
+          authorize?: false
+        )
+
+      assert %{version_action_name: :withhold, state: :withheld} = List.last(versions(withheld))
+    end
+  end
+
   describe "publish" do
     test "request_publish transitions draft → publishing with cve_json" do
       record = publishing_record()

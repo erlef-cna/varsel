@@ -135,6 +135,7 @@ defmodule VarselWeb.CaseDetailLive do
         mode: :view,
         expanded_package_id: nil,
         child_form: nil,
+        cve_picker: nil,
         preview: nil,
         validation: nil,
         preview_open?: false,
@@ -262,11 +263,36 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, socket}
   end
 
+  # Opening the picker reads the pool fresh: the ID list is the one thing on
+  # this page that another POC can invalidate between page load and click.
   def handle_event("assign_cve_id", _params, socket) do
+    actor = socket.assigns.current_user
+
+    {:noreply, assign(socket, cve_picker: CVE.list_assignable_cve_records!(actor: actor))}
+  end
+
+  def handle_event("cancel_cve_picker", _params, socket) do
+    {:noreply, assign(socket, :cve_picker, nil)}
+  end
+
+  # Both paths land here: "next free ID" sends no cve_record_id and lets the
+  # action pick, a chosen row sends the one it names.
+  def handle_event("confirm_assign_cve_id", params, socket) do
+    args =
+      case params["cve_record_id"] do
+        id when is_binary(id) and id != "" -> %{cve_record_id: id}
+        _blank -> %{}
+      end
+
     socket =
-      case Cases.assign_case_cve_id(socket.assigns.case_record, %{}, actor: socket.assigns.current_user) do
-        {:ok, _case_record} -> put_flash(socket, :info, "CVE ID assigned.")
-        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
+      case Cases.assign_case_cve_id(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
+        {:ok, _case_record} ->
+          socket
+          |> assign(:cve_picker, nil)
+          |> put_flash(:info, "CVE ID assigned.")
+
+        {:error, error} ->
+          put_flash(socket, :error, errors_to_string(error))
       end
 
     {:noreply, socket}
@@ -1165,6 +1191,8 @@ defmodule VarselWeb.CaseDetailLive do
       diff={@diff}
       amendment={amendment?(@case_record)}
     />
+
+    <.cve_picker_modal :if={@cve_picker} records={@cve_picker} />
     """
   end
 
@@ -2342,6 +2370,111 @@ defmodule VarselWeb.CaseDetailLive do
         </form>
       </div>
     </details>
+    """
+  end
+
+  attr :records, :list, required: true
+
+  # Two ways to take an ID, kept visibly apart: the top half is the one-click
+  # default (whatever is next in the pool), the bottom half is the deliberate
+  # pick. Nothing is assigned by opening this — both halves need their own
+  # button, so neither path can be taken by reflex.
+  defp cve_picker_modal(assigns) do
+    {free, withheld} = Enum.split_with(assigns.records, &(&1.state == :reserved))
+
+    assigns = assign(assigns, free: free, withheld: withheld, next: List.first(free))
+
+    ~H"""
+    <.modal id="cve-picker-modal" title="Assign a CVE ID" on_cancel="cancel_cve_picker">
+      <div class="space-y-4">
+        <div class="rounded-lg border border-base-300 bg-base-200 p-3">
+          <p class="text-sm font-semibold">Take the next free ID</p>
+          <p class="text-xs text-base-content/60 mt-0.5">
+            <span :if={@next} class="font-mono">{@next.cve_id}</span>
+            <span :if={is_nil(@next)}>The pool is empty — reserve more IDs first.</span>
+          </p>
+          <button
+            :if={@next}
+            type="button"
+            class="btn btn-eef btn-sm mt-2"
+            phx-click="confirm_assign_cve_id"
+          >
+            Assign {@next.cve_id}
+          </button>
+        </div>
+
+        <form
+          :if={@free != [] or @withheld != []}
+          phx-submit="confirm_assign_cve_id"
+          class="rounded-lg border border-base-300 p-3"
+        >
+          <p class="text-sm font-semibold">Or choose a specific ID</p>
+          <div class="mt-2 max-h-64 overflow-y-auto space-y-1">
+            <label
+              :for={record <- @free}
+              class="flex items-center gap-2 py-0.5 cursor-pointer text-sm"
+            >
+              <input
+                type="radio"
+                name="cve_record_id"
+                value={record.id}
+                class="radio radio-sm"
+                required
+              />
+              <span class="font-mono text-xs">{record.cve_id}</span>
+              <span class="text-xs text-base-content/50 tabular-nums">
+                reserved {format_date(record.reserved_at)}
+              </span>
+            </label>
+
+            <%!-- Withheld IDs are held for something outside this system, so
+                  they sit below a divider with the reason attached: taking one
+                  should read as overriding a decision, not picking off a list. --%>
+            <div
+              :if={@withheld != []}
+              class="flex items-center gap-2 pt-2 text-[0.66rem] font-semibold uppercase tracking-wider text-warning"
+            >
+              <span class="h-px flex-1 bg-warning/30"></span>
+              withheld <span class="h-px flex-1 bg-warning/30"></span>
+            </div>
+            <label
+              :for={record <- @withheld}
+              class="flex items-start gap-2 py-1 px-2 -mx-1 rounded-md cursor-pointer text-sm bg-warning/10 border border-warning/25"
+            >
+              <input
+                type="radio"
+                name="cve_record_id"
+                value={record.id}
+                class="radio radio-sm radio-warning mt-0.5"
+                required
+              />
+              <span class="flex flex-col">
+                <span class="flex items-baseline gap-2">
+                  <span class="font-mono text-xs">{record.cve_id}</span>
+                  <span class="text-xs text-warning tabular-nums">
+                    withheld {format_date(record.withheld_at)}
+                  </span>
+                </span>
+                <span class="text-xs text-base-content/60">{record.withhold_reason}</span>
+              </span>
+            </label>
+          </div>
+          <button type="submit" class="btn btn-eef-quiet btn-sm mt-3">
+            Assign chosen ID
+          </button>
+        </form>
+
+        <p :if={@free == [] and @withheld == []} class="text-sm text-base-content/60">
+          No CVE IDs are available to assign.
+        </p>
+      </div>
+
+      <:actions>
+        <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_cve_picker">
+          Cancel
+        </button>
+      </:actions>
+    </.modal>
     """
   end
 

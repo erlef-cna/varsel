@@ -217,6 +217,7 @@ defmodule Varsel.CVE.CveRecordPolicyTest do
       published = published_record("CVE-#{@year}-0008")
 
       assert Ash.can?({reserved, :assign}, poc)
+      assert Ash.can?({reserved, :withhold}, poc)
       assert Ash.can?({reserved, :reject}, poc)
       assert Ash.can?({published, :update}, poc)
     end
@@ -227,6 +228,7 @@ defmodule Varsel.CVE.CveRecordPolicyTest do
       published = published_record("CVE-#{@year}-0010")
 
       refute Ash.can?({reserved, :assign}, supporter)
+      refute Ash.can?({reserved, :withhold}, supporter)
       refute Ash.can?({reserved, :reject}, supporter)
       refute Ash.can?({published, :update}, supporter)
     end

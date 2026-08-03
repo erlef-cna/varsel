@@ -10,10 +10,10 @@ defmodule VarselWeb.CveListLive do
   full-text search, paginated; the `:list_all` read policy scopes them to
   published records. POCs get the management console on top: the header band
   with pool sync/reserve actions, a reserved-pool summary panel above the
-  table (collapsible, with per-ID inline reject), the paginated table of
-  every active record (draft, publishing, published, pending_update), and an
-  action-free rejected-IDs summary panel below it. Editing a record's JSON
-  lives on `VarselWeb.VarselEditLive`.
+  table (collapsible, with per-ID inline withhold and reject), the paginated
+  table of every active record (draft, publishing, published, pending_update),
+  and action-free withheld- and rejected-IDs summary panels below it. Editing
+  a record's JSON lives on `VarselWeb.VarselEditLive`.
   """
   use VarselWeb, :live_view
 
@@ -27,8 +27,9 @@ defmodule VarselWeb.CveListLive do
 
   require Ash.Query
 
-  # The states the records table lists (reserved and rejected records live in
-  # their own summary panels) — also the table's filter-scope order.
+  # The states the records table lists (reserved, withheld and rejected
+  # records live in their own summary panels) — also the table's filter-scope
+  # order.
   @table_states [:draft, :publishing, :published, :pending_update]
 
   @impl Phoenix.LiveView
@@ -49,12 +50,17 @@ defmodule VarselWeb.CveListLive do
         filter: "all",
         record_counts: %{},
         pool_open?: false,
+        withheld_open?: false,
         rejected_open?: false,
-        confirming_reject_id: nil
+        confirming_reject_id: nil,
+        withholding_id: nil
       )
       |> keep_records_live()
 
-    socket = if console?, do: socket |> keep_pool_live() |> keep_rejected_live(), else: socket
+    socket =
+      if console?,
+        do: socket |> keep_pool_live() |> keep_withheld_live() |> keep_rejected_live(),
+        else: socket
 
     {:ok, socket}
   end
@@ -108,6 +114,26 @@ defmodule VarselWeb.CveListLive do
         |> Ash.Query.load([:cve_id, :reserved_at])
         |> Ash.Query.sort(reserved_at: :asc)
         |> Ash.Query.select([:id, :state, :version])
+    )
+  end
+
+  # Withheld IDs get the same summary-panel treatment: they are out of the
+  # pool but not terminal, so the panel keeps the reject action — the only
+  # way out of the hold that is ours to take (the other is MITRE publishing
+  # the ID, which the sync picks up on its own).
+  defp keep_withheld_live(socket) do
+    keep_live(socket, :withheld, &list_withheld/1, subscribe: "cve_record:all", results: :lose)
+  end
+
+  defp list_withheld(socket) do
+    CVE.list_all_cve_records!(
+      actor: socket.assigns.current_user,
+      query:
+        CveRecord
+        |> Ash.Query.filter(state == :withheld)
+        |> Ash.Query.load([:cve_id, :reserved_at])
+        |> Ash.Query.sort(withheld_at: :asc)
+        |> Ash.Query.select([:id, :state, :version, :withheld_at, :withhold_reason])
     )
   end
 
@@ -181,11 +207,68 @@ defmodule VarselWeb.CveListLive do
   end
 
   def handle_event("toggle_pool", _params, socket) do
-    {:noreply, assign(socket, pool_open?: not socket.assigns.pool_open?, confirming_reject_id: nil)}
+    {:noreply,
+     assign(socket,
+       pool_open?: not socket.assigns.pool_open?,
+       confirming_reject_id: nil,
+       withholding_id: nil
+     )}
+  end
+
+  def handle_event("toggle_withheld", _params, socket) do
+    {:noreply, assign(socket, withheld_open?: not socket.assigns.withheld_open?, confirming_reject_id: nil)}
   end
 
   def handle_event("toggle_rejected", _params, socket) do
     {:noreply, assign(socket, rejected_open?: not socket.assigns.rejected_open?)}
+  end
+
+  # Withholding asks for a reason the way rejection does — an ID held for
+  # something outside this system is only legible later if it says what for.
+  def handle_event("withhold_prompt", %{"id" => record_id}, socket) do
+    {:noreply, assign(socket, withholding_id: record_id, confirming_reject_id: nil)}
+  end
+
+  def handle_event("withhold_cancel", _params, socket) do
+    {:noreply, assign(socket, :withholding_id, nil)}
+  end
+
+  def handle_event("withhold", params, socket) do
+    actor = socket.assigns.current_user
+    record = Enum.find(socket.assigns.pool, &(&1.id == params["record_id"]))
+    reason = params["reason"] |> to_string() |> String.trim()
+
+    socket =
+      case CVE.withhold_cve_record(record, %{withhold_reason: reason}, actor: actor) do
+        {:ok, withheld} ->
+          socket
+          |> assign(:withholding_id, nil)
+          |> put_flash(:info, "Withheld #{withheld.cve_id} from the pool.")
+
+        {:error, error} ->
+          put_flash(socket, :error, "Could not withhold: #{errors_to_string(error)}")
+      end
+
+    {:noreply, socket}
+  end
+
+  # The withheld panel's undo: the ID returns as a draft, not to the open
+  # pool, so releasing it is a decision to work it here rather than a
+  # candidate for the next auto-assignment.
+  def handle_event("release", %{"id" => record_id}, socket) do
+    actor = socket.assigns.current_user
+    record = Enum.find(socket.assigns.withheld, &(&1.id == record_id))
+
+    socket =
+      case CVE.assign_cve_record(record, %{}, actor: actor) do
+        {:ok, drafted} ->
+          put_flash(socket, :info, "Released #{drafted.cve_id} — now a draft.")
+
+        {:error, error} ->
+          put_flash(socket, :error, "Could not release: #{errors_to_string(error)}")
+      end
+
+    {:noreply, socket}
   end
 
   def handle_event("reject_prompt", %{"id" => record_id}, socket) do
@@ -205,6 +288,7 @@ defmodule VarselWeb.CveListLive do
 
     record =
       Enum.find(socket.assigns.pool, &(&1.id == record_id)) ||
+        Enum.find(socket.assigns.withheld, &(&1.id == record_id)) ||
         Enum.find(socket.assigns.cve_records.results, &(&1.id == record_id))
 
     reason = reject_reason(record, params["reason"])
@@ -324,6 +408,7 @@ defmodule VarselWeb.CveListLive do
   end
 
   defp default_reject_reason(%{state: :reserved}), do: "Rejected from the reserved pool"
+  defp default_reject_reason(%{state: :withheld}), do: "Discarded while withheld from the pool"
   defp default_reject_reason(_record), do: "Rejected before publication"
 
   defp table_states, do: @table_states
@@ -406,6 +491,7 @@ defmodule VarselWeb.CveListLive do
         pool={@pool}
         open?={@pool_open?}
         confirming_reject_id={@confirming_reject_id}
+        withholding_id={@withholding_id}
         current_user={@current_user}
       />
 
@@ -567,6 +653,14 @@ defmodule VarselWeb.CveListLive do
         </:footer>
       </.list_card>
 
+      <.withheld_panel
+        :if={@console?}
+        withheld={@withheld}
+        open?={@withheld_open?}
+        confirming_reject_id={@confirming_reject_id}
+        current_user={@current_user}
+      />
+
       <.rejected_panel :if={@console?} rejected={@rejected} open?={@rejected_open?} />
 
       <p :if={@console?} class="mt-6 text-sm text-base-content/60">
@@ -623,15 +717,19 @@ defmodule VarselWeb.CveListLive do
   defp state_dot_class(:pending_update), do: "bg-warning"
   defp state_dot_class(:publishing), do: "bg-info"
   defp state_dot_class(:published), do: "bg-base-content/40"
+  defp state_dot_class(:withheld), do: "bg-base-content/30"
+  defp state_dot_class(_state), do: "bg-base-content/30"
 
   defp state_text_class(:draft), do: "text-warning text-sm"
   defp state_text_class(:pending_update), do: "text-warning text-sm"
   defp state_text_class(:publishing), do: "text-info text-sm"
   defp state_text_class(:published), do: "text-base-content/60 text-sm"
+  defp state_text_class(_state), do: "text-base-content/60 text-sm"
 
   attr :pool, :list, required: true
   attr :open?, :boolean, required: true
   attr :confirming_reject_id, :string, default: nil
+  attr :withholding_id, :string, default: nil
   attr :current_user, :any, required: true
 
   # P2: count joins the label ("Reserved pool 12", no redundant "IDs"), the
@@ -672,7 +770,9 @@ defmodule VarselWeb.CveListLive do
         :for={record <- @records}
         record={record}
         confirming?={@confirming_reject_id == record.id}
+        withholding?={@withholding_id == record.id}
         can_reject?={CVE.can_reject_cve_record?(@current_user, record)}
+        can_withhold?={CVE.can_withhold_cve_record?(@current_user, record, %{})}
       />
     </.summary_panel>
     """
@@ -691,28 +791,74 @@ defmodule VarselWeb.CveListLive do
 
   attr :record, :any, required: true
   attr :confirming?, :boolean, required: true
+  attr :withholding?, :boolean, required: true
   attr :can_reject?, :boolean, required: true
+  attr :can_withhold?, :boolean, required: true
 
   defp pool_row(assigns) do
     ~H"""
     <div
-      :if={not @confirming?}
+      :if={not @confirming? and not @withholding?}
       class="grid grid-cols-[10rem_1fr_auto] items-center gap-3 py-1 text-sm"
     >
       <span class="font-mono text-xs text-base-content/60">{@record.cve_id}</span>
       <span class="text-xs text-base-content/50 tabular-nums">
         reserved {format_date(@record.reserved_at)}
       </span>
-      <button
-        :if={@can_reject?}
-        type="button"
-        class="text-xs font-semibold text-error/85"
-        phx-click="reject_prompt"
-        phx-value-id={@record.id}
-      >
-        Reject
-      </button>
+      <div class="flex items-center gap-3">
+        <%!-- Withhold reads before Reject: it is the reversible one, and
+              putting the destructive action last keeps the pool row's
+              gradient of consequence going left to right. --%>
+        <button
+          :if={@can_withhold?}
+          type="button"
+          class="text-xs font-semibold text-base-content/60"
+          phx-click="withhold_prompt"
+          phx-value-id={@record.id}
+        >
+          Withhold
+        </button>
+        <button
+          :if={@can_reject?}
+          type="button"
+          class="text-xs font-semibold text-error/85"
+          phx-click="reject_prompt"
+          phx-value-id={@record.id}
+        >
+          Reject
+        </button>
+      </div>
     </div>
+    <form
+      :if={@withholding?}
+      phx-submit="withhold"
+      phx-window-keydown="withhold_cancel"
+      phx-key="escape"
+      class="flex flex-wrap items-center gap-2 py-1 px-2 -mx-2 my-0.5 rounded-md text-sm bg-base-300/40"
+    >
+      <input type="hidden" name="record_id" value={@record.id} />
+      <span class="font-mono text-xs text-base-content/60">{@record.cve_id}</span>
+      <span class="text-xs text-base-content/60">held for what?</span>
+      <input
+        type="text"
+        name="reason"
+        value=""
+        placeholder="e.g. reserved in the old management system"
+        required
+        autofocus
+        class="input input-xs flex-1 min-w-56"
+      />
+      <div class="ml-auto flex items-center gap-2 shrink-0">
+        <button type="submit" class="btn btn-neutral btn-xs">Withhold</button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs border border-base-300"
+          phx-click="withhold_cancel"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
     <div
       :if={@confirming?}
       phx-window-keydown="reject_cancel"
@@ -739,6 +885,99 @@ defmodule VarselWeb.CveListLive do
         </button>
       </div>
     </div>
+    """
+  end
+
+  attr :withheld, :list, required: true
+  attr :open?, :boolean, required: true
+  attr :confirming_reject_id, :string, default: nil
+  attr :current_user, :any, required: true
+
+  # Sits below the table rather than above it: withheld IDs are the pool's
+  # backwater, not work in progress. Each row carries the reason it is held,
+  # which is the only thing that makes the hold reviewable months later.
+  defp withheld_panel(assigns) do
+    records = assigns.withheld
+
+    assigns =
+      assign(assigns,
+        records: records,
+        count: length(records),
+        id_range: pool_id_range(records)
+      )
+
+    ~H"""
+    <.summary_panel
+      :if={@count > 0}
+      id="withheld-panel"
+      label="Withheld"
+      dot="bg-base-content/30"
+      count={@count}
+      open?={@open?}
+      toggle="toggle_withheld"
+      records_id="withheld-ids"
+      class="mt-4"
+    >
+      <:fact :if={@id_range} label="span" value={@id_range} mono?={true} />
+      <div
+        :for={record <- @records}
+        class="grid grid-cols-[10rem_1fr_auto] items-center gap-3 py-1 text-sm"
+      >
+        <span class="font-mono text-xs text-base-content/60">{record.cve_id}</span>
+        <span class="text-xs text-base-content/50">
+          {record.withhold_reason}
+          <span class="tabular-nums text-base-content/40">
+            · withheld {format_date(record.withheld_at)}
+          </span>
+        </span>
+        <div :if={@confirming_reject_id != record.id} class="flex items-center gap-3">
+          <%!-- Releasing is the deliberate undo of a hold: the ID comes back
+                as a draft rather than to the open pool, so it stays out of
+                anything that auto-picks. --%>
+          <button
+            :if={CVE.can_assign_cve_record?(@current_user, record, %{})}
+            type="button"
+            class="text-xs font-semibold text-base-content/60"
+            phx-click="release"
+            phx-value-id={record.id}
+          >
+            Release
+          </button>
+          <button
+            :if={CVE.can_reject_cve_record?(@current_user, record)}
+            type="button"
+            class="text-xs font-semibold text-error/85"
+            phx-click="reject_prompt"
+            phx-value-id={record.id}
+          >
+            Reject
+          </button>
+        </div>
+        <span
+          :if={@confirming_reject_id == record.id}
+          class="flex items-center gap-2 shrink-0"
+          phx-window-keydown="reject_cancel"
+          phx-key="escape"
+        >
+          <span class="text-xs text-base-content/60">reject at MITRE?</span>
+          <button
+            type="button"
+            class="btn btn-error btn-xs"
+            phx-click="reject"
+            phx-value-id={record.id}
+          >
+            Reject
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs border border-base-300"
+            phx-click="reject_cancel"
+          >
+            Cancel
+          </button>
+        </span>
+      </div>
+    </.summary_panel>
     """
   end
 
