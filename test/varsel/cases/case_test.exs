@@ -242,6 +242,44 @@ defmodule Varsel.Cases.CaseTest do
       assert Ash.get!(Cases.Case, case2.id, authorize?: false).cve_record_id == nil
     end
 
+    test "never auto-picks a withheld ID", %{poc: poc} do
+      year = Date.utc_today().year
+      withheld = Fixtures.reserved_cve_record("CVE-#{year}-11119")
+
+      Ash.update!(withheld, %{withhold_reason: "held by the old system"},
+        action: :withhold,
+        authorize?: false
+      )
+
+      free = Fixtures.reserved_cve_record("CVE-#{year}-11120")
+
+      case_record = Fixtures.open_case(poc)
+      case_record = Cases.assign_case_cve_id!(case_record, %{}, actor: poc)
+
+      # The withheld ID sorts lower, so it would have won the pick if the
+      # pool query offered it at all.
+      assert case_record.cve_record_id == free.id
+      assert Ash.get!(CveRecord, withheld.id, authorize?: false).state == :withheld
+    end
+
+    test "assigns a withheld ID when it is named explicitly", %{poc: poc} do
+      year = Date.utc_today().year
+      record = Fixtures.reserved_cve_record("CVE-#{year}-11121")
+
+      Ash.update!(record, %{withhold_reason: "held by the old system"},
+        action: :withhold,
+        authorize?: false
+      )
+
+      case_record = Fixtures.open_case(poc)
+
+      case_record =
+        Cases.assign_case_cve_id!(case_record, %{cve_record_id: record.id}, actor: poc)
+
+      assert case_record.cve_record_id == record.id
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
+    end
+
     test "two cases assigned in sequence get different IDs", %{poc: poc} do
       year = Date.utc_today().year
       Fixtures.reserved_cve_record("CVE-#{year}-11117")

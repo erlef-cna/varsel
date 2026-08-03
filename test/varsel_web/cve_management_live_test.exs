@@ -240,6 +240,129 @@ defmodule VarselWeb.VarselLiveTest do
     assert html =~ "CVE-#{@year}-1005"
   end
 
+  test "withholding a pool ID takes it out of the pool into its own panel", %{conn: conn} do
+    poc = register("poc", :poc)
+    record = reserved_record("CVE-#{@year}-1010")
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    lv |> element("button", "Show IDs ▾") |> render_click()
+
+    lv
+    |> element(~s{button[phx-click="withhold_prompt"][phx-value-id="#{record.id}"]})
+    |> render_click()
+
+    # The reason starts empty — a prefilled one gets accepted unedited, which
+    # is exactly the hold nobody can account for later.
+    html = render(lv)
+    assert html =~ "held for what?"
+    assert html =~ ~s(name="reason" value="")
+
+    # Submitting it blank is refused rather than written as a nil reason.
+    html =
+      lv
+      |> form(~s{#pool-ids form[phx-submit="withhold"]}, %{reason: "  "})
+      |> render_submit()
+
+    assert html =~ "Could not withhold"
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :reserved
+
+    lv
+    |> form(~s{#pool-ids form[phx-submit="withhold"]}, %{reason: "Held by the old system"})
+    |> render_submit()
+
+    withheld = Ash.get!(CveRecord, record.id, authorize?: false)
+    assert withheld.state == :withheld
+    assert withheld.withhold_reason == "Held by the old system"
+
+    # It leaves the reserved pool and surfaces in the withheld panel, which
+    # carries the reason once expanded.
+    assert render(lv) =~ ~s(id="withheld-panel")
+
+    html = lv |> element(~s{#withheld-panel button}, "Show IDs ▾") |> render_click()
+    assert html =~ "CVE-#{@year}-1010"
+    assert html =~ "Held by the old system"
+  end
+
+  test "a withheld ID is not handed out by 'Reserve a new one'", %{conn: conn} do
+    poc = register("poc", :poc)
+    record = reserved_record("CVE-#{@year}-1011")
+
+    Ash.update!(record, %{withhold_reason: "Held by the old system"},
+      action: :withhold,
+      authorize?: false
+    )
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    html = lv |> element("button", "Reserve a new one") |> render_click()
+
+    assert html =~ "No reserved IDs in the pool."
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :withheld
+  end
+
+  test "a withheld ID can be released back into a draft", %{conn: conn} do
+    poc = register("poc", :poc)
+    record = reserved_record("CVE-#{@year}-1013")
+
+    Ash.update!(record, %{withhold_reason: "Held by the old system"},
+      action: :withhold,
+      authorize?: false
+    )
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    lv |> element(~s{#withheld-panel button}, "Show IDs ▾") |> render_click()
+
+    lv
+    |> element(~s{#withheld-ids button[phx-click="release"][phx-value-id="#{record.id}"]})
+    |> render_click()
+
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
+
+    html = render(lv)
+    assert html =~ "Released CVE-#{@year}-1013"
+    # It rejoins the records table as a draft rather than the reserved pool.
+    refute html =~ ~s(id="withheld-panel")
+    assert has_element?(lv, "tbody td", "Draft")
+  end
+
+  test "a withheld ID can be discarded from its panel", %{conn: conn} do
+    poc = register("poc", :poc)
+    record = reserved_record("CVE-#{@year}-1012")
+
+    Ash.update!(record, %{withhold_reason: "Held by the old system"},
+      action: :withhold,
+      authorize?: false
+    )
+
+    Req.Test.stub(MitreCveApi, fn conn ->
+      if conn.method == "PUT" do
+        Req.Test.json(conn, %{"message" => "CVE ID rejected"})
+      else
+        Plug.Conn.send_resp(conn, 405, "Method Not Allowed")
+      end
+    end)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    lv |> element(~s{#withheld-panel button}, "Show IDs ▾") |> render_click()
+
+    lv
+    |> element(~s{#withheld-ids button[phx-click="reject_prompt"][phx-value-id="#{record.id}"]})
+    |> render_click()
+
+    lv
+    |> element(~s{#withheld-ids button[phx-click="reject"][phx-value-id="#{record.id}"]})
+    |> render_click()
+
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :rejected
+
+    html = render(lv)
+    assert html =~ ~s(id="rejected-panel")
+    refute html =~ ~s(id="withheld-panel")
+  end
+
   test "a draft row is rejectable inline from the records table", %{conn: conn} do
     poc = register("poc", :poc)
 

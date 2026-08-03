@@ -243,6 +243,7 @@ defmodule VarselWeb.Router do
         :list_all_cves,
         :available_cve_ids,
         :assign_cve,
+        :withhold_cve,
         :update_cve,
         :request_publish_cve,
         :reject_cve,
