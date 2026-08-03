@@ -98,8 +98,8 @@ descriptions, affected version ranges, and credits.
 
 For the underlying data format, refer to the
 [CVE JSON schema](https://github.com/CVEProject/cve-schema). All our records follow
-this schema, and the [cna-staging repository](https://github.com/erlef-cna/cna-staging)
-contains tooling to validate and format them.
+this schema, and this site validates them against it before publication (see
+[§7](#7-cna-internal-process--tooling)).
 [Vulnogram](https://vulnogram.github.io/) is a useful tool for visually editing and
 validating CVE JSON records.
 
@@ -199,21 +199,14 @@ validating CVE JSON records.
 
 ## 7. CNA Internal Process & Tooling
 
-The internal CNA workflow is documented in the
-[cna-staging repository](https://github.com/erlef-cna/cna-staging). This includes
-scripts for formatting and validating CVE records, converting to OSV format, and
-automation workflows.
+CNA processes are facilitated by [Varsel](https://github.com/erlef-cna/varsel),
+the application this site runs on. It manages CVE records through their whole
+lifecycle — reservation, drafting, publication to MITRE, and the derived OSV
+feeds.
 
-The repository also contains a set of Claude Code skills that can assist with
-common coordinator tasks:
-
-- [new-cve](https://github.com/erlef-cna/cna-staging/blob/main/.claude/skills/new-cve/SKILL.md): step-by-step workflow for creating a CVE record
-- [cvss](https://github.com/erlef-cna/cna-staging/blob/main/.claude/skills/cvss/SKILL.md): CVSS v4.0 scoring
-- [find-cwe](https://github.com/erlef-cna/cna-staging/blob/main/.claude/skills/find-cwe/SKILL.md): CWE classification
-- [find-capec](https://github.com/erlef-cna/cna-staging/blob/main/.claude/skills/find-capec/SKILL.md): CAPEC attack pattern identification
-- [find-intro-commit](https://github.com/erlef-cna/cna-staging/blob/main/.claude/skills/find-intro-commit/SKILL.md): locate the commit that introduced a vulnerability
-- [summarize-cve](https://github.com/erlef-cna/cna-staging/blob/main/.claude/skills/summarize-cve/SKILL.md): generate a technical CVE summary
-- [verify](https://github.com/erlef-cna/cna-staging/blob/main/.claude/skills/verify/SKILL.md): validate a CVE record before submission
+Varsel also ships a set of [Claude Code skills](https://github.com/erlef-cna/varsel/tree/main/skills)
+covering common coordinator tasks: scoring, classification, drafting, and
+validating a record before submission.
 
 > **Note:** AI can be very helpful for these tasks, but every result must be verified by a human before submission. Do not rely on AI output without checking it yourself.
 
