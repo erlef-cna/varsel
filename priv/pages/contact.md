@@ -5,12 +5,20 @@
 ---
 
 We encourage security researchers and members of the community to report
-vulnerabilities through the following contact methods.
+vulnerabilities to us.
 
 > **Are you a project maintainer coordinating a disclosure with us?** See the
 > [Maintainer Process](/maintainer-process) page for step-by-step guidance.
 
 ## Report a Vulnerability
+
+**Use the [report form](/report).** It reaches the Points of Contact directly,
+asks for what we need up front, and gives your report a tracked case from the
+start. The form requires a sign-in with GitHub or Hex.pm so we can reach you
+about the report.
+
+If you would rather not sign in, or the form is unavailable, email works as a
+backup:
 
 - **Email:** [cna@erlef.org](mailto:cna@erlef.org)
 - **GPG Key:** [for encrypted communications](https://keys.openpgp.org/vks/v1/by-fingerprint/38BD201B397E28F1F3D93EC76E031A811F266E21)
