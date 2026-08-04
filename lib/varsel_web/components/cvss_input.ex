@@ -125,8 +125,8 @@ defmodule VarselWeb.CvssInput do
         {error}
       </p>
 
-      <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1 mt-2">
-        <div :for={{code, name, options} <- metrics()} class="flex items-center justify-between gap-2">
+      <div class="grid sm:grid-cols-2 gap-x-6 gap-y-3 mt-2">
+        <div :for={{code, name, options} <- metrics()} class="flex flex-col items-start gap-1 min-w-0">
           <span class="text-xs text-base-content/70">{name}</span>
           <div class="join">
             <button
@@ -134,7 +134,10 @@ defmodule VarselWeb.CvssInput do
               type="button"
               class={[
                 "join-item btn btn-xs",
-                if(selected(@vector, code) == value, do: "btn-primary", else: "btn-ghost")
+                if(selected(@vector, code) == value,
+                  do: "btn-primary",
+                  else: "bg-base-200 text-base-content/80 border-base-300 hover:bg-base-300"
+                )
               ]}
               title={"#{code}:#{value} — #{value_label}"}
               phx-click="metric"

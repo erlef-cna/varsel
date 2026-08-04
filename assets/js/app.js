@@ -28,7 +28,7 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/varsel"
 import topbar from "../vendor/topbar"
-import {CssVars, DragSort, SectionRail} from "./hooks"
+import {AutoGrow, CssVars, DragSort, SectionRail} from "./hooks"
 
 // Plain-JS ToC scroll-spy for controller-rendered (dead) pages — the public
 // CVE detail page and the docs page template — where no LiveView hook runs.
@@ -82,7 +82,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, DragSort, SectionRail, CssVars},
+  hooks: {...colocatedHooks, AutoGrow, DragSort, SectionRail, CssVars},
 })
 
 // Show progress bar on live navigation and form submits

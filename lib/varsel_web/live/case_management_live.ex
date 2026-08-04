@@ -450,7 +450,7 @@ defmodule VarselWeb.CaseManagementLive do
       </:actions>
     </.page_header>
 
-    <.page_container>
+    <.page_container width={if @face == :pipeline, do: :wide, else: :normal}>
       <.pipeline_face
         :if={@face == :pipeline}
         lanes={@lanes}

@@ -984,7 +984,7 @@ defmodule VarselWeb.CaseDetailLive do
         </:actions>
       </.page_header>
 
-      <.page_container>
+      <.page_container width={:wide}>
         <:left width={:narrow} class="lg:sticky lg:top-24">
           <.section_nav sections={workspace_sections(@display_case, @case_record.proposals)} />
         </:left>

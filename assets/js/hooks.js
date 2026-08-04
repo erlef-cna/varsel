@@ -53,6 +53,50 @@ export const CssVars = {
   },
 }
 
+// Grows a textarea to fit its content while it is being edited, so a long
+// description is written without scrolling inside a fixed-height box. The
+// `rows` attribute is the resting height: the field expands on focus (and
+// keeps up with typing), then collapses back on blur so a form of several
+// fields stays scannable.
+//
+// Height is set through the CSSOM (`el.style.height`) rather than an inline
+// `style` attribute, which the strict Content-Security-Policy forbids — see
+// `CssVars`. Growing needs the element collapsed first, since `scrollHeight`
+// never reports less than the current height.
+export const AutoGrow = {
+  grow() {
+    this.el.style.height = "auto"
+    this.el.style.height = `${this.el.scrollHeight}px`
+  },
+  collapse() {
+    this.el.style.height = ""
+  },
+  mounted() {
+    // A textarea that sizes itself must not also be hand-resizable: the two
+    // fight, and the next keystroke would discard the dragged height.
+    this.el.style.resize = "none"
+    this.listeners = {
+      input: () => this.grow(),
+      focus: () => this.grow(),
+      blur: () => this.collapse(),
+    }
+
+    for (const [event, listener] of Object.entries(this.listeners)) {
+      this.el.addEventListener(event, listener)
+    }
+  },
+  updated() {
+    // A LiveView patch re-renders the textarea mid-edit; only the focused one
+    // should be tall, and the rest keep their resting height.
+    if (document.activeElement === this.el) this.grow()
+  },
+  destroyed() {
+    for (const [event, listener] of Object.entries(this.listeners)) {
+      this.el.removeEventListener(event, listener)
+    }
+  },
+}
+
 // Workspace section rail. Two jobs:
 //
 // 1. Anchor navigation: on LiveView pages Chromium cancels the smooth
