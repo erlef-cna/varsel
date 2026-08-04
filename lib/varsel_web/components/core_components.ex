@@ -184,8 +184,14 @@ defmodule VarselWeb.CoreComponents do
         main content
         <:right width={:wide}>...</:right>
       </.page_container>
+
+  `width` widens the measure for a page that is a workspace rather than
+  something to read: the case editor puts a form, its rails and a preview
+  side by side, and the reading measure squeezes all three. The bands above
+  and below keep their own width, so the page still lines up with the site.
   """
   attr :padding, :atom, default: :normal, values: [:tight, :normal, :hero]
+  attr :width, :atom, default: :normal, values: [:normal, :wide]
   attr :class, :any, default: nil
 
   slot :left, doc: "a rail left of the content" do
@@ -204,7 +210,11 @@ defmodule VarselWeb.CoreComponents do
     ~H"""
     <div class={
       [
-        "container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl",
+        "container mx-auto px-4 sm:px-6 lg:px-8",
+        case @width do
+          :normal -> "max-w-6xl"
+          :wide -> "max-w-[100rem]"
+        end,
         case @padding do
           :tight -> "py-3"
           :normal -> "py-6"
@@ -250,11 +260,16 @@ defmodule VarselWeb.CoreComponents do
 
   # The rail carries its own width and the content column takes what is left,
   # so a page declares how wide its rails are without naming a grid track.
+  #
+  # A narrow rail is a fixed strip — a section nav reads the same at any page
+  # width. The wider two hold content that benefits from the room, so they take
+  # a share of the viewport between a floor and a ceiling: on a wide page they
+  # grow, and on a normal one they stay what they were.
   defp aside_width(aside) do
     case Map.get(aside, :width, :normal) do
       :narrow -> "w-40"
-      :normal -> "w-60"
-      :wide -> "w-80"
+      :normal -> "w-[clamp(15rem,18vw,22rem)]"
+      :wide -> "w-[clamp(20rem,24vw,30rem)]"
     end
   end
 
