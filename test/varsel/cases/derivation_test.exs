@@ -440,6 +440,7 @@ defmodule Varsel.Cases.DerivationTest do
            %{
              name: "acme_lib",
              qualifiers: %{"repository_url" => "ghcr.io/acme"},
+             tag_prefix: "v",
              tag_suffixes: ["elixir", "erlang"]
            }}
         ],

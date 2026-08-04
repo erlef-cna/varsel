@@ -19,7 +19,9 @@ defmodule Varsel.Cases.Derivation.Emit do
       translated to the application's own version through
       `Varsel.Cases.Derivation.OtpVersionsTable`, versionType `"otp"`.
     * **OCI** (`:oci`) — one range per `tag_suffixes` flavor
-      (`v<version>` / `v<version>-<suffix>`), versionType `"other"`.
+      (`<tag_prefix><version>` / `<tag_prefix><version>-<suffix>`), versionType
+      `"other"`. A `"-"` suffix emits the bare tag, so a repo tagging both
+      `1.2.3` and `1.2.3-special` lists `["-", "special"]`.
     * **git/forge** — a git-SHA range per fix commit from the raw facts, and
       nothing else: release versions belong to the release channel.
 
@@ -35,6 +37,11 @@ defmodule Varsel.Cases.Derivation.Emit do
   alias Varsel.Cases.Reachability
 
   @type range :: Reachability.range()
+
+  # The suffix standing for the unsuffixed image tag. A form's comma separated
+  # list cannot carry an empty entry — Ash trims it away — so the bare-tag
+  # flavor is stored as this marker instead.
+  @bare_tag "-"
 
   # The root (parent-less) commit of erlang/otp — the R13B03 import that squashed
   # all pre-R13B03 history. A vulnerability introduced *at* this commit predates
@@ -131,18 +138,23 @@ defmodule Varsel.Cases.Derivation.Emit do
   end
 
   defp oci_ranges(channel, ranges) do
-    suffixes = if channel.tag_suffixes == [], do: [nil], else: channel.tag_suffixes
+    prefix = channel.tag_prefix || ""
+    suffixes = if channel.tag_suffixes == [], do: [@bare_tag], else: channel.tag_suffixes
 
     for suffix <- suffixes, range <- ranges do
-      version_object(oci_tag(bare(range.from), suffix), oci_bound(range.until, suffix), "other")
+      version_object(
+        oci_tag(prefix, bare(range.from), suffix),
+        oci_bound(prefix, range.until, suffix),
+        "other"
+      )
     end
   end
 
-  defp oci_tag(version, nil), do: "v#{version}"
-  defp oci_tag(version, suffix), do: "v#{version}-#{suffix}"
+  defp oci_tag(prefix, version, @bare_tag), do: "#{prefix}#{version}"
+  defp oci_tag(prefix, version, suffix), do: "#{prefix}#{version}-#{suffix}"
 
-  defp oci_bound(:unbounded, _suffix), do: "*"
-  defp oci_bound(until, suffix), do: oci_tag(bare(until), suffix)
+  defp oci_bound(_prefix, :unbounded, _suffix), do: "*"
+  defp oci_bound(prefix, until, suffix), do: oci_tag(prefix, bare(until), suffix)
 
   ## ------------------------------------------------------------ otp app
 

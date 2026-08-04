@@ -179,8 +179,19 @@ defmodule VarselWeb.CaseFormComponents do
           distributes the whole repository.
         </:description>
       </.input>
+      <.input field={@form[:tag_prefix]} type="text" placeholder="e.g. v">
+        <:label>OCI tag prefix (optional)</:label>
+        <:description>
+          Prepended to the image tag — v for v1.2.3 tags. Empty for bare
+          version tags.
+        </:description>
+      </.input>
       <.input field={@form[:tag_suffixes]} type="text" value={list_value(@form[:tag_suffixes])}>
         <:label>OCI tag suffixes (comma separated)</:label>
+        <:description>
+          One range per flavor. Use - for the bare tag, e.g. -, special for
+          1.2.3 and 1.2.3-special.
+        </:description>
       </.input>
       <.input field={@form[:position]} type="number">
         <:label>Position</:label>

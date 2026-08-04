@@ -29,6 +29,12 @@ defmodule Varsel.Cases.ChildParamsTest do
       assert params["tag_suffixes"] == "OTP-, v"
     end
 
+    test "keeps the bare-tag marker as a suffix of its own" do
+      params = ChildParams.normalize("channel", %{"tag_suffixes" => "-, special"}, %{})
+
+      assert params["tag_suffixes"] == ["-", "special"]
+    end
+
     test "merges the reference checkbox tags with the custom ones" do
       params =
         ChildParams.normalize(

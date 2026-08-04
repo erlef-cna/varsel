@@ -186,11 +186,21 @@ defmodule Varsel.Cases.PackageChannel do
       public? true
     end
 
+    attribute :tag_prefix, :string do
+      description """
+      String prepended to OCI image tags, e.g. "v" for `v1.2.3` tags. Nil or
+      empty for repos tagging bare versions.
+      """
+
+      public? true
+    end
+
     attribute :tag_suffixes, {:array, :string} do
       description """
       OCI image-tag flavor suffixes (e.g. ["elixir", "erlang", "node"]); the
       derived version range is repeated once per flavor with the suffix
-      appended (versionType other).
+      appended (versionType other). A "-" entry is the bare tag, so a repo
+      publishing both 1.2.3 and 1.2.3-special uses ["-", "special"].
       """
 
       allow_nil? false

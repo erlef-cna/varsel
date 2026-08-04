@@ -55,6 +55,7 @@ defmodule Varsel.Cases.Proposable do
     :name,
     :qualifiers,
     :subpath,
+    :tag_prefix,
     :tag_suffixes,
     :versions_override,
     :entry_override,
