@@ -231,6 +231,7 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :name, :string
       argument :qualifiers, :map
       argument :subpath, :string
+      argument :tag_prefix, :string
       argument :tag_suffixes, {:array, :string}
       argument :versions_override, {:array, :map}
       argument :entry_override, :map

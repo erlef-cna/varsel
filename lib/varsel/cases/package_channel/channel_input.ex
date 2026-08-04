@@ -61,8 +61,13 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
       public? true
     end
 
+    attribute :tag_prefix, :string do
+      description ~s{String prepended to OCI image tags, e.g. "v" for v1.2.3 tags. Nil or empty for bare version tags.}
+      public? true
+    end
+
     attribute :tag_suffixes, {:array, :string} do
-      description ~s{OCI image-tag flavor suffixes (e.g. ["elixir", "erlang"]); the derived range repeats once per flavor with the suffix appended.}
+      description ~s{OCI image-tag flavor suffixes (e.g. ["elixir", "erlang"]); the derived range repeats once per flavor with the suffix appended. A "-" entry is the bare tag, e.g. ["-", "special"] for 1.2.3 and 1.2.3-special.}
       allow_nil? false
       default []
       public? true

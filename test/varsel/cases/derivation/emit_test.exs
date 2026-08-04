@@ -45,7 +45,12 @@ defmodule Varsel.Cases.Derivation.EmitTest do
 
   describe "channel/3 oci" do
     test "repeats each range per tag-suffix flavor" do
-      channel = %PackageChannel{purl_type: :oci, name: "acme", tag_suffixes: ["elixir", "erlang"]}
+      channel = %PackageChannel{
+        purl_type: :oci,
+        name: "acme",
+        tag_prefix: "v",
+        tag_suffixes: ["elixir", "erlang"]
+      }
 
       assert Emit.channel(channel, [range("v1.9.0-rc1", "v1.15.4")], otp_platform?: false) == %{
                "versions" => [
@@ -64,6 +69,66 @@ defmodule Varsel.Cases.Derivation.EmitTest do
                ],
                "issues" => []
              }
+    end
+
+    test "emits bare tags when no prefix is configured" do
+      channel = %PackageChannel{purl_type: :oci, name: "acme", tag_prefix: "", tag_suffixes: []}
+
+      assert Emit.channel(channel, [range("v1.2.3", "v1.2.9")], otp_platform?: false) == %{
+               "versions" => [
+                 %{
+                   "version" => "1.2.3",
+                   "lessThan" => "1.2.9",
+                   "status" => "affected",
+                   "versionType" => "other"
+                 }
+               ],
+               "issues" => []
+             }
+    end
+
+    test "a - suffix is the bare-tag flavor alongside real ones" do
+      channel = %PackageChannel{
+        purl_type: :oci,
+        name: "acme",
+        tag_prefix: "",
+        tag_suffixes: ["-", "special"]
+      }
+
+      assert Emit.channel(channel, [range("v1.2.3", "v1.2.9")], otp_platform?: false) == %{
+               "versions" => [
+                 %{
+                   "version" => "1.2.3",
+                   "lessThan" => "1.2.9",
+                   "status" => "affected",
+                   "versionType" => "other"
+                 },
+                 %{
+                   "version" => "1.2.3-special",
+                   "lessThan" => "1.2.9-special",
+                   "status" => "affected",
+                   "versionType" => "other"
+                 }
+               ],
+               "issues" => []
+             }
+    end
+
+    test "an unbounded range stays open per flavor" do
+      channel = %PackageChannel{
+        purl_type: :oci,
+        name: "acme",
+        tag_prefix: "v",
+        tag_suffixes: ["-", "special"]
+      }
+
+      assert %{"versions" => versions} =
+               Emit.channel(channel, [range("v1.2.3", :unbounded)], otp_platform?: false)
+
+      assert [
+               %{"version" => "v1.2.3", "lessThan" => "*"},
+               %{"version" => "v1.2.3-special", "lessThan" => "*"}
+             ] = versions
     end
   end
 
