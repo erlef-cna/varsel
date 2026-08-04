@@ -301,6 +301,32 @@ defmodule Varsel.Cases.Description.AffectedSummaryTest do
                "This issue affects hexpm: from 617e44c before c692438."
     end
 
+    # An image tag restates the release version once per flavor.
+    test "an oci entry beside a version entry is dropped" do
+      affected = [
+        entry("gleam", "pkg:sid/gleam.run/gleam", [version("1.15.0", "1.18.0")]),
+        entry("gleam-lang/gleam", "pkg:oci/gleam?repository_url=ghcr.io%2Fgleam-lang", [
+          version("v1.15.0", "v1.18.0", "affected", "other"),
+          version("v1.15.0-erlang", "v1.18.0-erlang", "affected", "other"),
+          version("v1.15.0-scratch", "v1.18.0-scratch", "affected", "other")
+        ])
+      ]
+
+      assert Summary.summarize(affected) == "This issue affects gleam: from 1.15.0 before 1.18.0."
+    end
+
+    # …but an image-only product keeps them: that is all there is.
+    test "an oci-only product still gets a sentence" do
+      affected = [
+        entry("gleam-lang/gleam", "pkg:oci/gleam?repository_url=ghcr.io%2Fgleam-lang", [
+          version("v1.15.0", "v1.18.0", "affected", "other")
+        ])
+      ]
+
+      assert Summary.summarize(affected) ==
+               "This issue affects gleam-lang/gleam: from v1.15.0 before v1.18.0."
+    end
+
     test "nothing to say yields nil" do
       assert Summary.summarize([]) == nil
       assert Summary.summarize([entry("plug", "pkg:hex/plug", [])]) == nil
