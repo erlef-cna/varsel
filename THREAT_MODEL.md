@@ -436,6 +436,7 @@ from controlling only its size.
 | GitHub OAuth | `user_info` (sub, preferred_username, name, email) | data | IdP-supplied, verified by GitHub | Stored as `github_id/handle/name/email`; `handle` later in a client-side `img`/link |
 | Hex.pm OAuth | `user_info` (username as `sub`, email) | data | IdP-supplied by Hex.pm | Identity keyed on the **username**, since Hex.pm exposes no numeric id and offers no way to rename an account (§7). Email is opt-in-public there, so it is usually absent and is never used to match an account |
 | Account linking | `:strategy` path segment; `linking_from_user_id` **from the session** | data | Any authenticated user | Names the account by id from the signed session, not from `current_user`. Linking an identity another account already owns is refused (`resolve_oauth_identity.ex`) |
+| Sign-in pages (`/sign-in`, `/register`, `/reset`, `/auth/*`) | `return_to` query param | resource name | **Yes — anonymous**; anyone can hand a victim a crafted sign-in link | Parked in the session, spent as a `redirect` target after sign-in. Constrained to a same-site absolute **path** (property 17); a value that fails is dropped, not rewritten (`return_path.ex`) |
 | MCP/GraphQL tool args | per tool | data | scope-gated bearer (mcp/gql) + role policy | Same Ash actions as above; no separate trust level |
 
 **No caller supplies executable code.** No public action takes a callback,
@@ -893,16 +894,35 @@ none of the authorization properties, by construction rather than by defect.
 
 16. **The scheduled MITRE import cannot overwrite local in-flight work.**
    The catalog sweep writes only rows that are absent locally or sit in
-   `:reserved`/`:published`; rows in `:draft`, `:publishing`,
+   `:reserved`, `:withheld` or `:published`; rows in `:draft`, `:publishing`,
    `:pending_update` or `:rejected` are never touched. The condition rides
    inside the database upsert itself, so it holds even against a row that
    enters a protected state mid-sweep. A queued local amendment therefore
    survives the sweep, and a wrongly re-`:published` row cannot falsely
    advance a case out of its publish handoff.
+   `:withheld` is writable on purpose: the hold means the ID will be published
+   by another system on the same MITRE pool, so an imported record is the
+   expected end of it, not a clash. Nothing local is lost — a withheld row
+   holds no editorial work.
    - *Violation symptom:* an import replaces the state or `cve_json` of a row
      in a protected state.
    - *Severity:* `high` (silent loss of accepted editorial work).
    - (`cve_record.ex`)
+
+17. **Sign-in only ever returns to a path on this site.**
+   A `?return_to=` on a sign-in page is parked in the session and spent as a
+   redirect once the provider hands the user back. The value is attacker-set —
+   anyone can send a crafted sign-in link — so it must be an absolute path
+   under **both** specs that will read it: RFC 3986, which Elixir's `URI`
+   implements, and the WHATWG URL standard, which the navigating browser
+   implements. The two disagree about what names a host, so a value only
+   counts as a path when neither can read an origin out of it. A value that
+   fails is dropped rather than corrected, leaving the default `~p"/"`. Only
+   the ways *in* may set it, so `/sign-out?return_to=` cannot.
+   - *Violation symptom:* signing in redirects to another origin, or a header
+     is split by a CR/LF in the value.
+   - *Severity:* `high` (open redirect — phishing and OAuth-flow abuse).
+   - (`return_path.ex`, `sign_in_path.ex`, `auth_controller.ex`)
 
 **Resource bound — the one quantified line.** Each guardrail below bounds a
 *single* operation. None bounds how many operations an actor starts, which is
