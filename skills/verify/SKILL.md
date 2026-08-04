@@ -115,7 +115,7 @@ gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
 - [ ] Second: `https://cna.erlef.org/cves/CVE-<num>.html` `["related"]` (add `"third-party-advisory"` if no vendor advisory).
 - [ ] Third: `https://osv.dev/vulnerability/EEF-CVE-<num>` `["related"]`.
 - [ ] OTP: `https://www.erlang.org/doc/system/versions.html#order-of-versions` `["x_version-scheme"]` present.
-- [ ] At least one `"patch"`-tagged reference (use a `/TODO` URL if the patch commit is unknown; a fully-unpatched CVE with no patch reference must be confirmed with the user first).
+- [ ] At least one `"patch"`-tagged reference, unless the vulnerability is unpatched.
 
 ### CVSS
 - [ ] `baseScore` is not `0.0` — i.e. `cvss_v4` is set on the case and derived through.
