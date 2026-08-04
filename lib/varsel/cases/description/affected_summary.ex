@@ -33,6 +33,9 @@ defmodule Varsel.Cases.Description.AffectedSummary do
       version — the commit range is the same fact in a vocabulary the sentence
       cannot read aloud. A product known ONLY by commit keeps them, since that
       is all there is to say.
+    * OCI entries, on the same grounds: an image tag restates the release
+      version, once per tag flavor, so a ten-flavor channel would otherwise
+      repeat one range ten times.
 
   ## Non-breaking spaces
 
@@ -95,15 +98,29 @@ defmodule Varsel.Cases.Description.AffectedSummary do
           ranges != [],
           do: %{name: product_name(entry), purl: entry["packageURL"], ranges: ranges}
 
-    # A commit range restates a version range we already read aloud.
-    if Enum.any?(described, &(not commit_ranges?(&1.ranges))) do
-      Enum.reject(described, &commit_ranges?(&1.ranges))
+    described
+    |> drop_restatements(&commit_ranges?(&1.ranges))
+    |> drop_restatements(&oci_entry?/1)
+  end
+
+  # A commit range or an image tag restates a version range we already read
+  # aloud — and an OCI entry repeats it once per tag flavor. Both only survive
+  # when they are all there is to say.
+  defp drop_restatements(described, restatement?) do
+    if Enum.any?(described, &(not restatement?.(&1))) do
+      Enum.reject(described, restatement?)
     else
       described
     end
   end
 
   defp commit_ranges?(ranges), do: Enum.all?(ranges, &(&1.type == "git"))
+
+  defp oci_entry?(%{purl: purl}) when is_binary(purl) do
+    match?(%Purl{type: "oci"}, Purl.new!(purl))
+  end
+
+  defp oci_entry?(_entry), do: false
 
   # Rows of one status, and only ones with a bound to name.
   defp status_ranges(entry, status) do
