@@ -86,6 +86,7 @@ defmodule VarselWeb.MarkdownInput do
           rows={@rows}
           placeholder={@placeholder}
           class="w-full textarea font-mono text-sm"
+          phx-hook="AutoGrow"
         />
       </div>
 
