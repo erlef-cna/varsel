@@ -30,34 +30,40 @@ defmodule VarselWeb.Layouts do
   embed_templates "layouts/*"
 
   @doc """
-  Renders your app layout.
+  The page chrome — nav, main, footer — wrapped around every page's content.
 
-  This function is typically invoked from every template,
-  and it often contains your application menu, sidebar,
-  or similar.
+  It is a component rather than part of the root layout because the root
+  layout renders once per HTTP request and is never re-rendered across a live
+  redirect: a nav drawn there would keep highlighting whatever section the
+  last full page load was in. Rendered here it re-renders with its caller, so
+  passing the current path is enough to keep the highlight honest.
 
   ## Examples
 
-      <Layouts.app flash={@flash}>
+      <Layouts.app flash={@flash} current_user={@current_user} current_path={~p"/cves"}>
         <h1>Content</h1>
       </Layouts.app>
 
   """
-  attr :flash, :map, required: true, doc: "the map of flash messages"
+  # Everything defaults: an error page renders through `render_errors` with no
+  # controller assigns to draw on, and still deserves the same chrome.
+  attr :flash, :map, default: %{}, doc: "the map of flash messages"
+  attr :current_user, :any, default: nil, doc: "signed in with `nav_user_load/0` loaded"
 
-  attr :current_scope, :map,
+  attr :current_path, :string,
     default: nil,
-    doc: "the current [scope](https://hexdocs.pm/phoenix/scopes.html)"
+    doc: "the path being shown, which decides the active nav section"
 
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <main class="px-4 py-10 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-4xl space-y-4">
-        {render_slot(@inner_block)}
-      </div>
+    <.site_nav current_user={@current_user} current_path={@current_path} />
+    <main class="flex-1">
+      {render_slot(@inner_block)}
     </main>
+    <.site_footer />
+    <.dev_nav />
 
     <.flash_group flash={@flash} />
     """

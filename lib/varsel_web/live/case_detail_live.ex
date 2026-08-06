@@ -943,263 +943,263 @@ defmodule VarselWeb.CaseDetailLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.flash_group flash={@flash} />
-
-    <div class={@preview_open? && "opacity-45"}>
-      <.page_header>
-        <:eyebrow>
-          Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
-          <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
-          <span class="text-base-content/50">
-            · draft opened {Calendar.strftime(@case_record.inserted_at, "%b %-d, %Y")}
-          </span>
-        </:eyebrow>
-        <:title>{@case_record.title || "Untitled case"}</:title>
-        <:meta><.lifecycle_stepper state={@case_record.state} /></:meta>
-        <:actions>
-          <button
-            :if={@mode != :view and can_propose?(@case_record, @current_user)}
-            phx-click="toggle_suggest"
-            disabled={suggest_forced?(@case_record, @current_user)}
-            title={
-              if suggest_forced?(@case_record, @current_user),
-                do: "The case is frozen — edits become suggestions",
-                else: "Route your edits through suggestions instead of applying them"
-            }
-            class={[
-              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold",
-              if(@mode == :propose,
-                do: "border-info bg-info/15 text-info",
-                else: "border-info/40 text-info"
-              )
-            ]}
-          >
-            ✎ Suggest: {if @mode == :propose, do: "on", else: "off"}
-          </button>
-          <button class="btn btn-sm btn-eef-quiet" phx-click="preview">Preview</button>
-          <.lifecycle_buttons
-            case_record={@case_record}
-            current_user={@current_user}
-            include_publish={false}
-            publish_blocked={false}
-          />
-        </:actions>
-      </.page_header>
-
-      <.page_container width={:wide}>
-        <:left width={:narrow} class="lg:sticky lg:top-24">
-          <.section_nav sections={workspace_sections(@display_case, @case_record.proposals)} />
-        </:left>
-
-        <div class="space-y-8 min-w-0">
-          <div id="summary">
-            <.content_section
-              case_record={@display_case}
-              raw_case_record={@case_record}
-              content_form={@editing_section == "summary" && @content_form}
-              mode={@mode}
+    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+      <div class={@preview_open? && "opacity-45"}>
+        <.page_header>
+          <:eyebrow>
+            Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
+            <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
+            <span class="text-base-content/50">
+              · draft opened {Calendar.strftime(@case_record.inserted_at, "%b %-d, %Y")}
+            </span>
+          </:eyebrow>
+          <:title>{@case_record.title || "Untitled case"}</:title>
+          <:meta><.lifecycle_stepper state={@case_record.state} /></:meta>
+          <:actions>
+            <button
+              :if={@mode != :view and can_propose?(@case_record, @current_user)}
+              phx-click="toggle_suggest"
+              disabled={suggest_forced?(@case_record, @current_user)}
+              title={
+                if suggest_forced?(@case_record, @current_user),
+                  do: "The case is frozen — edits become suggestions",
+                  else: "Route your edits through suggestions instead of applying them"
+              }
+              class={[
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold",
+                if(@mode == :propose,
+                  do: "border-info bg-info/15 text-info",
+                  else: "border-info/40 text-info"
+                )
+              ]}
+            >
+              ✎ Suggest: {if @mode == :propose, do: "on", else: "off"}
+            </button>
+            <button class="btn btn-sm btn-eef-quiet" phx-click="preview">Preview</button>
+            <.lifecycle_buttons
+              case_record={@case_record}
               current_user={@current_user}
-              can_resolve={can_edit?(@case_record, @current_user)}
+              include_publish={false}
+              publish_blocked={false}
             />
-          </div>
-          <div id="severity">
-            <.severity_section
-              case_record={@display_case}
-              raw_case_record={@case_record}
-              form={@editing_section == "severity" && @content_form}
-              mode={@mode}
-              current_user={@current_user}
-              can_resolve={can_edit?(@case_record, @current_user)}
-            />
-          </div>
-          <div id="affected">
-            <.affected_section
-              case_record={@display_case}
-              raw_case_record={@case_record}
+          </:actions>
+        </.page_header>
+
+        <.page_container width={:wide}>
+          <:left width={:narrow} class="lg:sticky lg:top-24">
+            <.section_nav sections={workspace_sections(@display_case, @case_record.proposals)} />
+          </:left>
+
+          <div class="space-y-8 min-w-0">
+            <div id="summary">
+              <.content_section
+                case_record={@display_case}
+                raw_case_record={@case_record}
+                content_form={@editing_section == "summary" && @content_form}
+                mode={@mode}
+                current_user={@current_user}
+                can_resolve={can_edit?(@case_record, @current_user)}
+              />
+            </div>
+            <div id="severity">
+              <.severity_section
+                case_record={@display_case}
+                raw_case_record={@case_record}
+                form={@editing_section == "severity" && @content_form}
+                mode={@mode}
+                current_user={@current_user}
+                can_resolve={can_edit?(@case_record, @current_user)}
+              />
+            </div>
+            <div id="affected">
+              <.affected_section
+                case_record={@display_case}
+                raw_case_record={@case_record}
+                mode={@mode}
+                marks={marks(@projection)}
+                current_user={@current_user}
+                can_resolve={can_edit?(@case_record, @current_user)}
+                can_refresh={@can_refresh}
+                expanded_package_id={@expanded_package_id}
+                child_form={@child_form}
+              />
+            </div>
+            <.rows_section
+              id="references"
+              heading="References"
+              type="reference"
+              add_label="Add reference"
+              rows={@display_case.references}
               mode={@mode}
               marks={marks(@projection)}
+              sort_event="reorder_references"
+              raw_case_record={@case_record}
               current_user={@current_user}
               can_resolve={can_edit?(@case_record, @current_user)}
-              can_refresh={@can_refresh}
-              expanded_package_id={@expanded_package_id}
-              child_form={@child_form}
+              has_footer?={@display_case.derived_references != []}
+            >
+              <:row :let={reference}>
+                <span class="flex min-w-0 items-center gap-2 text-sm">
+                  <CveView.reference url={reference.url} tags={reference.tags} pills={:all} />
+                </span>
+              </:row>
+              <:footer>
+                <.derived_references refs={@display_case.derived_references} />
+              </:footer>
+            </.rows_section>
+            <.rows_section
+              id="credits"
+              heading="Credits"
+              type="credit"
+              add_label="Add credit"
+              rows={@display_case.credits}
+              mode={@mode}
+              marks={marks(@projection)}
+              sort_event="reorder_credits"
+              raw_case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
+            >
+              <:row :let={credit}>
+                {credit.name}{if credit.organization, do: " / #{credit.organization}"}
+                <span class="badge badge-ghost badge-xs ml-1">
+                  {credit.credit_type |> to_string() |> String.replace("_", " ")}
+                </span>
+              </:row>
+            </.rows_section>
+            <.rows_section
+              id="weaknesses"
+              heading="Weaknesses (CWE)"
+              type="weakness"
+              add_label="Add CWE"
+              rows={@display_case.weaknesses}
+              mode={@mode}
+              marks={marks(@projection)}
+              raw_case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
+            >
+              <:row :let={weakness}>
+                <.link
+                  href={"https://cwe.mitre.org/data/definitions/#{weakness.cwe_id}.html"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="link font-mono"
+                >
+                  CWE-{weakness.cwe_id}
+                </.link>
+                {weakness.weakness.name}
+              </:row>
+            </.rows_section>
+            <.rows_section
+              id="impacts"
+              heading="Impacts (CAPEC)"
+              type="impact"
+              add_label="Add CAPEC"
+              rows={@display_case.impacts}
+              mode={@mode}
+              marks={marks(@projection)}
+              raw_case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
+            >
+              <:row :let={impact}>
+                <.link
+                  href={"https://capec.mitre.org/data/definitions/#{impact.capec_id}.html"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="link font-mono"
+                >
+                  CAPEC-{impact.capec_id}
+                </.link>
+                {impact.attack_pattern.name}
+              </:row>
+            </.rows_section>
+
+            <.resolved_suggestions_disclosure
+              :if={resolved_proposals(@case_record) != []}
+              case_record={@case_record}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
             />
           </div>
-          <.rows_section
-            id="references"
-            heading="References"
-            type="reference"
-            add_label="Add reference"
-            rows={@display_case.references}
+
+          <:right width={:wide} class="space-y-4">
+            <.panel id="suggestions">
+              <:title>Suggestions</:title>
+              <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
+                <li :for={proposal <- open_proposals(@case_record)} class="flex items-center gap-2">
+                  <span class="text-info font-bold shrink-0">◆</span>
+                  <span class="truncate text-base-content/80">
+                    {proposal_field_ref(proposal)}
+                    <span class="text-base-content/50">— <.user_name user={proposal.author} /></span>
+                  </span>
+                  <.link
+                    href={"#suggestion-#{proposal.id}"}
+                    class="link link-hover text-primary text-xs ml-auto shrink-0"
+                  >
+                    Jump
+                  </.link>
+                </li>
+              </ul>
+              <p :if={open_proposals(@case_record) == []} class="text-sm text-base-content/60">
+                No open suggestions.
+              </p>
+            </.panel>
+            <.panel>
+              <:title>Activity</:title>
+              <form :if={@can_comment} phx-submit="post_comment" class="mb-4">
+                <textarea
+                  name="body"
+                  rows="2"
+                  required
+                  placeholder="Write a comment…"
+                  class="w-full textarea text-sm"
+                ></textarea>
+                <button type="submit" class="btn btn-outline btn-xs mt-1">Comment</button>
+              </form>
+              <.activity_feed entries={activity_entries(@case_record)} />
+            </.panel>
+            <.assignments_section
+              :if={Cases.can_assign_case_user?(@current_user, %{case_id: @case_record.id})}
+              case_record={@case_record}
+              users={@users}
+              current_user={@current_user}
+            />
+            <.reports_section
+              :if={@case_record.vulnerability_reports != []}
+              case_record={@case_record}
+              triage?={CVE.can_list_vulnerability_reports?(@current_user)}
+              expanded_payloads={@expanded_payloads}
+            />
+            <.close_link
+              :if={Cases.can_close_case?(@current_user, @case_record, validate?: true)}
+              case_record={@case_record}
+            />
+          </:right>
+
+          <.child_modal
+            :if={@child_form && not package_field_form?(@child_form)}
+            child_form={@child_form}
+            catalog_options={@catalog_options}
             mode={@mode}
-            marks={marks(@projection)}
-            sort_event="reorder_references"
-            raw_case_record={@case_record}
-            current_user={@current_user}
-            can_resolve={can_edit?(@case_record, @current_user)}
-            has_footer?={@display_case.derived_references != []}
-          >
-            <:row :let={reference}>
-              <span class="flex min-w-0 items-center gap-2 text-sm">
-                <CveView.reference url={reference.url} tags={reference.tags} pills={:all} />
-              </span>
-            </:row>
-            <:footer>
-              <.derived_references refs={@display_case.derived_references} />
-            </:footer>
-          </.rows_section>
-          <.rows_section
-            id="credits"
-            heading="Credits"
-            type="credit"
-            add_label="Add credit"
-            rows={@display_case.credits}
-            mode={@mode}
-            marks={marks(@projection)}
-            sort_event="reorder_credits"
-            raw_case_record={@case_record}
-            current_user={@current_user}
-            can_resolve={can_edit?(@case_record, @current_user)}
-          >
-            <:row :let={credit}>
-              {credit.name}{if credit.organization, do: " / #{credit.organization}"}
-              <span class="badge badge-ghost badge-xs ml-1">
-                {credit.credit_type |> to_string() |> String.replace("_", " ")}
-              </span>
-            </:row>
-          </.rows_section>
-          <.rows_section
-            id="weaknesses"
-            heading="Weaknesses (CWE)"
-            type="weakness"
-            add_label="Add CWE"
-            rows={@display_case.weaknesses}
-            mode={@mode}
-            marks={marks(@projection)}
-            raw_case_record={@case_record}
-            current_user={@current_user}
-            can_resolve={can_edit?(@case_record, @current_user)}
-          >
-            <:row :let={weakness}>
-              <.link
-                href={"https://cwe.mitre.org/data/definitions/#{weakness.cwe_id}.html"}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="link font-mono"
-              >
-                CWE-{weakness.cwe_id}
-              </.link>
-              {weakness.weakness.name}
-            </:row>
-          </.rows_section>
-          <.rows_section
-            id="impacts"
-            heading="Impacts (CAPEC)"
-            type="impact"
-            add_label="Add CAPEC"
-            rows={@display_case.impacts}
-            mode={@mode}
-            marks={marks(@projection)}
-            raw_case_record={@case_record}
-            current_user={@current_user}
-            can_resolve={can_edit?(@case_record, @current_user)}
-          >
-            <:row :let={impact}>
-              <.link
-                href={"https://capec.mitre.org/data/definitions/#{impact.capec_id}.html"}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="link font-mono"
-              >
-                CAPEC-{impact.capec_id}
-              </.link>
-              {impact.attack_pattern.name}
-            </:row>
-          </.rows_section>
-
-          <.resolved_suggestions_disclosure
-            :if={resolved_proposals(@case_record) != []}
-            case_record={@case_record}
-            current_user={@current_user}
-            can_resolve={can_edit?(@case_record, @current_user)}
           />
-        </div>
+        </.page_container>
+      </div>
 
-        <:right width={:wide} class="space-y-4">
-          <.panel id="suggestions">
-            <:title>Suggestions</:title>
-            <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
-              <li :for={proposal <- open_proposals(@case_record)} class="flex items-center gap-2">
-                <span class="text-info font-bold shrink-0">◆</span>
-                <span class="truncate text-base-content/80">
-                  {proposal_field_ref(proposal)}
-                  <span class="text-base-content/50">— <.user_name user={proposal.author} /></span>
-                </span>
-                <.link
-                  href={"#suggestion-#{proposal.id}"}
-                  class="link link-hover text-primary text-xs ml-auto shrink-0"
-                >
-                  Jump
-                </.link>
-              </li>
-            </ul>
-            <p :if={open_proposals(@case_record) == []} class="text-sm text-base-content/60">
-              No open suggestions.
-            </p>
-          </.panel>
-          <.panel>
-            <:title>Activity</:title>
-            <form :if={@can_comment} phx-submit="post_comment" class="mb-4">
-              <textarea
-                name="body"
-                rows="2"
-                required
-                placeholder="Write a comment…"
-                class="w-full textarea text-sm"
-              ></textarea>
-              <button type="submit" class="btn btn-outline btn-xs mt-1">Comment</button>
-            </form>
-            <.activity_feed entries={activity_entries(@case_record)} />
-          </.panel>
-          <.assignments_section
-            :if={Cases.can_assign_case_user?(@current_user, %{case_id: @case_record.id})}
-            case_record={@case_record}
-            users={@users}
-            current_user={@current_user}
-          />
-          <.reports_section
-            :if={@case_record.vulnerability_reports != []}
-            case_record={@case_record}
-            triage?={CVE.can_list_vulnerability_reports?(@current_user)}
-            expanded_payloads={@expanded_payloads}
-          />
-          <.close_link
-            :if={Cases.can_close_case?(@current_user, @case_record, validate?: true)}
-            case_record={@case_record}
-          />
-        </:right>
+      <.preview_overlay
+        :if={@preview_open?}
+        case_record={@case_record}
+        current_user={@current_user}
+        preview={@preview}
+        validation={@validation}
+        preview_tab={@preview_tab}
+        diff={@diff}
+        amendment={amendment?(@case_record)}
+      />
 
-        <.child_modal
-          :if={@child_form && not package_field_form?(@child_form)}
-          child_form={@child_form}
-          catalog_options={@catalog_options}
-          mode={@mode}
-        />
-      </.page_container>
-    </div>
-
-    <.preview_overlay
-      :if={@preview_open?}
-      case_record={@case_record}
-      current_user={@current_user}
-      preview={@preview}
-      validation={@validation}
-      preview_tab={@preview_tab}
-      diff={@diff}
-      amendment={amendment?(@case_record)}
-    />
-
-    <.cve_picker_modal :if={@cve_picker} records={@cve_picker} />
+      <.cve_picker_modal :if={@cve_picker} records={@cve_picker} />
+    </Layouts.app>
     """
   end
 

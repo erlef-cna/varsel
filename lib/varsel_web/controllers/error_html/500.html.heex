@@ -4,32 +4,37 @@
   SPDX-License-Identifier: Apache-2.0
 --%>
 
-<.error_page
-  context="Error"
-  status={500}
-  subtitle="Internal server error — your request was not applied."
+<Layouts.app
+  current_user={assigns[:current_user]}
+  current_path={assigns[:conn] && @conn.request_path}
 >
-  <:title>
-    Something went wrong on our side
-  </:title>
-  <p class="text-base-content/70 leading-relaxed">
-    The server hit an unexpected error while handling this request. Nothing you did caused it, and these problems are usually temporary — retrying in a moment often works.
-  </p>
-  <%= case assigns[:conn] do %>
-    <% %{request_path: request_path} -> %>
-      <div class="mt-6 flex flex-wrap items-center gap-4">
-        <.link href={request_path} class="btn btn-primary">
-          <.icon name="hero-arrow-path" class="size-4" /> Try again
-        </.link>
-        <.link href={~p"/"} class="link link-primary text-sm font-semibold">Back to home →</.link>
-      </div>
-    <% _ -> %>
-  <% end %>
-  <p class="mt-6 text-sm text-base-content/50 leading-relaxed">
-    If it keeps happening, tell us via the
-    <.link href={~p"/contact"} class="link link-primary">contact page</.link>
-    — the address you were visiting and the approximate time help us find it. If you believe you've found a security vulnerability, use the process in our
-    <.link href={~p"/security-policy"} class="link link-primary">security policy</.link>
-    instead.
-  </p>
-</.error_page>
+  <.error_page
+    context="Error"
+    status={500}
+    subtitle="Internal server error — your request was not applied."
+  >
+    <:title>
+      Something went wrong on our side
+    </:title>
+    <p class="text-base-content/70 leading-relaxed">
+      The server hit an unexpected error while handling this request. Nothing you did caused it, and these problems are usually temporary — retrying in a moment often works.
+    </p>
+    <%= case assigns[:conn] do %>
+      <% %{request_path: request_path} -> %>
+        <div class="mt-6 flex flex-wrap items-center gap-4">
+          <.link href={request_path} class="btn btn-primary">
+            <.icon name="hero-arrow-path" class="size-4" /> Try again
+          </.link>
+          <.link href={~p"/"} class="link link-primary text-sm font-semibold">Back to home →</.link>
+        </div>
+      <% _ -> %>
+    <% end %>
+    <p class="mt-6 text-sm text-base-content/50 leading-relaxed">
+      If it keeps happening, tell us via the
+      <.link href={~p"/contact"} class="link link-primary">contact page</.link>
+      — the address you were visiting and the approximate time help us find it. If you believe you've found a security vulnerability, use the process in our
+      <.link href={~p"/security-policy"} class="link link-primary">security policy</.link>
+      instead.
+    </p>
+  </.error_page>
+</Layouts.app>

@@ -2,71 +2,77 @@
 SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
 SPDX-License-Identifier: Apache-2.0
 --%>
-<.page_header>
-  <:eyebrow>Analysis</:eyebrow>
-  <:title>{@page.title}</:title>
-  <:subtitle>{@page.description}</:subtitle>
-</.page_header>
+<Layouts.app
+  flash={@flash}
+  current_user={assigns[:current_user]}
+  current_path={@conn.request_path}
+>
+  <.page_header>
+    <:eyebrow>Analysis</:eyebrow>
+    <:title>{@page.title}</:title>
+    <:subtitle>{@page.description}</:subtitle>
+  </.page_header>
 
-<.page_container>
-  <div class="prose prose-base max-w-none mb-6">{raw(@page.body)}</div>
+  <.page_container>
+    <div class="prose prose-base max-w-none mb-6">{raw(@page.body)}</div>
 
-  <nav class="flex items-center flex-wrap gap-1 text-sm mb-4">
-    <.link navigate={~p"/common-weaknesses/#{@view.view_id}"} class="link link-primary">
-      {@view.name}
-    </.link>
-    <span :for={parent <- @parents} class="flex items-center gap-1">
-      <.icon name="hero-chevron-right-micro" class="size-3.5 text-base-content/40" />
-      <.link
-        navigate={~p"/common-weaknesses/#{@view.view_id}/#{parent.cwe_id}"}
-        class="link link-hover"
-      >
-        {parent.name}
+    <nav class="flex items-center flex-wrap gap-1 text-sm mb-4">
+      <.link navigate={~p"/common-weaknesses/#{@view.view_id}"} class="link link-primary">
+        {@view.name}
       </.link>
-    </span>
-  </nav>
-
-  <.panel class="mb-6">
-    <:title>
-      {@weakness.name}
-      <span class="text-base-content/50 font-normal normal-case tracking-normal">
-        CWE-{@weakness.cwe_id}
+      <span :for={parent <- @parents} class="flex items-center gap-1">
+        <.icon name="hero-chevron-right-micro" class="size-3.5 text-base-content/40" />
+        <.link
+          navigate={~p"/common-weaknesses/#{@view.view_id}/#{parent.cwe_id}"}
+          class="link link-hover"
+        >
+          {parent.name}
+        </.link>
       </span>
-    </:title>
-    <:actions>
-      <.link href={@mitre_url} target="_blank" rel="noopener" class="link link-primary">
-        CWE-{@weakness.cwe_id} at MITRE
-      </.link>
-    </:actions>
-    <p class="text-sm text-base-content/70">{@weakness.description}</p>
-  </.panel>
+    </nav>
 
-  <div :if={@has_children?} class="cwe-chart-wrapper">
-    <div class="cwe-donut"><.cwe_donut data={@dist} /></div>
-    <div class="cwe-legend">
-      <.cwe_legend
-        data={@dist}
-        unsliced_label={"Classified as CWE-#{@weakness.cwe_id} itself, not a child weakness"}
-      />
+    <.panel class="mb-6">
+      <:title>
+        {@weakness.name}
+        <span class="text-base-content/50 font-normal normal-case tracking-normal">
+          CWE-{@weakness.cwe_id}
+        </span>
+      </:title>
+      <:actions>
+        <.link href={@mitre_url} target="_blank" rel="noopener" class="link link-primary">
+          CWE-{@weakness.cwe_id} at MITRE
+        </.link>
+      </:actions>
+      <p class="text-sm text-base-content/70">{@weakness.description}</p>
+    </.panel>
+
+    <div :if={@has_children?} class="cwe-chart-wrapper">
+      <div class="cwe-donut"><.cwe_donut data={@dist} /></div>
+      <div class="cwe-legend">
+        <.cwe_legend
+          data={@dist}
+          unsliced_label={"Classified as CWE-#{@weakness.cwe_id} itself, not a child weakness"}
+        />
+      </div>
     </div>
-  </div>
 
-  <section :if={@cve_total > 0} class="mt-8 pt-6 border-t border-base-300">
-    <p class="eef-eyebrow mb-1">CVEs</p>
-    <h2 class="text-xl font-bold mb-4">
-      CVEs for {@weakness.name}
-      <span class="text-base-content/50 font-normal text-base">CWE-{@weakness.cwe_id}</span>
-    </h2>
-    {live_render(@conn, VarselWeb.CommonWeaknessesCveTableLive,
-      id: "cw-cve-table",
-      session: VarselWeb.CommonWeaknessesHTML.table_session(@view.view_id, @weakness.cwe_id)
-    )}
-  </section>
+    <section :if={@cve_total > 0} class="mt-8 pt-6 border-t border-base-300">
+      <p class="eef-eyebrow mb-1">CVEs</p>
+      <h2 class="text-xl font-bold mb-4">
+        CVEs for {@weakness.name}
+        <span class="text-base-content/50 font-normal text-base">CWE-{@weakness.cwe_id}</span>
+      </h2>
+      {live_render(@conn, VarselWeb.CommonWeaknessesCveTableLive,
+        id: "cw-cve-table",
+        session: VarselWeb.CommonWeaknessesHTML.table_session(@view.view_id, @weakness.cwe_id)
+      )}
+    </section>
 
-  <.empty_state
-    :if={!@has_children? and @cve_total == 0}
-    class="mt-8 pt-6 border-t border-base-300"
-  >
-    No published CVEs reference this weakness.
-  </.empty_state>
-</.page_container>
+    <.empty_state
+      :if={!@has_children? and @cve_total == 0}
+      class="mt-8 pt-6 border-t border-base-300"
+    >
+      No published CVEs reference this weakness.
+    </.empty_state>
+  </.page_container>
+</Layouts.app>

@@ -2,20 +2,26 @@
 SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
 SPDX-License-Identifier: Apache-2.0
 --%>
-<.page_header>
-  <:eyebrow>Documentation</:eyebrow>
-  <:subtitle>{@page.description}</:subtitle>
-  <:title>{@page.title}</:title>
-</.page_header>
+<Layouts.app
+  flash={@flash}
+  current_user={assigns[:current_user]}
+  current_path={@conn.request_path}
+>
+  <.page_header>
+    <:eyebrow>Documentation</:eyebrow>
+    <:subtitle>{@page.description}</:subtitle>
+    <:title>{@page.title}</:title>
+  </.page_header>
 
-<.page_container>
-  <:right :if={@page.toc != []} class="lg:sticky lg:top-24">
-    <.table_of_contents entries={
-      Enum.map(@page.toc, &%{id: &1.id, label: &1.text, level: &1.level})
-    } />
-  </:right>
+  <.page_container>
+    <:right :if={@page.toc != []} class="lg:sticky lg:top-24">
+      <.table_of_contents entries={
+        Enum.map(@page.toc, &%{id: &1.id, label: &1.text, level: &1.level})
+      } />
+    </:right>
 
-  <article class="prose prose-base max-w-none min-w-0">
-    {raw(@page.body)}
-  </article>
-</.page_container>
+    <article class="prose prose-base max-w-none min-w-0">
+      {raw(@page.body)}
+    </article>
+  </.page_container>
+</Layouts.app>

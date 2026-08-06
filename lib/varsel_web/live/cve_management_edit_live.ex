@@ -89,38 +89,38 @@ defmodule VarselWeb.VarselEditLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.flash_group flash={@flash} />
+    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+      <.page_header>
+        <:eyebrow>CNA Console</:eyebrow>
+        <:title>Edit <span class="font-mono">{@record.cve_id || "CVE"}</span></:title>
+        <:subtitle>
+          State: <span class="font-mono">{@record.state}</span>. Saving runs validation and
+          enqueues the MITRE push.
+        </:subtitle>
+      </.page_header>
 
-    <.page_header>
-      <:eyebrow>CNA Console</:eyebrow>
-      <:title>Edit <span class="font-mono">{@record.cve_id || "CVE"}</span></:title>
-      <:subtitle>
-        State: <span class="font-mono">{@record.state}</span>. Saving runs validation and
-        enqueues the MITRE push.
-      </:subtitle>
-    </.page_header>
-
-    <.page_container>
-      <div :if={!@editable?} class="alert alert-warning">
-        A record in state <span class="font-mono">{@record.state}</span> cannot be edited.
-      </div>
-
-      <.form :if={@editable?} for={@form} id="cve-json-form" phx-submit="save" phx-change="validate">
-        <.input
-          type="textarea"
-          name="cve_json"
-          value={@json_text}
-          rows="30"
-          class="w-full textarea font-mono text-sm"
-          errors={Enum.map(@form[:cve_json].errors, &translate_error/1)}
-        />
-
-        <div class="flex items-center gap-2 mt-4">
-          <button type="submit" class="btn btn-primary">Save</button>
-          <.link href={~p"/cves"} class="btn btn-ghost">Cancel</.link>
+      <.page_container>
+        <div :if={!@editable?} class="alert alert-warning">
+          A record in state <span class="font-mono">{@record.state}</span> cannot be edited.
         </div>
-      </.form>
-    </.page_container>
+
+        <.form :if={@editable?} for={@form} id="cve-json-form" phx-submit="save" phx-change="validate">
+          <.input
+            type="textarea"
+            name="cve_json"
+            value={@json_text}
+            rows="30"
+            class="w-full textarea font-mono text-sm"
+            errors={Enum.map(@form[:cve_json].errors, &translate_error/1)}
+          />
+
+          <div class="flex items-center gap-2 mt-4">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <.link href={~p"/cves"} class="btn btn-ghost">Cancel</.link>
+          </div>
+        </.form>
+      </.page_container>
+    </Layouts.app>
     """
   end
 end

@@ -4,13 +4,18 @@
   SPDX-License-Identifier: Apache-2.0
 --%>
 
-<.error_page context="Error" status={@status}>
-  <:title>
-    {@headline}
-  </:title>
-  <p class="text-base-content/70 leading-relaxed">Your request couldn't be completed.</p>
-  <:actions>
-    <.link href={~p"/"} class="btn btn-primary">Back to home</.link>
-    <.link navigate={~p"/cves"} class="link link-primary text-sm font-semibold">Browse CVEs →</.link>
-  </:actions>
-</.error_page>
+<Layouts.app
+  current_user={assigns[:current_user]}
+  current_path={assigns[:conn] && @conn.request_path}
+>
+  <.error_page context="Error" status={@status}>
+    <:title>
+      {@headline}
+    </:title>
+    <p class="text-base-content/70 leading-relaxed">Your request couldn't be completed.</p>
+    <:actions>
+      <.link href={~p"/"} class="btn btn-primary">Back to home</.link>
+      <.link navigate={~p"/cves"} class="link link-primary text-sm font-semibold">Browse CVEs →</.link>
+    </:actions>
+  </.error_page>
+</Layouts.app>

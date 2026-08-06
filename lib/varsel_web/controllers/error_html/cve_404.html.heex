@@ -4,35 +4,40 @@
   SPDX-License-Identifier: Apache-2.0
 --%>
 
-<.error_page
-  context="CVE record"
-  status={404}
-  subtitle="No published EEF CNA record for this identifier."
+<Layouts.app
+  current_user={assigns[:current_user]}
+  current_path={assigns[:conn] && @conn.request_path}
 >
-  <:title mono?={true}>
-    {@cve_id}
-  </:title>
-  <p class="text-base-content/70 leading-relaxed">
-    This CVE ID may be
-    <span class="text-base-content font-semibold">reserved but not yet published</span>
-    — records appear on this site only once the EEF CNA publishes them. It may also be assigned by a different CVE Numbering Authority, in which case it will not appear here at all.
-  </p>
-  <p class="text-base-content/70 leading-relaxed mt-4">
-    If you believe a published EEF CNA record should exist for this ID,
-    <.link href={~p"/contact"} class="link link-primary">contact us</.link>
-    and mention the ID — we'll check.
-  </p>
-  <:actions>
-    <.link
-      href={"https://www.cve.org/CVERecord?id=#{@cve_id}"}
-      target="_blank"
-      rel="noopener"
-      class="btn btn-primary"
-    >
-      Look it up on cve.org <.icon name="hero-arrow-top-right-on-square" class="size-4" />
-    </.link>
-    <.link navigate={~p"/cves"} class="link link-primary text-sm font-semibold">
-      Browse published CVEs →
-    </.link>
-  </:actions>
-</.error_page>
+  <.error_page
+    context="CVE record"
+    status={404}
+    subtitle="No published EEF CNA record for this identifier."
+  >
+    <:title mono?={true}>
+      {@cve_id}
+    </:title>
+    <p class="text-base-content/70 leading-relaxed">
+      This CVE ID may be
+      <span class="text-base-content font-semibold">reserved but not yet published</span>
+      — records appear on this site only once the EEF CNA publishes them. It may also be assigned by a different CVE Numbering Authority, in which case it will not appear here at all.
+    </p>
+    <p class="text-base-content/70 leading-relaxed mt-4">
+      If you believe a published EEF CNA record should exist for this ID,
+      <.link href={~p"/contact"} class="link link-primary">contact us</.link>
+      and mention the ID — we'll check.
+    </p>
+    <:actions>
+      <.link
+        href={"https://www.cve.org/CVERecord?id=#{@cve_id}"}
+        target="_blank"
+        rel="noopener"
+        class="btn btn-primary"
+      >
+        Look it up on cve.org <.icon name="hero-arrow-top-right-on-square" class="size-4" />
+      </.link>
+      <.link navigate={~p"/cves"} class="link link-primary text-sm font-semibold">
+        Browse published CVEs →
+      </.link>
+    </:actions>
+  </.error_page>
+</Layouts.app>
