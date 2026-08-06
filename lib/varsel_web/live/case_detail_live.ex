@@ -1439,14 +1439,13 @@ defmodule VarselWeb.CaseDetailLive do
         >
           <:label>Discovery</:label>
         </.input>
-        <.input
+        <.live_component
+          module={VarselWeb.MarkdownInput}
+          id="case-internal-notes"
           field={@content_form[:internal_notes]}
-          type="textarea"
-          rows="2"
-          class="w-full textarea text-sm"
-        >
-          <:label>Internal notes (never published)</:label>
-        </.input>
+          label="Internal notes (never published)"
+          rows={3}
+        />
 
         <details class="mt-2">
           <summary class="cursor-pointer text-sm text-base-content/60">
@@ -1468,6 +1467,7 @@ defmodule VarselWeb.CaseDetailLive do
         configurations={@case_record.configurations_md}
         workarounds={@case_record.workarounds_md}
         solutions={@case_record.solutions_md}
+        internal_notes={@case_record.internal_notes}
       />
 
       <.inline_suggestions

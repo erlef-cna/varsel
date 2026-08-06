@@ -84,6 +84,7 @@ defmodule VarselWeb.McpTest do
                    validate_case
                    refresh_case_derivation list_case_proposals list_open_case_proposals
                    propose_title propose_credit propose_weakness propose_reference
+                   propose_internal_notes
                    propose_otp_affected_package propose_version_event propose_delete
                    withdraw_case_proposal list_case_comments
                    create_case_comment) do

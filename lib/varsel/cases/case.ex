@@ -483,7 +483,7 @@ defmodule Varsel.Cases.Case do
     end
 
     attribute :internal_notes, :string do
-      description "Internal working notes. Never rendered into the record."
+      description "Markdown working notes for the case team. Never rendered into the record."
       constraints max_length: 50_000
       public? true
     end

@@ -263,6 +263,7 @@ defmodule VarselWeb.Router do
         :propose_workarounds,
         :propose_configurations,
         :propose_solutions,
+        :propose_internal_notes,
         :propose_discovery,
         :propose_cvss,
         :propose_date_public,
