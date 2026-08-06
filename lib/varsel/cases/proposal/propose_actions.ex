@@ -88,6 +88,19 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       change {PackProposal, target: :case, operation: :set, field: :solutions_md}
     end
 
+    create :propose_internal_notes do
+      description """
+      Proposes setting the case's internal working notes (markdown). These are
+      for the case team only and are never rendered into the published record,
+      so keep anything that belongs in the advisory in the real fields. Pass an
+      explicit null value to propose clearing them.
+      """
+
+      accept [:case_id, :reasoning]
+      argument :value, :string, allow_nil?: true
+      change {PackProposal, target: :case, operation: :set, field: :internal_notes}
+    end
+
     create :propose_discovery do
       description "Proposes setting how the vulnerability was discovered."
       accept [:case_id, :reasoning]

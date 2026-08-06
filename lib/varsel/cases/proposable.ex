@@ -34,6 +34,7 @@ defmodule Varsel.Cases.Proposable do
     :cvss_v4,
     :date_public,
     :timeline,
+    :internal_notes,
     :cna_override
   ]
 
