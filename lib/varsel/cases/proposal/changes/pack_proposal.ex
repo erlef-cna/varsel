@@ -23,6 +23,10 @@ defmodule Varsel.Cases.Proposal.Changes.PackProposal do
     * `:operation` (required) — `:set`, `:insert`, or `:delete`.
     * `:field` — for `:set`, the fixed `field_name` this action edits (e.g.
       `:description_md`). The value is taken from the action's `value` argument.
+      An action whose field is clearable declares that argument
+      `allow_nil?: true`, so an explicit `null` proposes removing the field;
+      omitting the argument altogether stays an error rather than a silent
+      clear.
     * `:preset` — for an `affected_package` `:insert`, injects a fixed
       `"preset"` key (`:otp` / `:elixir` / `:gleam`) into the payload so
       `ValidTarget` routes to preset validation. The preset is implied by the
@@ -75,11 +79,17 @@ defmodule Varsel.Cases.Proposal.Changes.PackProposal do
   defp force_target(changeset, target), do: Ash.Changeset.force_change_attribute(changeset, :target, target)
 
   defp pack(changeset, :set, opts) do
-    value = jsonify(changeset, :value)
+    case Ash.Changeset.fetch_argument(changeset, :value) do
+      :error ->
+        Ash.Changeset.add_error(changeset, field: :value, message: "is required")
 
-    changeset
-    |> Ash.Changeset.force_change_attribute(:field_name, to_string(opts[:field]))
-    |> Ash.Changeset.force_change_attribute(:proposed_value, %{"value" => value})
+      {:ok, _value} ->
+        changeset
+        |> Ash.Changeset.force_change_attribute(:field_name, to_string(opts[:field]))
+        |> Ash.Changeset.force_change_attribute(:proposed_value, %{
+          "value" => jsonify(changeset, :value)
+        })
+    end
   end
 
   defp pack(changeset, :insert, opts) do
