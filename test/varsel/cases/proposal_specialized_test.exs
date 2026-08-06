@@ -71,6 +71,42 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
     end
   end
 
+  describe "clearing an optional field" do
+    setup %{poc: poc, case: case_record} do
+      Cases.edit_case!(case_record, %{workarounds_md: "disable ssh"}, actor: poc)
+
+      :ok
+    end
+
+    test "propose_workarounds accepts an explicit nil and clears the field on accept", %{
+      poc: poc,
+      case: case_record
+    } do
+      proposal = Cases.propose_workarounds!(%{case_id: case_record.id, value: nil}, actor: poc)
+
+      assert proposal.field_name == "workarounds_md"
+      assert proposal.proposed_value == %{"value" => nil}
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      reloaded = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      assert is_nil(reloaded.workarounds_md)
+    end
+
+    test "propose_workarounds still rejects an omitted value argument", %{
+      poc: poc,
+      case: case_record
+    } do
+      assert {:error, error} = Cases.propose_workarounds(%{case_id: case_record.id}, actor: poc)
+      assert Enum.any?(error.errors, &(&1.field == :value))
+    end
+
+    test "propose_description still requires a value", %{poc: poc, case: case_record} do
+      assert {:error, _error} =
+               Cases.propose_description(%{case_id: case_record.id, value: nil}, actor: poc)
+    end
+  end
+
   describe "insert actions" do
     test "propose_credit packs the credit payload", %{poc: poc, case: case_record} do
       proposal =
