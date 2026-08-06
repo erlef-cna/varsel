@@ -144,7 +144,6 @@ defmodule VarselWeb.CveViewTest do
     test "humanizes and classifies tags and credits" do
       assert CveView.humanize_tag("unsupported-when-assigned") == "Unsupported when assigned"
       assert CveView.cna_tag_class("disputed") == "badge-warning"
-      assert CveView.ref_tag_class("exploit") == "badge-error"
       assert CveView.humanize_credit("remediation_developer") == "Remediation developer"
     end
   end
@@ -308,33 +307,33 @@ defmodule VarselWeb.CveViewTest do
     end
   end
 
-  describe "reference_row/1" do
-    test "a GitHub commit URL renders as repo plus short sha" do
-      row =
-        CveView.reference_row(%{
-          "url" => "https://github.com/erlef/varsel/commit/0123456789abcdef0123456789abcdef01234567"
-        })
+  describe "reference/1" do
+    defp body(attrs), do: render_component(&CveView.reference/1, attrs)
 
-      assert %{
-               kind: :commit,
-               owner_repo: "erlef/varsel",
-               sha: "0123456789abcdef0123456789abcdef01234567"
-             } = row
+    test "a GitHub commit URL renders as repo plus short sha" do
+      html =
+        body(url: "https://github.com/erlef/varsel/commit/0123456789abcdef0123456789abcdef01234567")
+
+      assert html =~ "github.com/erlef/varsel"
+      assert html =~ "0123456"
+      # The identifier forms hide the raw URL in the text, keeping it as a title.
+      refute html =~ ">https://github.com/erlef/varsel/commit"
+      assert html =~ ~s(title="https://github.com/erlef/varsel/commit/)
     end
 
     test "a GHSA advisory URL renders as repo plus advisory id" do
-      row =
-        CveView.reference_row(%{
-          "url" => "https://github.com/gleam-lang/gleam/security/advisories/GHSA-4vvc-458m-r82g"
-        })
+      html =
+        body(url: "https://github.com/gleam-lang/gleam/security/advisories/GHSA-4vvc-458m-r82g")
 
-      assert %{kind: :ghsa, owner_repo: "gleam-lang/gleam", id: "GHSA-4vvc-458m-r82g"} = row
+      assert html =~ "github.com/gleam-lang/gleam"
+      assert html =~ "GHSA-4vvc-458m-r82g"
     end
 
     test "an OSV vulnerability URL renders as its id" do
-      row = CveView.reference_row(%{"url" => "https://osv.dev/vulnerability/EEF-CVE-2026-9012"})
+      html = body(url: "https://osv.dev/vulnerability/EEF-CVE-2026-9012")
 
-      assert %{kind: :osv, id: "EEF-CVE-2026-9012"} = row
+      assert html =~ "osv.dev"
+      assert html =~ "EEF-CVE-2026-9012"
     end
 
     test "a GitHub URL that is neither a commit nor an advisory stays a plain link" do
@@ -343,24 +342,46 @@ defmodule VarselWeb.CveViewTest do
             "https://github.com/erlef/varsel/issues/1",
             "https://osv.dev/list"
           ] do
-        assert %{kind: :link, name: ^url} = CveView.reference_row(%{"url" => url})
+        html = body(url: url)
+
+        assert html =~ url
+        # A bare link reads as its own URL, so it needs no tooltip repeating it.
+        refute html =~ "title="
       end
     end
 
-    test "a named reference keeps its name as the link text" do
-      row = CveView.reference_row(%{"url" => "https://example.com/a", "name" => "Upstream notes"})
+    test "a name overrides whatever the URL would have rendered as" do
+      html =
+        body(
+          url: "https://osv.dev/vulnerability/EEF-CVE-2026-9012",
+          name: "Upstream notes"
+        )
 
-      assert %{kind: :link, name: "Upstream notes"} = row
+      assert html =~ "Upstream notes"
+      # The href still points at the URL; only the link text is overridden, so
+      # the osv.dev · <id> face it would otherwise have worn is gone.
+      assert html =~ ~s(href="https://osv.dev/vulnerability/EEF-CVE-2026-9012")
+      refute html =~ "osv.dev ·"
     end
 
-    test "the first tag becomes the pill, and broken-link rows render faint" do
-      row =
-        CveView.reference_row(%{
-          "url" => "https://example.com/a",
-          "tags" => ["patch", "broken-link"]
-        })
+    test "a broken-link row renders faint but stays clickable" do
+      html = body(url: "https://example.com/a", tags: ["patch", "broken-link"])
 
-      assert %{tag: "patch", tone: :neutral, faint?: true} = row
+      assert html =~ "text-base-content/40"
+      assert html =~ ~s(href="https://example.com/a")
+    end
+
+    test "draws one pill by default and every tag on request" do
+      attrs = [url: "https://example.com/a", tags: ["patch", "broken-link"]]
+
+      first = body(attrs)
+      all = body(attrs ++ [pills: :all])
+
+      assert first =~ "patch"
+      refute first =~ "broken-link"
+
+      assert all =~ "patch"
+      assert all =~ "broken-link"
     end
   end
 

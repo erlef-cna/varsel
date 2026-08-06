@@ -42,12 +42,14 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.VersionEvent
   alias Varsel.CVE
   alias Varsel.Types.CVSS
+  alias VarselWeb.CveView
   alias VarselWeb.TimelineComponents
 
   @case_loads [
     :cve_id,
     :cve_record,
     :affected_summary,
+    :derived_references,
     # :avatar_url wherever a user is drawn as an avatar disc.
     assignments: [user: [:avatar_url]],
     references: [],
@@ -1035,11 +1037,16 @@ defmodule VarselWeb.CaseDetailLive do
             raw_case_record={@case_record}
             current_user={@current_user}
             can_resolve={can_edit?(@case_record, @current_user)}
+            has_footer?={@display_case.derived_references != []}
           >
             <:row :let={reference}>
-              <span class="font-mono text-sm break-all">{reference.url}</span>
-              <span :for={tag <- reference.tags} class="badge badge-ghost badge-xs ml-1">{tag}</span>
+              <span class="flex min-w-0 items-center gap-2 text-sm">
+                <CveView.reference url={reference.url} tags={reference.tags} pills={:all} />
+              </span>
             </:row>
+            <:footer>
+              <.derived_references refs={@display_case.derived_references} />
+            </:footer>
           </.rows_section>
           <.rows_section
             id="credits"
@@ -1932,7 +1939,12 @@ defmodule VarselWeb.CaseDetailLive do
   attr :current_user, :map, required: true
   attr :can_resolve, :boolean, required: true
 
+  attr :has_footer?, :boolean,
+    default: false,
+    doc: "whether the footer slot will render anything — suppresses the empty state"
+
   slot :row, required: true
+  slot :footer, doc: "read-only content below the editable rows (e.g. derived references)"
 
   defp rows_section(assigns) do
     assigns = assign(assigns, :sortable, assigns.mode == :edit and assigns.sort_event != nil)
@@ -1974,6 +1986,7 @@ defmodule VarselWeb.CaseDetailLive do
             >
               ⠿
             </span>
+            <.row_bullet :if={not @sortable} />
             <div>{render_slot(@row, row)}</div>
             <.proposal_marks row_id={row.id} marks={@marks} />
           </div>
@@ -2002,7 +2015,9 @@ defmodule VarselWeb.CaseDetailLive do
           </div>
         </li>
       </ul>
-      <p :if={@rows == []} class="text-sm text-base-content/60">None yet.</p>
+      <p :if={@rows == [] and not @has_footer?} class="text-sm text-base-content/60">None yet.</p>
+
+      {render_slot(@footer)}
 
       <.inline_suggestions
         case_record={@raw_case_record}
@@ -2011,6 +2026,31 @@ defmodule VarselWeb.CaseDetailLive do
         can_resolve={@can_resolve}
       />
     </.panel>
+    """
+  end
+
+  defp row_bullet(assigns) do
+    ~H"""
+    <span aria-hidden="true" class="h-[5px] w-[5px] flex-shrink-0 rounded-[1px] bg-base-content/35"></span>
+    """
+  end
+
+  # The references the record adds for itself. They are not rows: nothing here
+  # is editable, sortable or removable, so they sit below the stored list under
+  # their own rule rather than mixing into it.
+  attr :refs, :list, required: true
+
+  defp derived_references(assigns) do
+    ~H"""
+    <div :if={@refs != []} class="mt-2 border-t border-dashed border-base-300 pt-2">
+      <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+        added on publish
+      </p>
+      <div :for={ref <- @refs} class="flex items-center gap-2 py-0.5 text-sm opacity-70">
+        <.row_bullet />
+        <CveView.reference url={ref.url} tags={ref.tags} pills={:all} />
+      </div>
+    </div>
     """
   end
 

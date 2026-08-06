@@ -585,6 +585,19 @@ defmodule Varsel.Cases.Case do
       """
     end
 
+    calculate :derived_references,
+              {:array, Varsel.Cases.Case.DerivedReference},
+              Varsel.Cases.Case.Calculations.DerivedReferences do
+      public? true
+
+      description """
+      The references the published record adds on its own — the cna.erlef.org /
+      osv.dev self-links and the fix-commit links — as rendered
+      `{"url", "tags"}` maps. Read it to see what will ship; never store these
+      as references yourself.
+      """
+    end
+
     calculate :preview,
               Varsel.Cases.Case.Calculations.Preview.Result,
               Varsel.Cases.Case.Calculations.Preview do

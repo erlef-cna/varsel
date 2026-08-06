@@ -430,6 +430,66 @@ defmodule VarselWeb.CaseLiveTest do
     end
   end
 
+  describe "the references panel" do
+    defp references_section(html) do
+      html
+      |> String.split(~s(id="references"), parts: 2)
+      |> List.last()
+      |> String.split(~s(id="credits"), parts: 2)
+      |> List.first()
+    end
+
+    test "stored references render as links carrying their tags", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Linked refs"})
+
+      Cases.add_case_reference!(
+        %{
+          case_id: case_record.id,
+          url: "https://example.com/advisory",
+          tags: ["vendor-advisory"]
+        },
+        actor: poc
+      )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      section = references_section(render(lv))
+
+      assert section =~ ~s(href="https://example.com/advisory")
+      assert section =~ "vendor-advisory"
+      # Warn-toned outline, not a filled badge — same pill the public page uses.
+      assert section =~ "border-warning/40"
+    end
+
+    test "a fix commit shows up as a derived reference, not a stored row", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      record = Fixtures.reserved_cve_record("CVE-#{year}-31900")
+      case_record = Fixtures.open_case(poc, %{title: "Derived refs"})
+      Cases.assign_case_cve_id!(case_record, %{cve_record_id: record.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      section = references_section(render(lv))
+
+      assert section =~ "added on publish"
+      assert section =~ "osv.dev"
+      assert section =~ ~s(href="https://osv.dev/vulnerability/EEF-CVE-#{year}-31900")
+      # Derived rows are read-only: no Remove control among them.
+      refute section |> String.split("added on publish") |> List.last() =~ "Remove"
+    end
+
+    test "a case with neither stored nor derived references says so", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "No refs"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      section = references_section(render(lv))
+
+      assert section =~ "None yet."
+      refute section =~ "added on publish"
+    end
+  end
+
   describe "assigning a CVE ID" do
     test "the button opens a picker without assigning anything", %{conn: conn, poc: poc} do
       year = Date.utc_today().year
