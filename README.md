@@ -52,6 +52,12 @@ in Sweden.
 - **MCP** — at `/mcp`: public CVE/CWE/CAPEC tools, plus lifecycle tools gated
   by personal API keys (managed at `/settings/tokens`).
 
+You can add the MCP server to Claude with:
+
+```bash
+claude mcp add --transport http varsel https://cna.erlef.org/mcp
+```
+
 ## Agent skills
 
 This repo is also a Claude Code plugin (`varsel-poc`) bundling skills for CNA
