@@ -260,6 +260,27 @@
   color: inherit;
 }
 
+/* A copy button shows one of its three icons. The write is async, so a failure
+   arrives after the click already set is-copied and has to overrule it. */
+.copy-button .copy-done,
+.copy-button .copy-failed,
+.copy-button.is-copied .copy-idle,
+.copy-button.is-copy-failed .copy-idle {
+  display: none;
+}
+
+.copy-button.is-copied .copy-done {
+  display: inline-block;
+}
+
+.copy-button.is-copy-failed .copy-done {
+  display: none;
+}
+
+.copy-button.is-copy-failed .copy-failed {
+  display: inline-block;
+}
+
 .eef-hero-glow {
   position: relative;
   isolation: isolate;

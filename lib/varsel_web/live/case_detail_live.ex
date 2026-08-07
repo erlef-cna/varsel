@@ -988,6 +988,12 @@ defmodule VarselWeb.CaseDetailLive do
         <.page_header>
           <:eyebrow>
             Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
+            <.copy_button
+              :if={@case_record.cve_id}
+              value={@case_record.cve_id}
+              label={"Copy #{@case_record.cve_id}"}
+              class="align-text-bottom"
+            />
             <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
             <span class="text-base-content/50">
               · draft opened {Calendar.strftime(@case_record.inserted_at, "%b %-d, %Y")}
