@@ -507,19 +507,32 @@ defmodule VarselWeb.CaseLiveTest do
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == nil
     end
 
-    test "the auto path takes the next free ID", %{conn: conn, poc: poc} do
+    test "the auto path takes the lowest free ID of the year", %{conn: conn, poc: poc} do
       year = Date.utc_today().year
-      next = Fixtures.reserved_cve_record("CVE-#{year}-31002")
       Fixtures.reserved_cve_record("CVE-#{year}-31003")
+      lowest = Fixtures.reserved_cve_record("CVE-#{year}-31002")
       case_record = Fixtures.open_case(poc, %{title: "Auto case"})
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
       lv |> element("button", "Assign CVE ID") |> render_click()
-      lv |> element("button", "Assign CVE-#{year}-31002") |> render_click()
+      lv |> element("button", "Assign the next free ID") |> render_click()
 
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == next.id
-      assert render(lv) =~ "CVE ID assigned."
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == lowest.id
+      assert render(lv) =~ "Assigned CVE-#{year}-31002."
+    end
+
+    test "the auto path offers no particular ID up front", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      Fixtures.reserved_cve_record("CVE-#{year}-31009")
+      case_record = Fixtures.open_case(poc, %{title: "No promise case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      html = lv |> element("button", "Assign CVE ID") |> render_click()
+
+      assert html =~ "Assign the next free ID"
+      refute html =~ "Assign CVE-#{year}-31009"
     end
 
     test "a chosen ID wins over the next free one", %{conn: conn, poc: poc} do
@@ -537,7 +550,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> render_submit()
 
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == chosen.id
-      assert render(lv) =~ "CVE ID assigned."
+      assert render(lv) =~ "Assigned CVE-#{year}-31005."
     end
 
     test "withheld IDs are offered below the free ones, with their reason", %{
@@ -564,8 +577,7 @@ defmodule VarselWeb.CaseLiveTest do
       # Both the reason and when the hold started, so overriding it is an
       # informed choice rather than a guess.
       assert html =~ "withheld #{Date.utc_today()}"
-      # The auto path still offers only the free ID.
-      assert html =~ "Assign CVE-#{year}-31006"
+      assert html =~ "Assign the next free ID"
 
       lv
       |> form(~s{#cve-picker-modal form}, %{cve_record_id: held.id})
@@ -1459,6 +1471,255 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "supporter"
       assert html =~ poc.name
       assert html =~ supporter.name
+    end
+  end
+
+  describe "a catalog suggestion" do
+    defp suggestion_card_html(html) do
+      [card] = Regex.run(~r/<div id="suggestion-[^"]*".{0,1200}/s, html)
+      card
+    end
+
+    test "names the CWE it proposes, not just its id", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      Fixtures.seed_weakness(79, "Cross-site Scripting")
+      case_record = Fixtures.open_case(poc, %{title: "CWE suggestion case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :weakness,
+          operation: :insert,
+          proposed_value: %{"value" => %{"cwe_id" => 79}}
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "CWE-79"
+      assert html =~ "Cross-site Scripting"
+      assert html =~ "https://cwe.mitre.org/data/definitions/79.html"
+    end
+
+    test "names the CAPEC it proposes", %{conn: conn, poc: poc, supporter: supporter} do
+      Fixtures.seed_attack_pattern(66, "SQL Injection")
+      case_record = Fixtures.open_case(poc, %{title: "CAPEC suggestion case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :impact,
+          operation: :insert,
+          proposed_value: %{"value" => %{"capec_id" => 66}}
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "CAPEC-66"
+      assert html =~ "SQL Injection"
+    end
+
+    test "names the CAPEC a removal targets", %{conn: conn, poc: poc, supporter: supporter} do
+      Fixtures.seed_attack_pattern(63, "Cross-Site Scripting (XSS)")
+      case_record = Fixtures.open_case(poc, %{title: "CAPEC removal case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      impact =
+        Cases.add_case_impact!(%{case_id: case_record.id, capec_id: 63}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :impact,
+          target_id: impact.id,
+          operation: :delete
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      card = suggestion_card_html(html)
+      assert card =~ "CAPEC-63"
+      assert card =~ "Cross-Site Scripting (XSS)"
+      assert card =~ "line-through"
+    end
+
+    test "names the reference a removal targets", %{conn: conn, poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc, %{title: "Reference removal case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      reference =
+        Cases.add_case_reference!(
+          %{case_id: case_record.id, url: "https://example.com/retracted"},
+          actor: poc
+        )
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :reference,
+          target_id: reference.id,
+          operation: :delete
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert suggestion_card_html(html) =~ "https://example.com/retracted"
+    end
+
+    test "still names an id the catalog does not have", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Unknown CWE case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :weakness,
+          operation: :insert,
+          proposed_value: %{"value" => %{"cwe_id" => 4_040_404}}
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "CWE-4040404"
+      assert html =~ "(not in catalog)"
+    end
+  end
+
+  describe "accepting a whole section" do
+    defp set_proposal(case_record, actor, field, value) do
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :case,
+          operation: :set,
+          field_name: field,
+          proposed_value: %{"value" => value}
+        },
+        actor: actor
+      )
+    end
+
+    defp insert_reference(case_record, actor, url) do
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :reference,
+          operation: :insert,
+          proposed_value: %{"value" => %{"url" => url}}
+        },
+        actor: actor
+      )
+    end
+
+    test "accepts every suggestion in the section it names", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Bulk case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      set_proposal(case_record, supporter, "title", "Bulk title")
+      set_proposal(case_record, supporter, "description_md", "Bulk description")
+      # A different section, which the button must leave alone.
+      reference = insert_reference(case_record, supporter, "https://example.com/a")
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      html =
+        lv
+        |> element(~s{button[phx-value-section="summary"]}, "Accept all")
+        |> render_click()
+
+      assert html =~ "Accepted 2 suggestions."
+
+      reloaded = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      assert reloaded.title == "Bulk title"
+      assert reloaded.description_md == "Bulk description"
+
+      assert Ash.get!(Cases.Proposal, reference.id, authorize?: false).state == :open
+    end
+
+    test "stands down when two suggestions change the same field", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Competing case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      set_proposal(case_record, supporter, "title", "One title")
+      set_proposal(case_record, supporter, "title", "Another title")
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "Two suggestions change the same field"
+      assert lv |> element(~s{button[phx-value-section="summary"][disabled]}) |> has_element?()
+    end
+
+    test "stands down when a removal would settle the rest", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Removal case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      reference =
+        Cases.add_case_reference!(
+          %{case_id: case_record.id, url: "https://example.com/old"},
+          actor: poc
+        )
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :reference,
+          target_id: reference.id,
+          operation: :delete
+        },
+        actor: supporter
+      )
+
+      insert_reference(case_record, supporter, "https://example.com/new")
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "A removal here would settle the rest"
+      assert lv |> element(~s{button[phx-value-section="references"][disabled]}) |> has_element?()
+    end
+
+    test "is not offered for a lone suggestion", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Single case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      set_proposal(case_record, supporter, "title", "Only title")
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      refute html =~ "Accept all"
     end
   end
 

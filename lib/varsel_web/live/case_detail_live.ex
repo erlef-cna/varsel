@@ -288,10 +288,12 @@ defmodule VarselWeb.CaseDetailLive do
 
     socket =
       case Cases.assign_case_cve_id(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
-        {:ok, _case_record} ->
+        {:ok, case_record} ->
+          assigned = Ash.load!(case_record, [:cve_id], actor: socket.assigns.current_user).cve_id
+
           socket
           |> assign(:cve_picker, nil)
-          |> put_flash(:info, "CVE ID assigned.")
+          |> put_flash(:info, "Assigned #{assigned}.")
 
         {:error, error} ->
           put_flash(socket, :error, errors_to_string(error))
@@ -564,6 +566,23 @@ defmodule VarselWeb.CaseDetailLive do
     resolve_proposal(socket, id, params["resolution_note"], fun, verb)
   end
 
+  # The button is only offered for a section whose suggestions cannot supersede
+  # one another, but the pool is shared: another reviewer may resolve one
+  # between the render and the click. So each is accepted on its own and the
+  # flash says what actually happened rather than assuming all of them landed.
+  def handle_event("accept_section_proposals", %{"section" => section_id}, socket) do
+    actor = socket.assigns.current_user
+
+    {accepted, failed} =
+      socket.assigns.case_record
+      |> section_suggestions(section_id)
+      |> Enum.split_with(fn proposal ->
+        match?({:ok, _proposal}, Cases.accept_case_proposal(proposal, %{}, actor: actor))
+      end)
+
+    {:noreply, put_flash_for_bulk_accept(socket, length(accepted), length(failed))}
+  end
+
   def handle_event("withdraw_proposal", %{"id" => id}, socket) do
     proposal = Enum.find(socket.assigns.case_record.proposals, &(&1.id == id))
 
@@ -681,6 +700,29 @@ defmodule VarselWeb.CaseDetailLive do
         {:noreply, assign(socket, content_form: form)}
     end
   end
+
+  defp put_flash_for_bulk_accept(socket, 0, _failed) do
+    put_flash(
+      socket,
+      :error,
+      "Nothing was accepted — the suggestions have already been resolved."
+    )
+  end
+
+  defp put_flash_for_bulk_accept(socket, accepted, 0) do
+    put_flash(socket, :info, "Accepted #{suggestion_count(accepted)}.")
+  end
+
+  defp put_flash_for_bulk_accept(socket, accepted, failed) do
+    put_flash(
+      socket,
+      :info,
+      "Accepted #{suggestion_count(accepted)}; #{failed} could not be and stayed open."
+    )
+  end
+
+  defp suggestion_count(1), do: "1 suggestion"
+  defp suggestion_count(count), do: "#{count} suggestions"
 
   defp resolve_proposal(socket, id, note, fun, verb) do
     proposal = Enum.find(socket.assigns.case_record.proposals, &(&1.id == id))
@@ -948,6 +990,12 @@ defmodule VarselWeb.CaseDetailLive do
         <.page_header>
           <:eyebrow>
             Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
+            <.copy_button
+              :if={@case_record.cve_id}
+              value={@case_record.cve_id}
+              label={"Copy #{@case_record.cve_id}"}
+              class="align-text-bottom"
+            />
             <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
             <span class="text-base-content/50">
               · draft opened {Calendar.strftime(@case_record.inserted_at, "%b %-d, %Y")}
@@ -1359,13 +1407,33 @@ defmodule VarselWeb.CaseDetailLive do
   attr :can_resolve, :boolean, required: true
 
   defp inline_suggestions(assigns) do
+    suggestions = section_suggestions(assigns.case_record, assigns.section_id)
+
     assigns =
       assign(assigns,
-        suggestions: section_suggestions(assigns.case_record, assigns.section_id),
-        comments: comments_by_proposal(assigns.case_record)
+        suggestions: suggestions,
+        comments: comments_by_proposal(assigns.case_record),
+        accept_all_blocker: accept_all_blocker(suggestions)
       )
 
     ~H"""
+    <div
+      :if={@can_resolve and length(@suggestions) > 1}
+      class="mt-3 flex items-center justify-end gap-2"
+    >
+      <span :if={@accept_all_blocker} class="text-xs text-base-content/60">
+        {@accept_all_blocker}
+      </span>
+      <button
+        class="btn btn-xs btn-primary"
+        disabled={@accept_all_blocker != nil}
+        phx-click="accept_section_proposals"
+        phx-value-section={@section_id}
+      >
+        Accept all {length(@suggestions)}
+      </button>
+    </div>
+
     <div :for={proposal <- @suggestions} class="mt-3">
       <.suggestion_card
         id={"suggestion-#{proposal.id}"}
@@ -1376,14 +1444,42 @@ defmodule VarselWeb.CaseDetailLive do
         own={proposal.author_id == @current_user.id}
         comments={Map.get(@comments, proposal.id, [])}
       >
-        <.code_block
-          :if={proposal.operation != :set and proposal.proposed_value}
-          source={pretty_json(proposal.proposed_value["value"])}
-          class="mt-1 max-h-40"
+        <.proposal_payload
+          proposal={proposal}
+          removing={proposal_target_row(@case_record, proposal)}
+          class="mt-1 max-h-96"
         />
       </.suggestion_card>
     </div>
     """
+  end
+
+  # Why a section cannot be accepted in one go, or nil when it can.
+  #
+  # Accepting a proposal supersedes the ones it competes with (see
+  # `Varsel.Cases.Proposal.Changes.SupersedeCompeting`), so for those the
+  # outcome depends on which is accepted first — a choice a single button
+  # cannot make on the reviewer's behalf. The keys below are that change's own:
+  # a :delete claims its whole row, two :sets collide on the same field.
+  defp accept_all_blocker(proposals) do
+    cond do
+      Enum.any?(proposals, &(&1.operation == :delete)) ->
+        "A removal here would settle the rest — accept them one at a time."
+
+      competing_sets?(proposals) ->
+        "Two suggestions change the same field — pick between them first."
+
+      true ->
+        nil
+    end
+  end
+
+  defp competing_sets?(proposals) do
+    keys =
+      for %{operation: :set} = proposal <- proposals,
+          do: {proposal.target, proposal.target_id, proposal.field_name}
+
+    length(Enum.uniq(keys)) < length(keys)
   end
 
   defp content_section(assigns) do
@@ -2422,7 +2518,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp cve_picker_modal(assigns) do
     {free, withheld} = Enum.split_with(assigns.records, &(&1.state == :reserved))
 
-    assigns = assign(assigns, free: free, withheld: withheld, next: List.first(free))
+    assigns = assign(assigns, free: free, withheld: withheld)
 
     ~H"""
     <.modal id="cve-picker-modal" title="Assign a CVE ID" on_cancel="cancel_cve_picker">
@@ -2430,16 +2526,18 @@ defmodule VarselWeb.CaseDetailLive do
         <div class="rounded-lg border border-base-300 bg-base-200 p-3">
           <p class="text-sm font-semibold">Take the next free ID</p>
           <p class="text-xs text-base-content/60 mt-0.5">
-            <span :if={@next} class="font-mono">{@next.cve_id}</span>
-            <span :if={is_nil(@next)}>The pool is empty — reserve more IDs first.</span>
+            <span :if={@free != []}>
+              The lowest free ID of the current year, chosen when you confirm.
+            </span>
+            <span :if={@free == []}>The pool is empty — reserve more IDs first.</span>
           </p>
           <button
-            :if={@next}
+            :if={@free != []}
             type="button"
             class="btn btn-eef btn-sm mt-2"
             phx-click="confirm_assign_cve_id"
           >
-            Assign {@next.cve_id}
+            Assign the next free ID
           </button>
         </div>
 

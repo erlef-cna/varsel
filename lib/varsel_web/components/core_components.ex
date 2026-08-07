@@ -645,6 +645,38 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  A button that copies `value` to the clipboard, confirming on itself.
+
+  ## Examples
+
+      <.copy_button value={@case_record.cve_id} label="Copy the CVE ID" />
+  """
+  attr :value, :string, required: true, doc: "the text put on the clipboard"
+  attr :label, :string, required: true, doc: "what it copies, for the tooltip and screen readers"
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  def copy_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      title={@label}
+      aria-label={@label}
+      phx-click={
+        JS.dispatch("varsel:clipcopy", detail: %{text: @value})
+        |> JS.transition("is-copied", time: 1500)
+      }
+      class={["copy-button text-base-content/40 hover:text-base-content", @class]}
+      {@rest}
+    >
+      <.icon name="hero-clipboard-document" class="copy-idle size-4" />
+      <.icon name="hero-clipboard-document-check" class="copy-done size-4 text-success" />
+      <.icon name="hero-exclamation-circle" class="copy-failed size-4 text-error" />
+    </button>
+    """
+  end
+
+  @doc """
   Renders a lifecycle state as dot + word — color never carries the meaning
   alone. `dot` is a background color class (e.g. "bg-warning").
   """

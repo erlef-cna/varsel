@@ -30,6 +30,23 @@ import {hooks as colocatedHooks} from "phoenix-colocated/varsel"
 import topbar from "../vendor/topbar"
 import {AutoGrow, CssVars, DragSort, SectionRail} from "./hooks"
 
+// Clipboard copies for `CoreComponents.copy_button/1`. The click already
+// showed its own confirmation, so this only takes it back on failure.
+window.addEventListener("varsel:clipcopy", (event) => {
+  const button = event.target
+
+  const failed = () => {
+    clearTimeout(button.copyFailedTimer)
+    button.classList.add("is-copy-failed")
+    button.copyFailedTimer = setTimeout(() => button.classList.remove("is-copy-failed"), 1500)
+  }
+
+  // navigator.clipboard is absent outside a secure context.
+  if (!navigator.clipboard) return failed()
+
+  navigator.clipboard.writeText(event.detail.text).catch(failed)
+})
+
 // Plain-JS ToC scroll-spy for controller-rendered (dead) pages — the public
 // CVE detail page and the docs page template — where no LiveView hook runs.
 // Marks the entry whose section sits nearest above the viewport top with
