@@ -260,6 +260,21 @@
   color: inherit;
 }
 
+.eef-hero-glow {
+  position: relative;
+  isolation: isolate;
+}
+
+.eef-hero-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse 900px 600px at 50% 110%, #49b7ff 0%, #93c5fd 30%, transparent 65%);
+  opacity: 0.1;
+  pointer-events: none;
+}
+
 /* The console band under the navbar: in dark mode a deeper navy (#17222a)
    than the panels, in light mode the plain tinted surface. */
 .console-band {
