@@ -4,17 +4,22 @@
   SPDX-License-Identifier: Apache-2.0
 --%>
 
-<.error_page context="Error" status={401}>
-  <:title>
-    Please sign in to continue
-  </:title>
-  <p class="text-base-content/70 leading-relaxed">
-    This page is only available to signed-in members of the CNA team. Published CVE records are always public — no account needed.
-  </p>
-  <:actions>
-    <.link href={VarselWeb.SignInPath.for(assigns[:conn])} class="btn btn-primary">
-      <.icon name="hero-arrow-right-end-on-rectangle" class="size-4" /> Sign in
-    </.link>
-    <.link href={~p"/"} class="link link-primary text-sm font-semibold">Back to home →</.link>
-  </:actions>
-</.error_page>
+<Layouts.app
+  current_user={assigns[:current_user]}
+  current_path={assigns[:conn] && @conn.request_path}
+>
+  <.error_page context="Error" status={401}>
+    <:title>
+      Please sign in to continue
+    </:title>
+    <p class="text-base-content/70 leading-relaxed">
+      This page is only available to signed-in members of the CNA team. Published CVE records are always public — no account needed.
+    </p>
+    <:actions>
+      <.link href={VarselWeb.SignInPath.for(assigns[:conn])} class="btn btn-primary">
+        <.icon name="hero-arrow-right-end-on-rectangle" class="size-4" /> Sign in
+      </.link>
+      <.link href={~p"/"} class="link link-primary text-sm font-semibold">Back to home →</.link>
+    </:actions>
+  </.error_page>
+</Layouts.app>

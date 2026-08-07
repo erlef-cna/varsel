@@ -404,72 +404,72 @@ defmodule VarselWeb.CaseManagementLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.flash_group flash={@flash} />
-
-    <.page_header>
-      <:eyebrow>CNA Console</:eyebrow>
-      <:title>Cases</:title>
-      <:meta>
-        <.face_tabs
-          socket={@socket}
-          face={@face}
-          query={@query}
-          pipeline_count={@pipeline_count}
-          archive_count={@archive_count}
-          pipeline_match_count={@pipeline_match_count}
-          archive_match_count={@archive_match_count}
-        />
-      </:meta>
-      <:actions>
-        <.console_search id="case-search" value={@query} placeholder="Search all cases…" />
-        <div :if={Cases.can_open_case?(@current_user, %{})} class="relative">
-          <button type="button" class="btn btn-sm btn-eef" phx-click="toggle_open_case">
-            Open case
-          </button>
-          <div
-            :if={@open_case_open?}
-            class="absolute right-0 top-full mt-2 z-20 rounded-box border border-base-300 bg-base-200 p-3 shadow-lg"
-            phx-click-away="close_open_case"
-            phx-window-keydown="close_open_case"
-            phx-key="escape"
-          >
-            <form phx-submit="open_case" class="flex items-center gap-2">
-              <input
-                id="open-case-title"
-                type="text"
-                name="title"
-                placeholder="Working title"
-                required
-                class="input input-bordered input-sm w-56"
-                phx-mounted={JS.focus()}
-              />
-              <button type="submit" class="btn btn-sm btn-eef">Open</button>
-            </form>
+    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+      <.page_header>
+        <:eyebrow>CNA Console</:eyebrow>
+        <:title>Cases</:title>
+        <:meta>
+          <.face_tabs
+            socket={@socket}
+            face={@face}
+            query={@query}
+            pipeline_count={@pipeline_count}
+            archive_count={@archive_count}
+            pipeline_match_count={@pipeline_match_count}
+            archive_match_count={@archive_match_count}
+          />
+        </:meta>
+        <:actions>
+          <.console_search id="case-search" value={@query} placeholder="Search all cases…" />
+          <div :if={Cases.can_open_case?(@current_user, %{})} class="relative">
+            <button type="button" class="btn btn-sm btn-eef" phx-click="toggle_open_case">
+              Open case
+            </button>
+            <div
+              :if={@open_case_open?}
+              class="absolute right-0 top-full mt-2 z-20 rounded-box border border-base-300 bg-base-200 p-3 shadow-lg"
+              phx-click-away="close_open_case"
+              phx-window-keydown="close_open_case"
+              phx-key="escape"
+            >
+              <form phx-submit="open_case" class="flex items-center gap-2">
+                <input
+                  id="open-case-title"
+                  type="text"
+                  name="title"
+                  placeholder="Working title"
+                  required
+                  class="input input-bordered input-sm w-56"
+                  phx-mounted={JS.focus()}
+                />
+                <button type="submit" class="btn btn-sm btn-eef">Open</button>
+              </form>
+            </div>
           </div>
-        </div>
-      </:actions>
-    </.page_header>
+        </:actions>
+      </.page_header>
 
-    <.page_container width={if @face == :pipeline, do: :wide, else: :normal}>
-      <.pipeline_face
-        :if={@face == :pipeline}
-        lanes={@lanes}
-        query={@query}
-        expanded_lanes={@expanded_lanes}
-        archive_match_count={@archive_match_count}
-        socket={@socket}
-      />
-      <.archive_face
-        :if={@face == :archive}
-        cases={@archive_cases}
-        scope={@scope}
-        query={@query}
-        published_count={@archive_published_count}
-        closed_count={@archive_closed_count}
-        archive_count={@archive_count}
-        socket={@socket}
-      />
-    </.page_container>
+      <.page_container width={if @face == :pipeline, do: :wide, else: :normal}>
+        <.pipeline_face
+          :if={@face == :pipeline}
+          lanes={@lanes}
+          query={@query}
+          expanded_lanes={@expanded_lanes}
+          archive_match_count={@archive_match_count}
+          socket={@socket}
+        />
+        <.archive_face
+          :if={@face == :archive}
+          cases={@archive_cases}
+          scope={@scope}
+          query={@query}
+          published_count={@archive_published_count}
+          closed_count={@archive_closed_count}
+          archive_count={@archive_count}
+          socket={@socket}
+        />
+      </.page_container>
+    </Layouts.app>
     """
   end
 

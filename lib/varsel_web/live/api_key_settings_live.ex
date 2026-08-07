@@ -134,105 +134,105 @@ defmodule VarselWeb.ApiKeySettingsLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.flash_group flash={@flash} />
+    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+      <.page_header>
+        <:eyebrow>CNA Console</:eyebrow>
+        <:title>API Tokens</:title>
+        <:subtitle>Personal access tokens for the GraphQL and MCP endpoints.</:subtitle>
+      </.page_header>
 
-    <.page_header>
-      <:eyebrow>CNA Console</:eyebrow>
-      <:title>API Tokens</:title>
-      <:subtitle>Personal access tokens for the GraphQL and MCP endpoints.</:subtitle>
-    </.page_header>
-
-    <.page_container class="space-y-4">
-      <div class="rounded-box border border-base-300 p-4">
-        <h2 class="font-semibold">Create a token</h2>
-        <p class="text-sm text-base-content/60 mt-0.5 mb-3">
-          The token authenticates API requests as you — send it as an
-          <code class="font-mono text-xs">Authorization: Bearer</code>
-          header. It is shown exactly once, right after creation.
-        </p>
-        <.form
-          :if={Accounts.can_create_api_key?(@current_user, %{})}
-          for={@form}
-          id="api-key-form"
-          phx-submit="create"
-          phx-change="validate"
-          class="flex flex-wrap items-start gap-2 [&_.fieldset]:mb-0"
-        >
-          <.input
-            field={@form[:name]}
-            type="text"
-            required
-            placeholder="Token name, e.g. CI pipeline"
-            class="input input-bordered input-sm w-64"
-          />
-          <.input
-            name="expiry"
-            type="select"
-            value={@expiry}
-            options={@expiry_presets}
-            class="select select-bordered select-sm w-32"
-          />
-          <button type="submit" class="btn btn-sm btn-eef">Create token</button>
-        </.form>
-      </div>
-
-      <div :if={@created_key} class="alert alert-warning" role="alert">
-        <.icon name="hero-key" class="size-5 shrink-0" />
-        <div>
-          <p class="font-medium">
-            Copy your new token now — it won't be shown again.
+      <.page_container class="space-y-4">
+        <div class="rounded-box border border-base-300 p-4">
+          <h2 class="font-semibold">Create a token</h2>
+          <p class="text-sm text-base-content/60 mt-0.5 mb-3">
+            The token authenticates API requests as you — send it as an
+            <code class="font-mono text-xs">Authorization: Bearer</code>
+            header. It is shown exactly once, right after creation.
           </p>
-          <code class="select-all break-all text-sm">{elem(@created_key, 1)}</code>
+          <.form
+            :if={Accounts.can_create_api_key?(@current_user, %{})}
+            for={@form}
+            id="api-key-form"
+            phx-submit="create"
+            phx-change="validate"
+            class="flex flex-wrap items-start gap-2 [&_.fieldset]:mb-0"
+          >
+            <.input
+              field={@form[:name]}
+              type="text"
+              required
+              placeholder="Token name, e.g. CI pipeline"
+              class="input input-bordered input-sm w-64"
+            />
+            <.input
+              name="expiry"
+              type="select"
+              value={@expiry}
+              options={@expiry_presets}
+              class="select select-bordered select-sm w-32"
+            />
+            <button type="submit" class="btn btn-sm btn-eef">Create token</button>
+          </.form>
         </div>
-      </div>
 
-      <.list_card empty?={@api_keys.results == []}>
-        <:empty>No tokens yet — create one above.</:empty>
-        <:footer :if={paged?(@api_keys)}>
-          <.pagination page={@api_keys} noun="token" />
-        </:footer>
-
-        <div class="overflow-x-auto">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th>Expires</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={api_key <- @api_keys.results} class="hover:bg-base-300/40">
-                <td class="font-medium">{api_key.name}</td>
-                <td>
-                  <.state :if={api_key.valid} dot="bg-success">Active</.state>
-                  <.state :if={!api_key.valid} dot="bg-base-content/30">Expired</.state>
-                </td>
-                <td class="whitespace-nowrap tabular-nums text-base-content/70">
-                  {format_date(api_key.inserted_at, "never")}
-                </td>
-                <td class="whitespace-nowrap tabular-nums text-base-content/70">
-                  {format_date(api_key.expires_at, "never")}
-                </td>
-                <td class="text-right">
-                  <button
-                    :if={Accounts.can_revoke_api_key?(@current_user, api_key)}
-                    phx-click="revoke"
-                    phx-value-id={api_key.id}
-                    data-confirm="Revoke this token? Applications using it will stop working."
-                    class="link link-hover text-error/80 text-sm"
-                  >
-                    Revoke
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div :if={@created_key} class="alert alert-warning" role="alert">
+          <.icon name="hero-key" class="size-5 shrink-0" />
+          <div>
+            <p class="font-medium">
+              Copy your new token now — it won't be shown again.
+            </p>
+            <code class="select-all break-all text-sm">{elem(@created_key, 1)}</code>
+          </div>
         </div>
-      </.list_card>
-    </.page_container>
+
+        <.list_card empty?={@api_keys.results == []}>
+          <:empty>No tokens yet — create one above.</:empty>
+          <:footer :if={paged?(@api_keys)}>
+            <.pagination page={@api_keys} noun="token" />
+          </:footer>
+
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Expires</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={api_key <- @api_keys.results} class="hover:bg-base-300/40">
+                  <td class="font-medium">{api_key.name}</td>
+                  <td>
+                    <.state :if={api_key.valid} dot="bg-success">Active</.state>
+                    <.state :if={!api_key.valid} dot="bg-base-content/30">Expired</.state>
+                  </td>
+                  <td class="whitespace-nowrap tabular-nums text-base-content/70">
+                    {format_date(api_key.inserted_at, "never")}
+                  </td>
+                  <td class="whitespace-nowrap tabular-nums text-base-content/70">
+                    {format_date(api_key.expires_at, "never")}
+                  </td>
+                  <td class="text-right">
+                    <button
+                      :if={Accounts.can_revoke_api_key?(@current_user, api_key)}
+                      phx-click="revoke"
+                      phx-value-id={api_key.id}
+                      data-confirm="Revoke this token? Applications using it will stop working."
+                      class="link link-hover text-error/80 text-sm"
+                    >
+                      Revoke
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </.list_card>
+      </.page_container>
+    </Layouts.app>
     """
   end
 end

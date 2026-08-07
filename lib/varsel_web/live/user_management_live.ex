@@ -124,114 +124,114 @@ defmodule VarselWeb.UserManagementLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.flash_group flash={@flash} />
+    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+      <.page_header>
+        <:eyebrow>CNA Console</:eyebrow>
+        <:title>Users</:title>
+        <:subtitle>Manage who can access the CNA tooling and their role.</:subtitle>
+      </.page_header>
 
-    <.page_header>
-      <:eyebrow>CNA Console</:eyebrow>
-      <:title>Users</:title>
-      <:subtitle>Manage who can access the CNA tooling and their role.</:subtitle>
-    </.page_header>
+      <.page_container>
+        <.list_card empty?={@users.results == []}>
+          <:empty>No users yet.</:empty>
+          <:footer :if={paged?(@users)}>
+            <.pagination page={@users} noun="user" />
+          </:footer>
 
-    <.page_container>
-      <.list_card empty?={@users.results == []}>
-        <:empty>No users yet.</:empty>
-        <:footer :if={paged?(@users)}>
-          <.pagination page={@users} noun="user" />
-        </:footer>
-
-        <div class="overflow-x-auto">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>GitHub</th>
-                <th>Hex.pm</th>
-                <th class="text-right">Role</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={user <- @users.results} class="hover:bg-base-300/40">
-                <td class="font-medium">
-                  <span class="flex items-center gap-2">
-                    <.avatar_disc user={user} />
-                    {user.name || "—"}
-                    <span :if={user.id == @current_user.id} class="badge badge-ghost badge-sm">
-                      you
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>GitHub</th>
+                  <th>Hex.pm</th>
+                  <th class="text-right">Role</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={user <- @users.results} class="hover:bg-base-300/40">
+                  <td class="font-medium">
+                    <span class="flex items-center gap-2">
+                      <.avatar_disc user={user} />
+                      {user.name || "—"}
+                      <span :if={user.id == @current_user.id} class="badge badge-ghost badge-sm">
+                        you
+                      </span>
                     </span>
-                  </span>
-                </td>
-                <td class="text-base-content/70">{user.notification_email || "—"}</td>
-                <td>
-                  <.link
-                    :if={user.github_username}
-                    href={"https://github.com/#{user.github_username}"}
-                    class="link link-hover text-primary"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    @{user.github_username}
-                  </.link>
-                  <span :if={is_nil(user.github_username)} class="text-base-content/50">—</span>
-                </td>
-                <td>
-                  <.link
-                    :if={user.hex_username}
-                    href={hex_profile_url(user.hex_username)}
-                    class="link link-hover text-primary"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    @{user.hex_username}
-                  </.link>
-                  <span :if={is_nil(user.hex_username)} class="text-base-content/50">—</span>
-                </td>
-                <td class="text-right">
-                  <form
-                    :if={Accounts.can_set_user_role?(@current_user, user, %{})}
-                    id={"role-#{user.id}"}
-                    phx-change="set_role"
-                    class="inline-block"
-                  >
-                    <input type="hidden" name="user_id" value={user.id} />
-                    <select name="role" class="select select-bordered select-sm w-32">
-                      <option
-                        :for={{label, value} <- @roles}
-                        value={role_value(value)}
-                        selected={user.role == value}
-                      >
-                        {label}
-                      </option>
-                    </select>
-                  </form>
-                  <%!-- Readable but not yours to change: the name of the role
-                  rather than an empty cell where a control would be. --%>
-                  <span
-                    :if={!Accounts.can_set_user_role?(@current_user, user, %{})}
-                    class="text-base-content/70"
-                  >
-                    {role_label(user.role)}
-                  </span>
-                </td>
-                <td class="text-right">
-                  <button
-                    :if={Accounts.can_delete_user?(@current_user, user)}
-                    type="button"
-                    phx-click="delete_user"
-                    phx-value-user_id={user.id}
-                    data-confirm={delete_confirmation(user)}
-                    class="btn btn-ghost btn-sm text-error"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </.list_card>
-    </.page_container>
+                  </td>
+                  <td class="text-base-content/70">{user.notification_email || "—"}</td>
+                  <td>
+                    <.link
+                      :if={user.github_username}
+                      href={"https://github.com/#{user.github_username}"}
+                      class="link link-hover text-primary"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      @{user.github_username}
+                    </.link>
+                    <span :if={is_nil(user.github_username)} class="text-base-content/50">—</span>
+                  </td>
+                  <td>
+                    <.link
+                      :if={user.hex_username}
+                      href={hex_profile_url(user.hex_username)}
+                      class="link link-hover text-primary"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      @{user.hex_username}
+                    </.link>
+                    <span :if={is_nil(user.hex_username)} class="text-base-content/50">—</span>
+                  </td>
+                  <td class="text-right">
+                    <form
+                      :if={Accounts.can_set_user_role?(@current_user, user, %{})}
+                      id={"role-#{user.id}"}
+                      phx-change="set_role"
+                      class="inline-block"
+                    >
+                      <input type="hidden" name="user_id" value={user.id} />
+                      <select name="role" class="select select-bordered select-sm w-32">
+                        <option
+                          :for={{label, value} <- @roles}
+                          value={role_value(value)}
+                          selected={user.role == value}
+                        >
+                          {label}
+                        </option>
+                      </select>
+                    </form>
+                    <%!-- Readable but not yours to change: the name of the role
+                    rather than an empty cell where a control would be. --%>
+                    <span
+                      :if={!Accounts.can_set_user_role?(@current_user, user, %{})}
+                      class="text-base-content/70"
+                    >
+                      {role_label(user.role)}
+                    </span>
+                  </td>
+                  <td class="text-right">
+                    <button
+                      :if={Accounts.can_delete_user?(@current_user, user)}
+                      type="button"
+                      phx-click="delete_user"
+                      phx-value-user_id={user.id}
+                      data-confirm={delete_confirmation(user)}
+                      class="btn btn-ghost btn-sm text-error"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </.list_card>
+      </.page_container>
+    </Layouts.app>
     """
   end
 end

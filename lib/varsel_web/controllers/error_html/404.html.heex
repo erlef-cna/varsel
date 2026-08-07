@@ -4,38 +4,43 @@
   SPDX-License-Identifier: Apache-2.0
 --%>
 
-<.error_page context="Error" status={404}>
-  <:title>
-    Page not found
-  </:title>
-  <p class="text-base-content/70 leading-relaxed">
-    There's nothing at this address. The link that brought you here may be out of date, or the address may be mistyped.
-  </p>
+<Layouts.app
+  current_user={assigns[:current_user]}
+  current_path={assigns[:conn] && @conn.request_path}
+>
+  <.error_page context="Error" status={404}>
+    <:title>
+      Page not found
+    </:title>
+    <p class="text-base-content/70 leading-relaxed">
+      There's nothing at this address. The link that brought you here may be out of date, or the address may be mistyped.
+    </p>
 
-  <p class="mt-8 mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
-    Useful places
-  </p>
-  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-4xl">
-    <.link_tile href={~p"/"} icon="hero-home" title="Home" layout={:inline}>Overview and latest CVEs</.link_tile>
-    <.link_tile navigate={~p"/cves"} icon="hero-list-bullet" title="All CVEs" layout={:inline}>Browse published records</.link_tile>
-    <.link_tile
-      navigate={~p"/common-weaknesses"}
-      icon="hero-chart-pie"
-      title="Common Weaknesses"
-      layout={:inline}
-    >CWE distribution</.link_tile>
-    <.link_tile
-      navigate={~p"/report"}
-      icon="hero-shield-exclamation"
-      title="Report a Vulnerability"
-      layout={:inline}
-    >Coordinated disclosure intake</.link_tile>
-    <.link_tile href={~p"/contact"} icon="hero-envelope" title="Contact" layout={:inline}>Reach the CNA team</.link_tile>
-    <.link_tile
-      href={~p"/security-policy"}
-      icon="hero-book-open"
-      title="Security Policy"
-      layout={:inline}
-    >Disclosure process</.link_tile>
-  </div>
-</.error_page>
+    <p class="mt-8 mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+      Useful places
+    </p>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-4xl">
+      <.link_tile href={~p"/"} icon="hero-home" title="Home" layout={:inline}>Overview and latest CVEs</.link_tile>
+      <.link_tile navigate={~p"/cves"} icon="hero-list-bullet" title="All CVEs" layout={:inline}>Browse published records</.link_tile>
+      <.link_tile
+        navigate={~p"/common-weaknesses"}
+        icon="hero-chart-pie"
+        title="Common Weaknesses"
+        layout={:inline}
+      >CWE distribution</.link_tile>
+      <.link_tile
+        navigate={~p"/report"}
+        icon="hero-shield-exclamation"
+        title="Report a Vulnerability"
+        layout={:inline}
+      >Coordinated disclosure intake</.link_tile>
+      <.link_tile href={~p"/contact"} icon="hero-envelope" title="Contact" layout={:inline}>Reach the CNA team</.link_tile>
+      <.link_tile
+        href={~p"/security-policy"}
+        icon="hero-book-open"
+        title="Security Policy"
+        layout={:inline}
+      >Disclosure process</.link_tile>
+    </div>
+  </.error_page>
+</Layouts.app>
