@@ -181,26 +181,12 @@ you pass the vector string only.
 
 ## Step 4 - CWE and CAPEC
 
-**Start from the sibling cases pulled in Step 0, but reuse a sibling's classification only when it
-covers the same construct and the same vulnerability class.** Same library is not the qualifying
-test. Sibling cases very often arrive in a batch precisely because one release fixed several
-*different* kinds of bug, so differing CWEs across siblings is the normal outcome, not a
-consistency failure to correct.
+Use the skills `find-cwe` and `find-capec` to find the CWE and CAPEC classificiations. Don't carry over
+the classifications from sibling cases but run the skills independently.
 
-A sibling's CWE and CAPEC carry over when the flawed construct and the way it fails are the same
-(the same parser mishandling the same class of input, say). They do not carry over merely because
-the two issues sit in the same package, were fixed in the same release, or share a reporter. Where
-they do carry over, that is usually the entire step; where they do not, classify from the evidence
-below and ignore the sibling.
-
-When the classification is not carried over, **do not search. Go straight to `get_weakness` and
-`get_attack_pattern` on the two or three IDs you already suspect.** The vulnerability class almost
-always suggests candidates, and fetching them directly is one cheap call each.
-
-`search_weaknesses` and `search_attack_patterns` are a bad fit here and cost far more than they
-return. Terms are ANDed, so a natural-language query matches nothing and comes back empty; widen it
-enough to match and the result overflows at tens of thousands of characters and has to be persisted
-and grepped. If you must search, keep `limit` at 4 or below.
+You can use `search_weaknesses` and `search_attack_patterns` to find matching classifier. 
+Terms are ANDed by default but support Websearch tsqueries like OR-cases like `"sad cat" or "fat rat"` 
+and negations like `"supernovae star" -crab`. Keep `limit` at 5 or below to reduce the number of results.
 
 **Decide the family once, then pick both IDs inside it.** The CWE and the CAPEC must agree. If a
 lookup hands you a CAPEC from a family you already rejected for the CWE, that disagreement is the
@@ -219,9 +205,8 @@ user points you at, is already there and must not be duplicated. Find it with `l
 `list_case_proposals` in **all** states, so you see what has already been accepted rather than only
 what is still open. Then skip to Step 6 and propose only what is missing or wrong.
 
-Otherwise call `open_case`. Fields it accepts: `title`, `description_md`, `configurations_md`,
-`solutions_md`, `workarounds_md`, `discovery`
-(`external` / `internal` / `unknown`), `internal_notes`, `timeline`, `date_public`.
+Otherwise call `open_case` but only use the `propose_*` fields, never the fields directly. Every change
+to the case needs to be a proposal, never a direct update.
 
 `open_case` also accepts `cvss_v4`, but **do not seed the score here.** Scoring is a judgement a
 reviewer weighs on its own, so it lands as its own `propose_cvss` in Step 6 where the reasoning
