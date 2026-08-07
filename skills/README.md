@@ -39,7 +39,8 @@ See <https://cna.erlef.org/api-access#mcp> for how to connect and authenticate.
 
 | Skill | Purpose |
 |-------|---------|
-| `new-cve` | Orchestrator. Advisory → case proposals → derive → verify (stops review-ready). |
+| `new-case` | Orchestrator. Advisory **or pasted report** → case proposals → derive → verify (stops review-ready). |
+| `new-cve` | Older orchestrator, superseded by `new-case`. Advisory-only. |
 | `cvss` | Produce a CVSS v4.0 vector (Varsel derives the numeric score). |
 | `find-cwe` | Pick a CWE from the MCP catalog (`search_weaknesses` / `get_weakness`). |
 | `find-capec` | Pick a CAPEC — start from the CWE's `related_attack_patterns`, fall back to search. |
@@ -47,8 +48,12 @@ See <https://cna.erlef.org/api-access#mcp> for how to connect and authenticate.
 | `verify` | Render the case preview, run the MCP validators, walk the convention checklist. |
 | `summarize-cve` | Human-readable technical write-up from a case or published CVE. |
 
-Each skill is invocable directly (e.g. `/new-cve`); `new-cve` calls the others
-as sub-steps.
+Each skill is invocable directly (e.g. `/new-case`); the orchestrator calls
+`cvss`, `find-cwe`, `find-capec`, `find-intro-commit`, and `verify` as sub-steps.
+
+`new-case` is the current filing workflow and the one to reach for. `new-cve`
+remains for now so in-flight work keeps running, and will be removed once
+`new-case` has replaced it outright.
 
 ## What Varsel automates (and these skills therefore do not do)
 
