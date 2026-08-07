@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ---
 name: new-case
-description: Open a new draft CVE case in Varsel from a GitHub advisory or a pasted vulnerability report. Use when filing a new vulnerability with the Varsel MCP, which replaces the deprecated records/ repo workflow.
+description: Open a new draft CVE case in Varsel from a GitHub advisory or a pasted vulnerability report. Use when filing a new vulnerability with the Varsel MCP.
 ---
 
 # New Varsel Case
@@ -44,14 +44,6 @@ you did not accept it. To see the true state use `list_case_proposals`, which re
 ones, so an empty result there means "nothing left to accept", not "nothing was ever proposed".
 
 You author proposals; you never self-approve them.
-
-## Load the tool schemas in one call
-
-Before starting, pull every schema this workflow needs in a single `ToolSearch`, with
-`max_results` set high enough to return them all. Discovering them one at a time as you go costs
-several wasted round trips.
-
-`select:open_case,get_case,propose_affected_package,propose_weakness,propose_impact,propose_credit,propose_reference,propose_cvss,propose_delete,list_cases,list_case_proposals,list_cves_by_purl,get_weakness,get_attack_pattern,refresh_case_derivation,render_case_preview,validate_case`
 
 ---
 
@@ -105,11 +97,7 @@ Vulnerabilities in one library arrive in batches, especially when a single relea
 issues at once, so a sibling case very often already carries:
 
 - the exact vendor, product, `repo_url`, CPE, and channel shape, ready to copy
-- **the introducing commit and the first affected release**, which is by far the most expensive
-  thing to re-derive
-- the credit list, with confirmed spellings
 - the reference set and its tagging
-- the CVSS shape for this class of issue in this library
 - a description whose length and depth is the target to match
 
 Reuse all of it. Derive from scratch only what genuinely differs, and name the sibling you took a
@@ -146,11 +134,7 @@ if something is genuinely wrong, such as the report bundling two distinct vulner
 
 ## Step 2 - Version boundaries
 
-**If a sibling case from Step 0 already establishes the introducing commit for the same construct,
-take it and skip the archaeology.** Cite the sibling in your reasoning. Only the rest of this step
-applies.
-
-**Otherwise the introducing commit must be verified, never taken on trust.** The user checks the
+**The introducing commit must be verified, never taken on trust.** The user checks the
 bug and the fix, so this boundary is yours to establish, and neither the reporter nor the advisory
 is authoritative about it.
 
@@ -166,17 +150,14 @@ more than the answer is worth.
 - Use the `find-intro-commit` skill. Never guess the SHA, and never lift it from the advisory.
 - Confirm by reading that commit that the vulnerable construct is genuinely present in it. A commit
   that merely touches the file is not the introducing commit.
-- Establish the first affected release with `git tag --contains <sha>`. The earliest reachable tag
-  is the first affected version.
-- Reconcile that against the range the advisory claims. Advisories get this wrong routinely. If the
-  two disagree, trust the tag containment, and tell the user which boundary moved and why.
 - Where the vulnerable code and its reachability arrived in separate commits, say which is which.
   The boundary is the commit that makes the vulnerability real, and if they landed in different
   releases that difference belongs in the version-event `note`.
 - For the fix, identify the commit at which the vulnerability is actually closed, which is not
   always the first commit that mentions it. A follow-up that corrects a case-sensitivity slip or an
   incomplete pattern is the real boundary, so read the later commits in the same release before
-  settling on one.
+  settling on one. Also, a fix might be backported to other branches or tags and might result in different 
+  SHAs. In that cse, multiple fix commits need to be provided.
 - Always use real commit SHAs, never tag SHAs. Use full 40-character SHAs.
 
 ## Step 3 - CVSS
@@ -221,10 +202,6 @@ return. Terms are ANDed, so a natural-language query matches nothing and comes b
 enough to match and the result overflows at tens of thousands of characters and has to be persisted
 and grepped. If you must search, keep `limit` at 4 or below.
 
-Reserve the `find-cwe` and `find-capec` subagents for genuinely hard classification. They are
-expensive, and run in parallel they cannot see each other's conclusions, which is how you end up
-with a CWE that rejects a family and a CAPEC drawn from it.
-
 **Decide the family once, then pick both IDs inside it.** The CWE and the CAPEC must agree. If a
 lookup hands you a CAPEC from a family you already rejected for the CWE, that disagreement is the
 finding: settle the family first, then re-pick both. Do not paper over it by keeping both.
@@ -259,7 +236,6 @@ visible anywhere else.
 **Keep it very short. A handful of lines, and often fewer.** Write only what a reviewer cannot
 reconstruct from the case itself:
 
-- the introducing and fixing commit SHAs, and the one command or fact that settled each
 - the sibling case you reused a value from, named
 - anything the user flagged from their own verification
 
@@ -271,10 +247,7 @@ ruled out is worth one clause at most, and usually nothing.
 Length matters beyond taste here: `render_case_preview` and `validate_case` echo the whole case
 back, notes included, so every extra line is paid again on each later round.
 
-**Write the notes in this `open_case` call.** `internal_notes` can only be set here. There is no
-`update_case` and no `propose_internal_notes`, so leaving them for later strands them: the only
-way to add context afterwards is `create_case_comment`, which is a different thing in a different
-place. Compose the notes before you open the case.
+**Write the notes with the `propose_internal_notes` call.** `internal_notes` can only be set here.
 
 ## Step 6 - Propose the structured parts
 
@@ -371,7 +344,7 @@ boundary facts nested inline, so a single acceptance creates all of it:
 ```
 mcp__varsel__propose_affected_package(input: {
   case_id: <id>,
-  vendor: "...", product: "...", repo_url: "...", cpe: "...",
+  vendor: "...", product: "...", repo_url: "...",
   channels: [
     {purl_type: "hex", name: "<name>", namespace: null, qualifiers: {},
      subpath: null, tag_prefix: null, tag_suffixes: []}
@@ -393,8 +366,7 @@ mcp__varsel__propose_affected_package(input: {
 - **Extraction packages.** If code in package A was extracted into package B, model them as two
   affected packages. A's fix boundary is the extraction point; B carries the real fix commit.
 - **Unpatched.** Omit `fixed_commits` or the `fixed` boundary entirely. Varsel renders the
-  open-ended range, and the description carries `TODO` where the fixed version would go. Do not
-  propose a patch reference for a case with no fix.
+  open-ended range. Do not propose a patch reference at all. Varsel derrives it.
 
 ### Correcting an accepted proposal
 
@@ -428,8 +400,8 @@ Step 6.
 **2. The preview's `blockers` array.** This is a distinct signal from validation errors, and it is
 where problems like "the introducing commit is in no release tag" surface. Never skip it.
 
-**3. `validate_case` errors.** Some are expected and some are real, so tell them apart rather than
-dismissing the set.
+**3. `validate_case` errors.** These are hard validation errors that need to be fixed before 
+the case can be published.
 
 An error is expected only while the proposal that would satisfy it is still sitting unaccepted.
 `E006 (no affected product)` is expected with the affected-package proposal open, and is a genuine
