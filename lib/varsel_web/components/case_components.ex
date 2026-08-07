@@ -632,6 +632,107 @@ defmodule VarselWeb.CaseComponents do
   end
 
   @doc """
+  What a proposal would do: the catalog entry a weakness or impact names, the
+  row a removal targets, the raw JSON for anything else.
+
+  `removing` is that targeted row, which only the caller can resolve.
+  """
+  attr :proposal, :any, required: true
+  attr :removing, :any, default: nil, doc: "the row a :delete proposal targets"
+  attr :class, :any, default: nil
+
+  def proposal_payload(%{proposal: %{operation: :insert, target: target}} = assigns)
+      when target in [:weakness, :impact] do
+    assigns = assign(assigns, :entry, catalog_entry(assigns.proposal))
+
+    ~H"""
+    <p :if={@entry} class="mt-1 text-sm">
+      <.catalog_link entry={@entry} />
+    </p>
+    """
+  end
+
+  def proposal_payload(%{proposal: %{operation: :delete}} = assigns) do
+    assigns = assign(assigns, :entry, removed_entry(assigns.removing))
+
+    ~H"""
+    <p :if={@entry} class="mt-1 text-sm line-through decoration-error/40">
+      <.catalog_link :if={@entry.url} entry={@entry} />
+      <span :if={is_nil(@entry.url)} class="font-mono">{@entry.name}</span>
+    </p>
+    """
+  end
+
+  def proposal_payload(%{proposal: %{operation: operation, proposed_value: value}} = assigns)
+      when operation != :set and not is_nil(value) do
+    ~H"""
+    <.code_block
+      source={Jason.encode!(@proposal.proposed_value["value"], pretty: true)}
+      class={@class}
+    />
+    """
+  end
+
+  def proposal_payload(assigns), do: ~H""
+
+  attr :entry, :map, required: true
+
+  defp catalog_link(assigns) do
+    ~H"""
+    <.link href={@entry.url} target="_blank" rel="noopener noreferrer" class="link font-mono">
+      {@entry.id}
+    </.link>
+    {@entry.name}
+    """
+  end
+
+  defp catalog_entry(%{target: :weakness, proposed_value: %{"value" => %{"cwe_id" => cwe_id}}}) do
+    cwe_entry(cwe_id, with_name(Varsel.CWE.get_weakness(cwe_id)))
+  end
+
+  defp catalog_entry(%{target: :impact, proposed_value: %{"value" => %{"capec_id" => capec_id}}}) do
+    capec_entry(capec_id, with_name(Varsel.CAPEC.get_attack_pattern(capec_id)))
+  end
+
+  defp catalog_entry(_proposal), do: nil
+
+  defp with_name({:ok, %{name: name}}), do: name
+  defp with_name({:error, _not_found}), do: nil
+
+  defp removed_entry(%Varsel.Cases.CaseWeakness{} = weakness) do
+    cwe_entry(weakness.cwe_id, catalog_name(weakness, :weakness))
+  end
+
+  defp removed_entry(%Varsel.Cases.CaseImpact{} = impact) do
+    capec_entry(impact.capec_id, catalog_name(impact, :attack_pattern))
+  end
+
+  defp removed_entry(%Varsel.Cases.CaseReference{} = reference), do: %{id: nil, name: reference.url, url: nil}
+
+  defp removed_entry(%Varsel.Cases.CaseCredit{} = credit), do: %{id: nil, name: credit.name, url: nil}
+
+  defp removed_entry(%Varsel.Cases.AffectedPackage{} = package) do
+    %{id: nil, name: "#{package.vendor} / #{package.product}", url: nil}
+  end
+
+  defp removed_entry(_row), do: nil
+
+  defp catalog_name(row, key) do
+    case Map.get(row, key) do
+      %{name: name} -> name
+      _not_loaded -> nil
+    end
+  end
+
+  defp cwe_entry(id, name), do: entry("CWE", id, name, "https://cwe.mitre.org/data/definitions")
+
+  defp capec_entry(id, name), do: entry("CAPEC", id, name, "https://capec.mitre.org/data/definitions")
+
+  defp entry(prefix, id, name, base_url) do
+    %{id: "#{prefix}-#{id}", name: name || "(not in catalog)", url: "#{base_url}/#{id}.html"}
+  end
+
+  @doc """
   Renders a settled suggestion: what it asked for, how it was resolved, and
   the note whoever resolved it left. Unlike `suggestion_card/1` this one is
   read-only — a resolved proposal has nothing left to accept or decline.
@@ -648,11 +749,7 @@ defmodule VarselWeb.CaseComponents do
         </span>
       </div>
 
-      <.code_block
-        :if={@proposal.operation != :set and @proposal.proposed_value}
-        source={Jason.encode!(@proposal.proposed_value["value"], pretty: true)}
-        class="mt-1 max-h-96"
-      />
+      <.proposal_payload proposal={@proposal} class="mt-1 max-h-96" />
 
       <div :if={@proposal.reasoning} class="mt-1 text-base-content/80">
         <.markdown content={@proposal.reasoning} class="prose-xs" />

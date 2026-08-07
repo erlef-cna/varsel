@@ -1444,9 +1444,9 @@ defmodule VarselWeb.CaseDetailLive do
         own={proposal.author_id == @current_user.id}
         comments={Map.get(@comments, proposal.id, [])}
       >
-        <.code_block
-          :if={proposal.operation != :set and proposal.proposed_value}
-          source={pretty_json(proposal.proposed_value["value"])}
+        <.proposal_payload
+          proposal={proposal}
+          removing={proposal_target_row(@case_record, proposal)}
           class="mt-1 max-h-96"
         />
       </.suggestion_card>

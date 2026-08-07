@@ -1474,6 +1474,135 @@ defmodule VarselWeb.CaseLiveTest do
     end
   end
 
+  describe "a catalog suggestion" do
+    defp suggestion_card_html(html) do
+      [card] = Regex.run(~r/<div id="suggestion-[^"]*".{0,1200}/s, html)
+      card
+    end
+
+    test "names the CWE it proposes, not just its id", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      Fixtures.seed_weakness(79, "Cross-site Scripting")
+      case_record = Fixtures.open_case(poc, %{title: "CWE suggestion case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :weakness,
+          operation: :insert,
+          proposed_value: %{"value" => %{"cwe_id" => 79}}
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "CWE-79"
+      assert html =~ "Cross-site Scripting"
+      assert html =~ "https://cwe.mitre.org/data/definitions/79.html"
+    end
+
+    test "names the CAPEC it proposes", %{conn: conn, poc: poc, supporter: supporter} do
+      Fixtures.seed_attack_pattern(66, "SQL Injection")
+      case_record = Fixtures.open_case(poc, %{title: "CAPEC suggestion case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :impact,
+          operation: :insert,
+          proposed_value: %{"value" => %{"capec_id" => 66}}
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "CAPEC-66"
+      assert html =~ "SQL Injection"
+    end
+
+    test "names the CAPEC a removal targets", %{conn: conn, poc: poc, supporter: supporter} do
+      Fixtures.seed_attack_pattern(63, "Cross-Site Scripting (XSS)")
+      case_record = Fixtures.open_case(poc, %{title: "CAPEC removal case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      impact =
+        Cases.add_case_impact!(%{case_id: case_record.id, capec_id: 63}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :impact,
+          target_id: impact.id,
+          operation: :delete
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      card = suggestion_card_html(html)
+      assert card =~ "CAPEC-63"
+      assert card =~ "Cross-Site Scripting (XSS)"
+      assert card =~ "line-through"
+    end
+
+    test "names the reference a removal targets", %{conn: conn, poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc, %{title: "Reference removal case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      reference =
+        Cases.add_case_reference!(
+          %{case_id: case_record.id, url: "https://example.com/retracted"},
+          actor: poc
+        )
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :reference,
+          target_id: reference.id,
+          operation: :delete
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert suggestion_card_html(html) =~ "https://example.com/retracted"
+    end
+
+    test "still names an id the catalog does not have", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Unknown CWE case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :weakness,
+          operation: :insert,
+          proposed_value: %{"value" => %{"cwe_id" => 4_040_404}}
+        },
+        actor: supporter
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "CWE-4040404"
+      assert html =~ "(not in catalog)"
+    end
+  end
+
   describe "accepting a whole section" do
     defp set_proposal(case_record, actor, field, value) do
       Cases.create_case_proposal!(
