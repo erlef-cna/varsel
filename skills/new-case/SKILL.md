@@ -71,6 +71,25 @@ advisory page for comments carrying a CVE number or handling instructions.
 with CVE conventions, so the scope, the severity, and the affected range often need correcting even
 when the underlying finding is sound.
 
+### Trusted or untrusted reports
+
+**Always ask the user whether the report is "trusted" or "untrusted", before doing anything else, 
+and never infer it.** The answer decides whether you reproduce the vulnerability, which is the 
+single largest fork in this workflow.
+
+Ask once, offering **trusted as the default**, because the vast majority of reports reaching this
+workflow originate from the CNA itself and are already verified. Running autonomously with no
+answer available, treat the report as trusted and say so in the final summary.
+
+- **Trusted.** The bug and the fix have already been verified by a human, typically ours. Take the
+  reported mechanism, the PoC, and the fix as given. **Do not reproduce anything.** No `Mix.install`
+  harnesses, no running payloads, no proving the exploit.
+- **Untrusted.** An external report nobody here has reproduced yet. **You must run and verify the
+  PoC script before filing**, per Step 1.
+
+Record which it was in a single clause of `internal_notes`, and for untrusted reports name the
+outcome of your reproduction.
+
 ### Pull prior cases for this package, before anything else
 
 **Do this before any git archaeology, classification, or scoring.** It is the single largest time
@@ -106,12 +125,50 @@ same construct, Step 2 becomes a confirmation rather than an investigation.**
 
 ## Step 1 - Understand the report
 
+### Trusted reports: do not reproduce
+
 **The user verifies the bug and the fix independently. Do not reproduce either.** No `Mix.install`
-harnesses, no running payloads, no proving the exploit. Take the reported mechanism and the fix as
-given and spend the effort on what only the record needs.
+harnesses, no running payloads, no proving the exploit. Take the reported mechanism, its PoC, and
+the fix as given and spend the effort on what only the record needs.
 
 This bans demonstrating the vulnerability, not examining the code. You still read the source, and
 you still clone the repository for the git archaeology in Step 2.
+
+The one exception is testing a candidate workaround, which is encouraged even here; see the
+workarounds section under Optional fields.
+
+### Untrusted reports: run the PoC first
+
+**Nobody here has reproduced this yet, so you must, before any of the work below.** A report that
+does not reproduce must not become a case.
+
+Build a self-contained harness rather than touching the user's project. For Elixir, a single
+`Mix.install/2` script pinned to a **vulnerable** version is the whole setup:
+
+```elixir
+Mix.install([{:the_package, "== <vulnerable-version>"}])
+# minimal call path from the report, printing the observed result
+```
+
+Work in the scratchpad directory, never in the project tree.
+
+- **Run it against a vulnerable version and confirm the reported behaviour actually occurs.** The
+  report's own expected output is the thing you are checking, not the thing you assume.
+- **Then run the same script against the fixed version** and confirm the behaviour is gone. That
+  second run is what proves the fix boundary is where the report claims, and it is the half people
+  skip.
+- If the report ships no PoC, write the minimal one its mechanism implies, and say in the summary
+  that the PoC is yours rather than the reporter's.
+- Keep the harness minimal. It exists to answer one question, not to explore the library.
+
+**If it does not reproduce, stop.** Do not open a case, do not propose anything, and report to the
+user what you ran and what you observed instead. This applies to environmental failures too: a
+harness you could not get running is an unreproduced report, so hand it back rather than filing on
+the assumption that it would have worked. The user decides what happens next.
+
+Once it reproduces, treat the finding as established and continue exactly as for a trusted report.
+
+### Both
 
 Read the vulnerable function and the fix commit closely enough to describe both accurately, then
 settle these:
@@ -126,17 +183,19 @@ settle these:
 - **What the fix actually changed.** If the patch is narrower than the report, that shapes
   `solutions_md` and is worth flagging to the user.
 
-**A case reaching this workflow has already been through several rounds of human review, so its
-validity as a CVE is settled. Do not re-litigate it, and do not stop to check in here.** Note the
+**A trusted case reaching this workflow has already been through several rounds of human review, so
+its validity as a CVE is settled. Do not re-litigate it, and do not stop to check in here.** For an
+untrusted report, the reproduction above is what settles it, and once it reproduces the same rule
+applies: carry on rather than checking in again. Note the
 scope and impact calls in one line of `internal_notes`, only where they changed something, and
 carry on to Step 2. Surface a finding mid-flight only
 if something is genuinely wrong, such as the report bundling two distinct vulnerabilities.
 
 ## Step 2 - Version boundaries
 
-**The introducing commit must be verified, never taken on trust.** The user checks the
-bug and the fix, so this boundary is yours to establish, and neither the reporter nor the advisory
-is authoritative about it.
+**The introducing commit must be verified, never taken on trust, trusted report or not.** The bug
+and the fix are settled by Step 1 either way, so this boundary is yours to establish, and neither
+the reporter nor the advisory is authoritative about it.
 
 **Stop as soon as the boundary is settled.** A pickaxe search (`git log -S`) on the vulnerable
 construct plus one `git tag --contains` normally settles it outright. Once it is settled, do not
@@ -502,6 +561,16 @@ it here adds nothing.
 
 An empty field is the correct and common outcome. Do not fill one in for completeness, and never
 write "There are no workarounds."
+
+**Verifying a candidate workaround is encouraged, on trusted and untrusted cases alike.** This is
+the one exception to the no-reproduce rule for trusted reports: a workaround you publish is advice
+users act on, so a mitigation you never tested is worse than an omitted field.
+
+Adapt the PoC into a small `Mix.install/2` script in the scratchpad, run it with the workaround
+applied against a **vulnerable** version, and confirm the exploit no longer succeeds. Run it once
+without the workaround in the same script too, so you know the harness would have caught the
+exploit at all. If the mitigation does not hold, do not propose it, and say in the summary which
+candidate you ruled out and how.
 
 ### Credits
 
