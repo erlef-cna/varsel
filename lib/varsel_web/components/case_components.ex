@@ -948,12 +948,17 @@ defmodule VarselWeb.CaseComponents do
   record appends to the description. It is shown here, muted and labelled, so
   an author can see what the reader will get without being able to edit it —
   and so nobody writes it a second time by hand.
+
+  `internal_notes` is the one part of this panel that never reaches the
+  record, so it renders last, collapsed, and marked as internal — a plain
+  `<details>`, since nothing here needs LiveView state.
   """
   attr :description, :string, default: nil
   attr :affected_summary, :string, default: nil
   attr :configurations, :string, default: nil
   attr :workarounds, :string, default: nil
   attr :solutions, :string, default: nil
+  attr :internal_notes, :string, default: nil
 
   def case_content(assigns) do
     ~H"""
@@ -980,6 +985,13 @@ defmodule VarselWeb.CaseComponents do
           <.markdown content={content} />
         </div>
       </div>
+
+      <details :if={@internal_notes} class="rounded border border-dashed border-base-300 p-2">
+        <summary class="cursor-pointer text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
+          internal notes — never published
+        </summary>
+        <.markdown content={@internal_notes} class="mt-2" />
+      </details>
     </div>
     """
   end

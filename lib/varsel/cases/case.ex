@@ -483,7 +483,7 @@ defmodule Varsel.Cases.Case do
     end
 
     attribute :internal_notes, :string do
-      description "Internal working notes. Never rendered into the record."
+      description "Markdown working notes for the case team. Never rendered into the record."
       constraints max_length: 50_000
       public? true
     end
@@ -582,6 +582,19 @@ defmodule Varsel.Cases.Case do
       The "This issue affects …" sentence the published record appends to the
       description, derived from the case's affected packages. Read it to see
       what will ship; never write it into `description_md` yourself.
+      """
+    end
+
+    calculate :derived_references,
+              {:array, Varsel.Cases.Case.DerivedReference},
+              Varsel.Cases.Case.Calculations.DerivedReferences do
+      public? true
+
+      description """
+      The references the published record adds on its own — the cna.erlef.org /
+      osv.dev self-links and the fix-commit links — as rendered
+      `{"url", "tags"}` maps. Read it to see what will ship; never store these
+      as references yourself.
       """
     end
 

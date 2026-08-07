@@ -588,12 +588,6 @@ defmodule VarselWeb.CveView do
   @doc "Human label for a CNA tag (`unsupported-when-assigned` → `Unsupported when assigned`)."
   def humanize_tag(tag), do: tag |> String.replace("-", " ") |> upcase_first()
 
-  @doc "DaisyUI badge class for a reference tag."
-  def ref_tag_class("vendor-advisory"), do: "badge-warning"
-  def ref_tag_class("mitigation"), do: "badge-info"
-  def ref_tag_class("exploit"), do: "badge-error"
-  def ref_tag_class(_other), do: "badge-ghost"
-
   @doc "Human label for a credit type (`remediation_developer` → `Remediation developer`)."
   def humanize_credit(type), do: type |> String.replace("_", " ") |> upcase_first()
 
@@ -637,48 +631,104 @@ defmodule VarselWeb.CveView do
   @ghsa_url_regex ~r/^https:\/\/github\.com\/([^\/]+\/[^\/]+)\/security\/advisories\/(GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4})$/
   @osv_url_regex ~r/^https:\/\/osv\.dev\/vulnerability\/([A-Za-z0-9][A-Za-z0-9.-]*)$/
 
-  @doc """
-  Presentation data for one References row: `%{kind:, url:, name:, owner_repo:,
-  sha:, id:, tag:, tone:, faint?:}`. The template renders the body from `kind`:
+  # The tag pill beside a reference: a hairline outline, warn-toned for the
+  # advisory tags and muted otherwise. Outlined rather than a filled badge so a
+  # list of references reads as links first and tags second.
+  attr :tag, :string, required: true
 
-    * `:commit` — a GitHub commit URL (`github.com/owner/repo/commit/<sha>`)
-      renders as `host/owner/repo · <7-char mono sha> ↗` in the text face —
-      the raw URL never appears (full URL stays in `href`/`title`).
-    * `:ghsa` — a GitHub Security Advisory
-      (`github.com/owner/repo/security/advisories/GHSA-…`) renders as
-      `host/owner/repo · <mono GHSA id> ↗`, the same shape as a commit: the
-      identifier is what a reader recognises, not the path to it.
-    * `:osv` — an OSV entry (`osv.dev/vulnerability/<id>`) renders as
-      `osv.dev · <mono id> ↗`.
-    * `:link` — everything else renders its `name` (falling back to the
-      bare `url`) as the link text.
+  defp reference_tag(assigns) do
+    assigns = assign(assigns, :warn?, assigns.tag in ["vendor-advisory", "third-party-advisory"])
 
-  `broken-link` rows (`faint?: true`) render faint (not struck through —
-  strikethrough reads as retracted) but stay in the list and stay
-  clickable. The tag pill is the FIRST tag only (`tag`/`tone`); untagged
-  references get `tag: nil` — no pill, absence is honest.
-  `vendor-advisory`/`third-party-advisory` are warn-toned, every other tag
-  is neutral.
-  """
-  @spec reference_row(map()) :: map()
-  def reference_row(ref) do
-    tags = ref["tags"] || []
-    tag = List.first(tags)
-    url = ref["url"]
-
-    body = reference_body_data(url, ref["name"])
-
-    Map.merge(body, %{
-      url: url,
-      tag: tag,
-      tone: if(tag in ["vendor-advisory", "third-party-advisory"], do: :warn, else: :neutral),
-      faint?: "broken-link" in tags
-    })
+    ~H"""
+    <span class={[
+      "flex-shrink-0 rounded-[5px] border px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap",
+      if(@warn?,
+        do: "border-warning/40 text-warning",
+        else: "border-base-300/70 text-base-content/50"
+      )
+    ]}>
+      {@tag}
+    </span>
+    """
   end
 
-  defp reference_body_data(nil, name), do: %{kind: :link, name: name}
+  @doc """
+  One reference: a link followed by its tag pills, the URL's shape deciding
+  how the link reads:
 
-  defp reference_body_data(url, name) do
+    * a GitHub commit (`github.com/owner/repo/commit/<sha>`) →
+      `github.com/owner/repo · <7-char mono sha> ↗`, the raw URL never shown
+    * a GitHub Security Advisory → `github.com/owner/repo · <mono GHSA id> ↗`,
+      the same shape: the identifier is what a reader recognises, not the path
+      to it
+    * an OSV entry (`osv.dev/vulnerability/<id>`) → `osv.dev · <mono id> ↗`
+    * anything else → the bare URL, or `name` when one is given
+
+  Those identifier forms carry the full URL as a `title`, since their text
+  deliberately hides it; a plain link already reads as its own URL. A
+  `broken-link` tag renders the row faint — not struck through, which would
+  read as retracted — while keeping it listed and clickable.
+
+  `pills` picks how many tags are drawn — `:first` (the default) is the
+  published card's flat one-pill-per-row look, `:all` suits an editor that
+  should show everything a row actually carries.
+  """
+  attr :url, :string, required: true
+  attr :tags, :list, default: []
+  attr :name, :string, default: nil, doc: "link text, overriding what the URL would render as"
+  attr :pills, :atom, values: [:first, :all], default: :first
+
+  def reference(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :pill_tags,
+        if(assigns.pills == :all, do: assigns.tags, else: Enum.take(assigns.tags, 1))
+      )
+
+    ~H"""
+    <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+      <.reference_body url={@url} tags={@tags} name={@name} />
+    </span>
+    <.reference_tag :for={tag <- @pill_tags} tag={tag} />
+    """
+  end
+
+  attr :url, :string, required: true
+  attr :tags, :list, default: []
+  attr :name, :string, default: nil
+
+  defp reference_body(assigns) do
+    assigns = assign(assigns, :shape, reference_shape(assigns.url, assigns.name))
+
+    ~H"""
+    <.link
+      href={@url}
+      title={@shape.kind != :link && @url}
+      target="_blank"
+      rel="noopener"
+      class={["truncate", "broken-link" in @tags && "text-base-content/40"]}
+    >
+      <%= case @shape do %>
+        <% %{kind: :commit, owner_repo: owner_repo, sha: sha} -> %>
+          github.com/{owner_repo} · <code>{short_sha7(sha)}</code> ↗
+        <% %{kind: :ghsa, owner_repo: owner_repo, id: id} -> %>
+          github.com/{owner_repo} · <code>{id}</code> ↗
+        <% %{kind: :osv, id: id} -> %>
+          osv.dev · <code>{id}</code> ↗
+        <% %{kind: :link, name: name} -> %>
+          {name}
+      <% end %>
+    </.link>
+    """
+  end
+
+  # How a reference URL reads: a named link wins outright, otherwise the URL
+  # shape decides whether an identifier or the bare link is the honest face.
+  defp reference_shape(_url, name) when is_binary(name), do: %{kind: :link, name: name}
+  defp reference_shape(nil, _name), do: %{kind: :link, name: nil}
+
+  defp reference_shape(url, _name) do
     cond do
       match = Regex.run(@commit_url_regex, url) ->
         [_full, owner_repo, sha] = match
@@ -693,66 +743,8 @@ defmodule VarselWeb.CveView do
         %{kind: :osv, id: id}
 
       true ->
-        %{kind: :link, name: name || url}
+        %{kind: :link, name: url}
     end
-  end
-
-  @doc "Component rendering a References row's body per `reference_row/1`'s `kind`."
-  attr :row, :map, required: true
-
-  def reference_body(%{row: %{kind: :commit}} = assigns) do
-    ~H"""
-    <.link
-      href={@row.url}
-      title={@row.url}
-      target="_blank"
-      rel="noopener"
-      class={["truncate", @row.faint? && "text-base-content/40"]}
-    >
-      github.com/{@row.owner_repo} · <code>{short_sha7(@row.sha)}</code> ↗
-    </.link>
-    """
-  end
-
-  def reference_body(%{row: %{kind: :ghsa}} = assigns) do
-    ~H"""
-    <.link
-      href={@row.url}
-      title={@row.url}
-      target="_blank"
-      rel="noopener"
-      class={["truncate", @row.faint? && "text-base-content/40"]}
-    >
-      github.com/{@row.owner_repo} · <code>{@row.id}</code> ↗
-    </.link>
-    """
-  end
-
-  def reference_body(%{row: %{kind: :osv}} = assigns) do
-    ~H"""
-    <.link
-      href={@row.url}
-      title={@row.url}
-      target="_blank"
-      rel="noopener"
-      class={["truncate", @row.faint? && "text-base-content/40"]}
-    >
-      osv.dev · <code>{@row.id}</code> ↗
-    </.link>
-    """
-  end
-
-  def reference_body(%{row: %{kind: :link}} = assigns) do
-    ~H"""
-    <.link
-      href={@row.url}
-      target="_blank"
-      rel="noopener"
-      class={["truncate", @row.faint? && "text-base-content/40"]}
-    >
-      {@row.name}
-    </.link>
-    """
   end
 
   defp upcase_first(""), do: ""

@@ -36,6 +36,33 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
       assert proposal.proposed_value == %{"value" => "disable ssh"}
     end
 
+    test "propose_internal_notes applies to the case on accept", %{poc: poc, case: case_record} do
+      proposal =
+        Cases.propose_internal_notes!(
+          %{case_id: case_record.id, value: "Waiting on the **backport**."},
+          actor: poc
+        )
+
+      assert proposal.field_name == "internal_notes"
+      assert proposal.proposed_value == %{"value" => "Waiting on the **backport**."}
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      reloaded = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      assert reloaded.internal_notes == "Waiting on the **backport**."
+    end
+
+    test "internal notes stay out of the rendered record", %{poc: poc, case: case_record} do
+      Cases.edit_case!(case_record, %{internal_notes: "not for publication"}, actor: poc)
+
+      %{preview: preview} =
+        Cases.Case
+        |> Ash.get!(case_record.id, authorize?: false)
+        |> Ash.load!([:preview], authorize?: false)
+
+      refute preview.cve_record |> Jason.encode!() |> String.contains?("not for publication")
+    end
+
     test "propose_cvss casts the vector through the real type", %{poc: poc, case: case_record} do
       vector = "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
 
@@ -68,6 +95,42 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
                  %{case_id: case_record.id, value: "not_a_discovery"},
                  actor: poc
                )
+    end
+  end
+
+  describe "clearing an optional field" do
+    setup %{poc: poc, case: case_record} do
+      Cases.edit_case!(case_record, %{workarounds_md: "disable ssh"}, actor: poc)
+
+      :ok
+    end
+
+    test "propose_workarounds accepts an explicit nil and clears the field on accept", %{
+      poc: poc,
+      case: case_record
+    } do
+      proposal = Cases.propose_workarounds!(%{case_id: case_record.id, value: nil}, actor: poc)
+
+      assert proposal.field_name == "workarounds_md"
+      assert proposal.proposed_value == %{"value" => nil}
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      reloaded = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      assert is_nil(reloaded.workarounds_md)
+    end
+
+    test "propose_workarounds still rejects an omitted value argument", %{
+      poc: poc,
+      case: case_record
+    } do
+      assert {:error, error} = Cases.propose_workarounds(%{case_id: case_record.id}, actor: poc)
+      assert Enum.any?(error.errors, &(&1.field == :value))
+    end
+
+    test "propose_description still requires a value", %{poc: poc, case: case_record} do
+      assert {:error, _error} =
+               Cases.propose_description(%{case_id: case_record.id, value: nil}, actor: poc)
     end
   end
 

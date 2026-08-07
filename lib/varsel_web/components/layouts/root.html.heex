@@ -35,11 +35,6 @@
     </script>
   </head>
   <body class="min-h-screen flex flex-col">
-    <.site_nav current_user={assigns[:current_user]} current_path={@conn.request_path} />
-    <main class="flex-1">
-      {@inner_content}
-    </main>
-    <.site_footer />
-    <.dev_nav />
+    {@inner_content}
   </body>
 </html>

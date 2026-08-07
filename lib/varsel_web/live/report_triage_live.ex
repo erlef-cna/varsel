@@ -211,59 +211,59 @@ defmodule VarselWeb.ReportTriageLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.flash_group flash={@flash} />
+    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+      <.page_header>
+        <:eyebrow>CNA Console</:eyebrow>
+        <:title>{if @triage?, do: "Report Triage", else: "My Reports"}</:title>
+        <:subtitle :if={@triage?}>
+          Inbound vulnerability reports: triage, accept into a case, or reject.
+        </:subtitle>
+        <:subtitle :if={not @triage?}>
+          Reports you submitted. The CNA team triages every report and follows up with you once it
+          has been reviewed.
+        </:subtitle>
+        <:actions>
+          <.link navigate={~p"/report"} class="btn btn-sm btn-eef">Submit a report</.link>
+        </:actions>
+      </.page_header>
 
-    <.page_header>
-      <:eyebrow>CNA Console</:eyebrow>
-      <:title>{if @triage?, do: "Report Triage", else: "My Reports"}</:title>
-      <:subtitle :if={@triage?}>
-        Inbound vulnerability reports: triage, accept into a case, or reject.
-      </:subtitle>
-      <:subtitle :if={not @triage?}>
-        Reports you submitted. The CNA team triages every report and follows up with you once it
-        has been reviewed.
-      </:subtitle>
-      <:actions>
-        <.link navigate={~p"/report"} class="btn btn-sm btn-eef">Submit a report</.link>
-      </:actions>
-    </.page_header>
+      <.page_container>
+        <div :if={@triage?} class="mb-4">
+          <.stat_tiles active={@filter} options={tile_options(@reports)} />
+        </div>
 
-    <.page_container>
-      <div :if={@triage?} class="mb-4">
-        <.stat_tiles active={@filter} options={tile_options(@reports)} />
-      </div>
+        <.list_card empty?={visible_reports(@reports, active_filter(@triage?, @filter)) == []}>
+          <:tabs :if={@triage?}>
+            <.scope_button
+              :for={{value, label, _dot} <- scopes()}
+              active={@filter}
+              value={value}
+              label={label}
+              count={length(visible_reports(@reports, value))}
+            />
+          </:tabs>
+          <:note :if={not @triage?}>
+            <.count_label count={length(@reports)} singular="report" />
+          </:note>
+          <:empty>{empty_sentence(@triage?, @reports, @filter)}</:empty>
 
-      <.list_card empty?={visible_reports(@reports, active_filter(@triage?, @filter)) == []}>
-        <:tabs :if={@triage?}>
-          <.scope_button
-            :for={{value, label, _dot} <- scopes()}
-            active={@filter}
-            value={value}
-            label={label}
-            count={length(visible_reports(@reports, value))}
+          <.report_row
+            :for={report <- visible_reports(@reports, active_filter(@triage?, @filter))}
+            report={report}
+            triage?={@triage?}
+            current_user={@current_user}
+            payload_open?={MapSet.member?(@expanded_payloads, report.id)}
           />
-        </:tabs>
-        <:note :if={not @triage?}>
-          <.count_label count={length(@reports)} singular="report" />
-        </:note>
-        <:empty>{empty_sentence(@triage?, @reports, @filter)}</:empty>
+        </.list_card>
 
-        <.report_row
-          :for={report <- visible_reports(@reports, active_filter(@triage?, @filter))}
+        <.decision_modal
+          :for={report <- deciding_report(@reports, @deciding)}
           report={report}
-          triage?={@triage?}
-          current_user={@current_user}
-          payload_open?={MapSet.member?(@expanded_payloads, report.id)}
+          decision={elem(@deciding, 1)}
+          open_cases={@open_cases}
         />
-      </.list_card>
-
-      <.decision_modal
-        :for={report <- deciding_report(@reports, @deciding)}
-        report={report}
-        decision={elem(@deciding, 1)}
-        open_cases={@open_cases}
-      />
-    </.page_container>
+      </.page_container>
+    </Layouts.app>
     """
   end
 

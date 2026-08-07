@@ -226,165 +226,165 @@ defmodule VarselWeb.AccountSettingsLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.flash_group flash={@flash} />
+    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+      <.page_header>
+        <:eyebrow>CNA Console</:eyebrow>
+        <:title>Account</:title>
+        <:subtitle>Your profile and how the CNA reaches you.</:subtitle>
+      </.page_header>
 
-    <.page_header>
-      <:eyebrow>CNA Console</:eyebrow>
-      <:title>Account</:title>
-      <:subtitle>Your profile and how the CNA reaches you.</:subtitle>
-    </.page_header>
-
-    <.page_container class="space-y-4">
-      <.panel>
-        <:title>Profile</:title>
-        <div class="flex items-center gap-3">
-          <.avatar_disc user={@account} class="size-12" />
-          <div>
-            <p class="font-semibold">{@account.display_name}</p>
-            <p class="text-sm text-base-content/60">
-              Your picture comes from your linked GitHub account, or from
-              <.link
-                href="https://gravatar.com"
-                class="link link-hover text-primary"
-                target="_blank"
-                rel="noopener"
-              >
-                Gravatar
-              </.link>
-              for your notification email.
-            </p>
-          </div>
-        </div>
-      </.panel>
-
-      <.panel>
-        <:title>Sign-in providers</:title>
-        <p class="text-sm text-base-content/60 mb-3">
-          Any provider linked here signs you into this account. Linking one you
-          have already used elsewhere brings that account's work across, and the
-          last one cannot be unlinked — it is the only way back in.
-        </p>
-
-        <ul class="divide-y divide-base-300">
-          <li :for={provider <- @providers} class="flex items-center gap-3 py-2">
-            <span class="font-medium">{provider.label}</span>
-            <.state :if={provider.identity_id} dot="bg-success" class="shrink-0">Linked</.state>
-            <.link
-              :if={is_nil(provider.identity_id)}
-              href={~p"/settings/account/link/start/#{provider.name}"}
-              class="btn btn-xs btn-ghost ml-auto"
-            >
-              Link account
-            </.link>
-            <button
-              :if={provider.unlinkable?}
-              type="button"
-              phx-click="unlink_provider"
-              phx-value-identity_id={provider.identity_id}
-              data-confirm={"Unlink #{provider.label} from this account?"}
-              class="btn btn-xs btn-ghost ml-auto"
-            >
-              Unlink
-            </button>
-          </li>
-        </ul>
-      </.panel>
-
-      <.panel>
-        <:title>Notification email</:title>
-        <p class="text-sm text-base-content/60 mb-3">
-          Where the CNA writes to you. You can pick any address one of your
-          linked providers reported — link another provider to add to this list.
-        </p>
-
-        <.empty_state :if={@candidate_emails == []} class="py-4">
-          None of your linked providers reported an email address, so there is
-          nothing to choose from yet.
-        </.empty_state>
-
-        <ul :if={@candidate_emails != []} class="divide-y divide-base-300">
-          <li :for={candidate <- @candidate_emails} class="flex items-center gap-3 py-2">
-            <.mono_chip size={:small}>{candidate.email}</.mono_chip>
-            <.state :if={candidate.in_use?} dot="bg-success" class="shrink-0">
-              In use
-            </.state>
-            <button
-              :if={!candidate.in_use?}
-              type="button"
-              phx-click="set_notification_email"
-              phx-value-notification_email={candidate.email}
-              class="btn btn-xs btn-ghost ml-auto"
-            >
-              Use this
-            </button>
-          </li>
-        </ul>
-      </.panel>
-
-      <.panel>
-        <:title>Sessions</:title>
-        <p class="text-sm text-base-content/60 mb-3">
-          Every browser you are currently signed in on. Signing one out ends it
-          straight away — do that for anything you do not recognise, or for a
-          computer you have stopped using.
-        </p>
-
-        <ul class="divide-y divide-base-300">
-          <li :for={session <- @sessions} class="flex items-center gap-3 py-2">
-            <div class="min-w-0">
-              <p class="flex items-center gap-2">
-                <span class="font-medium truncate">{session.user_agent || "Unknown browser"}</span>
-                <.state :if={session.current?} dot="bg-success" class="shrink-0">
-                  This device
-                </.state>
-              </p>
-              <p class="text-xs text-base-content/60">
-                <span :if={session.ip}>{session.ip} · </span>
-                signed in {format_datetime(session.signed_in_at)}
+      <.page_container class="space-y-4">
+        <.panel>
+          <:title>Profile</:title>
+          <div class="flex items-center gap-3">
+            <.avatar_disc user={@account} class="size-12" />
+            <div>
+              <p class="font-semibold">{@account.display_name}</p>
+              <p class="text-sm text-base-content/60">
+                Your picture comes from your linked GitHub account, or from
+                <.link
+                  href="https://gravatar.com"
+                  class="link link-hover text-primary"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Gravatar
+                </.link>
+                for your notification email.
               </p>
             </div>
-            <button
-              :if={!session.current?}
-              type="button"
-              phx-click="revoke_session"
-              phx-value-jti={session.jti}
-              class="btn btn-xs btn-ghost ml-auto"
-            >
-              Sign out
-            </button>
-          </li>
-        </ul>
+          </div>
+        </.panel>
 
-        <button
-          :if={Enum.count(@sessions, &(not &1.current?)) > 0}
-          type="button"
-          phx-click="revoke_other_sessions"
-          data-confirm="Sign out every other session?"
-          class="btn btn-sm btn-outline mt-3"
-        >
-          Sign out everywhere else
-        </button>
-      </.panel>
+        <.panel>
+          <:title>Sign-in providers</:title>
+          <p class="text-sm text-base-content/60 mb-3">
+            Any provider linked here signs you into this account. Linking one you
+            have already used elsewhere brings that account's work across, and the
+            last one cannot be unlinked — it is the only way back in.
+          </p>
 
-      <.panel class="border-error/40">
-        <:title>Delete account</:title>
-        <p class="text-sm text-base-content/60 mb-3">
-          Your sign-in providers, API tokens and case assignments go with the
-          account, and you are signed out. What you wrote stays — comments,
-          suggestions and reports keep their place in the record, credited to a
-          deleted user. This cannot be undone.
-        </p>
+          <ul class="divide-y divide-base-300">
+            <li :for={provider <- @providers} class="flex items-center gap-3 py-2">
+              <span class="font-medium">{provider.label}</span>
+              <.state :if={provider.identity_id} dot="bg-success" class="shrink-0">Linked</.state>
+              <.link
+                :if={is_nil(provider.identity_id)}
+                href={~p"/settings/account/link/start/#{provider.name}"}
+                class="btn btn-xs btn-ghost ml-auto"
+              >
+                Link account
+              </.link>
+              <button
+                :if={provider.unlinkable?}
+                type="button"
+                phx-click="unlink_provider"
+                phx-value-identity_id={provider.identity_id}
+                data-confirm={"Unlink #{provider.label} from this account?"}
+                class="btn btn-xs btn-ghost ml-auto"
+              >
+                Unlink
+              </button>
+            </li>
+          </ul>
+        </.panel>
 
-        <button
-          type="button"
-          phx-click="delete_account"
-          data-confirm="Delete your account? This cannot be undone."
-          class="btn btn-sm btn-error btn-outline"
-        >
-          Delete my account
-        </button>
-      </.panel>
-    </.page_container>
+        <.panel>
+          <:title>Notification email</:title>
+          <p class="text-sm text-base-content/60 mb-3">
+            Where the CNA writes to you. You can pick any address one of your
+            linked providers reported — link another provider to add to this list.
+          </p>
+
+          <.empty_state :if={@candidate_emails == []} class="py-4">
+            None of your linked providers reported an email address, so there is
+            nothing to choose from yet.
+          </.empty_state>
+
+          <ul :if={@candidate_emails != []} class="divide-y divide-base-300">
+            <li :for={candidate <- @candidate_emails} class="flex items-center gap-3 py-2">
+              <.mono_chip size={:small}>{candidate.email}</.mono_chip>
+              <.state :if={candidate.in_use?} dot="bg-success" class="shrink-0">
+                In use
+              </.state>
+              <button
+                :if={!candidate.in_use?}
+                type="button"
+                phx-click="set_notification_email"
+                phx-value-notification_email={candidate.email}
+                class="btn btn-xs btn-ghost ml-auto"
+              >
+                Use this
+              </button>
+            </li>
+          </ul>
+        </.panel>
+
+        <.panel>
+          <:title>Sessions</:title>
+          <p class="text-sm text-base-content/60 mb-3">
+            Every browser you are currently signed in on. Signing one out ends it
+            straight away — do that for anything you do not recognise, or for a
+            computer you have stopped using.
+          </p>
+
+          <ul class="divide-y divide-base-300">
+            <li :for={session <- @sessions} class="flex items-center gap-3 py-2">
+              <div class="min-w-0">
+                <p class="flex items-center gap-2">
+                  <span class="font-medium truncate">{session.user_agent || "Unknown browser"}</span>
+                  <.state :if={session.current?} dot="bg-success" class="shrink-0">
+                    This device
+                  </.state>
+                </p>
+                <p class="text-xs text-base-content/60">
+                  <span :if={session.ip}>{session.ip} · </span>
+                  signed in {format_datetime(session.signed_in_at)}
+                </p>
+              </div>
+              <button
+                :if={!session.current?}
+                type="button"
+                phx-click="revoke_session"
+                phx-value-jti={session.jti}
+                class="btn btn-xs btn-ghost ml-auto"
+              >
+                Sign out
+              </button>
+            </li>
+          </ul>
+
+          <button
+            :if={Enum.count(@sessions, &(not &1.current?)) > 0}
+            type="button"
+            phx-click="revoke_other_sessions"
+            data-confirm="Sign out every other session?"
+            class="btn btn-sm btn-outline mt-3"
+          >
+            Sign out everywhere else
+          </button>
+        </.panel>
+
+        <.panel class="border-error/40">
+          <:title>Delete account</:title>
+          <p class="text-sm text-base-content/60 mb-3">
+            Your sign-in providers, API tokens and case assignments go with the
+            account, and you are signed out. What you wrote stays — comments,
+            suggestions and reports keep their place in the record, credited to a
+            deleted user. This cannot be undone.
+          </p>
+
+          <button
+            type="button"
+            phx-click="delete_account"
+            data-confirm="Delete your account? This cannot be undone."
+            class="btn btn-sm btn-error btn-outline"
+          >
+            Delete my account
+          </button>
+        </.panel>
+      </.page_container>
+    </Layouts.app>
     """
   end
 end

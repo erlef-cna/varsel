@@ -14,9 +14,9 @@ defmodule VarselWeb.ErrorHTML do
 
   @doc """
   Shared shell for every error page: the console band plus a narrow body
-  column. Renders only `<main>` content — nav and footer come from the root
-  layout on both the exception path and the controller `render_404` path, so
-  embedding them here would double the chrome (see config.exs render_errors).
+  column. Renders only the body — each error template wraps it in
+  `VarselWeb.Layouts.app/1` for the nav and footer, the same as any other
+  page, so embedding them here would double the chrome.
   """
   attr :context, :string,
     default: "Error",

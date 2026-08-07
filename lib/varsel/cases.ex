@@ -74,6 +74,7 @@ defmodule Varsel.Cases do
     tool :propose_workarounds, Proposal, :propose_workarounds
     tool :propose_configurations, Proposal, :propose_configurations
     tool :propose_solutions, Proposal, :propose_solutions
+    tool :propose_internal_notes, Proposal, :propose_internal_notes
     tool :propose_discovery, Proposal, :propose_discovery
     tool :propose_cvss, Proposal, :propose_cvss
     tool :propose_date_public, Proposal, :propose_date_public
@@ -157,6 +158,7 @@ defmodule Varsel.Cases do
       create Proposal, :propose_case_workarounds, :propose_workarounds
       create Proposal, :propose_case_configurations, :propose_configurations
       create Proposal, :propose_case_solutions, :propose_solutions
+      create Proposal, :propose_case_internal_notes, :propose_internal_notes
       create Proposal, :propose_case_discovery, :propose_discovery
       create Proposal, :propose_case_cvss, :propose_cvss
       create Proposal, :propose_case_date_public, :propose_date_public
@@ -295,6 +297,7 @@ defmodule Varsel.Cases do
       define :propose_workarounds, action: :propose_workarounds
       define :propose_configurations, action: :propose_configurations
       define :propose_solutions, action: :propose_solutions
+      define :propose_internal_notes, action: :propose_internal_notes
       define :propose_discovery, action: :propose_discovery
       define :propose_cvss, action: :propose_cvss
       define :propose_date_public, action: :propose_date_public

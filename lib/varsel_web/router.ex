@@ -133,7 +133,8 @@ defmodule VarselWeb.Router do
     ash_authentication_live_session :auth,
       on_mount: [
         {VarselWeb.LiveUserAuth, :live_user},
-        {VarselWeb.LiveNotifications, :default}
+        {VarselWeb.LiveNotifications, :default},
+        {VarselWeb.LiveCurrentPath, :default}
       ] do
       live "/cves", CveListLive, :index
       live "/cves/manage/:id", VarselEditLive, :edit
@@ -263,6 +264,7 @@ defmodule VarselWeb.Router do
         :propose_workarounds,
         :propose_configurations,
         :propose_solutions,
+        :propose_internal_notes,
         :propose_discovery,
         :propose_cvss,
         :propose_date_public,

@@ -45,7 +45,15 @@ defmodule VarselWeb.ErrorHTMLTest do
 
     assert body =~ "You don't have access to this page"
     assert body =~ "Error · HTTP 403"
-    refute body =~ "Sign in"
+    # Being signed in already is what makes it a 403, so the page itself offers
+    # no way to sign in — unlike the nav around it, which serves every visitor.
+    refute error_body(body) =~ "Sign in"
+  end
+
+  # The chrome `Layouts.app/1` wraps every page in, dropped so an assertion can
+  # speak about what the error page itself says.
+  defp error_body(html) do
+    html |> String.split("</header>") |> List.last() |> String.split("<footer") |> List.first()
   end
 
   test "falls back to a generic shell for an arbitrary status" do

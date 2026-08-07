@@ -484,226 +484,226 @@ defmodule VarselWeb.CveListLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.flash_group flash={@flash} />
+    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+      <.page_header>
+        <:eyebrow>{if @console?, do: "CNA Console", else: "EEF CNA"}</:eyebrow>
+        <:title>{if @console?, do: "CVE records", else: "Issued CVEs"}</:title>
+        <:subtitle :if={@console?}>Reserve, draft, publish, and reject CVE records.</:subtitle>
+        <:subtitle :if={not @console?}>
+          Vulnerabilities assigned and published by the EEF CNA.
+        </:subtitle>
+        <:actions>
+          <.console_search
+            id="cve-record-search"
+            value={@query}
+            placeholder={
+              if @console?, do: "Search records…", else: "Search by ID, title, package, description…"
+            }
+          />
+          <button
+            :if={Ash.can?({CveRecord, :import_from_mitre}, @current_user)}
+            class="btn btn-sm btn-eef-quiet"
+            phx-click="sync_with_mitre"
+            disabled={@mitre_syncing?}
+          >
+            {if @mitre_syncing?, do: "Syncing…", else: "Sync pool"}
+          </button>
+          <button
+            :if={Ash.can?({CveRecord, :assign}, @current_user)}
+            class="btn btn-sm btn-eef"
+            phx-click="reserve"
+          >
+            Reserve a new one
+          </button>
+        </:actions>
+      </.page_header>
 
-    <.page_header>
-      <:eyebrow>{if @console?, do: "CNA Console", else: "EEF CNA"}</:eyebrow>
-      <:title>{if @console?, do: "CVE records", else: "Issued CVEs"}</:title>
-      <:subtitle :if={@console?}>Reserve, draft, publish, and reject CVE records.</:subtitle>
-      <:subtitle :if={not @console?}>
-        Vulnerabilities assigned and published by the EEF CNA.
-      </:subtitle>
-      <:actions>
-        <.console_search
-          id="cve-record-search"
-          value={@query}
-          placeholder={
-            if @console?, do: "Search records…", else: "Search by ID, title, package, description…"
-          }
+      <.page_container>
+        <.pool_panel
+          :if={@console?}
+          pool={@pool}
+          open?={@pool_open?}
+          confirming_reject_id={@confirming_reject_id}
+          withholding_id={@withholding_id}
+          current_user={@current_user}
         />
-        <button
-          :if={Ash.can?({CveRecord, :import_from_mitre}, @current_user)}
-          class="btn btn-sm btn-eef-quiet"
-          phx-click="sync_with_mitre"
-          disabled={@mitre_syncing?}
-        >
-          {if @mitre_syncing?, do: "Syncing…", else: "Sync pool"}
-        </button>
-        <button
-          :if={Ash.can?({CveRecord, :assign}, @current_user)}
-          class="btn btn-sm btn-eef"
-          phx-click="reserve"
-        >
-          Reserve a new one
-        </button>
-      </:actions>
-    </.page_header>
 
-    <.page_container>
-      <.pool_panel
-        :if={@console?}
-        pool={@pool}
-        open?={@pool_open?}
-        confirming_reject_id={@confirming_reject_id}
-        withholding_id={@withholding_id}
-        current_user={@current_user}
-      />
+        <.list_card>
+          <:tabs :if={@console?}>
+            <.scope_button
+              active={@filter}
+              value="all"
+              label="All"
+              count={@record_counts |> Map.values() |> Enum.sum()}
+            />
+            <.scope_button
+              :for={state <- table_states()}
+              active={@filter}
+              value={to_string(state)}
+              label={Phoenix.Naming.humanize(state)}
+              count={Map.get(@record_counts, state, 0)}
+            />
+          </:tabs>
+          <:note :if={@console? and String.trim(@query) != ""}>
+            <span class="font-semibold text-info tabular-nums">
+              {match_summary(@cve_records.count, @query)}
+            </span>
+          </:note>
+          <:note :if={not @console?}>
+            Machine-readable: <.link href={~p"/cves/index.json"} class="link">JSON</.link>
+            · <.link href={~p"/osv/all.json"} class="link">OSV</.link>
+            · <.link href={~p"/feed.atom"} class="link">Atom</.link>
+            · <.link href={~p"/feed.rss"} class="link">RSS</.link>
+          </:note>
 
-      <.list_card>
-        <:tabs :if={@console?}>
-          <.scope_button
-            active={@filter}
-            value="all"
-            label="All"
-            count={@record_counts |> Map.values() |> Enum.sum()}
-          />
-          <.scope_button
-            :for={state <- table_states()}
-            active={@filter}
-            value={to_string(state)}
-            label={Phoenix.Naming.humanize(state)}
-            count={Map.get(@record_counts, state, 0)}
-          />
-        </:tabs>
-        <:note :if={@console? and String.trim(@query) != ""}>
-          <span class="font-semibold text-info tabular-nums">
-            {match_summary(@cve_records.count, @query)}
-          </span>
-        </:note>
-        <:note :if={not @console?}>
-          Machine-readable: <.link href={~p"/cves/index.json"} class="link">JSON</.link>
-          · <.link href={~p"/osv/all.json"} class="link">OSV</.link>
+          <div class="overflow-x-auto">
+            <table class="table table-fixed min-w-[60rem]">
+              <thead>
+                <tr>
+                  <th class="w-32">CVE ID</th>
+                  <th>Title</th>
+                  <th class="w-56">Packages</th>
+                  <th class="w-20">Severity</th>
+                  <th :if={@console?} class="w-32">State</th>
+                  <th class="w-24">Published</th>
+                  <th :if={@console?} class="w-16"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  :for={record <- @cve_records.results}
+                  class={["group hover:bg-base-300/40", not @console? && "cursor-pointer"]}
+                  phx-click={not @console? && JS.navigate(~p"/cves/#{record.cve_id <> ".html"}")}
+                >
+                  <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
+                    {record.cve_id || "—"}
+                  </td>
+                  <td>
+                    <.link
+                      :if={record.state == :published and @console?}
+                      href={~p"/cves/#{record.cve_id <> ".html"}"}
+                      class="link link-hover font-semibold"
+                    >
+                      {record.title || record.cve_id}
+                    </.link>
+                    <span
+                      :if={not @console? and record.state == :published}
+                      class="font-semibold group-hover:text-primary"
+                    >
+                      {record.title || record.cve_id}
+                    </span>
+                    <span
+                      :if={@console? and record.state != :published}
+                      class={record.state == :publishing && "font-semibold"}
+                    >
+                      {record.title || "—"}
+                    </span>
+                  </td>
+                  <%!-- The empty JS command shields the nested hex.pm links
+                        from the row's click-through: LiveView only executes
+                        the binding closest to the click target, and inline
+                        handlers are out (CSP). --%>
+                  <td phx-click={%JS{}}>
+                    <div :for={purl <- record.purls || []} class="text-xs break-all">
+                      <.package_display_name purl={purl} link={true} />
+                    </div>
+                  </td>
+                  <td>
+                    <.severity_chip score={record_score(record)} />
+                  </td>
+                  <td :if={@console?}>
+                    <.record_state_cell record={record} may_adopt?={@may_adopt?} />
+                  </td>
+                  <td class="whitespace-nowrap tabular-nums text-xs">
+                    {format_date(record.date_published)}
+                  </td>
+                  <td :if={@console?} class="relative text-right">
+                    <div class="flex flex-col items-end gap-0.5">
+                      <.link
+                        :if={editable?(@current_user, record)}
+                        navigate={~p"/cves/manage/#{record.id}"}
+                        class="link link-hover text-primary text-sm font-medium"
+                      >
+                        Edit
+                      </.link>
+                      <button
+                        :if={
+                          CVE.can_reject_cve_record?(@current_user, record) and
+                            @confirming_reject_id != record.id
+                        }
+                        type="button"
+                        class="text-xs font-semibold text-error/85"
+                        phx-click="reject_prompt"
+                        phx-value-id={record.id}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                    <%!-- Floating confirm: anchored to the cell so narrow
+                          action columns never clip the consequence line. --%>
+                    <form
+                      :if={@confirming_reject_id == record.id}
+                      phx-submit="reject"
+                      phx-click-away="reject_cancel"
+                      phx-window-keydown="reject_cancel"
+                      phx-key="escape"
+                      class="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex w-[min(26rem,calc(100vw-3rem))] flex-wrap items-center justify-end gap-2 rounded-md border border-error/30 bg-base-200 px-3 py-2 shadow-lg"
+                    >
+                      <input type="hidden" name="record_id" value={record.id} />
+                      <span class="text-xs text-base-content/60 basis-full text-right">
+                        reject at MITRE? can't be reused — the reason becomes part of the record
+                      </span>
+                      <input
+                        type="text"
+                        name="reason"
+                        value={default_reject_reason(record)}
+                        autofocus
+                        class="input input-xs flex-1 min-w-56 border-error/30"
+                      />
+                      <button type="submit" class="btn btn-error btn-xs">
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs border border-base-300"
+                        phx-click="reject_cancel"
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <.empty_state :if={@cve_records.results == []}>
+              No CVEs match your search.
+            </.empty_state>
+          </div>
+
+          <:footer :if={paged?(@cve_records)}>
+            <.pagination page={@cve_records} noun={if @console?, do: "record", else: "CVE"} />
+          </:footer>
+        </.list_card>
+
+        <.withheld_panel
+          :if={@console?}
+          withheld={@withheld}
+          open?={@withheld_open?}
+          confirming_reject_id={@confirming_reject_id}
+          current_user={@current_user}
+        />
+
+        <.rejected_panel :if={@console?} rejected={@rejected} open?={@rejected_open?} />
+
+        <p :if={@console?} class="mt-6 text-sm text-base-content/60">
+          Machine-readable: <.link href={~p"/cves/index.json"} class="link">CVE index (JSON)</.link>
+          · <.link href={~p"/osv/all.json"} class="link">OSV feed (JSON)</.link>
           · <.link href={~p"/feed.atom"} class="link">Atom</.link>
           · <.link href={~p"/feed.rss"} class="link">RSS</.link>
-        </:note>
-
-        <div class="overflow-x-auto">
-          <table class="table table-fixed min-w-[60rem]">
-            <thead>
-              <tr>
-                <th class="w-32">CVE ID</th>
-                <th>Title</th>
-                <th class="w-56">Packages</th>
-                <th class="w-20">Severity</th>
-                <th :if={@console?} class="w-32">State</th>
-                <th class="w-24">Published</th>
-                <th :if={@console?} class="w-16"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                :for={record <- @cve_records.results}
-                class={["group hover:bg-base-300/40", not @console? && "cursor-pointer"]}
-                phx-click={not @console? && JS.navigate(~p"/cves/#{record.cve_id <> ".html"}")}
-              >
-                <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
-                  {record.cve_id || "—"}
-                </td>
-                <td>
-                  <.link
-                    :if={record.state == :published and @console?}
-                    href={~p"/cves/#{record.cve_id <> ".html"}"}
-                    class="link link-hover font-semibold"
-                  >
-                    {record.title || record.cve_id}
-                  </.link>
-                  <span
-                    :if={not @console? and record.state == :published}
-                    class="font-semibold group-hover:text-primary"
-                  >
-                    {record.title || record.cve_id}
-                  </span>
-                  <span
-                    :if={@console? and record.state != :published}
-                    class={record.state == :publishing && "font-semibold"}
-                  >
-                    {record.title || "—"}
-                  </span>
-                </td>
-                <%!-- The empty JS command shields the nested hex.pm links
-                      from the row's click-through: LiveView only executes
-                      the binding closest to the click target, and inline
-                      handlers are out (CSP). --%>
-                <td phx-click={%JS{}}>
-                  <div :for={purl <- record.purls || []} class="text-xs break-all">
-                    <.package_display_name purl={purl} link={true} />
-                  </div>
-                </td>
-                <td>
-                  <.severity_chip score={record_score(record)} />
-                </td>
-                <td :if={@console?}>
-                  <.record_state_cell record={record} may_adopt?={@may_adopt?} />
-                </td>
-                <td class="whitespace-nowrap tabular-nums text-xs">
-                  {format_date(record.date_published)}
-                </td>
-                <td :if={@console?} class="relative text-right">
-                  <div class="flex flex-col items-end gap-0.5">
-                    <.link
-                      :if={editable?(@current_user, record)}
-                      navigate={~p"/cves/manage/#{record.id}"}
-                      class="link link-hover text-primary text-sm font-medium"
-                    >
-                      Edit
-                    </.link>
-                    <button
-                      :if={
-                        CVE.can_reject_cve_record?(@current_user, record) and
-                          @confirming_reject_id != record.id
-                      }
-                      type="button"
-                      class="text-xs font-semibold text-error/85"
-                      phx-click="reject_prompt"
-                      phx-value-id={record.id}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                  <%!-- Floating confirm: anchored to the cell so narrow
-                        action columns never clip the consequence line. --%>
-                  <form
-                    :if={@confirming_reject_id == record.id}
-                    phx-submit="reject"
-                    phx-click-away="reject_cancel"
-                    phx-window-keydown="reject_cancel"
-                    phx-key="escape"
-                    class="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex w-[min(26rem,calc(100vw-3rem))] flex-wrap items-center justify-end gap-2 rounded-md border border-error/30 bg-base-200 px-3 py-2 shadow-lg"
-                  >
-                    <input type="hidden" name="record_id" value={record.id} />
-                    <span class="text-xs text-base-content/60 basis-full text-right">
-                      reject at MITRE? can't be reused — the reason becomes part of the record
-                    </span>
-                    <input
-                      type="text"
-                      name="reason"
-                      value={default_reject_reason(record)}
-                      autofocus
-                      class="input input-xs flex-1 min-w-56 border-error/30"
-                    />
-                    <button type="submit" class="btn btn-error btn-xs">
-                      Reject
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs border border-base-300"
-                      phx-click="reject_cancel"
-                    >
-                      Cancel
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <.empty_state :if={@cve_records.results == []}>
-            No CVEs match your search.
-          </.empty_state>
-        </div>
-
-        <:footer :if={paged?(@cve_records)}>
-          <.pagination page={@cve_records} noun={if @console?, do: "record", else: "CVE"} />
-        </:footer>
-      </.list_card>
-
-      <.withheld_panel
-        :if={@console?}
-        withheld={@withheld}
-        open?={@withheld_open?}
-        confirming_reject_id={@confirming_reject_id}
-        current_user={@current_user}
-      />
-
-      <.rejected_panel :if={@console?} rejected={@rejected} open?={@rejected_open?} />
-
-      <p :if={@console?} class="mt-6 text-sm text-base-content/60">
-        Machine-readable: <.link href={~p"/cves/index.json"} class="link">CVE index (JSON)</.link>
-        · <.link href={~p"/osv/all.json"} class="link">OSV feed (JSON)</.link>
-        · <.link href={~p"/feed.atom"} class="link">Atom</.link>
-        · <.link href={~p"/feed.rss"} class="link">RSS</.link>
-      </p>
-    </.page_container>
+        </p>
+      </.page_container>
+    </Layouts.app>
     """
   end
 

@@ -56,24 +56,49 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
     end
 
     create :propose_workarounds do
-      description "Proposes setting the case workarounds (markdown)."
+      description """
+      Proposes setting the case workarounds (markdown). The section is
+      optional: pass an explicit null value to propose removing it.
+      """
+
       accept [:case_id, :reasoning]
-      argument :value, :string, allow_nil?: false
+      argument :value, :string, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :workarounds_md}
     end
 
     create :propose_configurations do
-      description "Proposes setting the affected configurations (markdown)."
+      description """
+      Proposes setting the affected configurations (markdown). The section is
+      optional: pass an explicit null value to propose removing it.
+      """
+
       accept [:case_id, :reasoning]
-      argument :value, :string, allow_nil?: false
+      argument :value, :string, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :configurations_md}
     end
 
     create :propose_solutions do
-      description "Proposes setting the case solutions (markdown)."
+      description """
+      Proposes setting the case solutions (markdown). The section is optional:
+      pass an explicit null value to propose removing it.
+      """
+
       accept [:case_id, :reasoning]
-      argument :value, :string, allow_nil?: false
+      argument :value, :string, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :solutions_md}
+    end
+
+    create :propose_internal_notes do
+      description """
+      Proposes setting the case's internal working notes (markdown). These are
+      for the case team only and are never rendered into the published record,
+      so keep anything that belongs in the advisory in the real fields. Pass an
+      explicit null value to propose clearing them.
+      """
+
+      accept [:case_id, :reasoning]
+      argument :value, :string, allow_nil?: true
+      change {PackProposal, target: :case, operation: :set, field: :internal_notes}
     end
 
     create :propose_discovery do
@@ -84,26 +109,35 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
     end
 
     create :propose_cvss do
-      description "Proposes setting the CVSS v4.0 vector (a CVSS:4.0/... string)."
+      description """
+      Proposes setting the CVSS v4.0 vector (a CVSS:4.0/... string). Pass an
+      explicit null value to propose removing the score.
+      """
+
       accept [:case_id, :reasoning]
       # Typed as CVSS so the vector is fully validated at the argument layer.
-      argument :value, Varsel.Types.CVSS, allow_nil?: false
+      argument :value, Varsel.Types.CVSS, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :cvss_v4}
 
       # PackProposal packs the dumped {vector, score, severity, version} map;
       # store just the vector string so the proposal envelope stays the plain
       # CVSS text (score/severity/version are derived on re-cast anyway).
       change fn changeset, _context ->
-        Ash.Changeset.update_change(changeset, :proposed_value, fn %{"value" => dumped} ->
-          %{"value" => dumped["vector"]}
+        Ash.Changeset.update_change(changeset, :proposed_value, fn
+          %{"value" => nil} -> %{"value" => nil}
+          %{"value" => dumped} -> %{"value" => dumped["vector"]}
         end)
       end
     end
 
     create :propose_date_public do
-      description "Proposes setting the public disclosure date."
+      description """
+      Proposes setting the public disclosure date. Pass an explicit null value
+      to propose removing it.
+      """
+
       accept [:case_id, :reasoning]
-      argument :value, :utc_datetime, allow_nil?: false
+      argument :value, :utc_datetime, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :date_public}
     end
 
@@ -115,9 +149,13 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
     end
 
     create :propose_cna_override do
-      description "Proposes setting the raw CNA container override map."
+      description """
+      Proposes setting the raw CNA container override map. Pass an explicit
+      null value to propose dropping the override.
+      """
+
       accept [:case_id, :reasoning]
-      argument :value, :map, allow_nil?: false
+      argument :value, :map, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :cna_override}
     end
 

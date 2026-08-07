@@ -34,6 +34,14 @@ defmodule VarselWeb.Storybook.Case.CaseContent do
         }
       },
       %Variation{
+        id: :internal_notes,
+        description: "Team-only notes, collapsed and marked as never reaching the record.",
+        attributes: %{
+          description: "A path-existence oracle in the SFTP daemon.",
+          internal_notes: "Waiting on the reporter to confirm the **28.x** backport before we request review."
+        }
+      },
+      %Variation{
         id: :empty,
         description: "Nothing written yet — the case says so rather than showing a blank.",
         attributes: %{}
