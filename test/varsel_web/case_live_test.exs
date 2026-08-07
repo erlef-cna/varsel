@@ -507,19 +507,32 @@ defmodule VarselWeb.CaseLiveTest do
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == nil
     end
 
-    test "the auto path takes the next free ID", %{conn: conn, poc: poc} do
+    test "the auto path takes the lowest free ID of the year", %{conn: conn, poc: poc} do
       year = Date.utc_today().year
-      next = Fixtures.reserved_cve_record("CVE-#{year}-31002")
       Fixtures.reserved_cve_record("CVE-#{year}-31003")
+      lowest = Fixtures.reserved_cve_record("CVE-#{year}-31002")
       case_record = Fixtures.open_case(poc, %{title: "Auto case"})
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
       lv |> element("button", "Assign CVE ID") |> render_click()
-      lv |> element("button", "Assign CVE-#{year}-31002") |> render_click()
+      lv |> element("button", "Assign the next free ID") |> render_click()
 
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == next.id
-      assert render(lv) =~ "CVE ID assigned."
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == lowest.id
+      assert render(lv) =~ "Assigned CVE-#{year}-31002."
+    end
+
+    test "the auto path offers no particular ID up front", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      Fixtures.reserved_cve_record("CVE-#{year}-31009")
+      case_record = Fixtures.open_case(poc, %{title: "No promise case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      html = lv |> element("button", "Assign CVE ID") |> render_click()
+
+      assert html =~ "Assign the next free ID"
+      refute html =~ "Assign CVE-#{year}-31009"
     end
 
     test "a chosen ID wins over the next free one", %{conn: conn, poc: poc} do
@@ -537,7 +550,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> render_submit()
 
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == chosen.id
-      assert render(lv) =~ "CVE ID assigned."
+      assert render(lv) =~ "Assigned CVE-#{year}-31005."
     end
 
     test "withheld IDs are offered below the free ones, with their reason", %{
@@ -564,8 +577,7 @@ defmodule VarselWeb.CaseLiveTest do
       # Both the reason and when the hold started, so overriding it is an
       # informed choice rather than a guess.
       assert html =~ "withheld #{Date.utc_today()}"
-      # The auto path still offers only the free ID.
-      assert html =~ "Assign CVE-#{year}-31006"
+      assert html =~ "Assign the next free ID"
 
       lv
       |> form(~s{#cve-picker-modal form}, %{cve_record_id: held.id})

@@ -288,10 +288,12 @@ defmodule VarselWeb.CaseDetailLive do
 
     socket =
       case Cases.assign_case_cve_id(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
-        {:ok, _case_record} ->
+        {:ok, case_record} ->
+          assigned = Ash.load!(case_record, [:cve_id], actor: socket.assigns.current_user).cve_id
+
           socket
           |> assign(:cve_picker, nil)
-          |> put_flash(:info, "CVE ID assigned.")
+          |> put_flash(:info, "Assigned #{assigned}.")
 
         {:error, error} ->
           put_flash(socket, :error, errors_to_string(error))
@@ -2516,7 +2518,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp cve_picker_modal(assigns) do
     {free, withheld} = Enum.split_with(assigns.records, &(&1.state == :reserved))
 
-    assigns = assign(assigns, free: free, withheld: withheld, next: List.first(free))
+    assigns = assign(assigns, free: free, withheld: withheld)
 
     ~H"""
     <.modal id="cve-picker-modal" title="Assign a CVE ID" on_cancel="cancel_cve_picker">
@@ -2524,16 +2526,18 @@ defmodule VarselWeb.CaseDetailLive do
         <div class="rounded-lg border border-base-300 bg-base-200 p-3">
           <p class="text-sm font-semibold">Take the next free ID</p>
           <p class="text-xs text-base-content/60 mt-0.5">
-            <span :if={@next} class="font-mono">{@next.cve_id}</span>
-            <span :if={is_nil(@next)}>The pool is empty — reserve more IDs first.</span>
+            <span :if={@free != []}>
+              The lowest free ID of the current year, chosen when you confirm.
+            </span>
+            <span :if={@free == []}>The pool is empty — reserve more IDs first.</span>
           </p>
           <button
-            :if={@next}
+            :if={@free != []}
             type="button"
             class="btn btn-eef btn-sm mt-2"
             phx-click="confirm_assign_cve_id"
           >
-            Assign {@next.cve_id}
+            Assign the next free ID
           </button>
         </div>
 
