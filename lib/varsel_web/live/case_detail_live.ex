@@ -564,6 +564,23 @@ defmodule VarselWeb.CaseDetailLive do
     resolve_proposal(socket, id, params["resolution_note"], fun, verb)
   end
 
+  # The button is only offered for a section whose suggestions cannot supersede
+  # one another, but the pool is shared: another reviewer may resolve one
+  # between the render and the click. So each is accepted on its own and the
+  # flash says what actually happened rather than assuming all of them landed.
+  def handle_event("accept_section_proposals", %{"section" => section_id}, socket) do
+    actor = socket.assigns.current_user
+
+    {accepted, failed} =
+      socket.assigns.case_record
+      |> section_suggestions(section_id)
+      |> Enum.split_with(fn proposal ->
+        match?({:ok, _proposal}, Cases.accept_case_proposal(proposal, %{}, actor: actor))
+      end)
+
+    {:noreply, put_flash_for_bulk_accept(socket, length(accepted), length(failed))}
+  end
+
   def handle_event("withdraw_proposal", %{"id" => id}, socket) do
     proposal = Enum.find(socket.assigns.case_record.proposals, &(&1.id == id))
 
@@ -681,6 +698,29 @@ defmodule VarselWeb.CaseDetailLive do
         {:noreply, assign(socket, content_form: form)}
     end
   end
+
+  defp put_flash_for_bulk_accept(socket, 0, _failed) do
+    put_flash(
+      socket,
+      :error,
+      "Nothing was accepted — the suggestions have already been resolved."
+    )
+  end
+
+  defp put_flash_for_bulk_accept(socket, accepted, 0) do
+    put_flash(socket, :info, "Accepted #{suggestion_count(accepted)}.")
+  end
+
+  defp put_flash_for_bulk_accept(socket, accepted, failed) do
+    put_flash(
+      socket,
+      :info,
+      "Accepted #{suggestion_count(accepted)}; #{failed} could not be and stayed open."
+    )
+  end
+
+  defp suggestion_count(1), do: "1 suggestion"
+  defp suggestion_count(count), do: "#{count} suggestions"
 
   defp resolve_proposal(socket, id, note, fun, verb) do
     proposal = Enum.find(socket.assigns.case_record.proposals, &(&1.id == id))
@@ -1359,13 +1399,33 @@ defmodule VarselWeb.CaseDetailLive do
   attr :can_resolve, :boolean, required: true
 
   defp inline_suggestions(assigns) do
+    suggestions = section_suggestions(assigns.case_record, assigns.section_id)
+
     assigns =
       assign(assigns,
-        suggestions: section_suggestions(assigns.case_record, assigns.section_id),
-        comments: comments_by_proposal(assigns.case_record)
+        suggestions: suggestions,
+        comments: comments_by_proposal(assigns.case_record),
+        accept_all_blocker: accept_all_blocker(suggestions)
       )
 
     ~H"""
+    <div
+      :if={@can_resolve and length(@suggestions) > 1}
+      class="mt-3 flex items-center justify-end gap-2"
+    >
+      <span :if={@accept_all_blocker} class="text-xs text-base-content/60">
+        {@accept_all_blocker}
+      </span>
+      <button
+        class="btn btn-xs btn-primary"
+        disabled={@accept_all_blocker != nil}
+        phx-click="accept_section_proposals"
+        phx-value-section={@section_id}
+      >
+        Accept all {length(@suggestions)}
+      </button>
+    </div>
+
     <div :for={proposal <- @suggestions} class="mt-3">
       <.suggestion_card
         id={"suggestion-#{proposal.id}"}
@@ -1384,6 +1444,34 @@ defmodule VarselWeb.CaseDetailLive do
       </.suggestion_card>
     </div>
     """
+  end
+
+  # Why a section cannot be accepted in one go, or nil when it can.
+  #
+  # Accepting a proposal supersedes the ones it competes with (see
+  # `Varsel.Cases.Proposal.Changes.SupersedeCompeting`), so for those the
+  # outcome depends on which is accepted first — a choice a single button
+  # cannot make on the reviewer's behalf. The keys below are that change's own:
+  # a :delete claims its whole row, two :sets collide on the same field.
+  defp accept_all_blocker(proposals) do
+    cond do
+      Enum.any?(proposals, &(&1.operation == :delete)) ->
+        "A removal here would settle the rest — accept them one at a time."
+
+      competing_sets?(proposals) ->
+        "Two suggestions change the same field — pick between them first."
+
+      true ->
+        nil
+    end
+  end
+
+  defp competing_sets?(proposals) do
+    keys =
+      for %{operation: :set} = proposal <- proposals,
+          do: {proposal.target, proposal.target_id, proposal.field_name}
+
+    length(Enum.uniq(keys)) < length(keys)
   end
 
   defp content_section(assigns) do

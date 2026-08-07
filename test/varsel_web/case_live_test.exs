@@ -1462,6 +1462,126 @@ defmodule VarselWeb.CaseLiveTest do
     end
   end
 
+  describe "accepting a whole section" do
+    defp set_proposal(case_record, actor, field, value) do
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :case,
+          operation: :set,
+          field_name: field,
+          proposed_value: %{"value" => value}
+        },
+        actor: actor
+      )
+    end
+
+    defp insert_reference(case_record, actor, url) do
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :reference,
+          operation: :insert,
+          proposed_value: %{"value" => %{"url" => url}}
+        },
+        actor: actor
+      )
+    end
+
+    test "accepts every suggestion in the section it names", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Bulk case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      set_proposal(case_record, supporter, "title", "Bulk title")
+      set_proposal(case_record, supporter, "description_md", "Bulk description")
+      # A different section, which the button must leave alone.
+      reference = insert_reference(case_record, supporter, "https://example.com/a")
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      html =
+        lv
+        |> element(~s{button[phx-value-section="summary"]}, "Accept all")
+        |> render_click()
+
+      assert html =~ "Accepted 2 suggestions."
+
+      reloaded = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      assert reloaded.title == "Bulk title"
+      assert reloaded.description_md == "Bulk description"
+
+      assert Ash.get!(Cases.Proposal, reference.id, authorize?: false).state == :open
+    end
+
+    test "stands down when two suggestions change the same field", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Competing case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      set_proposal(case_record, supporter, "title", "One title")
+      set_proposal(case_record, supporter, "title", "Another title")
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "Two suggestions change the same field"
+      assert lv |> element(~s{button[phx-value-section="summary"][disabled]}) |> has_element?()
+    end
+
+    test "stands down when a removal would settle the rest", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Removal case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      reference =
+        Cases.add_case_reference!(
+          %{case_id: case_record.id, url: "https://example.com/old"},
+          actor: poc
+        )
+
+      Cases.create_case_proposal!(
+        %{
+          case_id: case_record.id,
+          target: :reference,
+          target_id: reference.id,
+          operation: :delete
+        },
+        actor: supporter
+      )
+
+      insert_reference(case_record, supporter, "https://example.com/new")
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "A removal here would settle the rest"
+      assert lv |> element(~s{button[phx-value-section="references"][disabled]}) |> has_element?()
+    end
+
+    test "is not offered for a lone suggestion", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Single case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      set_proposal(case_record, supporter, "title", "Only title")
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      refute html =~ "Accept all"
+    end
+  end
+
   describe "propose mode" do
     test "a frozen case forces suggest mode; edits become proposals", %{
       conn: conn,
