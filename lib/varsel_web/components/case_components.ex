@@ -651,7 +651,7 @@ defmodule VarselWeb.CaseComponents do
       <.code_block
         :if={@proposal.operation != :set and @proposal.proposed_value}
         source={Jason.encode!(@proposal.proposed_value["value"], pretty: true)}
-        class="mt-1 max-h-40"
+        class="mt-1 max-h-96"
       />
 
       <div :if={@proposal.reasoning} class="mt-1 text-base-content/80">

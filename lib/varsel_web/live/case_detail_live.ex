@@ -1379,7 +1379,7 @@ defmodule VarselWeb.CaseDetailLive do
         <.code_block
           :if={proposal.operation != :set and proposal.proposed_value}
           source={pretty_json(proposal.proposed_value["value"])}
-          class="mt-1 max-h-40"
+          class="mt-1 max-h-96"
         />
       </.suggestion_card>
     </div>
