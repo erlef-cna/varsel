@@ -346,14 +346,9 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
             {entry, applied} =
               Channel.render(package, channel, channel_results[channel.id] || %{})
 
-            {entry, Enum.map(applied, &"#{package.product}/#{channel.purl_type}: #{&1}")}
+            {entry, Enum.map(applied, &"#{package.product}/#{channel_label(channel)}: #{&1}")}
           end)
           |> Enum.unzip()
-
-        # The implicit git/forge entry closes the package's entries, matching
-        # the published convention (registry entries first, github last).
-        git_entry = Channel.render_git(package, derivation["git"])
-        package_entries = package_entries ++ List.wrap(git_entry)
 
         {entries ++ package_entries, overrides ++ List.flatten(package_overrides),
          blockers ++ package_blockers(package, derivation)}
@@ -367,23 +362,22 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       freshness_blockers(package) ++
         Enum.map(derivation["issues"] || [], &"#{package.product}: #{&1}")
 
-    git_issues =
-      for issue <- (derivation["git"] || %{})["issues"] || [] do
-        "#{package.product}/git: #{issue}"
-      end
-
     channel_issues =
       for {channel, result} <- overridable_channel_results(package, derivation),
           issue <- result["issues"] || [] do
-        "#{package.product}/#{channel.purl_type}: #{issue}"
+        "#{package.product}/#{channel_label(channel)}: #{issue}"
       end
 
     issues ++
-      git_issues ++
       channel_issues ++
       call_out_blockers(package, derivation) ++
       Enum.uniq(pending_blockers(package, derivation))
   end
+
+  # How a channel is named in a blocker or override message: its purl type, or
+  # the domain of a service (which has none).
+  defp channel_label(%{kind: :service, domain: domain}), do: domain || "service"
+  defp channel_label(channel), do: channel.purl_type
 
   # Reachability call-outs (e.g. a pre-release whose affected status contradicts
   # the surrounding releases) need a human to confirm before publishing. The
@@ -417,7 +411,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   defp pending_blockers(package, derivation) do
     for {channel, result} <- overridable_channel_results(package, derivation),
         sha <- result["pending"] || [] do
-      "#{package.product}/#{channel.purl_type}: fix #{sha} has no containing release yet " <>
+      "#{package.product}/#{channel_label(channel)}: fix #{sha} has no containing release yet " <>
         "(set allow_unreleased_fix or a versions_override to publish anyway)"
     end
   end

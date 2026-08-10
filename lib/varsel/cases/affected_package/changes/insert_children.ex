@@ -8,7 +8,8 @@ defmodule Varsel.Cases.AffectedPackage.Changes.InsertChildren do
   `propose_affected_package` insert, once the package row exists — through the
   children's regular `:add` actions inside the create's transaction (same
   actor, same policies, same paper trail), so accepting one package proposal
-  materializes the whole product at once.
+  materializes the whole product at once. The repository's own channel comes
+  along too, as it would on a direct `:add`.
 
   The nested version events are package-global; a channel-scoped event
   (`package_channel_id`) is not expressible inline (see
@@ -18,6 +19,7 @@ defmodule Varsel.Cases.AffectedPackage.Changes.InsertChildren do
   use Ash.Resource.Change
 
   alias Ash.Resource.Change
+  alias Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.VersionEvent
 
@@ -27,8 +29,9 @@ defmodule Varsel.Cases.AffectedPackage.Changes.InsertChildren do
   end
 
   defp create_children(changeset, package, actor) do
-    channels = Ash.Changeset.get_argument(changeset, :channels) || []
+    authored = Ash.Changeset.get_argument(changeset, :channels) || []
     version_events = Ash.Changeset.get_argument(changeset, :version_events) || []
+    channels = authored ++ List.wrap(AddRepositoryChannel.params(package.repo_url))
 
     children =
       Enum.map(channels, &child(PackageChannel, package, &1, actor)) ++

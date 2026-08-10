@@ -5,14 +5,23 @@
 defmodule Varsel.Cases.PackageChannel do
   @moduledoc """
   One distribution channel of a `Varsel.Cases.AffectedPackage` — rendered as
-  exactly one `affected[]` entry in the CNA container, identified the purl
-  way: type + namespace/name + qualifiers.
+  exactly one `affected[]` entry in the CNA container.
 
-  The purl type fixes the entry's constants (collectionURL, versionType) and
-  the derivation semantics. Version boundaries come from the package's
-  `Varsel.Cases.VersionEvent` facts, resolved per channel by
-  `Varsel.Cases.Derivation`. The git/forge entry is *not* a channel — it
-  renders automatically from the package's `repo_url`.
+  A channel is one of two `kind`s:
+
+  * `:package` — identified by a Package URL, authored as its parts (`purl_type`
+    + `namespace` / `name` / `qualifiers` / `subpath`). Any purl type works:
+    the type is an open string, and `Varsel.Cases.PackageChannel.PurlType`
+    supplies the conventions of the ones we know without restricting the rest.
+    The source repository is a channel like any other (`pkg:github/...`, or
+    `pkg:generic` for an unregistered forge), derived from the package's
+    `repo_url` when it is added.
+  * `:service` — a running service with no package to download, identified by
+    the `domain` it answers on and versioned by date.
+
+  Version boundaries come from the package's `Varsel.Cases.VersionEvent` facts,
+  resolved per channel by `Varsel.Cases.Derivation` and written in the
+  channel's `version_type` vocabulary.
 
   ## Escape hatches
 
@@ -33,8 +42,10 @@ defmodule Varsel.Cases.PackageChannel do
 
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
-  alias Varsel.Cases.PackageChannel.PurlType
+  alias Varsel.Cases.PackageChannel.Calculations.Purl, as: PurlCalculation
+  alias Varsel.Cases.PackageChannel.Kind
   alias Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage
+  alias Varsel.Cases.PackageChannel.VersionType
   alias Varsel.Cases.Proposable
 
   graphql do
@@ -139,15 +150,32 @@ defmodule Varsel.Cases.PackageChannel do
   attributes do
     uuid_primary_key :id
 
-    attribute :purl_type, PurlType do
+    attribute :kind, Kind do
+      description """
+      Whether this channel distributes a package (purl-identified) or is a
+      running service (domain-identified, versioned by date).
+      """
+
       allow_nil? false
+      default :package
+      public? true
+    end
+
+    attribute :purl_type, :string do
+      description """
+      Package URL type, e.g. "hex", "npm", "oci", "otp", "github", "cargo".
+      Any purl type is accepted; the well-known ones additionally supply a
+      collectionURL and a default versionType. Nil for :service channels.
+      """
+
+      constraints match: ~r{^[a-z0-9][a-z0-9._-]*$}
       public? true
     end
 
     attribute :namespace, :string do
       description """
-      The purl namespace, e.g. "gleam.run" (sid) or an npm scope. Nil for
-      unnamespaced ecosystems like hex.
+      The purl namespace, e.g. "gleam.run" (sid), "erlang" (github) or an npm
+      scope. Nil for unnamespaced ecosystems like hex.
       """
 
       public? true
@@ -156,7 +184,16 @@ defmodule Varsel.Cases.PackageChannel do
     attribute :name, :string do
       description """
       The purl name, e.g. "ash_authentication_phoenix" (hex), "stdlib" (otp),
-      "gleam" (oci/sid). Nil only for :hosted channels.
+      "otp" (github). Required for :package channels.
+      """
+
+      public? true
+    end
+
+    attribute :domain, :string do
+      description """
+      The domain a :service channel answers on, e.g. "hex.pm". Identifies the
+      service in place of a purl; nil for :package channels.
       """
 
       public? true
@@ -165,8 +202,8 @@ defmodule Varsel.Cases.PackageChannel do
     attribute :qualifiers, :map do
       description """
       Purl qualifiers rendered into the packageURL, e.g.
-      %{"repository_url" => "ghcr.io/gleam-lang"} for oci. OTP channels get
-      repository_url/vcs_url derived from the package's repo_url when absent.
+      %{"repository_url" => "ghcr.io/gleam-lang"} for oci, or vcs_url on the
+      repository channel of a forge with no purl type of its own.
       """
 
       allow_nil? false
@@ -186,10 +223,20 @@ defmodule Varsel.Cases.PackageChannel do
       public? true
     end
 
+    attribute :version_type, VersionType do
+      description """
+      Vocabulary the derived version bounds are written in. Nil takes the purl
+      type's default (hex/npm semver, otp otp, oci other, github/generic git);
+      :service channels are always date.
+      """
+
+      public? true
+    end
+
     attribute :tag_prefix, :string do
       description """
-      String prepended to OCI image tags, e.g. "v" for `v1.2.3` tags. Nil or
-      empty for repos tagging bare versions.
+      String prepended to every derived version, e.g. "v" for `v1.2.3` tags.
+      Nil or empty for bare versions.
       """
 
       public? true
@@ -197,10 +244,11 @@ defmodule Varsel.Cases.PackageChannel do
 
     attribute :tag_suffixes, {:array, :string} do
       description """
-      OCI image-tag flavor suffixes (e.g. ["elixir", "erlang", "node"]); the
-      derived version range is repeated once per flavor with the suffix
-      appended (versionType other). A "-" entry is the bare tag, so a repo
-      publishing both 1.2.3 and 1.2.3-special uses ["-", "special"].
+      Flavor suffixes appended to every derived version (e.g. ["elixir",
+      "erlang", "node"] for an image published once per runtime); the derived
+      range repeats once per flavor. A "-" entry is the bare version, so a
+      channel publishing both 1.2.3 and 1.2.3-special uses ["-", "special"].
+      Empty renders the version alone.
       """
 
       allow_nil? false
@@ -255,7 +303,20 @@ defmodule Varsel.Cases.PackageChannel do
     end
   end
 
+  calculations do
+    calculate :purl, :string, PurlCalculation do
+      description """
+      The composed Package URL of this channel, e.g.
+      "pkg:hex/ash_authentication_phoenix" or
+      "pkg:oci/gleam?repository_url=ghcr.io/gleam-lang". Nil for :service
+      channels, which have a domain rather than a purl.
+      """
+
+      public? true
+    end
+  end
+
   identities do
-    identity :unique_channel, [:affected_package_id, :purl_type, :namespace, :name]
+    identity :unique_channel, [:affected_package_id, :purl_type, :namespace, :name, :domain], nils_distinct?: false
   end
 end

@@ -32,6 +32,7 @@ defmodule Varsel.Cases.AffectedPackage do
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
+  alias Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel
   alias Varsel.Cases.AffectedPackage.Changes.FromPreset
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.AffectedPackage.ProgramFile
@@ -66,9 +67,15 @@ defmodule Varsel.Cases.AffectedPackage do
     defaults [:read]
 
     create :add do
-      description "Adds a logical product to a case."
+      description """
+      Adds a logical product to a case. A `repo_url` additionally gets the
+      repository its own distribution channel (pkg:github/... or pkg:generic),
+      so the source is published alongside the registries.
+      """
+
       primary? true
       accept [:case_id | Proposable.fields(__MODULE__)]
+      change AddRepositoryChannel
     end
 
     create :add_otp do

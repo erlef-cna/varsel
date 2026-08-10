@@ -56,9 +56,10 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
              ] = package.program_files
 
       assert [
-               %{purl_type: :sid, namespace: "erlang.org", name: "otp", position: 0},
-               %{purl_type: :otp, name: "ssh", subpath: "lib/ssh", position: 1},
-               %{purl_type: :otp, name: "ssl", subpath: "lib/ssl", position: 2}
+               %{purl_type: "sid", namespace: "erlang.org", name: "otp", position: 0},
+               %{purl_type: "otp", name: "ssh", subpath: "lib/ssh", position: 1},
+               %{purl_type: "otp", name: "ssl", subpath: "lib/ssl", position: 2},
+               %{purl_type: "github", namespace: "erlang", name: "otp"}
              ] = package.channels
 
       assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==
@@ -101,7 +102,9 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
           load: [:channels, :version_events]
         )
 
-      assert [%{name: "otp"}, %{name: "stdlib", subpath: "lib/stdlib"}] = package.channels
+      assert [%{name: "otp"}, %{name: "stdlib", subpath: "lib/stdlib"}, %{purl_type: "github"}] =
+               package.channels
+
       assert package.version_events == []
     end
 
@@ -113,7 +116,8 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
           load: [:channels]
         )
 
-      assert [%{name: "otp"}, %{name: "erts", subpath: "erts"}] = package.channels
+      assert [%{name: "otp"}, %{name: "erts", subpath: "erts"}, %{purl_type: "github"}] =
+               package.channels
     end
 
     test "an assigned supporter may use it, an unassigned one may not",
@@ -159,7 +163,11 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
       # The default vendor/product CPE derivation matches the published records.
       assert package.cpe == nil
 
-      assert [%{purl_type: :otp, name: "elixir", subpath: "lib/elixir"}] = package.channels
+      assert [
+               %{purl_type: "otp", name: "elixir", subpath: "lib/elixir", version_type: :semver},
+               %{purl_type: "github", namespace: "elixir-lang", name: "elixir"}
+             ] = package.channels
+
       assert length(package.version_events) == 2
     end
   end
@@ -184,11 +192,14 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
       assert package.repo_url == "https://github.com/gleam-lang/gleam"
       assert package.cpe == "cpe:2.3:a:gleam-lang:gleam:*:*:*:*:*:*:*:*"
 
-      assert [sid, oci] = package.channels
-      assert %{purl_type: :sid, namespace: "gleam.run", name: "gleam"} = sid
-      assert %{purl_type: :oci, name: "gleam"} = oci
+      assert [sid, oci, repository] = package.channels
+      assert %{purl_type: "sid", namespace: "gleam.run", name: "gleam"} = sid
+      assert %{purl_type: "oci", name: "gleam"} = oci
       assert oci.qualifiers == %{"repository_url" => "ghcr.io/gleam-lang"}
       assert "erlang" in oci.tag_suffixes and "scratch" in oci.tag_suffixes
+
+      assert %{purl_type: "github", namespace: "gleam-lang", name: "gleam", version_type: :git} =
+               repository
 
       assert length(package.version_events) == 2
     end
@@ -233,7 +244,11 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
       assert [%{path: "lib/ssh/src/ssh_sftpd.erl", modules: ["ssh_sftpd"]}] =
                package.program_files
 
-      assert [%{purl_type: :sid, name: "otp"}, %{purl_type: :otp, name: "ssh"}] = package.channels
+      assert [
+               %{purl_type: "sid", name: "otp"},
+               %{purl_type: "otp", name: "ssh"},
+               %{purl_type: "github", name: "otp"}
+             ] = package.channels
 
       assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==
                MapSet.new([{:introduced, @intro_sha}, {:fixed, @fix_sha}])
@@ -260,7 +275,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
         )
 
       assert package.vendor == "Gleam"
-      assert [%{purl_type: :sid}, %{purl_type: :oci}] = package.channels
+      assert [%{purl_type: "sid"}, %{purl_type: "oci"}, %{purl_type: "github"}] = package.channels
     end
 
     test "an unknown preset is rejected at propose time", %{poc: poc, case: case_record} do

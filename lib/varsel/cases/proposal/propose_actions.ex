@@ -258,17 +258,20 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       description """
       Proposes adding a distribution channel to an affected package that is
       already accepted (target_id); for a new package, author its channels
-      inline on propose_affected_package instead. The source repo's pkg:github
-      channel is derived from the package's repo_url — normally you don't add it
-      here (do so only for something like a second forge host).
+      inline on propose_affected_package instead. The source repository's own
+      channel is derived from the package's repo_url — normally you don't add
+      it here (do so only for something like a second forge host).
       """
 
       accept [:case_id, :target_id, :reasoning]
-      argument :purl_type, Varsel.Cases.PackageChannel.PurlType, allow_nil?: false
+      argument :kind, Varsel.Cases.PackageChannel.Kind
+      argument :purl_type, :string
       argument :namespace, :string
       argument :name, :string
+      argument :domain, :string
       argument :qualifiers, :map
       argument :subpath, :string
+      argument :version_type, Varsel.Cases.PackageChannel.VersionType
       argument :tag_prefix, :string
       argument :tag_suffixes, {:array, :string}
       argument :versions_override, {:array, :map}

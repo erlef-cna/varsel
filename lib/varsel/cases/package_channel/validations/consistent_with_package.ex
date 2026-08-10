@@ -4,20 +4,21 @@
 
 defmodule Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage do
   @moduledoc """
-  Channel consistency rules:
-
-  * `name` is required for every purl type except `:hosted` (a hosted
-    service has no package identity).
-  * The channel's denormalized `case_id` must match its parent
-    `affected_package`'s `case_id` (rejects cross-case row mixups).
+  Channel consistency rules: the identity rules of
+  `Varsel.Cases.PackageChannel.Validations.ConsistentIdentity`, plus a check
+  that the channel's denormalized `case_id` matches its parent
+  `affected_package`'s (which rejects cross-case row mixups).
   """
 
   use Ash.Resource.Validation
 
-  @impl Ash.Resource.Validation
-  def validate(changeset, _opts, _context) do
+  alias Ash.Resource.Validation
+  alias Varsel.Cases.PackageChannel.Validations.ConsistentIdentity
+
+  @impl Validation
+  def validate(changeset, opts, context) do
     with {:ok, package} <- fetch_package(changeset),
-         :ok <- validate_package_name(changeset, package) do
+         :ok <- ConsistentIdentity.validate(changeset, opts, context) do
       validate_same_case(changeset, package)
     end
   end
@@ -32,17 +33,6 @@ defmodule Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage do
           {:ok, package} -> {:ok, package}
           {:error, _} -> {:error, field: :affected_package_id, message: "does not exist"}
         end
-    end
-  end
-
-  defp validate_package_name(changeset, _package) do
-    purl_type = Ash.Changeset.get_attribute(changeset, :purl_type)
-    name = Ash.Changeset.get_attribute(changeset, :name)
-
-    if purl_type != :hosted and is_nil(name) do
-      {:error, field: :name, message: "is required for %{type} channels", vars: [type: purl_type]}
-    else
-      :ok
     end
   end
 

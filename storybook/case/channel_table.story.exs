@@ -17,8 +17,8 @@ defmodule VarselWeb.Storybook.Case.ChannelTable do
       %Variation{
         id: :at_rest,
         description:
-          "The resting card: what ships where, and an implicit git row that carries " <>
-            "no actions — there is no channel record behind it.",
+          "The resting card: what ships where. The repository is a channel like " <>
+            "any other, and says which commits are affected rather than a range.",
         attributes: %{
           rows: [
             %{
@@ -27,7 +27,12 @@ defmodule VarselWeb.Storybook.Case.ChannelTable do
               title: "pkg:otp/ssh@5.2.11",
               derived: "≥ 0 < 1.1.7 · ≥ 5.3 < 5.5.2.2"
             },
-            %{id: nil, name: "github (implicit)", derived: "0 → 1 fix commit"}
+            %{
+              id: "chan-2",
+              name: "pkg:github/erlang/otp",
+              title: "pkg:github/erlang/otp",
+              derived: "63e186ae… → 1 fix commit"
+            }
           ],
           mode: :edit,
           marks: marks()
@@ -53,7 +58,12 @@ defmodule VarselWeb.Storybook.Case.ChannelTable do
               title: "pkg:hex/ssh_client",
               derived: "no derived range"
             },
-            %{id: nil, name: "github (implicit)", derived: "≥ 0 < R13B03"}
+            %{
+              id: "chan-3",
+              name: "pkg:github/erlang/otp",
+              title: "pkg:github/erlang/otp",
+              derived: "63e186ae… → 2 fix commits"
+            }
           ],
           mode: :edit,
           marks: marks(),

@@ -35,10 +35,10 @@ defmodule Varsel.Cases.DerivationFreshness do
   end
 
   @doc """
-  Whether a *fresh* derivation yields no affected versions on any channel or
-  the git entry, despite the package carrying an introduced boundary fact.
-  This is the genuine empty-derivation case (as opposed to staleness): the
-  facts are there and current, but resolution produced nothing renderable.
+  Whether a *fresh* derivation yields no affected versions on any channel,
+  despite the package carrying an introduced boundary fact. This is the genuine
+  empty-derivation case (as opposed to staleness): the facts are there and
+  current, but resolution produced nothing renderable.
 
   Returns `false` when the cache is stale (staleness is reported separately, and
   an out-of-date cache says nothing reliable about the derived versions) or when
@@ -56,19 +56,14 @@ defmodule Varsel.Cases.DerivationFreshness do
 
   defp has_introduced_boundary?(_package), do: false
 
-  # Every renderable range across the channels and the implicit git entry.
+  # Every renderable range across the package's channels.
   defp derived_versions(nil), do: []
 
   defp derived_versions(cache) do
-    channel_versions =
-      cache
-      |> Map.get("channels", %{})
-      |> Map.values()
-      |> Enum.flat_map(&(&1["versions"] || []))
-
-    git_versions = get_in(cache, ["git", "versions"]) || []
-
-    channel_versions ++ git_versions
+    cache
+    |> Map.get("channels", %{})
+    |> Map.values()
+    |> Enum.flat_map(&(&1["versions"] || []))
   end
 
   defp newest_fact(package) do

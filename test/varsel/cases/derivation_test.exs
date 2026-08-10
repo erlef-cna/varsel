@@ -22,15 +22,33 @@ defmodule Varsel.Cases.DerivationTest do
     %{poc: poc, case: case_record}
   end
 
+  # The channel the package's repo_url got when the package was added.
+  defp repository_channel(package) do
+    Enum.find(package.channels, &(&1.version_type == :git))
+  end
+
   defp package_with_channels(poc, case_record, channels, events) do
     package = Fixtures.add_affected_package(poc, case_record, %{repo_url: @repo})
 
+    # The repository gets its own channel when the package is added; the tests
+    # reach it under :git, the way they name the other channels by purl type.
+    repository =
+      package
+      |> Ash.load!(:channels, authorize?: false)
+      |> Map.fetch!(:channels)
+      |> List.first()
+
     channels =
-      Map.new(channels, fn {type, attrs} ->
+      channels
+      |> Map.new(fn {type, attrs} ->
         channel =
           Cases.add_package_channel!(
             Map.merge(
-              %{case_id: case_record.id, affected_package_id: package.id, purl_type: type},
+              %{
+                case_id: case_record.id,
+                affected_package_id: package.id,
+                purl_type: to_string(type)
+              },
               attrs
             ),
             actor: poc
@@ -38,6 +56,7 @@ defmodule Varsel.Cases.DerivationTest do
 
         {type, channel}
       end)
+      |> Map.put(:git, repository)
 
     Enum.each(events, fn attrs ->
       Cases.add_version_event!(
@@ -81,8 +100,8 @@ defmodule Varsel.Cases.DerivationTest do
              }
            ]
 
-    # The git/forge entry derives implicitly from the package's repo_url.
-    assert derivation["git"]["versions"] == [
+    # The repository's own channel, added with the package, carries the commits.
+    assert derivation["channels"][channels[:git].id]["versions"] == [
              %{
                "version" => @intro_sha,
                "lessThan" => @fix_sha,
@@ -138,7 +157,7 @@ defmodule Varsel.Cases.DerivationTest do
            ]
 
     # SHAs are not linearly orderable, so multiple fixes stay a changes[] chain.
-    assert derivation["git"]["versions"] == [
+    assert derivation["channels"][channels[:git].id]["versions"] == [
              %{
                "version" => @intro_sha,
                "lessThan" => "*",
@@ -188,8 +207,8 @@ defmodule Varsel.Cases.DerivationTest do
 
     assert derivation["channels"][channels[:hex].id]["pending"] == [@fix_sha]
 
-    # The implicit git entry still bounds on the commit itself.
-    assert derivation["git"]["versions"] == [
+    # The repository channel still bounds on the commit itself.
+    assert derivation["channels"][channels[:git].id]["versions"] == [
              %{
                "version" => @intro_sha,
                "lessThan" => @fix_sha,
@@ -221,13 +240,18 @@ defmodule Varsel.Cases.DerivationTest do
     assert issue =~ "the introducing commit is contained in no release tag"
   end
 
-  test "channel-scoped explicit events drive a hosted channel", %{poc: poc, case: case_record} do
+  test "channel-scoped explicit events drive a service channel", %{poc: poc, case: case_record} do
     package =
       Fixtures.add_affected_package(poc, case_record, %{repo_url: nil, product: "acme.example"})
 
     channel =
       Cases.add_package_channel!(
-        %{case_id: case_record.id, affected_package_id: package.id, purl_type: :hosted},
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          kind: :service,
+          domain: "acme.example"
+        },
         actor: poc
       )
 
@@ -283,9 +307,10 @@ defmodule Varsel.Cases.DerivationTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          purl_type: :sid,
+          purl_type: "sid",
           namespace: "erlang.org",
-          name: "otp"
+          name: "otp",
+          version_type: :otp
         },
         actor: poc
       )
@@ -295,8 +320,9 @@ defmodule Varsel.Cases.DerivationTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          purl_type: :otp,
-          name: "ssh"
+          purl_type: "otp",
+          name: "ssh",
+          version_type: :otp
         },
         actor: poc
       )
@@ -356,8 +382,8 @@ defmodule Varsel.Cases.DerivationTest do
              }
            ]
 
-    # The implicit git entry is commit SHAs alone — no release versions.
-    assert [git_block] = derivation["git"]["versions"]
+    # The repository channel is commit SHAs alone — no release versions.
+    assert [git_block] = derivation["channels"][repository_channel(package).id]["versions"]
     assert git_block["versionType"] == "git"
     assert git_block["version"] == @intro_sha
   end
@@ -386,8 +412,9 @@ defmodule Varsel.Cases.DerivationTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          purl_type: :otp,
-          name: "elixir"
+          purl_type: "otp",
+          name: "elixir",
+          version_type: :semver
         },
         actor: poc
       )
@@ -416,8 +443,8 @@ defmodule Varsel.Cases.DerivationTest do
              }
            ]
 
-    # The implicit git entry stays a pure git-SHA range (no OTP release block).
-    assert [git_block] = derivation["git"]["versions"]
+    # The repository channel stays a pure git-SHA range (no OTP release block).
+    assert [git_block] = derivation["channels"][repository_channel(package).id]["versions"]
     assert git_block["versionType"] == "git"
     assert git_block["version"] == @intro_sha
     assert git_block["lessThan"] == @fix_sha

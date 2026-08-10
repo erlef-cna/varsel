@@ -4,21 +4,22 @@
 
 defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
   @moduledoc """
-  Renders `affected[]` entries: one per `Varsel.Cases.PackageChannel` plus
-  the implicit git/forge entry every package with a `repo_url` gets.
+  Renders `affected[]` entries — one per `Varsel.Cases.PackageChannel`,
+  including the source repository's own channel, which is a stored channel like
+  any other rather than a second rendering path.
 
-  Channels are purl-shaped (type + namespace/name + qualifiers); the purl
-  type fixes the entry constants (collectionURL, versionType semantics live
-  in `Varsel.Cases.Derivation`). The two channel escape hatches
-  (`versions_override`, `entry_override`) apply last. The git entry derives
-  everything from the repository URL — a purl only for forges with a
-  registered purl type (github/gitlab/bitbucket); other forges keep
-  vendor/product/repo/packageName without inventing one.
+  A `:package` channel is purl-shaped (type + namespace/name + qualifiers) and
+  takes its entry constants from `Varsel.Cases.PackageChannel.PurlType`; a
+  `:service` channel has no package identity, so it publishes vendor/product
+  and its dated versions alone. The two channel escape hatches
+  (`versions_override`, `entry_override`) apply last.
   """
 
   alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.Case.Calculations.Preview.MergePatch
   alias Varsel.Cases.PackageChannel
+  alias Varsel.Cases.PackageChannel.Calculations.Purl, as: PurlCalculation
+  alias Varsel.Cases.PackageChannel.PurlType
 
   @doc """
   The rendered `affected[]` entry for a channel. Returns
@@ -49,35 +50,9 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
     {entry, version_override_applied ++ entry_override_applied}
   end
 
-  @doc """
-  The implicit git/forge entry for a package, or nil without a `repo_url`.
-  """
-  @spec render_git(AffectedPackage.t(), map() | nil) :: map() | nil
-  def render_git(%{repo_url: nil}, _git_derivation), do: nil
-
-  def render_git(package, git_derivation) do
-    package
-    |> base_entry()
-    |> put_program_info(Enum.map(package.program_files, &{&1, &1.path}))
-    |> Map.merge(git_constants(package))
-    |> put_versions((git_derivation || %{})["versions"] || [])
-  end
-
-  @doc "The composed packageURL of a channel (nil for hosted channels and unnamed forges)."
+  @doc "The composed packageURL of a channel (nil for service channels)."
   @spec purl_string(AffectedPackage.t(), PackageChannel.t()) :: String.t() | nil
-  def purl_string(_package, %{purl_type: :hosted}), do: nil
-  def purl_string(_package, %{name: nil}), do: nil
-
-  def purl_string(package, channel) do
-    Purl.to_string(
-      struct!(Purl,
-        type: to_string(channel.purl_type),
-        namespace: split_namespace(channel.namespace),
-        name: channel.name,
-        qualifiers: qualifiers(package, channel)
-      )
-    )
-  end
+  def purl_string(_package, channel), do: PurlCalculation.compose(channel)
 
   ## -------------------------------------------------------- entry assembly
 
@@ -100,8 +75,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
   # channel with a subpath distributes only that directory: files under it
   # apply, paths relative to it (the per-application view of a
   # multi-application repository, see CVE-2026-48858's inets/ftp entries).
-  # Without a subpath — and on the git entry — every file applies under its
-  # full repository path.
+  # Without a subpath every file applies under its full repository path.
   defp program_files(package, %{subpath: subpath}) when is_binary(subpath) do
     prefix = String.trim(subpath, "/") <> "/"
 
@@ -125,75 +99,80 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
     )
   end
 
-  defp channel_constants(_package, %{purl_type: :hosted}) do
-    # Hosted services carry no package identity — just vendor/product/versions
-    # (see the hex.pm entry in CVE-2026-21618).
-    %{}
+  # A service carries no package identity — just vendor/product/versions plus
+  # the domain it answers on (see the hex.pm entry in CVE-2026-21618).
+  defp channel_constants(package, %{kind: :service} = channel) do
+    %{"cpes" => [cpe(package)]}
+    |> put_present("collectionURL", service_url(channel))
+    |> put_present("packageName", channel.domain)
   end
 
   defp channel_constants(package, channel) do
     %{"cpes" => [cpe(package)]}
-    |> put_present("packageName", package_name(package, channel))
+    |> put_present("packageName", package_name(channel))
     |> put_present("packageURL", purl_string(package, channel))
     |> put_present("collectionURL", collection_url(package, channel))
-    |> put_repo(channel.purl_type, package)
+    |> put_repo(channel, package)
   end
 
+  defp service_url(%{domain: nil}), do: nil
+  defp service_url(%{domain: domain}), do: "https://#{domain}"
+
   # The published packageName per ecosystem: oci includes the registry path
-  # ("gleam-lang/gleam"), namespaced ecosystems join namespace/name, sid and
-  # the rest use the bare name.
-  defp package_name(_package, %{purl_type: :oci} = channel) do
-    case channel |> repository_url() |> String.split("/", parts: 2) do
+  # ("gleam-lang/gleam"), namespaced ecosystems join namespace/name, and
+  # everything else publishes the bare name.
+  defp package_name(%{purl_type: "oci"} = channel) do
+    case channel |> oci_repository_url() |> String.split("/", parts: 2) do
       [_host, path] -> "#{path}/#{channel.name}"
       [_host] -> channel.name
     end
   end
 
-  defp package_name(_package, %{purl_type: :sid} = channel), do: channel.name
-
-  defp package_name(_package, channel) do
-    case channel.namespace do
-      nil -> channel.name
-      namespace -> "#{namespace}/#{channel.name}"
+  defp package_name(channel) do
+    if PurlType.namespaced?(channel.purl_type) and channel.namespace do
+      "#{channel.namespace}/#{channel.name}"
+    else
+      channel.name
     end
   end
 
-  defp collection_url(_package, %{purl_type: :hex}), do: "https://repo.hex.pm"
-  defp collection_url(_package, %{purl_type: :npm}), do: "https://registry.npmjs.org"
-
-  defp collection_url(_package, %{purl_type: :oci} = channel) do
-    [host | _path] = channel |> repository_url() |> String.split("/", parts: 2)
+  # An OCI image's registry is per-channel (its repository_url qualifier), so
+  # unlike every other type its collectionURL cannot come from the type alone.
+  defp collection_url(_package, %{purl_type: "oci"} = channel) do
+    [host | _path] = channel |> oci_repository_url() |> String.split("/", parts: 2)
     "https://#{host}"
   end
 
-  defp collection_url(_package, _channel), do: nil
-
-  defp repository_url(channel), do: channel.qualifiers["repository_url"] || "ghcr.io"
-
-  # Registry entries of repo-backed packages carry the repo too (hex/otp/npm,
-  # matching the published records); oci/sid entries do not.
-  defp put_repo(constants, purl_type, %{repo_url: repo_url})
-       when purl_type in [:hex, :otp, :npm] and is_binary(repo_url) do
-    Map.put(constants, "repo", repo_url)
+  defp collection_url(package, channel) do
+    PurlType.collection_url(channel.purl_type) || forge_url(package, channel)
   end
 
-  defp put_repo(constants, _purl_type, _package), do: constants
-
-  defp qualifiers(package, channel) do
-    auto =
-      case {channel.purl_type, package.repo_url} do
-        {:otp, repo_url} when is_binary(repo_url) ->
-          %{"repository_url" => repo_url, "vcs_url" => "git #{repo_url}.git"}
-
-        _other ->
-          %{}
+  # No purl type names a forge's URL, so a repository channel takes it from the
+  # repository itself.
+  defp forge_url(%{repo_url: repo_url}, channel) when is_binary(repo_url) do
+    if PurlType.default_version_type(channel.purl_type) == :git do
+      case URI.parse(repo_url) do
+        %URI{host: host} when is_binary(host) -> "https://#{host}"
+        _no_host -> nil
       end
-
-    Map.merge(auto, channel.qualifiers || %{})
+    end
   end
 
-  defp split_namespace(nil), do: []
-  defp split_namespace(namespace), do: String.split(namespace, "/", trim: true)
+  defp forge_url(_package, _channel), do: nil
+
+  defp oci_repository_url(channel), do: channel.qualifiers["repository_url"] || "ghcr.io"
+
+  # Repo-backed entries name the repository (matching the published records);
+  # entries of packages published independently of it do not.
+  defp put_repo(constants, channel, %{repo_url: repo_url}) when is_binary(repo_url) do
+    if PurlType.repo_backed?(channel.purl_type) do
+      Map.put(constants, "repo", repo_url)
+    else
+      constants
+    end
+  end
+
+  defp put_repo(constants, _channel, _package), do: constants
 
   defp put_versions(entry, []), do: entry
   defp put_versions(entry, versions), do: Map.put(entry, "versions", versions)
@@ -203,48 +182,6 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
 
   defp put_present(entry, _key, nil), do: entry
   defp put_present(entry, key, value), do: Map.put(entry, key, value)
-
-  ## ------------------------------------------------------------------ forge
-
-  @forge_purl_types %{
-    "github.com" => "github",
-    "gitlab.com" => "gitlab",
-    "bitbucket.org" => "bitbucket"
-  }
-
-  defp git_constants(package) do
-    %URI{host: host, path: repo_path} = URI.parse(package.repo_url)
-    path = forge_path(repo_path)
-
-    %{"cpes" => [cpe(package)], "repo" => package.repo_url}
-    |> put_present("collectionURL", host && "https://#{host}")
-    |> put_present("packageName", path)
-    |> put_present("packageURL", forge_purl(Map.get(@forge_purl_types, host || ""), path))
-  end
-
-  # "/owner/repo.git/" -> "owner/repo"
-  defp forge_path(nil), do: nil
-
-  defp forge_path(path) do
-    case path |> String.trim("/") |> String.replace_suffix(".git", "") do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp forge_purl(nil, _path), do: nil
-  defp forge_purl(_type, nil), do: nil
-
-  defp forge_purl(type, path) do
-    case String.split(path, "/") do
-      [name] ->
-        Purl.to_string(struct!(Purl, type: type, name: name))
-
-      parts ->
-        # Multi-segment namespaces cover gitlab subgroups (owner/group/repo).
-        Purl.to_string(struct!(Purl, type: type, namespace: Enum.drop(parts, -1), name: List.last(parts)))
-    end
-  end
 
   ## -------------------------------------------------------------------- cpe
 

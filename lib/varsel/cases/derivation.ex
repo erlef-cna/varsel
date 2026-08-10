@@ -20,16 +20,15 @@ defmodule Varsel.Cases.Derivation do
      through `Varsel.Cases.Reachability`, which labels every release tag
      affected/safe from git containment and flattens them into
      `[from, until)` ranges. `Varsel.Cases.Derivation.Emit` then shapes those
-     neutral ranges into each channel's `versions[]` (registry semver, OTP
-     release versions, OTP per-application versions via `OtpVersionsTable`, OCI
-     tag flavours) and the implicit git/forge entry, which carries commit SHAs
-     alone.
+     neutral ranges into each channel's `versions[]`, in the vocabulary that
+     channel publishes in (semver, OTP release or per-application versions via
+     `OtpVersionsTable`, or commit SHAs for the repository channel).
   2. Channel-scoped events (`package_channel_id` set, e.g. date boundaries on a
-     `:hosted` channel) replace the repo derivation for that channel and are
+     `:service` channel) replace the repo derivation for that channel and are
      used verbatim.
   3. A fixed commit contained in no release is *pending*: it still bounds the
-     git channel, is reported in `"pending"`, and blocks publishing unless the
-     package allows unreleased fixes.
+     git-versioned channel, is reported in `"pending"`, and blocks publishing
+     unless the package allows unreleased fixes.
 
   ## Result shape (JSON-safe, cached in jsonb, all string keys)
 
@@ -37,7 +36,6 @@ defmodule Varsel.Cases.Derivation do
         "channels" => %{<channel-uuid> => %{"versions" => [...],
                                             "pending" => [...],
                                             "issues" => [...]}},
-        "git" => %{"versions" => [...], "pending" => [...], "issues" => [...]} | nil,
         # either bound is nil when the range is open on that side (the preview drops it)
         "cpe_matches" => [%{"versionStartIncluding" => _, "versionEndExcluding" => _}],
         "call_outs" => [%{...}],
@@ -64,32 +62,23 @@ defmodule Varsel.Cases.Derivation do
     reach = reachability(package, platform, global_events)
     pending = reach.pending_fixes
 
-    {intro_shas, _fixes} = boundary_shas(global_events)
+    {intro_shas, fix_shas} = boundary_shas(global_events)
 
     emit_opts = [
-      otp_platform?: platform.kind == :otp,
-      otp_root_intro?: Enum.any?(intro_shas, &Emit.otp_root_commit?/1)
+      intro_shas: intro_shas,
+      fix_shas: fix_shas,
+      otp_root_intro?: platform.kind == :otp and Enum.any?(intro_shas, &Emit.otp_root_commit?/1)
     ]
 
     channels =
       Map.new(package.channels, fn channel ->
         events = Enum.filter(scoped_events, &(&1.package_channel_id == channel.id))
-        {channel.id, derive_channel(channel, platform, reach, events, emit_opts, pending)}
+        {channel.id, derive_channel(channel, reach, events, emit_opts, pending)}
       end)
-
-    git =
-      if package.repo_url do
-        {intros, fixes} = boundary_shas(global_events)
-
-        intros
-        |> Emit.git(fixes, emit_opts)
-        |> Map.put("pending", pending)
-      end
 
     {:ok,
      %{
        "channels" => channels,
-       "git" => git,
        "cpe_matches" => Emit.cpe_matches(reach.ranges, emit_opts),
        "call_outs" => reach.call_outs,
        "issues" => reach.issues
@@ -145,16 +134,16 @@ defmodule Varsel.Cases.Derivation do
 
   ## --------------------------------------------------------------- channels
 
-  defp derive_channel(channel, platform, reach, scoped_events, emit_opts, pending) do
+  defp derive_channel(channel, reach, scoped_events, emit_opts, pending) do
     cond do
       scoped_events != [] ->
-        derive_scoped_channel(channel, platform, scoped_events)
+        derive_scoped_channel(channel, scoped_events)
 
-      channel.purl_type == :hosted ->
+      channel.kind == :service ->
         %{
           "versions" => [],
           "pending" => [],
-          "issues" => ["hosted channels need channel-scoped version events"]
+          "issues" => ["service channels need channel-scoped version events"]
         }
 
       true ->
@@ -165,10 +154,10 @@ defmodule Varsel.Cases.Derivation do
   end
 
   # Channel-scoped explicit events: used verbatim as one range.
-  defp derive_scoped_channel(channel, platform, events) do
+  defp derive_scoped_channel(channel, events) do
     intro = Enum.find(events, &(&1.event == :introduced))
     fixes = Enum.filter(events, &(&1.event == :fixed))
-    version_type = version_type(channel, platform)
+    version_type = channel |> Emit.version_type() |> to_string()
 
     cond do
       intro == nil ->
@@ -196,11 +185,6 @@ defmodule Varsel.Cases.Derivation do
 
   defp boundary_value(%{version: version}) when not is_nil(version), do: version
   defp boundary_value(%{commit_sha: sha}), do: sha
-
-  defp version_type(%{purl_type: :otp}, %{kind: :otp}), do: "otp"
-  defp version_type(%{purl_type: :oci}, _platform), do: "other"
-  defp version_type(%{purl_type: :hosted}, _platform), do: "date"
-  defp version_type(_channel, _platform), do: "semver"
 
   defp bounded_range(from, until, version_type) do
     %{

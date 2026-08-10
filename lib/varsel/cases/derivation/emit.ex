@@ -9,38 +9,44 @@ defmodule Varsel.Cases.Derivation.Emit do
 
   `Reachability` reports ranges as raw tag-name bounds (`{from: "v1.7.0", until:
   "v1.7.22"}` / `{from: "OTP-27.0", until: "OTP-27.3.4.3"}`). This module strips
-  the tag prefix and, per channel kind, translates and formats:
+  the tag prefix and formats each bound in the channel's *version type* — the
+  vocabulary it publishes in, stored on the channel rather than guessed from its
+  purl type:
 
-    * **semver / registry** (`:hex`, `:npm`, plain repo) — bare bounded ranges,
-      versionType `"semver"`.
-    * **OTP release** (`:sid` on the erlang/otp repo) — the OTP release bounds as
-      published (`R13B03`, `27.3.4`), versionType `"otp"`.
-    * **OTP application** (`:otp` on the erlang/otp repo) — each OTP release bound
-      translated to the application's own version through
-      `Varsel.Cases.Derivation.OtpVersionsTable`, versionType `"otp"`.
-    * **OCI** (`:oci`) — one range per `tag_suffixes` flavor
-      (`<tag_prefix><version>` / `<tag_prefix><version>-<suffix>`), versionType
-      `"other"`. A `"-"` suffix emits the bare tag, so a repo tagging both
-      `1.2.3` and `1.2.3-special` lists `["-", "special"]`.
-    * **git/forge** — a git-SHA range per fix commit from the raw facts, and
-      nothing else: release versions belong to the release channel.
+    * **semver** — bare bounded ranges.
+    * **otp** — OTP release bounds as published (`R13B03`, `27.3.4`). A channel
+      naming a single OTP application (`pkg:otp/<app>`) has each bound
+      translated to that application's own version through
+      `Varsel.Cases.Derivation.OtpVersionsTable`.
+    * **git** — a commit-SHA range per fix commit, from the raw boundary facts:
+      commit SHAs are opaque, so no release version appears here.
+    * **date** / **other** — the bounds verbatim.
 
-  Both semver and OTP publish **separate bounded ranges** — one `versions[]`
-  object per range (`{version, lessThan, status, versionType}`), never a
-  `changes[]` chain: the flat-timeline engine already linearises every version,
-  so each affected span is a single half-open interval. An unbounded range
-  (affected, never fixed) renders `lessThan: "*"`.
+  Every channel then applies its tag decoration: `tag_prefix` prepended and one
+  range emitted per `tag_suffixes` flavor (`<prefix><version>-<suffix>`). A
+  `"-"` suffix emits the bare version, so a channel publishing both `1.2.3` and
+  `1.2.3-special` lists `["-", "special"]`; an empty list emits the version
+  alone.
+
+  Ranges are published as **separate bounded ranges** — one `versions[]` object
+  per range (`{version, lessThan, status, versionType}`), never a `changes[]`
+  chain: the flat-timeline engine already linearises every version, so each
+  affected span is a single half-open interval. An unbounded range (affected,
+  never fixed) renders `lessThan: "*"`. The git type is the exception: SHAs have
+  no order, so several fixes render as a `changes[]` chain off the introducing
+  commit.
   """
 
   alias Varsel.Cases.Derivation.OtpVersionsTable
   alias Varsel.Cases.PackageChannel
+  alias Varsel.Cases.PackageChannel.PurlType
   alias Varsel.Cases.Reachability
 
   @type range :: Reachability.range()
 
-  # The suffix standing for the unsuffixed image tag. A form's comma separated
-  # list cannot carry an empty entry — Ash trims it away — so the bare-tag
-  # flavor is stored as this marker instead.
+  # The suffix standing for the undecorated version. A form's comma separated
+  # list cannot carry an empty entry — Ash trims it away — so the bare flavor is
+  # stored as this marker instead.
   @bare_tag "-"
 
   # The root (parent-less) commit of erlang/otp — the R13B03 import that squashed
@@ -57,50 +63,40 @@ defmodule Varsel.Cases.Derivation.Emit do
   @doc """
   The `versions[]` block for a repo-derived channel: `%{"versions" => [...],
   "issues" => [...]}`. `pending` is added by the caller (it is package-level).
+
+  `opts` carries the boundary facts the git version type needs
+  (`:intro_shas` / `:fix_shas`) and whether the introducing commit is the OTP
+  root (`:otp_root_intro?`).
   """
   @spec channel(PackageChannel.t(), [range()], keyword()) :: %{
           required(String.t()) => [map()]
         }
   def channel(channel, ranges, opts) do
+    version_type = version_type(channel)
+
     result =
-      case channel.purl_type do
+      case version_type do
+        :git ->
+          git(Keyword.get(opts, :intro_shas, []), Keyword.get(opts, :fix_shas, []))
+
         :otp ->
-          if Keyword.fetch!(opts, :otp_platform?),
-            do: otp_app_versions(channel.name, ranges),
-            else: %{"versions" => semver_ranges(ranges), "issues" => []}
+          otp_versions(channel, ranges)
 
-        :sid ->
-          if Keyword.fetch!(opts, :otp_platform?),
-            do: %{"versions" => otp_release_ranges(ranges), "issues" => []},
-            else: %{"versions" => semver_ranges(ranges), "issues" => []}
-
-        :oci ->
-          %{"versions" => oci_ranges(channel, ranges), "issues" => []}
-
-        _semver_like ->
-          %{"versions" => semver_ranges(ranges), "issues" => []}
+        other ->
+          %{"versions" => decorated_ranges(channel, ranges, to_string(other)), "issues" => []}
       end
 
-    prepend_root_sentinel(result, sentinel_for(channel, opts))
+    prepend_root_sentinel(result, sentinel_for(channel, version_type, opts))
   end
 
   @doc """
-  The implicit git/forge entry's `versions[]`: a git-SHA range from the raw facts
-  (`[intro_sha, fix_sha)` per fix, released or not).
-
-  Commit SHAs only — the entry says nothing about release versions (those are the
-  release channel's), and it carries no pre-root `unknown` sentinel: erlang/otp's
-  history *starts* at the root commit, so there is no earlier commit for such a
-  range to cover.
+  The version type a channel publishes in: its own when set, else its purl
+  type's default. Service channels are always dated.
   """
-  @spec git([String.t()], [String.t()], keyword()) :: %{
-          required(String.t()) => [map()]
-        }
-  def git(intro_shas, fix_shas, _opts) do
-    {versions, issues} = git_sha_ranges(intro_shas, fix_shas)
-
-    %{"versions" => versions, "issues" => issues}
-  end
+  @spec version_type(PackageChannel.t() | map()) :: atom()
+  def version_type(%{kind: :service}), do: :date
+  def version_type(%{version_type: version_type}) when not is_nil(version_type), do: version_type
+  def version_type(channel), do: PurlType.default_version_type(channel.purl_type)
 
   @doc """
   cpeApplicability matches from the neutral ranges: each `[from, until)` is one
@@ -119,7 +115,7 @@ defmodule Varsel.Cases.Derivation.Emit do
   def cpe_matches(ranges, opts \\ []) do
     # Reachability emits ranges in ascending release order, so the first one is
     # the lowest — the only one that can reach back past R13B03.
-    drop_lower_bound? = otp_root_intro?(opts)
+    drop_lower_bound? = Keyword.get(opts, :otp_root_intro?, false)
 
     for {range, index} <- Enum.with_index(ranges) do
       # cpe has no "*" sentinel — an open range simply has no upper bound (nil,
@@ -131,40 +127,52 @@ defmodule Varsel.Cases.Derivation.Emit do
     end
   end
 
-  ## ------------------------------------------------------------ semver / oci
+  ## ------------------------------------------------------------ decoration
 
-  defp semver_ranges(ranges) do
-    for range <- ranges, do: version_object(bare(range.from), bound(range.until), "semver")
-  end
-
-  defp oci_ranges(channel, ranges) do
+  # Every non-git range passes through the channel's tag decoration: one range
+  # per flavor, each bound prefixed and suffixed. No suffixes means the bare
+  # version, which is what most channels publish.
+  defp decorated_ranges(channel, ranges, version_type) do
     prefix = channel.tag_prefix || ""
-    suffixes = if channel.tag_suffixes == [], do: [@bare_tag], else: channel.tag_suffixes
+    suffixes = if channel.tag_suffixes in [nil, []], do: [@bare_tag], else: channel.tag_suffixes
 
     for suffix <- suffixes, range <- ranges do
       version_object(
-        oci_tag(prefix, bare(range.from), suffix),
-        oci_bound(prefix, range.until, suffix),
-        "other"
+        decorate(prefix, bare(range.from), suffix),
+        decorated_bound(prefix, range.until, suffix),
+        version_type
       )
     end
   end
 
-  defp oci_tag(prefix, version, @bare_tag), do: "#{prefix}#{version}"
-  defp oci_tag(prefix, version, suffix), do: "#{prefix}#{version}-#{suffix}"
+  defp decorate(prefix, version, @bare_tag), do: "#{prefix}#{version}"
+  defp decorate(prefix, version, suffix), do: "#{prefix}#{version}-#{suffix}"
 
-  defp oci_bound(_prefix, :unbounded, _suffix), do: "*"
-  defp oci_bound(prefix, until, suffix), do: oci_tag(prefix, bare(until), suffix)
+  defp decorated_bound(_prefix, :unbounded, _suffix), do: "*"
+  defp decorated_bound(prefix, until, suffix), do: decorate(prefix, bare(until), suffix)
 
-  ## ------------------------------------------------------------ otp app
+  ## ------------------------------------------------------------ otp
+
+  # A pkg:otp channel names one application, whose own versions differ from the
+  # release's; any other otp-versioned channel publishes the release versions.
+  defp otp_versions(%{purl_type: "otp", name: app} = channel, ranges) when is_binary(app) do
+    otp_app_versions(channel, app, ranges)
+  end
+
+  defp otp_versions(channel, ranges) do
+    %{"versions" => decorated_ranges(channel, ranges, "otp"), "issues" => []}
+  end
 
   # Translate each OTP release range into the application's own versions, halting
   # on the first release whose app version can't be resolved (reported as issue).
-  defp otp_app_versions(app, ranges) do
+  defp otp_app_versions(channel, app, ranges) do
     Enum.reduce_while(ranges, %{"versions" => [], "issues" => []}, fn range, acc ->
       with {:ok, from} <- OtpVersionsTable.first_shipped_version(bare(range.from), app),
            {:ok, until} <- app_upper_bound(range.until, app) do
-        {:cont, %{acc | "versions" => acc["versions"] ++ [version_object(from, until, "otp")]}}
+        versions =
+          acc["versions"] ++ decorated_ranges(channel, [%{from: from, until: until}], "otp")
+
+        {:cont, %{acc | "versions" => versions}}
       else
         :error ->
           {:halt, %{"versions" => [], "issues" => ["cannot resolve #{app}'s version for a range"]}}
@@ -172,27 +180,22 @@ defmodule Varsel.Cases.Derivation.Emit do
     end)
   end
 
-  defp app_upper_bound(:unbounded, _app), do: {:ok, "*"}
+  defp app_upper_bound(:unbounded, _app), do: {:ok, :unbounded}
   defp app_upper_bound(until, app), do: OtpVersionsTable.app_version(bare(until), app)
-
-  # The OTP release block on the git entry: the raw OTP release bounds, bare.
-  defp otp_release_ranges(ranges) do
-    for range <- ranges, do: version_object(bare(range.from), bound(range.until), "otp")
-  end
 
   ## ------------------------------------------------------------ git
 
-  # The git-SHA range. Commit SHAs are opaque (not linearly orderable), so — like
-  # the old git entry — a single fix renders a bounded range and several a
-  # `changes[]` chain off the introducing commit. Unreleased fixes still bound the
-  # git channel (the commit exists).
-  defp git_sha_ranges([], _fix_shas), do: {[], ["the introduced boundary has no commit SHA"]}
+  # The git-SHA range. Commit SHAs are opaque (not linearly orderable), so a
+  # single fix renders a bounded range and several a `changes[]` chain off the
+  # introducing commit. Unreleased fixes still bound a git channel: the commit
+  # exists whether or not a release contains it.
+  defp git([], _fix_shas), do: %{"versions" => [], "issues" => ["the introduced boundary has no commit SHA"]}
 
-  defp git_sha_ranges([intro | _], []), do: {[version_object(intro, "*", "git")], []}
+  defp git([intro | _], []), do: %{"versions" => [version_object(intro, "*", "git")], "issues" => []}
 
-  defp git_sha_ranges([intro | _], [fix]), do: {[version_object(intro, fix, "git")], []}
+  defp git([intro | _], [fix]), do: %{"versions" => [version_object(intro, fix, "git")], "issues" => []}
 
-  defp git_sha_ranges([intro | _], fixes) do
+  defp git([intro | _], fixes) do
     chain = %{
       "version" => intro,
       "lessThan" => "*",
@@ -201,7 +204,7 @@ defmodule Varsel.Cases.Derivation.Emit do
       "changes" => Enum.map(fixes, &%{"at" => &1, "status" => "unaffected"})
     }
 
-    {[chain], []}
+    %{"versions" => [chain], "issues" => []}
   end
 
   ## ------------------------------------------------------------ root sentinel
@@ -211,30 +214,26 @@ defmodule Varsel.Cases.Derivation.Emit do
   # history starts at, so anything earlier is genuinely underivable rather than
   # unaffected. `nil` (no sentinel) otherwise.
   #
-  #   * otp app channel     -> {version:"0", lessThan:<app vsn at R13B03>, unknown}
-  #   * otp release channel -> {version:"0", lessThan:"R13B03", unknown}
-  #   * plain semver        -> no sentinel (the root commit only exists in OTP)
+  #   * otp application channel -> {version:"0", lessThan:<app vsn at R13B03>, unknown}
+  #   * otp release channel     -> {version:"0", lessThan:"R13B03", unknown}
   #
-  # The git entry deliberately gets none: it is versioned in commit SHAs, and no
-  # commit precedes the root commit.
-  defp sentinel_for(%{purl_type: :otp, name: app}, opts) do
-    if otp_root_intro?(opts) do
-      case OtpVersionsTable.app_version(@first_otp_tag, app) do
-        {:ok, version} -> unknown_range(version, "otp")
-        :error -> nil
-      end
+  # Only otp-versioned channels get one: a git channel is versioned in commit
+  # SHAs and no commit precedes the root commit, and semver channels of other
+  # products never see it.
+  defp sentinel_for(channel, :otp, opts) do
+    if Keyword.get(opts, :otp_root_intro?, false), do: otp_sentinel(channel)
+  end
+
+  defp sentinel_for(_channel, _version_type, _opts), do: nil
+
+  defp otp_sentinel(%{purl_type: "otp", name: app}) when is_binary(app) do
+    case OtpVersionsTable.app_version(@first_otp_tag, app) do
+      {:ok, version} -> unknown_range(version, "otp")
+      :error -> nil
     end
   end
 
-  defp sentinel_for(%{purl_type: :sid}, opts) do
-    if otp_root_intro?(opts), do: unknown_range(@first_otp_tag, "otp")
-  end
-
-  defp sentinel_for(_channel, _opts), do: nil
-
-  defp otp_root_intro?(opts) do
-    Keyword.get(opts, :otp_root_intro?, false) and Keyword.get(opts, :otp_platform?, false)
-  end
+  defp otp_sentinel(_channel), do: unknown_range(@first_otp_tag, "otp")
 
   defp unknown_range(upper, version_type) do
     %{"version" => "0", "lessThan" => upper, "status" => "unknown", "versionType" => version_type}
@@ -257,10 +256,8 @@ defmodule Varsel.Cases.Derivation.Emit do
     }
   end
 
-  defp bound(:unbounded), do: "*"
-  defp bound(version), do: bare(version)
-
   # Strip the tag prefix to the bare version. `OTP_R13B03` keeps its `R…` form.
+  defp bare(:unbounded), do: :unbounded
   defp bare("OTP-" <> rest), do: rest
   defp bare("OTP_" <> rest), do: rest
 

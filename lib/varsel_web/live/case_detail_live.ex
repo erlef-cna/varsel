@@ -35,6 +35,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.ChildParams
   alias Varsel.Cases.Derivation.Display
+  alias Varsel.Cases.Derivation.Emit
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposal.Build
@@ -2757,10 +2758,7 @@ defmodule VarselWeb.CaseDetailLive do
         []
 
       package ->
-        Enum.map(
-          package.channels,
-          &{Display.channel_label(package, &1) || to_string(&1.purl_type), &1.id}
-        )
+        Enum.map(package.channels, &{Display.channel_label(package, &1), &1.id})
     end
   end
 
@@ -2769,47 +2767,39 @@ defmodule VarselWeb.CaseDetailLive do
   defp scoped_channel_label(package, event) do
     case Enum.find(package.channels, &(&1.id == event.package_channel_id)) do
       nil -> "(removed channel)"
-      channel -> Display.channel_label(package, channel) || to_string(channel.purl_type)
+      channel -> Display.channel_label(package, channel)
     end
   end
 
-  # A package's channels as the table renders them, plus the implicit git row
-  # a package with a repository gets. `:compact` words the git range the way
-  # the resting card does; `:full` the way the editor does, where there is
-  # room for the whole list.
+  # A package's channels as the table renders them. Commit-versioned channels
+  # (the repository's own) have no version range to list, so `:compact` words
+  # theirs the way the resting card does — "63e186ae… → 2 fix commits" — while
+  # `:full` gives the editor the whole list.
   defp channel_rows(package, git_detail) do
-    rows =
-      Enum.map(package.channels, fn channel ->
-        %{
-          id: channel.id,
-          name: Display.channel_label(package, channel) || "—",
-          title: Channel.purl_string(package, channel),
-          subpath: channel.subpath,
-          derived: Display.derived_versions_label(package, channel.id),
-          note: presence(Display.overridden_note(channel))
-        }
-      end)
+    Enum.map(package.channels, fn channel ->
+      derived = Display.derived_versions_label(package, channel.id)
 
-    if package.repo_url do
-      git =
-        case git_detail do
-          :compact -> Display.git_compact_label(package)
-          :full -> Display.derived_versions_label(package, "git")
-        end
+      %{
+        id: channel.id,
+        name: Display.channel_label(package, channel) || "—",
+        title: Channel.purl_string(package, channel),
+        subpath: channel.subpath,
+        derived: channel_derived_label(package, channel, derived, git_detail),
+        derived_title: derived,
+        note: presence(Display.overridden_note(channel))
+      }
+    end)
+  end
 
-      rows ++
-        [
-          %{
-            id: nil,
-            name: "github (implicit)",
-            derived: git,
-            derived_title: Display.derived_versions_label(package, "git")
-          }
-        ]
+  defp channel_derived_label(package, channel, derived, :compact) do
+    if Emit.version_type(channel) == :git do
+      Display.git_compact_label(package, channel)
     else
-      rows
+      derived
     end
   end
+
+  defp channel_derived_label(_package, _channel, derived, :full), do: derived
 
   # The CWE/CAPEC catalogs back the classification datalists; load them once
   # per LiveView, only when a weakness/impact modal first opens.

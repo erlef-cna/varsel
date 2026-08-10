@@ -60,7 +60,11 @@ defmodule VarselWeb.CaseFormComponents do
         </.input>
       </div>
       <.input field={@form[:repo_url]} type="text" placeholder="https://github.com/owner/repo">
-        <:label>Repository URL (empty for hosted services)</:label>
+        <:label>Repository URL (empty for services)</:label>
+        <:description>
+          Gets its own distribution channel, so the source is published alongside
+          the registries.
+        </:description>
       </.input>
       <.program_files_field form={@form} />
       <.input
@@ -141,56 +145,87 @@ defmodule VarselWeb.CaseFormComponents do
   slot :actions, doc: "the row that submits or abandons the form"
 
   def channel_form(assigns) do
+    assigns = assign(assigns, :service?, to_string(assigns.form[:kind].value) == "service")
+
     ~H"""
     <.form for={@form} {@rest}>
-      <.input field={@form[:purl_type]} type="select" options={enum_options(PackageChannel.PurlType)}>
-        <:label>Purl type (the git/forge entry is added automatically)</:label>
+      <.input field={@form[:kind]} type="select" options={enum_options(PackageChannel.Kind)}>
+        <:label>Kind</:label>
+        <:description>
+          A package is named by a purl; a service by the domain it answers on,
+          and is always versioned by date.
+        </:description>
       </.input>
-      <div class="grid sm:grid-cols-2 gap-x-4">
-        <.input field={@form[:namespace]} type="text" placeholder="e.g. gleam.run">
-          <:label>Namespace (optional)</:label>
+      <.input :if={@service?} field={@form[:domain]} type="text" placeholder="e.g. hex.pm">
+        <:label>Domain</:label>
+        <:description>The host this service answers on. It has no purl.</:description>
+      </.input>
+      <div :if={not @service?}>
+        <.input field={@form[:purl_type]} type="text" placeholder="e.g. hex, npm, oci, otp, cargo">
+          <:label>Purl type (the repository's own channel is added automatically)</:label>
+          <:description>
+            Any purl type works. Well-known ones fill in their registry URL and
+            version type on their own.
+          </:description>
         </.input>
-        <.input field={@form[:name]} type="text" placeholder="e.g. my_package">
-          <:label>Name (empty for hosted)</:label>
+        <div class="grid sm:grid-cols-2 gap-x-4">
+          <.input field={@form[:namespace]} type="text" placeholder="e.g. gleam.run">
+            <:label>Namespace (optional)</:label>
+          </.input>
+          <.input field={@form[:name]} type="text" placeholder="e.g. my_package">
+            <:label>Name</:label>
+          </.input>
+        </div>
+        <.input
+          type="text"
+          name="child[qualifiers]"
+          value={qualifiers_value(@form[:qualifiers])}
+          placeholder="repository_url=ghcr.io/owner"
+        >
+          <:label>Qualifiers (key=value, comma separated)</:label>
+          <:description>
+            Rendered into the packageURL, e.g. repository_url for an OCI image's
+            registry.
+          </:description>
+        </.input>
+        <.input
+          field={@form[:subpath]}
+          type="text"
+          placeholder="e.g. lib/ssh"
+          class="w-full input font-mono"
+        >
+          <:label>Subpath (optional)</:label>
+          <:description>
+            Repository directory this channel distributes. Program files scope to
+            it, paths relative to it — e.g. lib/ssh for pkg:otp/ssh. Empty
+            distributes the whole repository.
+          </:description>
         </.input>
       </div>
       <.input
-        type="text"
-        name="child[qualifiers]"
-        value={qualifiers_value(@form[:qualifiers])}
-        placeholder="repository_url=ghcr.io/owner"
+        :if={not @service?}
+        field={@form[:version_type]}
+        type="select"
+        options={[{"Default for the purl type", nil} | enum_options(PackageChannel.VersionType)]}
       >
-        <:label>Qualifiers (key=value, comma separated)</:label>
+        <:label>Version type (optional)</:label>
         <:description>
-          Only overrides are stored here — otp channels derive repository_url and
-          vcs_url from the package's repository automatically at render time.
-        </:description>
-      </.input>
-      <.input
-        field={@form[:subpath]}
-        type="text"
-        placeholder="e.g. lib/ssh"
-        class="w-full input font-mono"
-      >
-        <:label>Subpath (optional)</:label>
-        <:description>
-          Repository directory this channel distributes. Program files scope to
-          it, paths relative to it — e.g. lib/ssh for pkg:otp/ssh. Empty
-          distributes the whole repository.
+          Vocabulary the derived ranges are written in. Leave on default unless
+          this channel disagrees with its ecosystem.
         </:description>
       </.input>
       <.input field={@form[:tag_prefix]} type="text" placeholder="e.g. v">
-        <:label>OCI tag prefix (optional)</:label>
+        <:label>Version prefix (optional)</:label>
         <:description>
-          Prepended to the image tag — v for v1.2.3 tags. Empty for bare
-          version tags.
+          Prepended to every derived version — v for v1.2.3 tags. Empty for bare
+          versions.
         </:description>
       </.input>
       <.input field={@form[:tag_suffixes]} type="text" value={list_value(@form[:tag_suffixes])}>
-        <:label>OCI tag suffixes (comma separated)</:label>
+        <:label>Version flavors (comma separated)</:label>
         <:description>
-          One range per flavor. Use - for the bare tag, e.g. -, special for
-          1.2.3 and 1.2.3-special.
+          One range per flavor, appended to the version. Use - for the bare
+          version, e.g. -, special for 1.2.3 and 1.2.3-special.
         </:description>
       </.input>
       <.input field={@form[:position]} type="number">

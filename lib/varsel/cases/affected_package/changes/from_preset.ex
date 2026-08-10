@@ -15,6 +15,7 @@ defmodule Varsel.Cases.AffectedPackage.Changes.FromPreset do
   use Ash.Resource.Change
 
   alias Ash.Resource.Change
+  alias Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.VersionEvent
@@ -45,9 +46,11 @@ defmodule Varsel.Cases.AffectedPackage.Changes.FromPreset do
 
   defp create_children(changeset, package, preset, actor) do
     applications = Ash.Changeset.get_argument(changeset, :applications)
+    repository = AddRepositoryChannel.params(package.repo_url)
+    channels = Preset.channels(preset, applications) ++ List.wrap(repository)
 
     children =
-      Enum.map(Preset.channels(preset, applications), &child(PackageChannel, package, &1, actor)) ++
+      Enum.map(channels, &child(PackageChannel, package, &1, actor)) ++
         Enum.map(events(changeset), &child(VersionEvent, package, &1, actor))
 
     Enum.reduce_while(children, {:ok, package, []}, fn child, {:ok, package, notifications} ->
