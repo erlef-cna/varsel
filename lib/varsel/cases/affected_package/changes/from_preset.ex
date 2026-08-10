@@ -5,20 +5,19 @@
 defmodule Varsel.Cases.AffectedPackage.Changes.FromPreset do
   @moduledoc """
   Backs the specialized preset create actions on
-  `Varsel.Cases.AffectedPackage`: stamps the preset's package constants and,
-  once the package row exists, spawns its distribution channels and the
+  `Varsel.Cases.AffectedPackage`: stamps the preset's package constants and
+  spawns its distribution channels (the repository's own included) and the
   version boundary facts from the given commits — all inside the create's
-  transaction, through the children's regular `:add` actions (same actor,
-  same policies, same paper trail).
+  transaction, through the children's regular `:add` actions (same actor, same
+  policies, same paper trail).
   """
 
   use Ash.Resource.Change
 
   alias Ash.Resource.Change
   alias Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel
+  alias Varsel.Cases.AffectedPackage.Changes.ManageChildren
   alias Varsel.Cases.AffectedPackage.Preset
-  alias Varsel.Cases.PackageChannel
-  alias Varsel.Cases.VersionEvent
 
   @impl Change
   def init(opts) do
@@ -30,43 +29,37 @@ defmodule Varsel.Cases.AffectedPackage.Changes.FromPreset do
   end
 
   @impl Change
-  def change(changeset, opts, context) do
+  def change(changeset, opts, _context) do
     preset = opts[:preset]
+    changeset = stamp_constants(changeset, preset)
+
+    # Children are built up front now, so a preset that takes applications must
+    # wait for the argument's own validation to reject a missing list rather
+    # than expanding nil into channels.
+    if Preset.applications?(preset) and
+         is_nil(Ash.Changeset.get_argument(changeset, :applications)) do
+      changeset
+    else
+      manage_children(changeset, preset)
+    end
+  end
+
+  defp manage_children(changeset, preset) do
+    applications = Ash.Changeset.get_argument(changeset, :applications)
+    repository = AddRepositoryChannel.params(Ash.Changeset.get_attribute(changeset, :repo_url))
 
     changeset
-    |> stamp_constants(preset)
-    |> Ash.Changeset.after_action(&create_children(&1, &2, preset, context.actor))
+    |> ManageChildren.manage(
+      :channels,
+      Preset.channels(preset, applications) ++ List.wrap(repository)
+    )
+    |> ManageChildren.manage(:version_events, events(changeset))
   end
 
   defp stamp_constants(changeset, preset) do
     Enum.reduce(Preset.attributes(preset), changeset, fn {attribute, value}, changeset ->
       Ash.Changeset.force_change_attribute(changeset, attribute, value)
     end)
-  end
-
-  defp create_children(changeset, package, preset, actor) do
-    applications = Ash.Changeset.get_argument(changeset, :applications)
-    repository = AddRepositoryChannel.params(package.repo_url)
-    channels = Preset.channels(preset, applications) ++ List.wrap(repository)
-
-    children =
-      Enum.map(channels, &child(PackageChannel, package, &1, actor)) ++
-        Enum.map(events(changeset), &child(VersionEvent, package, &1, actor))
-
-    Enum.reduce_while(children, {:ok, package, []}, fn child, {:ok, package, notifications} ->
-      case Ash.create(child, return_notifications?: true) do
-        {:ok, _row, new_notifications} ->
-          {:cont, {:ok, package, notifications ++ new_notifications}}
-
-        {:error, error} ->
-          {:halt, {:error, error}}
-      end
-    end)
-  end
-
-  defp child(resource, package, params, actor) do
-    params = Map.merge(params, %{case_id: package.case_id, affected_package_id: package.id})
-    Ash.Changeset.for_create(resource, :add, params, actor: actor)
   end
 
   defp events(changeset) do

@@ -5,11 +5,11 @@
 defmodule Varsel.Cases.AffectedPackage.Changes.InsertChildren do
   @moduledoc """
   Creates the channels and version boundary facts authored inline on a
-  `propose_affected_package` insert, once the package row exists — through the
-  children's regular `:add` actions inside the create's transaction (same
-  actor, same policies, same paper trail), so accepting one package proposal
-  materializes the whole product at once. The repository's own channel comes
-  along too, as it would on a direct `:add`.
+  `propose_affected_package` insert — through the children's regular `:add`
+  actions inside the create's transaction (same actor, same policies, same
+  paper trail), so accepting one package proposal materializes the whole
+  product at once. The repository's own channel comes along too, as it would on
+  a direct `:add`.
 
   The nested version events are package-global; a channel-scoped event
   (`package_channel_id`) is not expressible inline (see
@@ -20,36 +20,18 @@ defmodule Varsel.Cases.AffectedPackage.Changes.InsertChildren do
 
   alias Ash.Resource.Change
   alias Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel
-  alias Varsel.Cases.PackageChannel
-  alias Varsel.Cases.VersionEvent
+  alias Varsel.Cases.AffectedPackage.Changes.ManageChildren
 
   @impl Change
-  def change(changeset, _opts, context) do
-    Ash.Changeset.after_action(changeset, &create_children(&1, &2, context.actor))
-  end
-
-  defp create_children(changeset, package, actor) do
+  def change(changeset, _opts, _context) do
     authored = Ash.Changeset.get_argument(changeset, :channels) || []
-    version_events = Ash.Changeset.get_argument(changeset, :version_events) || []
-    channels = authored ++ List.wrap(AddRepositoryChannel.params(package.repo_url))
+    repository = AddRepositoryChannel.params(Ash.Changeset.get_attribute(changeset, :repo_url))
 
-    children =
-      Enum.map(channels, &child(PackageChannel, package, &1, actor)) ++
-        Enum.map(version_events, &child(VersionEvent, package, &1, actor))
-
-    Enum.reduce_while(children, {:ok, package, []}, fn child, {:ok, package, notifications} ->
-      case Ash.create(child, return_notifications?: true) do
-        {:ok, _row, new_notifications} ->
-          {:cont, {:ok, package, notifications ++ new_notifications}}
-
-        {:error, error} ->
-          {:halt, {:error, error}}
-      end
-    end)
-  end
-
-  defp child(resource, package, params, actor) do
-    params = Map.merge(params, %{case_id: package.case_id, affected_package_id: package.id})
-    Ash.Changeset.for_create(resource, :add, params, actor: actor)
+    changeset
+    |> ManageChildren.manage(:channels, authored ++ List.wrap(repository))
+    |> ManageChildren.manage(
+      :version_events,
+      Ash.Changeset.get_argument(changeset, :version_events) || []
+    )
   end
 end

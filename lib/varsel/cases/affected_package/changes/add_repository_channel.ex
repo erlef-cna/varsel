@@ -4,8 +4,8 @@
 
 defmodule Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel do
   @moduledoc """
-  Creates the source repository's own distribution channel when a package is
-  added with a `repo_url`.
+  Gives a package added with a `repo_url` the source repository's own
+  distribution channel.
 
   The repository is a place the affected code is obtained from like any other,
   so it is a stored `Varsel.Cases.PackageChannel` — editable, removable, and
@@ -13,6 +13,14 @@ defmodule Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel do
   conjures. `Varsel.Cases.PackageChannel.PurlType.for_repository/1` decides its
   purl identity (`pkg:github/...` and friends where the forge has a registered
   type, `pkg:generic` carrying `vcs_url` where it does not).
+
+  The row is managed through the package's `:channels` relationship and goes in
+  through the channel's own `:add` action, so the validations and policies that
+  apply to a POC adding it by hand apply here too. `params/2` is public because
+  the preset and proposal paths assemble their children as one list rather than
+  running this change (see
+  `Varsel.Cases.AffectedPackage.Changes.FromPreset` and
+  `Varsel.Cases.AffectedPackage.Changes.InsertChildren`).
 
   A package without a `repo_url` gets nothing: a service has no repository to
   publish.
@@ -28,8 +36,22 @@ defmodule Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel do
   @repository_position 1_000
 
   @impl Change
-  def change(changeset, _opts, context) do
-    Ash.Changeset.after_action(changeset, &create_channel(&1, &2, context.actor))
+  def change(changeset, _opts, _context) do
+    case params(Ash.Changeset.get_attribute(changeset, :repo_url)) do
+      nil ->
+        changeset
+
+      params ->
+        # `case_id` is denormalized onto the channel rather than reached through
+        # the package, so the relationship cannot stamp it the way it does
+        # `affected_package_id`.
+        params = Map.put(params, :case_id, Ash.Changeset.get_attribute(changeset, :case_id))
+
+        Ash.Changeset.manage_relationship(changeset, :channels, [params],
+          type: :create,
+          on_no_match: {:create, :add}
+        )
+    end
   end
 
   @doc """
@@ -57,22 +79,5 @@ defmodule Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel do
       version_type: :git,
       position: position
     }
-  end
-
-  defp create_channel(_changeset, %{repo_url: nil} = package, _actor), do: {:ok, package}
-
-  defp create_channel(_changeset, package, actor) do
-    params =
-      package.repo_url
-      |> params()
-      |> Map.merge(%{case_id: package.case_id, affected_package_id: package.id})
-
-    params
-    |> Varsel.Cases.changeset_to_add_package_channel(actor: actor)
-    |> Ash.create(return_notifications?: true)
-    |> case do
-      {:ok, _channel, notifications} -> {:ok, package, notifications}
-      {:error, error} -> {:error, error}
-    end
   end
 end

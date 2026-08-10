@@ -17,32 +17,33 @@ defmodule Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage do
 
   @impl Validation
   def validate(changeset, opts, context) do
-    with {:ok, package} <- fetch_package(changeset),
-         :ok <- ConsistentIdentity.validate(changeset, opts, context) do
-      validate_same_case(changeset, package)
+    with :ok <- ConsistentIdentity.validate(changeset, opts, context) do
+      validate_same_case(changeset)
     end
   end
 
-  defp fetch_package(changeset) do
+  # A channel created through its package's `:channels` relationship has both
+  # ids stamped by Ash *after* validation, and they agree by construction.
+  # Presence itself is the relationship's `allow_nil? false` to enforce, not
+  # ours.
+  defp validate_same_case(changeset) do
     case Ash.Changeset.get_attribute(changeset, :affected_package_id) do
-      nil ->
-        {:error, field: :affected_package_id, message: "is required"}
-
-      affected_package_id ->
-        case Varsel.Cases.get_affected_package(affected_package_id, authorize?: false) do
-          {:ok, package} -> {:ok, package}
-          {:error, _} -> {:error, field: :affected_package_id, message: "does not exist"}
-        end
+      nil -> :ok
+      affected_package_id -> compare_case(changeset, affected_package_id)
     end
   end
 
-  defp validate_same_case(changeset, package) do
-    case_id = Ash.Changeset.get_attribute(changeset, :case_id)
+  defp compare_case(changeset, affected_package_id) do
+    case Varsel.Cases.get_affected_package(affected_package_id, authorize?: false) do
+      {:ok, package} ->
+        if package.case_id == Ash.Changeset.get_attribute(changeset, :case_id) do
+          :ok
+        else
+          {:error, field: :affected_package_id, message: "belongs to a different case"}
+        end
 
-    if package.case_id == case_id do
-      :ok
-    else
-      {:error, field: :affected_package_id, message: "belongs to a different case"}
+      {:error, _not_found} ->
+        {:error, field: :affected_package_id, message: "does not exist"}
     end
   end
 end
