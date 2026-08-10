@@ -42,6 +42,8 @@ while you work, and you get no notification, so never assume a proposal is still
 you did not accept it. To see the true state use `list_case_proposals`, which returns proposals in
 **all** states (open, accepted, declined). `list_open_case_proposals` shows only the still-open
 ones, so an empty result there means "nothing left to accept", not "nothing was ever proposed".
+Listings carry the proposed value rather than the author's reasoning; read that on a single
+proposal with `get_case_proposal`.
 
 You author proposals; you never self-approve them.
 
@@ -90,16 +92,32 @@ answer available, treat the report as trusted and say so in the final summary.
 Record which it was in a single clause of `internal_notes`, and for untrusted reports name the
 outcome of your reproduction.
 
-### Pull prior cases for this package, before anything else
+### Pull prior cases for this repository, before anything else
 
 **Do this before any git archaeology, classification, or scoring.** It is the single largest time
 saver in this workflow, and skipping it means re-deriving work that is already sitting in review.
 
-Use this exact `list_cases` filter shape, which is the one that works:
-`{"field": "description_md", "operator": "ilike", "value": "%<package>%"}`
+**Search by repository, not by package name.** Establish the upstream repository URL first: a GHSA
+carries it, and for a hex package it is in `meta.links` from
+`curl -s https://hex.pm/api/packages/<package>`. That URL is the identifier cases are actually
+keyed on.
 
-`{"or": [...]}` groups error, and so does any filter on `affected_summary`. Do not spend calls
-rediscovering that. `list_cves_by_purl` and `search_cves` cover published records.
+Then filter `list_cases` on `affects_repo`, which matches against the repositories of the case's
+affected packages:
+
+```json
+{"affects_repo": {"input": {"repo_url": "https://github.com/rrrene/html_sanitize_ex"}, "eq": true}}
+```
+
+**This filter takes the nested form above, not the flat `{"field", "operator", "value"}` shape**,
+because the repository travels in `input` and the flat form has nowhere to put it. It nests inside
+an `{"and": [...]}` group fine.
+
+Fall back to `{"field": "description_md", "operator": "ilike", "value": "%<package>%"}` only when
+you cannot establish a repository URL. That is a prose match, so it misses any case whose
+description does not happen to name the package.
+
+`list_cves_by_purl` and `search_cves` cover published records.
 
 **Read the returned case rows before calling anything else.** They include full `internal_notes`,
 which usually already carry the introducing commit, the first affected release, the release commit
@@ -108,9 +126,6 @@ inventory, and the CVSS shape. That is most of what you came for.
 Only if you still need the affected-package payload shape or exact credit spellings, follow up with
 `list_case_proposals` filtered to just those targets:
 `{"field": "target", "operator": "in", "value": ["affected_package", "credit"]}`
-
-Unfiltered, that call returns every proposal's full reasoning and costs many thousands of tokens to
-learn two facts.
 
 Vulnerabilities in one library arrive in batches, especially when a single release fixes several
 issues at once, so a sibling case very often already carries:
@@ -243,9 +258,10 @@ you pass the vector string only.
 Use the skills `find-cwe` and `find-capec` to find the CWE and CAPEC classificiations. Don't carry over
 the classifications from sibling cases but run the skills independently.
 
-You can use `search_weaknesses` and `search_attack_patterns` to find matching classifier. 
-Terms are ANDed by default but support Websearch tsqueries like OR-cases like `"sad cat" or "fat rat"` 
-and negations like `"supernovae star" -crab`. Keep `limit` at 5 or below to reduce the number of results.
+You can use `search_weaknesses` and `search_attack_patterns` to find matching classifier. Bare words
+are ANDed, `OR` widens (`length OR quantity OR mismatch`), `"quoted words"` must be adjacent
+(`"path traversal"` skips a record that merely says "a traversal of the path"), and `-word` excludes
+(`traversal -relative`). Keep `limit` at 5 or below to reduce the number of results.
 
 **Decide the family once, then pick both IDs inside it.** The CWE and the CAPEC must agree. If a
 lookup hands you a CAPEC from a family you already rejected for the CWE, that disagreement is the
@@ -287,9 +303,6 @@ Nothing else. **Do not restate the vulnerability, the fix, the reasoning already
 proposal, or your investigation narrative.** If a note repeats something a reviewer can read in
 `description_md`, in a proposal `reasoning`, or in the affected package, cut it. A dead end you
 ruled out is worth one clause at most, and usually nothing.
-
-Length matters beyond taste here: `render_case_preview` and `validate_case` echo the whole case
-back, notes included, so every extra line is paid again on each later round.
 
 **Write the notes with the `propose_internal_notes` call.** `internal_notes` can only be set here.
 
@@ -637,9 +650,14 @@ reach it through.
 
 **`propose_cvss` takes the vector string.** Score and severity are derived at render time.
 
-**Keep Varsel reads small.** Always pass a `filter` to `list_cases`, `list_cves`, and
-`list_all_cves`. An unfiltered call returns every row and will overflow, costing you the call plus
-the re-run.
+**Every list tool is capped, and says nothing about it.** A call with no `limit` returns the first
+**25** rows, and an explicit `limit` is silently capped at 250. A short result is therefore not
+evidence that you have seen everything. To learn the real total, re-run the same call with
+`result_type: "count"`, which ignores the cap.
+
+**So filter rather than page.** Always pass a `filter` to `list_cases`, `list_cves`, and
+`list_all_cves`: the first 25 of everything is rarely the 25 you want. For `list_cases`,
+`affects_repo` is the narrowest filter available; see Step 0.
 
 **Varsel supplies most references itself.** Do not propose the patch commit: the renderer builds it
 from `repo_url` plus the fix version event. Do not propose the `cna.erlef.org` or `osv.dev` links
@@ -651,14 +669,12 @@ vendor advisory first, then patch-tagged, then the rest.
 **To remove a child row**, use `propose_delete` with its `target` (for example `"reference"`) and
 `target_id`.
 
-**`internal_notes` is write-once, at `open_case`, and should be a handful of lines at most.** There
-is no `update_case` and no `propose_internal_notes`. Compose the notes before opening the case, keep
-them to the boundary SHAs, the sibling you reused, and what the user verified, and use
+**`internal_notes` is set with `propose_internal_notes`, and should be a handful of lines at most.**
+Keep them to the boundary SHAs, the sibling you reused, and what the user verified, and use
 `create_case_comment` for anything longer that comes up later.
 
-**Reads echo the entire case.** `render_case_preview` and `validate_case` return every field,
-`internal_notes` included, so a long note is paid on every later round. Do not re-render without a
-reason.
+**`render_case_preview` and `validate_case` return the preview or the verdict alone**, not the case
+body, so checking one costs only what it reports.
 
 ---
 

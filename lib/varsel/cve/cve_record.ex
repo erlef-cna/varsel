@@ -1052,6 +1052,7 @@ defmodule Varsel.CVE.CveRecord do
               Varsel.CVE.CveValidation.Result,
               Varsel.CVE.CveRecord.Calculations.Validation do
       public? true
+      filterable? false
 
       description """
       The schema/cvelint/hex validation result (`valid` + `errors`) for the

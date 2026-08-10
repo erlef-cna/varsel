@@ -558,6 +558,22 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
+    calculate :affects_repo,
+              :boolean,
+              expr(fragment("regexp_replace(?, ?, '')", ^arg(:repo_url), "(\\.git)?/*$") in affected_repos) do
+      description """
+      Whether the case affects the given repository, comparing normalized URLs
+      so `.git`, a trailing slash and casing do not matter.
+      """
+
+      public? true
+
+      argument :repo_url, :ci_string do
+        allow_nil? false
+        constraints allow_empty?: false, trim?: true
+      end
+    end
+
     calculate :cvss_score, :float, Varsel.Cases.Case.Calculations.CvssScore do
       description "The CVSS v4.0 base score, or nil when the case has no CVSS vector yet."
       public? true
@@ -565,8 +581,8 @@ defmodule Varsel.Cases.Case do
 
     calculate :severity_bucket, :atom, Varsel.Cases.Case.Calculations.SeverityBucket do
       description """
-      The severity chip bucket (none/low/medium/high/critical), or nil when
-      the case has no CVSS vector yet (the chip's "no score" state).
+      The severity rating (none/low/medium/high/critical) `:cvss` derived from
+      the vector, or nil when the case has no CVSS vector yet.
       """
 
       public? true
@@ -577,6 +593,7 @@ defmodule Varsel.Cases.Case do
               :string,
               Varsel.Cases.Case.Calculations.AffectedSummary do
       public? true
+      filterable? false
 
       description """
       The "This issue affects …" sentence the published record appends to the
@@ -589,6 +606,7 @@ defmodule Varsel.Cases.Case do
               {:array, Varsel.Cases.Case.DerivedReference},
               Varsel.Cases.Case.Calculations.DerivedReferences do
       public? true
+      filterable? false
 
       description """
       The references the published record adds on its own — the cna.erlef.org /
@@ -602,6 +620,7 @@ defmodule Varsel.Cases.Case do
               Varsel.Cases.Case.Calculations.Preview.Result,
               Varsel.Cases.Case.Calculations.Preview do
       public? true
+      filterable? false
 
       description """
       The full CVE record, applied overrides and publish blockers — without
@@ -614,6 +633,7 @@ defmodule Varsel.Cases.Case do
               Varsel.CVE.CveValidation.Result,
               Varsel.Cases.Case.Calculations.Validation do
       public? true
+      filterable? false
 
       description """
       The schema/cvelint/hex validation result (`valid` + `errors`) for the
@@ -622,10 +642,19 @@ defmodule Varsel.Cases.Case do
     end
 
     calculate :published_cna, :map, Varsel.Cases.Case.Calculations.PublishedCna do
+      filterable? false
+
       description """
       The CNA container currently published on the case's CVE record, or nil
       when the case was never published — for diffing against :preview.
       """
+    end
+  end
+
+  aggregates do
+    list :affected_repos, :affected_packages, :normalized_repo_url do
+      description "The normalized repository URLs of every package this case affects."
+      sort []
     end
   end
 

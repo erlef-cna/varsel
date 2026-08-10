@@ -120,9 +120,10 @@ defmodule Varsel.CAPEC.AttackPattern do
     read :search do
       description """
       Full-text search over name, description, prerequisites, mitigations, and
-      consequences, best match first. Terms are ANDed by default; separate
-      alternatives with OR for broad recall (e.g. `malformed OR crash OR
-      length OR validation`), or wrap an exact phrase in double quotes.
+      consequences, best match first. Bare words are ANDed; `OR` widens (e.g.
+      `malformed OR crash OR length OR validation`), `"quoted words"` must
+      appear adjacent, and `-word` excludes. Words are stemmed, and no input
+      is a syntax error.
       """
 
       argument :query, :string, allow_nil?: false

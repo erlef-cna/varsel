@@ -44,17 +44,18 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   # loaded with all of its attributes (`all_fields/1`), and the catalog
   # relationships spell out the `:name` the render reads.
   @impl Calculation
-  def load(_query, _opts, _context) do
-    [
-      :cve_id,
-      references: all_fields(CaseReference),
-      credits: all_fields(CaseCredit),
-      weaknesses: all_fields(CaseWeakness) ++ [weakness: [:name]],
-      impacts: all_fields(CaseImpact) ++ [attack_pattern: [:name]],
-      affected_packages:
-        all_fields(AffectedPackage) ++
-          [channels: all_fields(PackageChannel), version_events: all_fields(VersionEvent)]
-    ]
+  def load(query, _opts, _context) do
+    all_fields(query.resource) ++
+      [
+        :cve_id,
+        references: all_fields(CaseReference),
+        credits: all_fields(CaseCredit),
+        weaknesses: all_fields(CaseWeakness) ++ [weakness: [:name]],
+        impacts: all_fields(CaseImpact) ++ [attack_pattern: [:name]],
+        affected_packages:
+          all_fields(AffectedPackage) ++
+            [channels: all_fields(PackageChannel), version_events: all_fields(VersionEvent)]
+      ]
   end
 
   defp all_fields(resource), do: Enum.map(Info.attributes(resource), & &1.name)

@@ -21,7 +21,16 @@ Full-text search over name, description, mitigations, and consequences, best mat
 mcp__varsel__search_weaknesses(input: {query: "path traversal"})
 ```
 
-Terms are ANDed by default, so a long descriptive query can match nothing. For broad recall, separate alternative terms with `OR` (e.g. `length OR quantity OR mismatch OR validation`) or wrap an exact phrase in double quotes. Start specific; widen with `OR` if you get too few hits.
+The query never errors, whatever you type. Four things it recognizes:
+
+- **Bare words are ANDed**, so a long descriptive query often matches nothing.
+- **`OR`** (either case) makes an alternation: `length OR quantity OR mismatch`. This is how you widen.
+- **`"quoted words"`** requires them *adjacent*, which narrows: `"path traversal"` skips a record that merely says "a traversal of the path".
+- **`-word`** excludes: `traversal -relative`.
+
+Words are stemmed, so `traversal` also matches "traversals". Start specific, widen with `OR`, then tighten with a quoted phrase or a `-` exclusion.
+
+Results are ranked, and the tool returns the first 25 unless you pass a `limit`. Since the best match is first, take the top few rather than paging: a `limit` of 5 or less is usually the right ask.
 
 Look for the most specific CWE that describes the **root cause**, not just the impact. Prefer **Base** level over **Class** (too broad) or **Variant** (too specific) when in doubt.
 
@@ -33,7 +42,7 @@ If a CWE ID is already suggested (by the advisory or the user), confirm it fits:
 mcp__varsel__get_weakness(input: {cwe_id: <ID>})
 ```
 
-Check the name, description, and consequences against the vulnerability. If it does not fit, search for a better one.
+Check the name, description, and consequences against the vulnerability. If it does not fit, search for a better one, or walk the hierarchy with `get_weakness_related_weaknesses(input: {cwe_id: <ID>})` to find the parent or child that fits better.
 
 ## Output
 

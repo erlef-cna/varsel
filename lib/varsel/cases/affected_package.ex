@@ -406,4 +406,15 @@ defmodule Varsel.Cases.AffectedPackage do
       public? true
     end
   end
+
+  calculations do
+    calculate :normalized_repo_url,
+              :ci_string,
+              expr(fragment("regexp_replace(?, ?, '')", repo_url, "(\\.git)?/*$")) do
+      description """
+      `repo_url` with its case, trailing slashes and `.git` suffix normalized
+      away, so the same repository compares equal however it was written.
+      """
+    end
+  end
 end

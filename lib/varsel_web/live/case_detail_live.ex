@@ -54,8 +54,8 @@ defmodule VarselWeb.CaseDetailLive do
     assignments: [user: [:avatar_url]],
     references: [],
     credits: [],
-    weaknesses: [:weakness],
-    impacts: [:attack_pattern],
+    weaknesses: [weakness: [:cwe_id, :name]],
+    impacts: [attack_pattern: [:capec_id, :name]],
     proposals: [author: [:avatar_url], resolved_by: []],
     affected_packages: [:channels, :version_events],
     comments: [:author],
@@ -2818,15 +2818,15 @@ defmodule VarselWeb.CaseDetailLive do
       socket
     else
       weaknesses =
-        Varsel.CWE.Weakness
-        |> Ash.Query.select([:cwe_id, :name])
+        Varsel.CWE.query_to_list_weaknesses()
+        |> Ash.Query.load([:cwe_id, :name])
         |> Ash.Query.sort(:cwe_id)
         |> Ash.read!()
         |> Enum.map(&{&1.cwe_id, &1.name})
 
       attack_patterns =
-        Varsel.CAPEC.AttackPattern
-        |> Ash.Query.select([:capec_id, :name])
+        Varsel.CAPEC.query_to_list_attack_patterns()
+        |> Ash.Query.load([:capec_id, :name])
         |> Ash.Query.sort(:capec_id)
         |> Ash.read!()
         |> Enum.map(&{&1.capec_id, &1.name})
