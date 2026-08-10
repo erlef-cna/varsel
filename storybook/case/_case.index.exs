@@ -14,6 +14,10 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("affected_package_form"), do: [name: "Affected package form", icon: {:local, "hero-cube"}]
 
+  def entry("boundary_fact"), do: [name: "Boundary fact", icon: {:local, "hero-flag"}]
+
+  def entry("channel_block"), do: [name: "Channel block", icon: {:local, "hero-truck"}]
+
   def entry("channel_table"), do: [name: "Channel table", icon: {:local, "hero-table-cells"}]
 
   def entry("case_content"), do: [name: "Case content", icon: {:local, "hero-document-text"}]
@@ -28,6 +32,8 @@ defmodule VarselWeb.Storybook.Case do
   def entry("lifecycle_stepper"), do: [name: "Lifecycle stepper", icon: {:local, "hero-flag"}]
   def entry("markdown"), do: [name: "Markdown", icon: {:local, "hero-document-text"}]
   def entry("mode_pill"), do: [name: "Mode pill", icon: {:local, "hero-pencil"}]
+
+  def entry("program_file"), do: [name: "Program file", icon: {:local, "hero-document"}]
 
   def entry("program_files"), do: [name: "Program files", icon: {:local, "hero-document-text"}]
 

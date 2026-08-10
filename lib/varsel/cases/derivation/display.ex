@@ -23,6 +23,30 @@ defmodule Varsel.Cases.Derivation.Display do
 
   @renderable_version_types ~w(semver otp date)
 
+  @doc """
+  Every channel of a package paired with what its derivation produced:
+
+      [{channel, %{versions:, pending?:, issues:, timeline:}}]
+
+  `versions` is the raw CVE `versions[]` the cache holds, ready for the same
+  components the published record renders through. `timeline` is nil for a
+  channel whose versions cannot be laid on a line (commit SHAs).
+  """
+  @spec channel_derivations(struct()) :: [{struct(), map()}]
+  def channel_derivations(package) do
+    for channel <- package.channels do
+      derivation = channel_derivation(package.derivation_cache, channel.id) || %{}
+
+      {channel,
+       %{
+         versions: derivation["versions"] || [],
+         pending?: (derivation["pending"] || []) != [],
+         issues: derivation["issues"] || [],
+         timeline: timeline_row(channel_row_label(channel), derivation)
+       }}
+    end
+  end
+
   # Most packages carry no per-channel subpath; the channel grid collapses
   # the Subpath column to a compact indicator so Derived gets the width it
   # actually needs instead of being squeezed by an empty column.

@@ -678,17 +678,23 @@ defmodule VarselWeb.CaseLiveTest do
       |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: cache}, authorize?: false)
       |> Ash.update!()
 
-      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
       # Markdown renders as HTML, including the sections beyond the description.
       assert html =~ "<strong>bold</strong>"
       assert html =~ "Workarounds"
       assert html =~ "disable the acme integration"
 
-      # Cached derived ranges show per channel, the repository's included.
-      assert html =~ "≥ 1.0.0 &lt; 2.0.0"
+      # Each channel's cached range renders through the published record's own
+      # range list, so the bounds are separate elements rather than one string.
+      hex_range = lv |> element("#channel-#{channel.id} .affected-range") |> render()
+      assert hex_range =~ "1.0.0"
+      assert hex_range =~ "2.0.0"
+
+      repository_range = lv |> element("#channel-#{repository.id} .affected-range") |> render()
+      assert repository_range =~ "aaaaaaa"
+
       assert html =~ "pkg:github/acme/acme_lib"
-      assert html =~ "aaaaaaaaaaaa…"
       assert html =~ "no introduced boundary fact recorded"
       assert html =~ "derived"
     end
@@ -1039,8 +1045,6 @@ defmodule VarselWeb.CaseLiveTest do
       package = Fixtures.add_affected_package(poc, case_record)
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
-
-      render_click(lv, "expand_package", %{"id" => package.id})
 
       lv
       |> element("button[phx-click=new_child][phx-value-type=channel]", "Add channel")

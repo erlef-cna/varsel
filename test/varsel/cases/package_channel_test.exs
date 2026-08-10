@@ -149,6 +149,18 @@ defmodule Varsel.Cases.PackageChannelTest do
       assert [] = Ash.load!(package, :channels, authorize?: false).channels
     end
 
+    # Storybook builds preset forms while the module compiles, before the purl
+    # registry exists, so identifying the repository has to wait for the action
+    # to run rather than happening as the changeset is assembled.
+    test "is not resolved while a changeset is merely being built", %{case: case_record} do
+      form =
+        Varsel.Cases.AffectedPackage
+        |> AshPhoenix.Form.for_create(:add_gleam, as: "child")
+        |> AshPhoenix.Form.validate(%{"case_id" => case_record.id})
+
+      assert %AshPhoenix.Form{} = form
+    end
+
     test "is an ordinary row: editable and removable", %{poc: poc, package: package} do
       [repository] = Ash.load!(package, :channels, authorize?: false).channels
 

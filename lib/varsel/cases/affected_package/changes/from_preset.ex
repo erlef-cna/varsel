@@ -31,29 +31,20 @@ defmodule Varsel.Cases.AffectedPackage.Changes.FromPreset do
   @impl Change
   def change(changeset, opts, _context) do
     preset = opts[:preset]
-    changeset = stamp_constants(changeset, preset)
 
-    # Children are built up front now, so a preset that takes applications must
-    # wait for the argument's own validation to reject a missing list rather
-    # than expanding nil into channels.
-    if Preset.applications?(preset) and
-         is_nil(Ash.Changeset.get_argument(changeset, :applications)) do
-      changeset
-    else
-      manage_children(changeset, preset)
-    end
+    changeset
+    |> stamp_constants(preset)
+    |> ManageChildren.manage_deferred(&children(&1, preset))
   end
 
-  defp manage_children(changeset, preset) do
+  defp children(changeset, preset) do
     applications = Ash.Changeset.get_argument(changeset, :applications)
     repository = AddRepositoryChannel.params(Ash.Changeset.get_attribute(changeset, :repo_url))
 
-    changeset
-    |> ManageChildren.manage(
-      :channels,
-      Preset.channels(preset, applications) ++ List.wrap(repository)
-    )
-    |> ManageChildren.manage(:version_events, events(changeset))
+    [
+      channels: Preset.channels(preset, applications) ++ List.wrap(repository),
+      version_events: events(changeset)
+    ]
   end
 
   defp stamp_constants(changeset, preset) do

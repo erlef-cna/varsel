@@ -276,11 +276,15 @@ defmodule VarselWeb.CveView do
   attr :ranges, :list, required: true, doc: "rows from `VarselWeb.CveHTML.affected_ranges/1`"
   attr :default_status, :string, default: nil, doc: "the entry's `defaultStatus`"
 
+  attr :class, :any,
+    default: nil,
+    doc: "placement and type-scale extras, e.g. a denser workspace list"
+
   def affected_range_list(assigns) do
     assigns = assign(assigns, :labelled?, Enum.any?(assigns.ranges, & &1.branch_label))
 
     ~H"""
-    <div class="flex flex-col gap-1 font-mono text-sm">
+    <div class={["flex flex-col gap-1 font-mono text-sm", @class]}>
       <div :for={range <- @ranges}>
         <div>
           <span

@@ -29,6 +29,7 @@ defmodule Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel do
   use Ash.Resource.Change
 
   alias Ash.Resource.Change
+  alias Varsel.Cases.AffectedPackage.Changes.ManageChildren
   alias Varsel.Cases.PackageChannel.PurlType
 
   # Far past any hand-authored channel's position, so the repository sorts last
@@ -37,21 +38,11 @@ defmodule Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel do
 
   @impl Change
   def change(changeset, _opts, _context) do
-    case params(Ash.Changeset.get_attribute(changeset, :repo_url)) do
-      nil ->
-        changeset
+    ManageChildren.manage_deferred(changeset, fn changeset ->
+      repo_url = Ash.Changeset.get_attribute(changeset, :repo_url)
 
-      params ->
-        # `case_id` is denormalized onto the channel rather than reached through
-        # the package, so the relationship cannot stamp it the way it does
-        # `affected_package_id`.
-        params = Map.put(params, :case_id, Ash.Changeset.get_attribute(changeset, :case_id))
-
-        Ash.Changeset.manage_relationship(changeset, :channels, [params],
-          type: :create,
-          on_no_match: {:create, :add}
-        )
-    end
+      [channels: List.wrap(params(repo_url))]
+    end)
   end
 
   @doc """

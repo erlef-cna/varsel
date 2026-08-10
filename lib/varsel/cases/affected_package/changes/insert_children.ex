@@ -24,14 +24,16 @@ defmodule Varsel.Cases.AffectedPackage.Changes.InsertChildren do
 
   @impl Change
   def change(changeset, _opts, _context) do
+    ManageChildren.manage_deferred(changeset, &children/1)
+  end
+
+  defp children(changeset) do
     authored = Ash.Changeset.get_argument(changeset, :channels) || []
     repository = AddRepositoryChannel.params(Ash.Changeset.get_attribute(changeset, :repo_url))
 
-    changeset
-    |> ManageChildren.manage(:channels, authored ++ List.wrap(repository))
-    |> ManageChildren.manage(
-      :version_events,
-      Ash.Changeset.get_argument(changeset, :version_events) || []
-    )
+    [
+      channels: authored ++ List.wrap(repository),
+      version_events: Ash.Changeset.get_argument(changeset, :version_events) || []
+    ]
   end
 end

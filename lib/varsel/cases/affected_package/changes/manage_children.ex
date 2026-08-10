@@ -14,6 +14,27 @@ defmodule Varsel.Cases.AffectedPackage.Changes.ManageChildren do
   """
 
   @doc """
+  Defers `build` until the action runs, then adds the rows it returns to the
+  package's relationships.
+
+  Deferred because assembling the rows is real work — reading the purl registry
+  to identify a repository, expanding a preset — that a *changeset* should not
+  do. `AshPhoenix.Form` builds changesets to render a form, long before anything
+  is submitted and, in a storybook story, before the application has started.
+
+  `build` receives the changeset and returns `{relationship, rows}` pairs.
+  """
+  @spec manage_deferred(Ash.Changeset.t(), (Ash.Changeset.t() -> [{atom(), [map()]}])) ::
+          Ash.Changeset.t()
+  def manage_deferred(changeset, build) do
+    Ash.Changeset.before_action(changeset, fn changeset ->
+      Enum.reduce(build.(changeset), changeset, fn {relationship, rows}, changeset ->
+        manage(changeset, relationship, rows)
+      end)
+    end)
+  end
+
+  @doc """
   Adds `rows` to the package's `relationship`, leaving the changeset untouched
   when there are none.
   """
