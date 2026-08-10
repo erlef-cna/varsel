@@ -561,17 +561,15 @@ defmodule Varsel.Cases.Case do
     calculate :cvss_score, :float, Varsel.Cases.Case.Calculations.CvssScore do
       description "The CVSS v4.0 base score, or nil when the case has no CVSS vector yet."
       public? true
-      filterable? false
     end
 
     calculate :severity_bucket, :atom, Varsel.Cases.Case.Calculations.SeverityBucket do
       description """
-      The severity chip bucket (none/low/medium/high/critical), or nil when
-      the case has no CVSS vector yet (the chip's "no score" state).
+      The severity rating (none/low/medium/high/critical) `:cvss` derived from
+      the vector, or nil when the case has no CVSS vector yet.
       """
 
       public? true
-      filterable? false
       constraints one_of: [:none, :low, :medium, :high, :critical]
     end
 

@@ -4,18 +4,22 @@
 
 defmodule Varsel.Cases.Case.Calculations.CvssScore do
   @moduledoc """
-  The case's CVSS v4.0 base score, read off the already-scored
-  `Varsel.Types.CVSS` struct on `cvss_v4` (the `:cvss` library scores the
-  vector once, at cast time — this calculation never re-scores). `nil` when
-  the case has no CVSS vector yet.
+  The case's CVSS v4.0 base score, or `nil` when it has no CVSS vector yet.
   """
 
   use Ash.Resource.Calculation
 
   alias Ash.Resource.Calculation
 
+  require Ash.Expr
+
   @impl Calculation
   def load(_query, _opts, _context), do: [:cvss_v4]
+
+  @impl Calculation
+  def expression(_opts, _context) do
+    Ash.Expr.expr(fragment("(?->>'score')::float", cvss_v4))
+  end
 
   @impl Calculation
   def calculate(records, _opts, _context) do
