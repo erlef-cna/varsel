@@ -667,9 +667,8 @@ vendor advisory first, then patch-tagged, then the rest.
 **To remove a child row**, use `propose_delete` with its `target` (for example `"reference"`) and
 `target_id`.
 
-**`internal_notes` is write-once, at `open_case`, and should be a handful of lines at most.** There
-is no `update_case` and no `propose_internal_notes`. Compose the notes before opening the case, keep
-them to the boundary SHAs, the sibling you reused, and what the user verified, and use
+**`internal_notes` is set with `propose_internal_notes`, and should be a handful of lines at most.**
+Keep them to the boundary SHAs, the sibling you reused, and what the user verified, and use
 `create_case_comment` for anything longer that comes up later.
 
 **Reads echo the entire case.** `render_case_preview` and `validate_case` return every field,
