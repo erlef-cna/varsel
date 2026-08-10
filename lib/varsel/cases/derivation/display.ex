@@ -47,13 +47,6 @@ defmodule Varsel.Cases.Derivation.Display do
     end
   end
 
-  # Most packages carry no per-channel subpath; the channel grid collapses
-  # the Subpath column to a compact indicator so Derived gets the width it
-  # actually needs instead of being squeezed by an empty column.
-  def any_channel_subpath?(package) do
-    Enum.any?(package.channels, &(&1.subpath not in [nil, ""]))
-  end
-
   # Board C's channel row annotates overridden machinery inline; these fields
   # hold the override value itself ({:array, :map} / :map), not a boolean.
   def overridden_note(channel) do
@@ -81,59 +74,6 @@ defmodule Varsel.Cases.Derivation.Display do
   # never the purl — purls belong on the chips.
   def channel_row_label(%{kind: :service} = channel), do: channel.domain || "service"
   def channel_row_label(channel), do: channel.name || channel.purl_type
-
-  # Compact per-channel summary of the cached derivation result. Never
-  # authoritative — publish recomputes.
-  def derived_versions_label(package, key) do
-    case channel_derivation(package.derivation_cache, key) do
-      nil ->
-        nil
-
-      derivation ->
-        ranges = Enum.map(derivation["versions"] || [], &range_label/1)
-        pending = if (derivation["pending"] || []) == [], do: [], else: ["fix unreleased"]
-
-        case ranges ++ pending do
-          [] -> "no derived range"
-          parts -> Enum.join(parts, " · ")
-        end
-    end
-  end
-
-  # The at-rest repository row's cell, mock style: "63e186ae… → 2 fix commits";
-  # the full derived label sits in the cell's title.
-  def git_compact_label(package, channel) do
-    case channel_derivation(package.derivation_cache, channel.id) do
-      nil -> nil
-      derivation -> git_compact_range_label(derivation)
-    end
-  end
-
-  defp git_compact_range_label(derivation) do
-    versions = derivation["versions"] || []
-    git_range = Enum.find(versions, &(&1["versionType"] == "git")) || List.first(versions)
-
-    cond do
-      git_range -> "#{shorten(git_range["version"])} → #{fix_commit_count_label(git_range)}"
-      (derivation["pending"] || []) == [] -> "no derived range"
-      true -> "fix unreleased"
-    end
-  end
-
-  defp fix_commit_count_label(range) do
-    count =
-      cond do
-        is_list(range["changes"]) -> length(range["changes"])
-        range["lessThan"] not in [nil, "*"] -> 1
-        true -> 0
-      end
-
-    case count do
-      0 -> "no fix commits"
-      1 -> "1 fix commit"
-      n -> "#{n} fix commits"
-    end
-  end
 
   defp channel_derivation(nil, _key), do: nil
   defp channel_derivation(cache, channel_id), do: get_in(cache, ["channels", channel_id])
@@ -247,18 +187,6 @@ defmodule Varsel.Cases.Derivation.Display do
   defp edge_pos(:start, _by_label), do: 0
   defp edge_pos(:end, _by_label), do: 100
   defp edge_pos({_kind, tag}, by_label), do: Map.fetch!(by_label, tag)
-
-  defp range_label(%{"version" => from, "changes" => changes}) when is_list(changes) do
-    "≥ #{from} · fixed: #{Enum.map_join(changes, ", ", &shorten(&1["at"]))}"
-  end
-
-  defp range_label(%{"version" => from, "lessThan" => "*"}), do: "≥ #{shorten(from)}"
-
-  defp range_label(%{"version" => from, "lessThan" => to}) do
-    "≥ #{shorten(from)} < #{shorten(to)}"
-  end
-
-  defp range_label(_other), do: "custom"
 
   def derivation_issues(%{derivation_cache: nil}), do: []
 

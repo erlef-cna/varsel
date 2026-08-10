@@ -68,27 +68,29 @@ defmodule VarselWeb.DisclosureComponents do
   @doc """
   Label/value rows for an object's small print.
 
-  `rows` are `{label, value}` pairs; a pair whose value is nil or empty is
-  dropped, so callers can list every field they might show without guarding
-  each one.
+  `rows` are `{label, value}` pairs, or `{label, value, :prose}` for a value
+  that reads as words rather than as an identifier and so does not want the
+  mono face. A row whose value is nil or empty is dropped, so callers can list
+  every field they might show without guarding each one.
   """
-  attr :rows, :list, required: true, doc: ~s({label, value} pairs)
-  attr :mono, :boolean, default: true, doc: "render values in the mono face"
+  attr :rows, :list, required: true, doc: ~s({label, value} or {label, value, :prose})
   attr :class, :any, default: nil
 
   def field_list(assigns) do
-    assigns = assign(assigns, :rows, Enum.reject(assigns.rows, &blank_value?/1))
+    assigns =
+      assign(
+        assigns,
+        :rows,
+        assigns.rows |> Enum.map(&normalize_row/1) |> Enum.reject(&blank_value?/1)
+      )
 
     ~H"""
     <div :if={@rows != []} class={["flex flex-col gap-0.5", @class]}>
-      <div :for={{label, value} <- @rows} class="flex items-baseline gap-3 py-0.5">
+      <div :for={{label, value, face} <- @rows} class="flex items-baseline gap-3 py-0.5">
         <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
           {label}
         </span>
-        <span class={[
-          "break-all text-xs text-base-content/70",
-          @mono && "font-mono"
-        ]}>
+        <span class={["break-all text-xs text-base-content/70", face == :mono && "font-mono"]}>
           {value}
         </span>
       </div>
@@ -96,5 +98,8 @@ defmodule VarselWeb.DisclosureComponents do
     """
   end
 
-  defp blank_value?({_label, value}), do: value in [nil, "", []]
+  defp normalize_row({label, value}), do: {label, value, :mono}
+  defp normalize_row({label, value, face}), do: {label, value, face}
+
+  defp blank_value?({_label, value, _face}), do: value in [nil, "", []]
 end

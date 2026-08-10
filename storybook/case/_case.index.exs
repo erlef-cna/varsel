@@ -18,8 +18,6 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("channel_block"), do: [name: "Channel block", icon: {:local, "hero-truck"}]
 
-  def entry("channel_table"), do: [name: "Channel table", icon: {:local, "hero-table-cells"}]
-
   def entry("case_content"), do: [name: "Case content", icon: {:local, "hero-document-text"}]
 
   def entry("card_section_header"), do: [name: "Card section header", icon: {:local, "hero-bars-2"}]

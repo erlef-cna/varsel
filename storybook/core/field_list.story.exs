@@ -39,10 +39,14 @@ defmodule VarselWeb.Storybook.Core.FieldList do
       },
       %Variation{
         id: :prose,
-        description: "Values that are prose rather than identifiers read better unmonospaced.",
+        description:
+          "A value that reads as words rather than an identifier drops the mono face, " <>
+            "per row — a list usually mixes the two.",
         attributes: %{
-          mono: false,
-          rows: [{"discovery", "Reported by a third party"}, {"status", "Awaiting review"}]
+          rows: [
+            {"default status", "unaffected", :prose},
+            {"cpe", "cpe:2.3:a:erlang:erlang\\/otp:*:*:*:*:*:*:*:*"}
+          ]
         }
       },
       %Variation{

@@ -1042,7 +1042,7 @@ defmodule VarselWeb.CaseLiveTest do
 
     test "the channel modal authors kind, purl type and version type", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
-      package = Fixtures.add_affected_package(poc, case_record)
+      Fixtures.add_affected_package(poc, case_record)
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
