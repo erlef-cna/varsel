@@ -21,6 +21,7 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
     extensions: [AshGraphql.Resource]
 
   alias Varsel.Cases.PackageChannel.Kind
+  alias Varsel.Cases.PackageChannel.PurlType
   alias Varsel.Cases.PackageChannel.Validations.ConsistentIdentity
   alias Varsel.Cases.PackageChannel.VersionType
 
@@ -40,7 +41,7 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
       public? true
     end
 
-    attribute :purl_type, :string do
+    attribute :purl_type, PurlType do
       description """
       Package URL type of this distribution channel, e.g. "hex", "otp", "oci",
       "sid", "npm". Any purl type works. List the distribution channels only —
@@ -49,7 +50,6 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
       like a second forge host).
       """
 
-      constraints match: ~r{^[a-z0-9][a-z0-9._-]*$}
       public? true
     end
 

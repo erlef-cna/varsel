@@ -44,6 +44,8 @@ defmodule Varsel.Cases.PackageChannel do
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.PackageChannel.Calculations.Purl, as: PurlCalculation
   alias Varsel.Cases.PackageChannel.Kind
+  alias Varsel.Cases.PackageChannel.PurlType
+  alias Varsel.Cases.PackageChannel.Validations.ConsistentIdentity
   alias Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage
   alias Varsel.Cases.PackageChannel.VersionType
   alias Varsel.Cases.Proposable
@@ -147,6 +149,10 @@ defmodule Varsel.Cases.PackageChannel do
     publish_all :destroy, [[:case_id]]
   end
 
+  validations do
+    validate ConsistentIdentity, on: [:create, :update]
+  end
+
   attributes do
     uuid_primary_key :id
 
@@ -161,14 +167,13 @@ defmodule Varsel.Cases.PackageChannel do
       public? true
     end
 
-    attribute :purl_type, :string do
+    attribute :purl_type, PurlType do
       description """
       Package URL type, e.g. "hex", "npm", "oci", "otp", "github", "cargo".
       Any purl type is accepted; the well-known ones additionally supply a
       collectionURL and a default versionType. Nil for :service channels.
       """
 
-      constraints match: ~r{^[a-z0-9][a-z0-9._-]*$}
       public? true
     end
 

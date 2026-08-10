@@ -85,4 +85,24 @@ defmodule Varsel.Cases.PackageChannel.PurlTypeTest do
       assert PurlType.cast(nil) == :error
     end
   end
+
+  describe "as an Ash type" do
+    test "casting normalizes on the way in" do
+      assert Ash.Type.cast_input(PurlType, "  Hex ", []) == {:ok, "hex"}
+      assert Ash.Type.cast_input(PurlType, :npm, []) == {:ok, "npm"}
+      assert Ash.Type.cast_input(PurlType, nil, []) == {:ok, nil}
+    end
+
+    test "casting rejects a malformed type" do
+      assert {:error, _} = Ash.Type.cast_input(PurlType, "pkg:hex", [])
+      assert {:error, _} = Ash.Type.cast_input(PurlType, 42, [])
+    end
+
+    # Storage stays :string so an existing column adopts the type unmigrated.
+    test "stores as a plain string" do
+      assert Ash.Type.storage_type(PurlType, []) == :string
+      assert Ash.Type.dump_to_native(PurlType, "hex", []) == {:ok, "hex"}
+      assert Ash.Type.cast_stored(PurlType, "hex", []) == {:ok, "hex"}
+    end
+  end
 end

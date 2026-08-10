@@ -265,7 +265,7 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
 
       accept [:case_id, :target_id, :reasoning]
       argument :kind, Varsel.Cases.PackageChannel.Kind
-      argument :purl_type, :string
+      argument :purl_type, Varsel.Cases.PackageChannel.PurlType
       argument :namespace, :string
       argument :name, :string
       argument :domain, :string

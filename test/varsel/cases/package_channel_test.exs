@@ -120,6 +120,13 @@ defmodule Varsel.Cases.PackageChannelTest do
                  actor: poc
                )
     end
+
+    test "a purl type is normalized on the way in", %{poc: poc, package: package} do
+      channel = add_channel(poc, package, %{purl_type: " Hex ", name: "acme_lib"})
+
+      assert channel.purl_type == "hex"
+      assert Ash.load!(channel, :purl, authorize?: false).purl == "pkg:hex/acme_lib"
+    end
   end
 
   describe "the repository channel" do

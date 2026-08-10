@@ -4,29 +4,23 @@
 
 defmodule Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage do
   @moduledoc """
-  Channel consistency rules: the identity rules of
-  `Varsel.Cases.PackageChannel.Validations.ConsistentIdentity`, plus a check
-  that the channel's denormalized `case_id` matches its parent
-  `affected_package`'s (which rejects cross-case row mixups).
+  Rejects a channel whose denormalized `case_id` disagrees with its parent
+  `affected_package`'s — a cross-case row mixup.
+
+  How the channel names itself is
+  `Varsel.Cases.PackageChannel.Validations.ConsistentIdentity`'s business,
+  declared separately on the resource.
   """
 
   use Ash.Resource.Validation
 
   alias Ash.Resource.Validation
-  alias Varsel.Cases.PackageChannel.Validations.ConsistentIdentity
 
   @impl Validation
-  def validate(changeset, opts, context) do
-    with :ok <- ConsistentIdentity.validate(changeset, opts, context) do
-      validate_same_case(changeset)
-    end
-  end
-
-  # A channel created through its package's `:channels` relationship has both
-  # ids stamped by Ash *after* validation, and they agree by construction.
-  # Presence itself is the relationship's `allow_nil? false` to enforce, not
-  # ours.
-  defp validate_same_case(changeset) do
+  def validate(changeset, _opts, _context) do
+    # A channel created through its package's `:channels` relationship has both
+    # ids stamped by Ash *after* validation, and they agree by construction.
+    # Presence itself is the relationship's `allow_nil? false` to enforce.
     case Ash.Changeset.get_attribute(changeset, :affected_package_id) do
       nil -> :ok
       affected_package_id -> compare_case(changeset, affected_package_id)
