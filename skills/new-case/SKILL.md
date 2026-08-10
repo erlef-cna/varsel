@@ -90,16 +90,32 @@ answer available, treat the report as trusted and say so in the final summary.
 Record which it was in a single clause of `internal_notes`, and for untrusted reports name the
 outcome of your reproduction.
 
-### Pull prior cases for this package, before anything else
+### Pull prior cases for this repository, before anything else
 
 **Do this before any git archaeology, classification, or scoring.** It is the single largest time
 saver in this workflow, and skipping it means re-deriving work that is already sitting in review.
 
-Use this exact `list_cases` filter shape, which is the one that works:
-`{"field": "description_md", "operator": "ilike", "value": "%<package>%"}`
+**Search by repository, not by package name.** Establish the upstream repository URL first: a GHSA
+carries it, and for a hex package it is in `meta.links` from
+`curl -s https://hex.pm/api/packages/<package>`. That URL is the identifier cases are actually
+keyed on.
 
-`{"or": [...]}` groups error, and so does any filter on `affected_summary`. Do not spend calls
-rediscovering that. `list_cves_by_purl` and `search_cves` cover published records.
+Then filter `list_cases` on `affects_repo`, which matches against the repositories of the case's
+affected packages:
+
+```json
+{"affects_repo": {"input": {"repo_url": "https://github.com/rrrene/html_sanitize_ex"}, "eq": true}}
+```
+
+**This filter takes the nested form above, not the flat `{"field", "operator", "value"}` shape**,
+because the repository travels in `input` and the flat form has nowhere to put it. It nests inside
+an `{"and": [...]}` group fine.
+
+Fall back to `{"field": "description_md", "operator": "ilike", "value": "%<package>%"}` only when
+you cannot establish a repository URL. That is a prose match, so it misses any case whose
+description does not happen to name the package.
+
+`list_cves_by_purl` and `search_cves` cover published records.
 
 **Read the returned case rows before calling anything else.** They include full `internal_notes`,
 which usually already carry the introducing commit, the first affected release, the release commit
@@ -639,7 +655,7 @@ reach it through.
 
 **Keep Varsel reads small.** Always pass a `filter` to `list_cases`, `list_cves`, and
 `list_all_cves`. An unfiltered call returns every row and will overflow, costing you the call plus
-the re-run.
+the re-run. For `list_cases`, `affects_repo` is the narrowest filter available; see Step 0.
 
 **Varsel supplies most references itself.** Do not propose the patch commit: the renderer builds it
 from `repo_url` plus the fix version event. Do not propose the `cna.erlef.org` or `osv.dev` links

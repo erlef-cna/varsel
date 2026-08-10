@@ -558,6 +558,22 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
+    calculate :affects_repo,
+              :boolean,
+              expr(fragment("regexp_replace(?, ?, '')", ^arg(:repo_url), "(\\.git)?/*$") in affected_repos) do
+      description """
+      Whether the case affects the given repository, comparing normalized URLs
+      so `.git`, a trailing slash and casing do not matter.
+      """
+
+      public? true
+
+      argument :repo_url, :ci_string do
+        allow_nil? false
+        constraints allow_empty?: false, trim?: true
+      end
+    end
+
     calculate :cvss_score, :float, Varsel.Cases.Case.Calculations.CvssScore do
       description "The CVSS v4.0 base score, or nil when the case has no CVSS vector yet."
       public? true
@@ -632,6 +648,13 @@ defmodule Varsel.Cases.Case do
       The CNA container currently published on the case's CVE record, or nil
       when the case was never published — for diffing against :preview.
       """
+    end
+  end
+
+  aggregates do
+    list :affected_repos, :affected_packages, :normalized_repo_url do
+      description "The normalized repository URLs of every package this case affects."
+      sort []
     end
   end
 
