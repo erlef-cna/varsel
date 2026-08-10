@@ -17,15 +17,40 @@ defmodule Varsel.CWE do
 
   tools do
     tool :list_weaknesses, Weakness, :read do
-      load [:related_weakness_relationships, :related_attack_patterns]
-    end
-
-    tool :get_weakness, Weakness, :get_by_cwe_id do
-      load [:related_weakness_relationships, :related_attack_patterns]
+      select [:cwe_id, :name, :description]
     end
 
     tool :search_weaknesses, Weakness, :search do
-      load [:related_weakness_relationships, :related_attack_patterns]
+      select [:cwe_id, :name, :description]
+    end
+
+    tool :get_weakness, Weakness, :get_by_cwe_id do
+      select [
+        :cwe_id,
+        :name,
+        :description,
+        :extended_description,
+        :potential_mitigations,
+        :common_consequences
+      ]
+    end
+
+    tool :get_weakness_related_weaknesses, Weakness, :get_by_cwe_id do
+      select [:cwe_id, :name]
+
+      load related_weakness_relationships: [
+             :nature,
+             source: [:cwe_id, :name],
+             target: [:cwe_id, :name]
+           ]
+
+      load_strict? true
+    end
+
+    tool :get_weakness_related_attack_patterns, Weakness, :get_by_cwe_id do
+      select [:cwe_id, :name]
+      load related_attack_patterns: [:capec_id, :name, :description]
+      load_strict? true
     end
 
     tool :list_cwe_views, View, :read do

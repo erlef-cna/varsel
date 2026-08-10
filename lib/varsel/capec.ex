@@ -16,15 +16,39 @@ defmodule Varsel.CAPEC do
 
   tools do
     tool :list_attack_patterns, AttackPattern, :read do
-      load [:weaknesses, :related_attack_pattern_relationships]
-    end
-
-    tool :get_attack_pattern, AttackPattern, :get_by_capec_id do
-      load [:weaknesses, :related_attack_pattern_relationships]
+      select [:capec_id, :name, :description]
     end
 
     tool :search_attack_patterns, AttackPattern, :search do
-      load [:weaknesses, :related_attack_pattern_relationships]
+      select [:capec_id, :name, :description]
+    end
+
+    tool :get_attack_pattern, AttackPattern, :get_by_capec_id do
+      select [
+        :capec_id,
+        :name,
+        :abstraction,
+        :status,
+        :description,
+        :extended_description,
+        :likelihood_of_attack,
+        :typical_severity,
+        :prerequisites,
+        :mitigations,
+        :consequences
+      ]
+    end
+
+    tool :get_attack_pattern_relations, AttackPattern, :get_by_capec_id do
+      select [:capec_id, :name]
+
+      load weaknesses: [:cwe_id, :name],
+           related_attack_pattern_relationships: [
+             :nature,
+             target: [:capec_id, :name]
+           ]
+
+      load_strict? true
     end
   end
 

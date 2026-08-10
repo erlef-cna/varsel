@@ -224,9 +224,12 @@ defmodule VarselWeb.Router do
       tools: [
         :list_weaknesses,
         :get_weakness,
+        :get_weakness_related_weaknesses,
+        :get_weakness_related_attack_patterns,
         :search_weaknesses,
         :list_attack_patterns,
         :get_attack_pattern,
+        :get_attack_pattern_relations,
         :search_attack_patterns,
         :list_cves,
         :get_cve,
