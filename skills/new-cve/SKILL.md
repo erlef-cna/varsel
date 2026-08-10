@@ -17,7 +17,7 @@ The unit of work is a **case**. You describe the vulnerability as **facts** — 
 
 Every change to a case is a **proposal**. There is one typed `mcp__varsel__propose_*` tool per thing you can change — pick the tool that names it (`propose_title`, `propose_cvss`, `propose_weakness`, `propose_reference`, `propose_credit`, `propose_affected_package` / `propose_otp_affected_package` / `propose_elixir_affected_package` / `propose_gleam_affected_package`, `propose_package_channel`, `propose_version_event`, `propose_delete`, …). Each takes `case_id`, `reasoning`, and the typed fields for that one change. Proposals are reviewed and accepted by a human — you author them, you never self-approve.
 
-A human accepts or declines your proposals **in the UI, out of band** — this can happen at any time while you work, and you get no notification. So don't assume a proposal is still open just because you didn't accept it. To see the true state, use `mcp__varsel__list_case_proposals` (it returns proposals in **all** states — open, accepted, declined); `list_open_case_proposals` shows only the still-open ones, so an empty result there means "nothing left to accept," not "nothing was ever proposed."
+A human accepts or declines your proposals **in the UI, out of band** — this can happen at any time while you work, and you get no notification. So don't assume a proposal is still open just because you didn't accept it. To see the true state, use `mcp__varsel__list_case_proposals` (it returns proposals in **all** states — open, accepted, declined); `list_open_case_proposals` shows only the still-open ones, so an empty result there means "nothing left to accept," not "nothing was ever proposed." Listings carry the proposed value rather than the author's reasoning; read that on a single proposal with `mcp__varsel__get_case_proposal`.
 
 Work through the steps interactively. Pause after each discussion step for the user before proceeding.
 
@@ -48,7 +48,7 @@ Check for prior art / duplicates: `mcp__varsel__list_cves_by_purl` (e.g. `pkg:he
 
 A case may already exist (an inbound vulnerability report accepted into a case, or a case the user points you at).
 
-- **Existing:** find it with `mcp__varsel__list_cases` (filter by title/description), read it with `mcp__varsel__get_case`, and read its proposals with `mcp__varsel__list_case_proposals` (all states, so you see what's already been accepted, not just what's still open).
+- **Existing:** find it with `mcp__varsel__list_cases`, filtering on the upstream repository — `{"affects_repo": {"input": {"repo_url": "https://github.com/<owner>/<repo>"}, "eq": true}}` — which matches the repositories of the case's affected packages. Read it with `mcp__varsel__get_case`, and read its proposals with `mcp__varsel__list_case_proposals` (all states, so you see what's already been accepted, not just what's still open).
 - **New:** if none exists, open a fresh draft with `mcp__varsel__open_case(input: {title: "<advisory title>"})`. It returns the new case (state `draft`); use its `id` as the `case_id` for every proposal below. You can seed just the title here — all other content lands as proposals in the later steps.
 
 The rest of this skill assumes you have a `case_id`.

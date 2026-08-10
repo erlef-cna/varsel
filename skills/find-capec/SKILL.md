@@ -15,14 +15,14 @@ Find the most appropriate CAPEC attack pattern(s) using the Varsel MCP's local C
 
 ## Start from the CWE (preferred)
 
-If you already picked a CWE (via `/find-cwe`), start there — MITRE maps each CWE to the attack patterns that exploit it, and Varsel exposes that link directly. `get_weakness` returns a `related_attack_patterns` array of full CAPEC entries:
+If you already picked a CWE (via `/find-cwe`), start there — MITRE maps each CWE to the attack patterns that exploit it, and Varsel exposes that link as its own tool:
 
 ```
-mcp__varsel__get_weakness(input: {cwe_id: <ID>})
-# → { ..., "related_attack_patterns": [{"capec_id": 126, "name": "Path Traversal", ...}, ...] }
+mcp__varsel__get_weakness_related_attack_patterns(input: {cwe_id: <ID>})
+# → { ..., "related_attack_patterns": [{"capec_id": 126, "name": "Path Traversal", "description": "..."}, ...] }
 ```
 
-Pick from `related_attack_patterns` the pattern(s) that match *how* this specific vulnerability is exploited. This keeps the CWE and CAPEC consistent by construction. If the list is empty or none fit, fall back to search below.
+Each pattern arrives identified by id, name and description. Pick the one(s) matching *how* this specific vulnerability is exploited, then read the full record with `get_attack_pattern`. This keeps the CWE and CAPEC consistent by construction. If the list is empty or none fit, fall back to search below.
 
 ## Search (fallback)
 
@@ -42,7 +42,7 @@ Pick the most specific pattern that describes *how* the attack works, not just t
 mcp__varsel__get_attack_pattern(input: {capec_id: <ID>})
 ```
 
-Check the name and description against the actual attack technique. The returned record's `weaknesses[].cwe_id` should include the case's CWE — that confirms the pattern exploits the weakness you identified.
+Check the name and description against the actual attack technique. To confirm the pattern exploits the weakness you identified, ask for its links separately — `get_attack_pattern_relations(input: {capec_id: <ID>})` returns a `weaknesses` array whose `cwe_id`s should include the case's CWE.
 
 ## Output
 

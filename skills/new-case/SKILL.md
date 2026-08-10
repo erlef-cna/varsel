@@ -42,6 +42,8 @@ while you work, and you get no notification, so never assume a proposal is still
 you did not accept it. To see the true state use `list_case_proposals`, which returns proposals in
 **all** states (open, accepted, declined). `list_open_case_proposals` shows only the still-open
 ones, so an empty result there means "nothing left to accept", not "nothing was ever proposed".
+Listings carry the proposed value rather than the author's reasoning; read that on a single
+proposal with `get_case_proposal`.
 
 You author proposals; you never self-approve them.
 
@@ -124,9 +126,6 @@ inventory, and the CVSS shape. That is most of what you came for.
 Only if you still need the affected-package payload shape or exact credit spellings, follow up with
 `list_case_proposals` filtered to just those targets:
 `{"field": "target", "operator": "in", "value": ["affected_package", "credit"]}`
-
-Unfiltered, that call returns every proposal's full reasoning and costs many thousands of tokens to
-learn two facts.
 
 Vulnerabilities in one library arrive in batches, especially when a single release fixes several
 issues at once, so a sibling case very often already carries:
@@ -303,9 +302,6 @@ Nothing else. **Do not restate the vulnerability, the fix, the reasoning already
 proposal, or your investigation narrative.** If a note repeats something a reviewer can read in
 `description_md`, in a proposal `reasoning`, or in the affected package, cut it. A dead end you
 ruled out is worth one clause at most, and usually nothing.
-
-Length matters beyond taste here: `render_case_preview` and `validate_case` echo the whole case
-back, notes included, so every extra line is paid again on each later round.
 
 **Write the notes with the `propose_internal_notes` call.** `internal_notes` can only be set here.
 
@@ -671,9 +667,8 @@ vendor advisory first, then patch-tagged, then the rest.
 Keep them to the boundary SHAs, the sibling you reused, and what the user verified, and use
 `create_case_comment` for anything longer that comes up later.
 
-**Reads echo the entire case.** `render_case_preview` and `validate_case` return every field,
-`internal_notes` included, so a long note is paid on every later round. Do not re-render without a
-reason.
+**`render_case_preview` and `validate_case` return the preview or the verdict alone**, not the case
+body, so checking one costs only what it reports.
 
 ---
 

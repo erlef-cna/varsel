@@ -33,7 +33,7 @@ If a CWE ID is already suggested (by the advisory or the user), confirm it fits:
 mcp__varsel__get_weakness(input: {cwe_id: <ID>})
 ```
 
-Check the name, description, and consequences against the vulnerability. If it does not fit, search for a better one.
+Check the name, description, and consequences against the vulnerability. If it does not fit, search for a better one, or walk the hierarchy with `get_weakness_related_weaknesses(input: {cwe_id: <ID>})` to find the parent or child that fits better.
 
 ## Output
 

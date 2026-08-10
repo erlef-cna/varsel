@@ -30,10 +30,10 @@ Note: the preview reflects **accepted** proposals only. If you (or the user) jus
 ## Step 2 — Validators
 
 ```
-mcp__varsel__validate_case(input: {id: <case-id>})
+mcp__varsel__validate_case(filter: {field: "id", operator: "eq", value: "<case-id>"})
 ```
 
-This returns the case with a `validation` result — the schema + cvelint + hex-package check (`{valid, errors}`) over the rendered record. Any error is a FAIL. Fix it as a proposal, then re-run.
+This is a read, addressed by filter rather than by an `id` argument. It returns the `validation` result — the schema + cvelint + hex-package check (`{valid, errors}`) over the rendered record — and nothing else of the case. Any error is a FAIL. Fix it as a proposal, then re-run.
 
 Reach for the standalone `validate_cve_record` (and the per-check `validate_cve_record_schema` / `_cvelint` / `_hex_packages`) only to isolate a specific failure against a hand-modified record.
 
