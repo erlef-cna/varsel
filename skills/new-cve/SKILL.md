@@ -42,6 +42,8 @@ Extract and present:
 
 Check for prior art / duplicates: `mcp__varsel__list_cves_by_purl` (e.g. `pkg:hex/<name>`) and `mcp__varsel__list_cves` / `mcp__varsel__list_cases`. Keep things consistent with existing published CVEs.
 
+Every list tool returns the first **25** rows unless you pass a `limit` (itself capped at 250), and says nothing when it truncates. A short result is not evidence you have seen everything, so filter for what you want rather than paging, and re-run with `result_type: "count"` when you need the real total.
+
 **Do not treat the advisory as authoritative.** It may have been filed by someone unfamiliar with CVE conventions or the real scope. Flag anything suspicious.
 
 ## Step 2 — Open or locate the case

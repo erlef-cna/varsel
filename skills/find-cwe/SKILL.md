@@ -23,6 +23,8 @@ mcp__varsel__search_weaknesses(input: {query: "path traversal"})
 
 Terms are ANDed by default, so a long descriptive query can match nothing. For broad recall, separate alternative terms with `OR` (e.g. `length OR quantity OR mismatch OR validation`) or wrap an exact phrase in double quotes. Start specific; widen with `OR` if you get too few hits.
 
+Results are ranked, and the tool returns the first 25 unless you pass a `limit`. Since the best match is first, take the top few rather than paging: a `limit` of 5 or less is usually the right ask.
+
 Look for the most specific CWE that describes the **root cause**, not just the impact. Prefer **Base** level over **Class** (too broad) or **Variant** (too specific) when in doubt.
 
 ## Verify a known ID

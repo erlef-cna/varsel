@@ -649,9 +649,14 @@ reach it through.
 
 **`propose_cvss` takes the vector string.** Score and severity are derived at render time.
 
-**Keep Varsel reads small.** Always pass a `filter` to `list_cases`, `list_cves`, and
-`list_all_cves`. An unfiltered call returns every row and will overflow, costing you the call plus
-the re-run. For `list_cases`, `affects_repo` is the narrowest filter available; see Step 0.
+**Every list tool is capped, and says nothing about it.** A call with no `limit` returns the first
+**25** rows, and an explicit `limit` is silently capped at 250. A short result is therefore not
+evidence that you have seen everything. To learn the real total, re-run the same call with
+`result_type: "count"`, which ignores the cap.
+
+**So filter rather than page.** Always pass a `filter` to `list_cases`, `list_cves`, and
+`list_all_cves`: the first 25 of everything is rarely the 25 you want. For `list_cases`,
+`affects_repo` is the narrowest filter available; see Step 0.
 
 **Varsel supplies most references itself.** Do not propose the patch commit: the renderer builds it
 from `repo_url` plus the fix version event. Do not propose the `cna.erlef.org` or `osv.dev` links

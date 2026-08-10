@@ -32,7 +32,9 @@ Full-text search over name, description, prerequisites, mitigations, and consequ
 mcp__varsel__search_attack_patterns(input: {query: "path traversal"})
 ```
 
-Terms are ANDed by default, so a long descriptive query (e.g. "malformed input crash denial of service") often matches nothing. For broad recall, **separate alternative terms with `OR`** — `malformed OR crash OR length OR validation` — or wrap an exact phrase in double quotes. Start with a specific 1–2 word phrase; if you get too few hits, re-run with `OR` between the candidate terms. Results are ranked, so the best match is first.
+Terms are ANDed by default, so a long descriptive query (e.g. "malformed input crash denial of service") often matches nothing. For broad recall, **separate alternative terms with `OR`** — `malformed OR crash OR length OR validation` — or wrap an exact phrase in double quotes. Start with a specific 1–2 word phrase; if you get too few hits, re-run with `OR` between the candidate terms.
+
+Results are ranked, and the tool returns the first 25 unless you pass a `limit`. Since the best match is first, take the top few rather than paging: a `limit` of 5 or less is usually the right ask.
 
 Pick the most specific pattern that describes *how* the attack works, not just the outcome. Multiple CAPECs are fine when the vulnerability can be exploited via genuinely distinct techniques (e.g. both relative and absolute path traversal).
 
