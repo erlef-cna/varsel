@@ -158,8 +158,6 @@ defmodule Varsel.Cases.Derivation.EmitTest do
              ] = versions
     end
 
-    # Decoration is no longer an OCI privilege: a hex channel whose repo tags
-    # `v1.2.3` publishes the same prefix.
     test "applies to any purl type, not just oci" do
       channel = %PackageChannel{purl_type: "hex", name: "acme", tag_prefix: "v", tag_suffixes: []}
 
@@ -223,8 +221,7 @@ defmodule Varsel.Cases.Derivation.EmitTest do
                Emit.channel(channel, [range("OTP-26.0", :unbounded)], [])
     end
 
-    # A pkg:otp channel on Elixir's repo versions with Elixir, not with OTP —
-    # which the channel now says outright instead of it being inferred.
+    # A pkg:otp channel on Elixir's repo versions with Elixir, not with OTP.
     test "a pkg:otp channel versioned as semver stays plain semver" do
       channel = %PackageChannel{
         purl_type: "otp",

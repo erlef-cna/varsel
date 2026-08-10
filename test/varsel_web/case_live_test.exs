@@ -1030,7 +1030,6 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert html =~ "pkg:hex/acme_lib"
       assert html =~ "acme.example"
-      # The repository is a channel of its own now, not a row the renderer invents.
       assert html =~ "pkg:github/acme/acme_lib"
       refute html =~ "implicit"
     end
