@@ -48,24 +48,34 @@ defmodule Varsel.Cases do
     end
 
     tool :render_case_preview, Case, :read do
+      select [:id]
       load [:preview]
     end
 
     tool :validate_case, Case, :read do
+      select [:id]
       load [:validation]
     end
 
     tool :refresh_case_derivation, Case, :refresh_derivation do
       # Return the freshly derived preview so the caller can confirm the ranges
       # in one call instead of a follow-up render_case_preview.
+      select [:id]
       load [:preview]
     end
 
     # Proposal workflow: discover → propose → discuss. Deliberately no
     # accept/decline/lifecycle tools — resolving proposals and moving cases
     # through their lifecycle stays in the human UI.
-    tool :list_case_proposals, Proposal, :list_for_case
-    tool :list_open_case_proposals, Proposal, :list_open_for_case
+    tool :list_case_proposals, Proposal, :list_for_case do
+      select [:id, :target, :target_id, :operation, :field_name, :proposed_value, :state]
+    end
+
+    tool :list_open_case_proposals, Proposal, :list_open_for_case do
+      select [:id, :target, :target_id, :operation, :field_name, :proposed_value, :state]
+    end
+
+    tool :get_case_proposal, Proposal, :get_by_id
 
     # One typed propose_* tool per field/child kind (the generic :propose stays
     # private; the agent picks the tool that names what it is changing).
@@ -104,7 +114,7 @@ defmodule Varsel.Cases do
 
       list Proposal, :list_case_proposals, :list_for_case
       list Proposal, :list_open_case_proposals, :list_open_for_case
-      get Proposal, :get_case_proposal, :read
+      get Proposal, :get_case_proposal, :get_by_id, identity: false
 
       list Comment, :list_case_comments, :list_for_case
     end
@@ -315,9 +325,10 @@ defmodule Varsel.Cases do
       define :propose_version_event, action: :propose_version_event
       define :propose_delete, action: :propose_delete
 
+      define :read_case_proposals, action: :read
       define :list_case_proposals, action: :list_for_case, args: [:case_id]
       define :list_open_case_proposals, action: :list_open_for_case, args: [:case_id]
-      define :get_case_proposal, action: :read, get_by: [:id]
+      define :get_case_proposal, action: :get_by_id, args: [:id]
       define :accept_case_proposal, action: :accept
       define :decline_case_proposal, action: :decline
       define :withdraw_case_proposal, action: :withdraw

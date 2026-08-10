@@ -262,6 +262,7 @@ defmodule VarselWeb.Router do
         :refresh_case_derivation,
         :list_case_proposals,
         :list_open_case_proposals,
+        :get_case_proposal,
         :propose_title,
         :propose_description,
         :propose_workarounds,
