@@ -258,9 +258,10 @@ you pass the vector string only.
 Use the skills `find-cwe` and `find-capec` to find the CWE and CAPEC classificiations. Don't carry over
 the classifications from sibling cases but run the skills independently.
 
-You can use `search_weaknesses` and `search_attack_patterns` to find matching classifier. 
-Terms are ANDed by default but support Websearch tsqueries like OR-cases like `"sad cat" or "fat rat"` 
-and negations like `"supernovae star" -crab`. Keep `limit` at 5 or below to reduce the number of results.
+You can use `search_weaknesses` and `search_attack_patterns` to find matching classifier. Bare words
+are ANDed, `OR` widens (`length OR quantity OR mismatch`), `"quoted words"` must be adjacent
+(`"path traversal"` skips a record that merely says "a traversal of the path"), and `-word` excludes
+(`traversal -relative`). Keep `limit` at 5 or below to reduce the number of results.
 
 **Decide the family once, then pick both IDs inside it.** The CWE and the CAPEC must agree. If a
 lookup hands you a CAPEC from a family you already rejected for the CWE, that disagreement is the

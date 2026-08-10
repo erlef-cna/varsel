@@ -116,9 +116,9 @@ defmodule Varsel.CWE.Weakness do
     read :search do
       description """
       Full-text search over name, description, mitigations, and consequences,
-      best match first. Terms are ANDed by default; separate alternatives with
-      OR for broad recall (e.g. `length OR quantity OR mismatch`), or wrap an
-      exact phrase in double quotes.
+      best match first. Bare words are ANDed; `OR` widens (e.g. `length OR
+      quantity OR mismatch`), `"quoted words"` must appear adjacent, and
+      `-word` excludes. Words are stemmed, and no input is a syntax error.
       """
 
       argument :query, :string, allow_nil?: false
