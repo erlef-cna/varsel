@@ -6,7 +6,10 @@ defmodule Varsel.Cases.PackageChannelTest do
   use Varsel.DataCase, async: false
 
   alias Varsel.Cases
+  alias Varsel.Cases.AffectedPackage
   alias Varsel.Fixtures
+
+  require Ash.Query
 
   setup do
     poc = Fixtures.register_user("channel_poc", :poc)
@@ -129,6 +132,96 @@ defmodule Varsel.Cases.PackageChannelTest do
     end
   end
 
+  describe "derivation_state" do
+    defp state(package) do
+      Ash.load!(package, :derivation_state, authorize?: false).derivation_state
+    end
+
+    defp derive(package) do
+      package
+      |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: %{}}, authorize?: false)
+      |> Ash.update!()
+    end
+
+    # Backdates the whole product — its row, its channels and its facts — as if
+    # the derivation had run `hours` ago and nothing had happened since. Moving
+    # only the package would leave its channels newer, which is genuinely
+    # `:outdated` rather than aged.
+    defp age(package, hours) do
+      at = DateTime.shift(DateTime.utc_now(), hour: -hours)
+      package = derive(package)
+
+      for table <- ["case_package_channels", "case_version_events"] do
+        Varsel.Repo.query!(
+          "UPDATE #{table} SET updated_at = $1 WHERE affected_package_id = $2",
+          [at, Ecto.UUID.dump!(package.id)]
+        )
+      end
+
+      Varsel.Repo.query!(
+        "UPDATE case_affected_packages SET updated_at = $1, derivation_cached_at = $1 WHERE id = $2",
+        [at, Ecto.UUID.dump!(package.id)]
+      )
+
+      Ash.reload!(package, authorize?: false)
+    end
+
+    test "a product that has never derived", %{package: package} do
+      assert state(package) == :never
+    end
+
+    test "a product derived after its last change", %{package: package} do
+      assert package |> derive() |> state() == :current
+    end
+
+    test "a product whose channels changed after it derived", %{poc: poc, package: package} do
+      package = derive(package)
+
+      add_channel(poc, package, %{purl_type: "hex", name: "acme_lib"})
+
+      assert state(package) == :outdated
+    end
+
+    test "a product whose boundary facts changed after it derived", %{
+      poc: poc,
+      case: case_record,
+      package: package
+    } do
+      package = derive(package)
+
+      Cases.add_version_event!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          event: :introduced,
+          commit_sha: String.duplicate("a", 40)
+        },
+        actor: poc
+      )
+
+      assert state(package) == :outdated
+    end
+
+    test "a current derivation ages", %{package: package} do
+      assert package |> age(48) |> state() == :ageing
+    end
+
+    # The point of an expression: the state narrows a query, not just a render.
+    test "filters in the database", %{package: package} do
+      age(package, 48)
+
+      assert [_ageing] =
+               AffectedPackage
+               |> Ash.Query.filter(derivation_state == :ageing)
+               |> Ash.read!(authorize?: false)
+
+      assert [] =
+               AffectedPackage
+               |> Ash.Query.filter(derivation_state == :outdated)
+               |> Ash.read!(authorize?: false)
+    end
+  end
+
   describe "the repository channel" do
     test "is created with the package", %{package: package} do
       assert [%{purl_type: "github", namespace: "acme", name: "acme_lib", version_type: :git}] =
@@ -154,7 +247,7 @@ defmodule Varsel.Cases.PackageChannelTest do
     # to run rather than happening as the changeset is assembled.
     test "is not resolved while a changeset is merely being built", %{case: case_record} do
       form =
-        Varsel.Cases.AffectedPackage
+        AffectedPackage
         |> AshPhoenix.Form.for_create(:add_gleam, as: "child")
         |> AshPhoenix.Form.validate(%{"case_id" => case_record.id})
 

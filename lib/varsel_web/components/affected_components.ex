@@ -20,6 +20,7 @@ defmodule VarselWeb.AffectedComponents do
 
   use Phoenix.Component
 
+  import VarselWeb.CaseComponents, only: [relative_timestamp: 1]
   import VarselWeb.CveView, only: [affected_range_list: 1, package_display_name: 1]
 
   alias VarselWeb.CveHTML
@@ -170,6 +171,67 @@ defmodule VarselWeb.AffectedComponents do
     </div>
     """
   end
+
+  @doc """
+  What the derived ranges below are currently worth, and the way to renew them.
+
+  Deriving is explicit, so the ranges on screen can be anything from
+  authoritative to actively misleading, and the difference is invisible in the
+  ranges themselves. The state leads in its own colour: an outdated derivation
+  is a warning because the versions being read are wrong, an unrun one is
+  neutral because nothing is being claimed yet, and a current one recedes.
+
+  Refreshing recomputes the whole case, not this product alone, so the button
+  says so rather than implying a scope it does not have.
+  """
+  attr :state, :atom, required: true, values: [:never, :outdated, :ageing, :current]
+  attr :at, :any, default: nil, doc: "when the derivation last ran"
+  attr :can_refresh, :boolean, default: false
+  attr :refreshing, :boolean, default: false
+
+  def derivation_status(assigns) do
+    ~H"""
+    <span class="flex items-center gap-2 text-xs">
+      <span class={["flex items-center gap-1.5", state_tone(@state)]}>
+        <span class={["size-1.5 shrink-0 rounded-full", state_dot(@state)]} aria-hidden="true"></span>
+        {state_label(@state)}
+      </span>
+
+      <span :if={@at && @state != :never} class="text-base-content/40">
+        <.relative_timestamp at={@at} />
+      </span>
+
+      <button
+        :if={@can_refresh}
+        class={["link link-hover", refresh_tone(@state)]}
+        phx-click="refresh_derivation"
+        disabled={@refreshing}
+        title="Recomputes every product in this case"
+      >
+        {if @refreshing, do: "Deriving…", else: "Derive the case"}
+      </button>
+    </span>
+    """
+  end
+
+  defp state_label(:never), do: "not derived"
+  defp state_label(:outdated), do: "out of date"
+  defp state_label(:ageing), do: "derived"
+  defp state_label(:current), do: "derived"
+
+  # Outdated is the only state that makes the ranges *wrong*, so it is the only
+  # one that warns; the rest report without colouring the whole card.
+  defp state_tone(:outdated), do: "text-warning font-semibold"
+  defp state_tone(:never), do: "text-base-content/60"
+  defp state_tone(_current), do: "text-base-content/50"
+
+  defp state_dot(:outdated), do: "bg-warning"
+  defp state_dot(:never), do: "bg-base-content/30"
+  defp state_dot(:ageing), do: "bg-success/40"
+  defp state_dot(:current), do: "bg-success"
+
+  defp refresh_tone(state) when state in [:outdated, :never], do: "text-warning font-semibold"
+  defp refresh_tone(_current), do: "text-primary"
 
   @doc """
   The header line under a product's title: where its source lives and the

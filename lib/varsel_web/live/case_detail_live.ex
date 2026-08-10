@@ -54,7 +54,7 @@ defmodule VarselWeb.CaseDetailLive do
     weaknesses: [weakness: [:cwe_id, :name]],
     impacts: [attack_pattern: [:capec_id, :name]],
     proposals: [author: [:avatar_url], resolved_by: []],
-    affected_packages: [channels: [:purl], version_events: []],
+    affected_packages: [:derivation_state, channels: [:purl], version_events: []],
     comments: [:author],
     vulnerability_reports: [reporter: [:avatar_url]]
   ]
@@ -132,6 +132,7 @@ defmodule VarselWeb.CaseDetailLive do
         suggest?: socket.assigns.live_action == :propose,
         editing_section: if(socket.assigns.live_action == :view, do: nil, else: "summary"),
         mode: :view,
+        refreshing: false,
         child_form: nil,
         cve_picker: nil,
         preview: nil,
@@ -319,7 +320,7 @@ defmodule VarselWeb.CaseDetailLive do
 
     {:noreply,
      socket
-     |> assign(preview: :loading)
+     |> assign(preview: :loading, refreshing: true)
      |> start_async(:preview, fn ->
        {:ok, _} = Cases.refresh_case_derivation(case_record, actor: actor)
        Cases.get_case!(case_record.id, load: [:preview, :validation], actor: actor)
@@ -595,14 +596,15 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply,
      assign(socket,
        preview: case_record.preview,
-       validation: case_record.validation
+       validation: case_record.validation,
+       refreshing: false
      )}
   end
 
   def handle_async(:preview, {:exit, reason}, socket) do
     {:noreply,
      socket
-     |> assign(preview: nil, validation: nil)
+     |> assign(preview: nil, validation: nil, refreshing: false)
      |> put_flash(:error, "Preview failed: #{Exception.format_exit(reason)}")}
   end
 
@@ -1045,6 +1047,7 @@ defmodule VarselWeb.CaseDetailLive do
                 current_user={@current_user}
                 can_resolve={can_edit?(@case_record, @current_user)}
                 can_refresh={@can_refresh}
+                refreshing={@refreshing}
               />
             </div>
             <.rows_section
@@ -1646,6 +1649,7 @@ defmodule VarselWeb.CaseDetailLive do
         mode={@mode}
         marks={@marks}
         can_refresh={@can_refresh}
+        refreshing={@refreshing}
       />
 
       <p :if={@case_record.affected_packages == []} class="text-sm text-base-content/60">
@@ -1671,6 +1675,7 @@ defmodule VarselWeb.CaseDetailLive do
   attr :mode, :atom, required: true
   attr :marks, :map, required: true
   attr :can_refresh, :boolean, required: true
+  attr :refreshing, :boolean, required: true
 
   defp affected_package_card(assigns) do
     assigns =
@@ -1725,20 +1730,16 @@ defmodule VarselWeb.CaseDetailLive do
 
       <.card_section_header title="Ships as">
         <:actions>
-          <span class="flex items-center gap-3 text-xs">
-            <span :if={@package.derivation_cached_at} class="text-base-content/50">
-              derived <.relative_timestamp at={@package.derivation_cached_at} />
-            </span>
-            <button
-              :if={@can_refresh}
-              class="link link-hover text-primary"
-              phx-click="refresh_derivation"
-            >
-              Refresh
-            </button>
+          <span class="flex items-center gap-3">
+            <AffectedComponents.derivation_status
+              state={@package.derivation_state}
+              at={@package.derivation_cached_at}
+              can_refresh={@can_refresh}
+              refreshing={@refreshing}
+            />
             <button
               :if={@mode != :view and @package.id not in @marks.phantom}
-              class="link link-hover text-primary"
+              class="link link-hover text-primary text-xs"
               phx-click="new_child"
               phx-value-type="channel"
               phx-value-affected_package_id={@package.id}
