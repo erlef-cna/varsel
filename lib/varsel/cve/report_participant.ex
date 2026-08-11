@@ -85,7 +85,17 @@ defmodule Varsel.CVE.ReportParticipant do
     # package's maintainers, and a reporter's contact details. Nobody but a POC
     # reads them on any surface. The reporter reads their own report instead,
     # which carries no participant data.
-    policy always() do
+    # Written as part of taking a report in, which has already proved which
+    # system is sending; that intake runs with no actor, so the provenance is
+    # the check. `:submit`, the actor-facing intake, manages no participants
+    # and must not start: a reporter naming their own maintainers would be
+    # writing the record that later grants case access.
+    policy action_type(:create) do
+      authorize_if accessing_from(VulnerabilityReport, :participants)
+      authorize_if actor_attribute_equals(:role, :poc)
+    end
+
+    policy action_type([:read, :update, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
     end
   end

@@ -74,6 +74,29 @@ defmodule Varsel.CVE.ReportParticipantTest do
       assert %{participants: [_, _]} = Ash.load!(report, [:participants], actor: poc)
     end
 
+    # The create policy admits anything reaching participants through the
+    # report, so the actor-facing intake must never offer that route: a
+    # reporter naming maintainers would be writing their own case access.
+    test "the actor-facing intake cannot carry participants" do
+      reporter = Fixtures.register_user("participant_submitter")
+
+      assert {:error, error} =
+               CVE.submit_vulnerability_report(
+                 %{
+                   report_json: %{"report" => "Bad."},
+                   summary: "Smuggled",
+                   confirms_criteria: true,
+                   confirms_in_scope: true,
+                   participants: [
+                     %{role: :maintainer, strategy: :hex, username: "mallory"}
+                   ]
+                 },
+                 actor: reporter
+               )
+
+      assert Exception.message(error) =~ "participants"
+    end
+
     test "a non-POC cannot record a participant", %{report: report} do
       supporter = Fixtures.register_user("participant_writer", :supporter)
 
