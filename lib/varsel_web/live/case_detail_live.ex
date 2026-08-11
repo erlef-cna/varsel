@@ -51,6 +51,7 @@ defmodule VarselWeb.CaseDetailLive do
     :derived_references,
     # :avatar_url wherever a user is drawn as an avatar disc.
     assignments: [user: [:avatar_url]],
+    invites: [],
     references: [],
     credits: [],
     weaknesses: [weakness: [:cwe_id, :name]],
@@ -137,6 +138,7 @@ defmodule VarselWeb.CaseDetailLive do
         refreshing: false,
         child_form: nil,
         cve_picker: nil,
+        people_picker?: false,
         preview: nil,
         validation: nil,
         preview_open?: false,
@@ -507,13 +509,56 @@ defmodule VarselWeb.CaseDetailLive do
 
   ## ------------------------------------------------------------- assignments
 
+  def handle_event("open_people_picker", _params, socket) do
+    {:noreply, assign(socket, :people_picker?, true)}
+  end
+
+  def handle_event("cancel_people_picker", _params, socket) do
+    {:noreply, assign(socket, :people_picker?, false)}
+  end
+
   def handle_event("assign_user", %{"user_id" => user_id}, socket) do
     socket =
       case Cases.assign_case_user(
              %{case_id: socket.assigns.case_record.id, user_id: user_id},
              actor: socket.assigns.current_user
            ) do
-        {:ok, _assignment} -> put_flash(socket, :info, "User assigned.")
+        {:ok, _assignment} ->
+          socket
+          |> assign(:people_picker?, false)
+          |> put_flash(:info, "User assigned.")
+
+        {:error, error} ->
+          put_flash(socket, :error, errors_to_string(error))
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("grant_by_handle", %{"strategy" => strategy, "username" => username}, socket) do
+    %{case_record: case_record, current_user: actor} = socket.assigns
+    strategy = String.to_existing_atom(strategy)
+
+    socket =
+      case Cases.grant_case_access(case_record, strategy, username, actor: actor) do
+        {:ok, _case_record} ->
+          socket
+          |> assign(:people_picker?, false)
+          |> put_flash(:info, "#{username} added.")
+
+        {:error, error} ->
+          put_flash(socket, :error, errors_to_string(error))
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("withdraw_invite", %{"id" => id}, socket) do
+    invite = Enum.find(socket.assigns.case_record.invites, &(&1.id == id))
+
+    socket =
+      case Cases.withdraw_case_invite(invite, actor: socket.assigns.current_user) do
+        :ok -> put_flash(socket, :info, "Invite withdrawn.")
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
@@ -1188,12 +1233,7 @@ defmodule VarselWeb.CaseDetailLive do
               </form>
               <.activity_feed entries={activity_entries(@case_record)} />
             </.panel>
-            <.assignments_section
-              :if={Cases.can_assign_case_user?(@current_user, %{case_id: @case_record.id})}
-              case_record={@case_record}
-              users={@users}
-              current_user={@current_user}
-            />
+            <.assignments_section case_record={@case_record} current_user={@current_user} />
             <.reports_section
               :if={@case_record.vulnerability_reports != []}
               case_record={@case_record}
@@ -1224,6 +1264,11 @@ defmodule VarselWeb.CaseDetailLive do
         preview_tab={@preview_tab}
         diff={@diff}
         amendment={amendment?(@case_record)}
+      />
+
+      <.people_picker_modal
+        :if={@people_picker?}
+        assignable_users={assignable_users(@users, @case_record)}
       />
 
       <.cve_picker_modal
@@ -2320,24 +2365,106 @@ defmodule VarselWeb.CaseDetailLive do
         No one assigned yet.
       </p>
 
-      <form
-        :if={Cases.can_assign_case_user?(@current_user, %{case_id: @case_record.id})}
-        phx-submit="assign_user"
-        class="flex items-center gap-2 mt-2"
-      >
-        <select name="user_id" required class="select select-bordered select-sm flex-1">
-          <option value="">Assign a user…</option>
-          <option
-            :for={user <- @users}
-            :if={not Enum.any?(@case_record.assignments, &(&1.user_id == user.id))}
-            value={user.id}
+      <ul :if={@case_record.invites != []} class="mt-2 space-y-1 text-sm">
+        <li
+          :for={invite <- @case_record.invites}
+          class="flex items-center justify-between gap-2 text-base-content/60"
+        >
+          <span class="flex min-w-0 items-center gap-2">
+            <span class="font-mono text-xs">{invite_handle(invite)}</span>
+            <span class="badge badge-ghost badge-sm">invited</span>
+          </span>
+          <button
+            :if={Cases.can_withdraw_case_invite?(@current_user, invite)}
+            class="btn btn-ghost btn-xs text-error"
+            phx-click="withdraw_invite"
+            phx-value-id={invite.id}
           >
-            <.user_name user={user} />
-          </option>
-        </select>
-        <button type="submit" class="btn btn-outline btn-sm">Assign</button>
-      </form>
+            Remove
+          </button>
+        </li>
+      </ul>
+
+      <button
+        :if={Cases.can_assign_case_user?(@current_user, %{case_id: @case_record.id})}
+        class="btn btn-outline btn-sm mt-3"
+        phx-click="open_people_picker"
+      >
+        Add someone
+      </button>
     </.panel>
+    """
+  end
+
+  defp invite_handle(%{strategy: :github, username: username}), do: "github/#{username}"
+  defp invite_handle(%{strategy: :hex, username: username}), do: "hex/#{username}"
+
+  defp assignable_users(users, case_record) do
+    Enum.reject(users, fn user ->
+      Enum.any?(case_record.assignments, &(&1.user_id == user.id))
+    end)
+  end
+
+  attr :assignable_users, :list, required: true
+
+  defp people_picker_modal(assigns) do
+    ~H"""
+    <.modal id="people-picker-modal" title="Add someone to the case" on_cancel="cancel_people_picker">
+      <div class="space-y-4">
+        <form
+          :if={@assignable_users != []}
+          phx-submit="assign_user"
+          class="rounded-lg border border-base-300 bg-base-200 p-3"
+        >
+          <p class="text-sm font-semibold">Someone with an account</p>
+          <div class="mt-2 flex items-center gap-2">
+            <select name="user_id" required class="select select-bordered select-sm flex-1">
+              <option value="">Pick a user…</option>
+              <option :for={user <- @assignable_users} value={user.id}>
+                <.user_name user={user} />
+              </option>
+            </select>
+            <button type="submit" class="btn btn-eef btn-sm">Add</button>
+          </div>
+        </form>
+
+        <p class="text-sm text-base-content/60">
+          Someone named by their handle joins the case as soon as they sign in here.
+        </p>
+
+        <.handle_form strategy={:github} label="By GitHub username" placeholder="octocat" />
+        <.handle_form strategy={:hex} label="By hex.pm username" placeholder="alice" />
+      </div>
+
+      <:actions>
+        <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_people_picker">
+          Close
+        </button>
+      </:actions>
+    </.modal>
+    """
+  end
+
+  attr :strategy, :atom, required: true
+  attr :label, :string, required: true
+  attr :placeholder, :string, required: true
+
+  defp handle_form(assigns) do
+    ~H"""
+    <form phx-submit="grant_by_handle" class="rounded-lg border border-base-300 p-3">
+      <input type="hidden" name="strategy" value={@strategy} />
+      <p class="text-sm font-semibold">{@label}</p>
+      <div class="mt-2 flex items-center gap-2">
+        <input
+          type="text"
+          name="username"
+          required
+          placeholder={@placeholder}
+          class="input input-bordered input-sm flex-1 font-mono"
+        />
+        <button type="submit" class="btn btn-eef-quiet btn-sm">Add</button>
+      </div>
+    </form>
     """
   end
 

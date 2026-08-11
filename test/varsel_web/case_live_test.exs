@@ -1567,6 +1567,141 @@ defmodule VarselWeb.CaseLiveTest do
     end
   end
 
+  describe "adding someone to a case" do
+    setup do
+      Application.put_env(:varsel, :hex_stub_users, ["alice"])
+      on_exit(fn -> Application.delete_env(:varsel, :hex_stub_users) end)
+
+      Req.Test.stub(Varsel.Accounts.GitHub, fn conn ->
+        case conn.request_path |> Path.basename() |> URI.decode() |> String.downcase() do
+          "octocat" -> Req.Test.json(conn, %{"login" => "octocat"})
+          _unknown -> Plug.Conn.send_resp(conn, 404, "{}")
+        end
+      end)
+
+      :ok
+    end
+
+    defp open_picker(conn, user, case_record) do
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/cases/#{case_record.id}")
+      render_click(lv, "open_people_picker")
+      lv
+    end
+
+    test "a POC picks from the user list", %{conn: conn, poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      assert lv |> element("#people-picker-modal") |> render() =~ supporter.name
+
+      lv
+      |> element("#people-picker-modal form[phx-submit='assign_user']")
+      |> render_submit(%{"user_id" => supporter.id})
+
+      assert render(lv) =~ supporter.name
+      assert [_poc_assignment, _supporter] = assignments(case_record, poc)
+    end
+
+    test "a supporter never sees the user list", %{conn: conn, poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      lv = open_picker(conn, supporter, case_record)
+      modal = lv |> element("#people-picker-modal") |> render()
+
+      refute modal =~ "Pick a user…"
+      assert modal =~ "By GitHub username"
+      assert modal =~ "By hex.pm username"
+    end
+
+    test "a GitHub handle with an account here is assigned outright", %{conn: conn, poc: poc} do
+      invitee = Fixtures.register_user("octocat")
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      lv
+      |> element("#people-picker-modal form[phx-submit='grant_by_handle']", "By GitHub username")
+      |> render_submit(%{"strategy" => "github", "username" => "octocat"})
+
+      assert case_record |> assignments(poc) |> Enum.any?(&(&1.user_id == invitee.id))
+    end
+
+    test "a GitHub handle with no account here becomes an invite", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      lv
+      |> element("#people-picker-modal form[phx-submit='grant_by_handle']", "By GitHub username")
+      |> render_submit(%{"strategy" => "github", "username" => "octocat"})
+
+      assert render(lv) =~ "github/octocat"
+      assert [invite] = Cases.list_case_invites!(actor: poc)
+      assert to_string(invite.username) == "octocat"
+    end
+
+    test "a hex.pm handle becomes an invite", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      lv
+      |> element("#people-picker-modal form[phx-submit='grant_by_handle']", "By hex.pm username")
+      |> render_submit(%{"strategy" => "hex", "username" => "alice"})
+
+      assert render(lv) =~ "hex/alice"
+    end
+
+    test "an unknown handle is reported, and nothing is added", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      html =
+        lv
+        |> element(
+          "#people-picker-modal form[phx-submit='grant_by_handle']",
+          "By GitHub username"
+        )
+        |> render_submit(%{"strategy" => "github", "username" => "ghost"})
+
+      assert html =~ "is not a GitHub account"
+      assert Cases.list_case_invites!(actor: poc) == []
+    end
+
+    test "an invite can be withdrawn again", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      invite =
+        Cases.invite_to_case!(
+          %{case_id: case_record.id, strategy: :github, username: "octocat"},
+          actor: poc
+        )
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      assert html =~ "github/octocat"
+
+      render_click(lv, "withdraw_invite", %{"id" => invite.id})
+
+      refute render(lv) =~ "github/octocat"
+      assert Cases.list_case_invites!(actor: poc) == []
+    end
+
+    test "someone with no role sees the people panel but cannot add", %{conn: conn, poc: poc} do
+      collaborator = Fixtures.register_user("case_live_collaborator")
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: collaborator.id}, actor: poc)
+
+      {:ok, lv, html} = conn |> log_in(collaborator) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "People"
+      refute lv |> element("button[phx-click='open_people_picker']") |> has_element?()
+    end
+  end
+
+  defp assignments(case_record, actor) do
+    case_record
+    |> Ash.load!([:assignments], actor: actor)
+    |> Map.fetch!(:assignments)
+  end
+
   describe "a catalog suggestion" do
     defp suggestion_card_html(html) do
       [card] = Regex.run(~r/<div id="suggestion-[^"]*".{0,1200}/s, html)

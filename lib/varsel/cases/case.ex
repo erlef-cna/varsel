@@ -580,6 +580,10 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
+    has_many :invites, Varsel.Cases.CaseInvite do
+      public? true
+    end
+
     has_many :affected_packages, Varsel.Cases.AffectedPackage do
       public? true
       sort position: :asc
