@@ -31,14 +31,12 @@ defmodule Varsel.Accounts.ClaimReportParticipantsTest do
 
     user = Fixtures.sign_in_with_hex("reporter", 4001)
 
-    assert [%{user_id: user_id}] = participants(poc)
-    assert user_id == user.id
-
     # What the sign-in link is for: the reporter can now read the report it
-    # sent them to.
+    # sent them to, and the row that carried them there is spent.
     assert Ash.reload!(report, authorize?: false).reporter_id == user.id
     assert [%{id: id}] = CVE.list_vulnerability_reports!(actor: user)
     assert id == report.id
+    assert participants(poc) == []
   end
 
   test "a report that already has a reporter is not taken over" do
@@ -60,13 +58,11 @@ defmodule Varsel.Accounts.ClaimReportParticipantsTest do
   end
 
   test "the handle matches regardless of how the provider spells it" do
-    poc = Fixtures.register_user("claim_case_poc", :poc)
-    report_naming("RePorTer")
+    report = report_naming("RePorTer")
 
     user = Fixtures.sign_in_with_hex("reporter", 4002)
 
-    assert [%{user_id: user_id}] = participants(poc)
-    assert user_id == user.id
+    assert Ash.reload!(report, authorize?: false).reporter_id == user.id
   end
 
   test "a GitHub sign-in does not claim a hex participant" do
@@ -97,23 +93,23 @@ defmodule Varsel.Accounts.ClaimReportParticipantsTest do
     assert user_id == user.id
   end
 
-  test "the row survives the claim rather than being consumed" do
+  # A maintainer's row waits for a case to be opened, so it keeps the contact
+  # details until then.
+  test "a maintainer's row survives the claim" do
     poc = Fixtures.register_user("claim_survives_poc", :poc)
-    report_naming("reporter")
+    report_naming("maintainer", :maintainer)
 
-    Fixtures.sign_in_with_hex("reporter", 4006)
+    Fixtures.sign_in_with_hex("maintainer", 4006)
 
-    assert [%{email: "reporter@example.com"}] = participants(poc)
+    assert [%{email: "maintainer@example.com"}] = participants(poc)
   end
 
   test "a second sign-in with the same handle is harmless" do
-    poc = Fixtures.register_user("claim_twice_poc", :poc)
-    report_naming("reporter")
+    report = report_naming("reporter")
 
     user = Fixtures.sign_in_with_hex("reporter", 4007)
     Fixtures.sign_in_with_hex("reporter", 4007)
 
-    assert [%{user_id: user_id}] = participants(poc)
-    assert user_id == user.id
+    assert Ash.reload!(report, authorize?: false).reporter_id == user.id
   end
 end

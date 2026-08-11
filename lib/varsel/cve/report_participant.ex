@@ -73,6 +73,11 @@ defmodule Varsel.CVE.ReportParticipant do
       accept [:user_id]
       require_atomic? false
     end
+
+    destroy :spend do
+      description "Drops a participant whose report became a case."
+      primary? true
+    end
   end
 
   policies do

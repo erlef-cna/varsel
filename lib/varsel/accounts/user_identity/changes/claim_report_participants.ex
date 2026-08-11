@@ -44,15 +44,22 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants do
     Enum.each(participants, &claim_participant(&1, identity))
   end
 
+  # Spent rather than linked: `report.reporter` now holds everything the row
+  # was carrying.
+  defp claim_participant(%{role: :reporter} = participant, identity) do
+    claim_report(participant, identity)
+
+    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
+    CVE.spend_report_participant!(participant, authorize?: false)
+  end
+
   defp claim_participant(participant, identity) do
     # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
     CVE.link_report_participant_user!(participant, %{user_id: identity.user_id}, authorize?: false)
-
-    if participant.role == :reporter, do: claim_report(participant, identity)
   end
 
-  # The report itself, not just the participant row: the sign-in link sends a
-  # reporter to their report, and the read policy finds it through `reporter`.
+  # The sign-in link sends a reporter to their report, and the read policy
+  # finds it through `reporter`.
   #
   # Checked rather than rescued: this runs inside the sign-in transaction, so
   # a report that already found its reporter must not fail the login.

@@ -184,6 +184,7 @@ defmodule Varsel.CVE do
         args: [:strategy, :username]
 
       define :link_report_participant_user, action: :link_user
+      define :spend_report_participant, action: :spend
     end
   end
 end
