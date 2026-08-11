@@ -255,7 +255,7 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
             case_id: case_record.id,
             vendor: "acme",
             product: "acme_lib",
-            channels: [%{purl_type: :hex, name: "acme_lib"}],
+            channels: [%{purl_type: "hex", name: "acme_lib"}],
             version_events: [%{event: :introduced, commit_sha: sha}]
           },
           actor: poc
@@ -296,7 +296,7 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
             vendor: "acme",
             product: "acme_lib",
             repo_url: "https://github.com/acme/acme_lib",
-            channels: [%{purl_type: :hex, name: "acme_lib"}],
+            channels: [%{purl_type: "hex", name: "acme_lib"}],
             version_events: [
               %{event: :introduced, version: "0"},
               %{event: :fixed, commit_sha: sha}
@@ -314,7 +314,10 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
         )
 
       assert package.product == "acme_lib"
-      assert [%{purl_type: :hex, name: "acme_lib"}] = package.channels
+
+      assert [%{purl_type: "hex", name: "acme_lib"}, %{purl_type: "github", name: "acme_lib"}] =
+               package.channels
+
       assert MapSet.new(package.version_events, & &1.event) == MapSet.new([:introduced, :fixed])
       assert Enum.all?(package.version_events, &(&1.affected_package_id == package.id))
     end

@@ -23,11 +23,28 @@ defmodule Varsel.Cases.Derivation.Display do
 
   @renderable_version_types ~w(semver otp date)
 
-  # Most packages carry no per-channel subpath; the channel grid collapses
-  # the Subpath column to a compact indicator so Derived gets the width it
-  # actually needs instead of being squeezed by an empty column.
-  def any_channel_subpath?(package) do
-    Enum.any?(package.channels, &(&1.subpath not in [nil, ""]))
+  @doc """
+  Every channel of a package paired with what its derivation produced:
+
+      [{channel, %{versions:, pending?:, issues:, timeline:}}]
+
+  `versions` is the raw CVE `versions[]` the cache holds, ready for the same
+  components the published record renders through. `timeline` is nil for a
+  channel whose versions cannot be laid on a line (commit SHAs).
+  """
+  @spec channel_derivations(struct()) :: [{struct(), map()}]
+  def channel_derivations(package) do
+    for channel <- package.channels do
+      derivation = channel_derivation(package.derivation_cache, channel.id) || %{}
+
+      {channel,
+       %{
+         versions: derivation["versions"] || [],
+         pending?: (derivation["pending"] || []) != [],
+         issues: derivation["issues"] || [],
+         timeline: timeline_row(channel_row_label(channel), derivation)
+       }}
+    end
   end
 
   # Board C's channel row annotates overridden machinery inline; these fields
@@ -41,100 +58,44 @@ defmodule Varsel.Cases.Derivation.Display do
     |> Enum.join(", ")
   end
 
-  # The purl without its qualifier tail — OTP channels carry long
+  # The purl without its qualifier tail — some channels carry long
   # repository_url/vcs_url qualifiers that would drown the UI, so rendered
   # surfaces show the clean base purl only; the full string lives in the
-  # rendering element's title attribute.
+  # rendering element's title attribute. A service has no purl, so it shows
+  # the domain it answers on.
   def channel_label(package, channel) do
     case Channel.purl_string(package, channel) do
-      nil -> channel.name
+      nil -> channel.domain || channel.name
       purl -> purl |> String.split("?", parts: 2) |> hd()
     end
   end
 
   # The timeline's row label: the short channel name ("inets", "bandit"),
   # never the purl — purls belong on the chips.
-  def channel_row_label(channel), do: channel.name || to_string(channel.purl_type)
-
-  # Compact per-channel summary of the cached derivation result ("git" is the
-  # implicit forge entry). Never authoritative — publish recomputes.
-  def derived_versions_label(package, key) do
-    case channel_derivation(package.derivation_cache, key) do
-      nil ->
-        nil
-
-      derivation ->
-        ranges = Enum.map(derivation["versions"] || [], &range_label/1)
-        pending = if (derivation["pending"] || []) == [], do: [], else: ["fix unreleased"]
-
-        case ranges ++ pending do
-          [] -> "no derived range"
-          parts -> Enum.join(parts, " · ")
-        end
-    end
-  end
-
-  # The at-rest github row's cell, mock style: "63e186ae… → 2 fix commits";
-  # the full derived label sits in the cell's title.
-  def git_compact_label(package) do
-    case channel_derivation(package.derivation_cache, "git") do
-      nil -> nil
-      derivation -> git_compact_range_label(derivation)
-    end
-  end
-
-  defp git_compact_range_label(derivation) do
-    versions = derivation["versions"] || []
-    git_range = Enum.find(versions, &(&1["versionType"] == "git")) || List.first(versions)
-
-    cond do
-      git_range -> "#{shorten(git_range["version"])} → #{fix_commit_count_label(git_range)}"
-      (derivation["pending"] || []) == [] -> "no derived range"
-      true -> "fix unreleased"
-    end
-  end
-
-  defp fix_commit_count_label(range) do
-    count =
-      cond do
-        is_list(range["changes"]) -> length(range["changes"])
-        range["lessThan"] not in [nil, "*"] -> 1
-        true -> 0
-      end
-
-    case count do
-      0 -> "no fix commits"
-      1 -> "1 fix commit"
-      n -> "#{n} fix commits"
-    end
-  end
+  def channel_row_label(%{kind: :service} = channel), do: channel.domain || "service"
+  def channel_row_label(channel), do: channel.name || channel.purl_type
 
   defp channel_derivation(nil, _key), do: nil
-  defp channel_derivation(cache, "git"), do: cache["git"]
   defp channel_derivation(cache, channel_id), do: get_in(cache, ["channels", channel_id])
 
   # Board C's boundary timeline, from the same derivation_cache the derived
-  # labels read. Every row (the implicit git row and each explicit channel
-  # row) is built the SAME way: its `versions` list is a sequence of
-  # half-open [from, until) ranges, flattened literally onto the track as
-  # intro/fixed node pairs with tinted vulnerable spans between them and safe
-  # gaps elsewhere. A `versionType: "git"` entry is a commit-SHA chain (a
-  # tree, not a line) and does not fit this linear track, so it's the one
-  # entry type skipped everywhere, including on the git row itself — an OTP
-  # git entry's leading OTP release ranges DO render there.
+  # labels read. Every channel row is built the SAME way: its `versions` list
+  # is a sequence of half-open [from, until) ranges, flattened literally onto
+  # the track as intro/fixed node pairs with tinted vulnerable spans between
+  # them and safe gaps elsewhere. A `versionType: "git"` entry is a commit-SHA
+  # chain (a tree, not a line) and does not fit this linear track, so it is the
+  # one entry type skipped everywhere — which leaves the repository channel
+  # without a row unless it also carries version-shaped ranges.
   def timeline_rows(%{derivation_cache: nil}), do: []
 
   def timeline_rows(package) do
     cache = package.derivation_cache
 
-    git_row = timeline_row("git", cache["git"])
-
-    channel_rows =
-      Enum.map(package.channels, fn channel ->
-        timeline_row(channel_row_label(channel), cache["channels"][channel.id])
-      end)
-
-    Enum.reject([git_row | channel_rows], &is_nil/1)
+    package.channels
+    |> Enum.map(fn channel ->
+      timeline_row(channel_row_label(channel), cache["channels"][channel.id])
+    end)
+    |> Enum.reject(&is_nil/1)
   end
 
   # A row's ranges become an ordered node sequence: each range contributes an
@@ -226,18 +187,6 @@ defmodule Varsel.Cases.Derivation.Display do
   defp edge_pos(:start, _by_label), do: 0
   defp edge_pos(:end, _by_label), do: 100
   defp edge_pos({_kind, tag}, by_label), do: Map.fetch!(by_label, tag)
-
-  defp range_label(%{"version" => from, "changes" => changes}) when is_list(changes) do
-    "≥ #{from} · fixed: #{Enum.map_join(changes, ", ", &shorten(&1["at"]))}"
-  end
-
-  defp range_label(%{"version" => from, "lessThan" => "*"}), do: "≥ #{shorten(from)}"
-
-  defp range_label(%{"version" => from, "lessThan" => to}) do
-    "≥ #{shorten(from)} < #{shorten(to)}"
-  end
-
-  defp range_label(_other), do: "custom"
 
   def derivation_issues(%{derivation_cache: nil}), do: []
 

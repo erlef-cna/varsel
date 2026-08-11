@@ -403,8 +403,8 @@ mcp__varsel__propose_affected_package(input: {
   case_id: <id>,
   vendor: "...", product: "...", repo_url: "...",
   channels: [
-    {purl_type: "hex", name: "<name>", namespace: null, qualifiers: {},
-     subpath: null, tag_prefix: null, tag_suffixes: []}
+    {kind: "package", purl_type: "hex", name: "<name>", namespace: null, qualifiers: {},
+     subpath: null, version_type: null, tag_prefix: null, tag_suffixes: []}
   ],
   version_events: [
     {event: "introduced", commit_sha: "<intro-SHA>", note: "..."},
@@ -612,12 +612,22 @@ person has been credited before.
 These are the things that will otherwise cost a round trip.
 
 **`propose_affected_package` channel keys are all required**, even when empty. Pass `qualifiers`
-as `{}` and `tag_suffixes` as `[]` rather than `null`, and include `namespace`, `subpath`, and
-`tag_prefix` explicitly as `null` when unused. A hex package channel is
-`{"purl_type": "hex", "name": "<pkg>", "namespace": null, "qualifiers": {}, "subpath": null, "tag_prefix": null, "tag_suffixes": []}`.
+as `{}` and `tag_suffixes` as `[]` rather than `null`, and include `namespace`, `subpath`,
+`version_type`, and `tag_prefix` explicitly as `null` when unused. A hex package channel is
+`{"kind": "package", "purl_type": "hex", "name": "<pkg>", "namespace": null, "qualifiers": {}, "subpath": null, "version_type": null, "tag_prefix": null, "tag_suffixes": []}`.
 
-**Do not add the `pkg:github` channel.** It is derived from the package's `repo_url`. Only add a
-forge channel for something like a second host.
+**`purl_type` is any purl type**, not a fixed list — `hex`, `npm`, `oci`, `otp`, `cargo`, `gem`,
+whatever the ecosystem publishes as. The well-known ones fill in their registry URL and version
+type on their own, so leave `version_type` null unless the channel genuinely disagrees with its
+ecosystem (the OTP release channel is `pkg:sid` versioned `otp`, for instance).
+
+**A service is a `kind: "service"` channel**, not a purl type: pass the `domain` it answers on
+(e.g. `hex.pm`) and none of the purl fields. It is always versioned by date, through
+channel-scoped version events.
+
+**Do not add the repository channel.** It is derived from the package's `repo_url` when the
+package is created (`pkg:github/...`, or `pkg:generic` for a forge with no purl type of its own).
+Only add a forge channel for something like a second host.
 
 **Version events are package-global.** Pass `introduced` and `fixed` with full commit SHAs and a
 `note` explaining each boundary. If different channels genuinely need different versions, stop and

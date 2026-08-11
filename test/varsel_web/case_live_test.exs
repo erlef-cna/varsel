@@ -630,11 +630,17 @@ defmodule VarselWeb.CaseLiveTest do
           %{
             case_id: case_record.id,
             affected_package_id: package.id,
-            purl_type: :hex,
+            purl_type: "hex",
             name: "acme_lib"
           },
           actor: poc
         )
+
+      repository =
+        package
+        |> Ash.load!(:channels, authorize?: false)
+        |> Map.fetch!(:channels)
+        |> Enum.find(&(&1.version_type == :git))
 
       intro_sha = String.duplicate("a", 40)
 
@@ -651,19 +657,19 @@ defmodule VarselWeb.CaseLiveTest do
             ],
             "pending" => [],
             "issues" => []
+          },
+          repository.id => %{
+            "versions" => [
+              %{
+                "version" => intro_sha,
+                "lessThan" => "*",
+                "status" => "affected",
+                "versionType" => "git"
+              }
+            ],
+            "pending" => [],
+            "issues" => []
           }
-        },
-        "git" => %{
-          "versions" => [
-            %{
-              "version" => intro_sha,
-              "lessThan" => "*",
-              "status" => "affected",
-              "versionType" => "git"
-            }
-          ],
-          "pending" => [],
-          "issues" => []
         },
         "issues" => ["no introduced boundary fact recorded"]
       }
@@ -672,17 +678,23 @@ defmodule VarselWeb.CaseLiveTest do
       |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: cache}, authorize?: false)
       |> Ash.update!()
 
-      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
       # Markdown renders as HTML, including the sections beyond the description.
       assert html =~ "<strong>bold</strong>"
       assert html =~ "Workarounds"
       assert html =~ "disable the acme integration"
 
-      # Cached derived ranges show per channel, plus the implicit git entry.
-      assert html =~ "≥ 1.0.0 &lt; 2.0.0"
-      assert html =~ "github (implicit)"
-      assert html =~ "≥ aaaaaaaaaaaa…"
+      # Each channel's cached range renders through the published record's own
+      # range list, so the bounds are separate elements rather than one string.
+      hex_range = lv |> element("#channel-#{channel.id} .affected-range") |> render()
+      assert hex_range =~ "1.0.0"
+      assert hex_range =~ "2.0.0"
+
+      repository_range = lv |> element("#channel-#{repository.id} .affected-range") |> render()
+      assert repository_range =~ "aaaaaaa"
+
+      assert html =~ "pkg:github/acme/acme_lib"
       assert html =~ "no introduced boundary fact recorded"
       assert html =~ "derived"
     end
@@ -942,7 +954,9 @@ defmodule VarselWeb.CaseLiveTest do
       assert [package] = case_record.affected_packages
       assert package.vendor == "Erlang"
       assert package.product == "OTP"
-      assert [%{name: "otp"}, %{name: "ssh"}, %{name: "ssl"}] = package.channels
+
+      assert [%{name: "otp"}, %{name: "ssh"}, %{name: "ssl"}, %{purl_type: "github"}] =
+               package.channels
 
       assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==
                MapSet.new([{:introduced, intro_sha}, {:fixed, fix_sha}])
@@ -960,7 +974,7 @@ defmodule VarselWeb.CaseLiveTest do
           load: [:channels]
         )
 
-      [_release_channel, inets_channel, _ftp_channel] = package.channels
+      inets_channel = Enum.find(package.channels, &(&1.name == "inets"))
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
@@ -992,6 +1006,56 @@ defmodule VarselWeb.CaseLiveTest do
 
       # The events table shows the scope badge.
       assert render(lv) =~ "pkg:otp/inets"
+    end
+
+    test "the channel card lists both channel kinds and the repository", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      package = Fixtures.add_affected_package(poc, case_record)
+
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: "hex",
+          name: "acme_lib"
+        },
+        actor: poc
+      )
+
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          kind: :service,
+          domain: "acme.example"
+        },
+        actor: poc
+      )
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "pkg:hex/acme_lib"
+      assert html =~ "acme.example"
+      assert html =~ "pkg:github/acme/acme_lib"
+      refute html =~ "implicit"
+    end
+
+    test "the channel modal authors kind, purl type and version type", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      Fixtures.add_affected_package(poc, case_record)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+
+      lv
+      |> element("button[phx-click=new_child][phx-value-type=channel]", "Add channel")
+      |> render_click()
+
+      modal = render(lv)
+
+      assert modal =~ "Kind"
+      assert modal =~ "Purl type"
+      assert modal =~ "Version type"
+      assert modal =~ "Version flavors"
     end
 
     test "adds a reference with tag checkboxes and custom x_ tags", %{conn: conn, poc: poc} do

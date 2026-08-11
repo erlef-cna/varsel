@@ -11,11 +11,9 @@ defmodule VarselWeb.CaseDetailLive do
 
   Content edits follow the content freeze (draft/review only); lifecycle
   decisions are POC-only — the same policies the API enforces, mirrored here
-  only to hide dead buttons. Most child rows are added/edited through one
-  modal `AshPhoenix.Form` at a time; an affected package's own fields and its
-  channels/boundary facts/program files instead open in place inside its own
-  card (`expanded_package_id`) — the board-C affected editor. Per-row actions
-  stay raw.
+  only to hide dead buttons. Child rows are added and edited through one modal
+  `AshPhoenix.Form` at a time, affected packages included, so every edit in the
+  workspace works the same way. Per-row actions stay raw.
   """
   use VarselWeb, :live_view
 
@@ -27,7 +25,6 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Accounts
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
-  alias Varsel.Cases.Case.Calculations.Preview.Channel
   alias Varsel.Cases.Case.Calculations.Preview.Diff
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseImpact
@@ -42,13 +39,15 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.VersionEvent
   alias Varsel.CVE
   alias Varsel.Types.CVSS
+  alias VarselWeb.AffectedComponents
   alias VarselWeb.CveView
-  alias VarselWeb.TimelineComponents
 
   @case_loads [
     :cve_id,
     :cve_record,
     :affected_summary,
+    :derivation_state,
+    :derivation_cached_at,
     :derived_references,
     # :avatar_url wherever a user is drawn as an avatar disc.
     assignments: [user: [:avatar_url]],
@@ -57,7 +56,7 @@ defmodule VarselWeb.CaseDetailLive do
     weaknesses: [weakness: [:cwe_id, :name]],
     impacts: [attack_pattern: [:capec_id, :name]],
     proposals: [author: [:avatar_url], resolved_by: []],
-    affected_packages: [:channels, :version_events],
+    affected_packages: [:derivation_state, channels: [:purl], version_events: []],
     comments: [:author],
     vulnerability_reports: [reporter: [:avatar_url]]
   ]
@@ -135,7 +134,7 @@ defmodule VarselWeb.CaseDetailLive do
         suggest?: socket.assigns.live_action == :propose,
         editing_section: if(socket.assigns.live_action == :view, do: nil, else: "summary"),
         mode: :view,
-        expanded_package_id: nil,
+        refreshing: false,
         child_form: nil,
         cve_picker: nil,
         preview: nil,
@@ -323,7 +322,7 @@ defmodule VarselWeb.CaseDetailLive do
 
     {:noreply,
      socket
-     |> assign(preview: :loading)
+     |> assign(preview: :loading, refreshing: true)
      |> start_async(:preview, fn ->
        {:ok, _} = Cases.refresh_case_derivation(case_record, actor: actor)
        Cases.get_case!(case_record.id, load: [:preview, :validation], actor: actor)
@@ -368,18 +367,6 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   ## -------------------------------------------------------------- child rows
-
-  # Opens the affected package's in-place editor (board C): the boundary
-  # timeline, channels-with-disclosure and program files, replacing the old
-  # centered modal for this one row. Channel/boundary child rows still use
-  # the modal (`child_form`) from inside it.
-  def handle_event("expand_package", %{"id" => id}, socket) do
-    {:noreply, assign(socket, expanded_package_id: id)}
-  end
-
-  def handle_event("collapse_package", _params, socket) do
-    {:noreply, assign(socket, expanded_package_id: nil, child_form: nil)}
-  end
 
   def handle_event("new_child", %{"type" => type} = params, socket) do
     %{resource: resource, title: title} = config = Map.fetch!(@children, type)
@@ -427,13 +414,6 @@ defmodule VarselWeb.CaseDetailLive do
       row
       |> AshPhoenix.Form.for_update(:edit, as: "child", actor: socket.assigns.current_user)
       |> to_form()
-
-    socket =
-      if type == "package" do
-        assign(socket, expanded_package_id: id)
-      else
-        socket
-      end
 
     {:noreply,
      assign(socket,
@@ -618,14 +598,15 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply,
      assign(socket,
        preview: case_record.preview,
-       validation: case_record.validation
+       validation: case_record.validation,
+       refreshing: false
      )}
   end
 
   def handle_async(:preview, {:exit, reason}, socket) do
     {:noreply,
      socket
-     |> assign(preview: nil, validation: nil)
+     |> assign(preview: nil, validation: nil, refreshing: false)
      |> put_flash(:error, "Preview failed: #{Exception.format_exit(reason)}")}
   end
 
@@ -1068,8 +1049,7 @@ defmodule VarselWeb.CaseDetailLive do
                 current_user={@current_user}
                 can_resolve={can_edit?(@case_record, @current_user)}
                 can_refresh={@can_refresh}
-                expanded_package_id={@expanded_package_id}
-                child_form={@child_form}
+                refreshing={@refreshing}
               />
             </div>
             <.rows_section
@@ -1227,7 +1207,7 @@ defmodule VarselWeb.CaseDetailLive do
           </:right>
 
           <.child_modal
-            :if={@child_form && not package_field_form?(@child_form)}
+            :if={@child_form}
             child_form={@child_form}
             catalog_options={@catalog_options}
             mode={@mode}
@@ -1638,28 +1618,38 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
-  # One board-A/board-C style card per affected package: package identity in
-  # the header, at rest a compact channels table plus a disclosure footer; the
-  # package's own "Edit" opens the board-C editor in place (boundary
-  # timeline, channel disclosure rows, program files) instead of a modal.
-  # Channel and boundary child rows still use the shared `child_modal`.
+  # One card per affected product. Deriving runs case-wide, so its state and
+  # its button live here rather than on each card.
   defp affected_section(assigns) do
     ~H"""
     <.card_section_header title="Affected" level={:h2}>
       <:actions>
-        <div :if={@mode != :view} class="dropdown dropdown-end">
-          <div tabindex="0" role="button" class="link link-hover text-primary cursor-pointer text-xs">
-            Add package ▾
+        <div class="flex items-center gap-4">
+          <AffectedComponents.derivation_status
+            :if={@case_record.derivation_state}
+            state={@case_record.derivation_state}
+            at={@case_record.derivation_cached_at}
+            can_refresh={@can_refresh}
+            refreshing={@refreshing}
+          />
+          <div :if={@mode != :view} class="dropdown dropdown-end">
+            <div
+              tabindex="0"
+              role="button"
+              class="link link-hover text-primary cursor-pointer text-xs"
+            >
+              Add package ▾
+            </div>
+            <ul
+              tabindex="0"
+              class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-10 w-44 p-1 shadow"
+            >
+              <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
+              <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
+              <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
+              <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
+            </ul>
           </div>
-          <ul
-            tabindex="0"
-            class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-10 w-44 p-1 shadow"
-          >
-            <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
-            <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
-            <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
-            <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
-          </ul>
         </div>
       </:actions>
     </.card_section_header>
@@ -1668,15 +1658,8 @@ defmodule VarselWeb.CaseDetailLive do
       <.affected_package_card
         :for={package <- @case_record.affected_packages}
         package={package}
-        expanded?={package.id == @expanded_package_id}
-        field_form={
-          @child_form && package_field_form?(@child_form) &&
-            @child_form.form.source.data.id == package.id &&
-            @child_form.form
-        }
         mode={@mode}
         marks={@marks}
-        can_refresh={@can_refresh}
       />
 
       <p :if={@case_record.affected_packages == []} class="text-sm text-base-content/60">
@@ -1693,331 +1676,217 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
+  # One card per affected product, in one shape. Channels are always visible —
+  # they are what the section is for — while boundary facts and program files
+  # fold away without taking their headers, counts or buttons with them, so no
+  # verb is ever behind a toggle. Editing the product's own fields opens the
+  # shared child modal, like every other edit in the section.
   attr :package, :map, required: true
-  attr :expanded?, :boolean, required: true
-  attr :field_form, :any, required: true
   attr :mode, :atom, required: true
   attr :marks, :map, required: true
-  attr :can_refresh, :boolean, required: true
 
   defp affected_package_card(assigns) do
+    channels = Display.channel_derivations(assigns.package)
+
+    assigns =
+      assign(assigns,
+        channels: channels,
+        shared_pending?: shared_pending?(channels),
+        card_warnings: card_warnings(assigns.package, channels),
+        editable?:
+          assigns.mode != :view and assigns.package.id not in assigns.marks.phantom and
+            assigns.package.id not in assigns.marks.deleted
+      )
+
     ~H"""
-    <.panel editing?={@expanded? && !!@field_form}>
+    <.panel>
       <:title>
-        {if @field_form,
-          do: "Affected — #{@package.vendor} / #{@package.product} — editing",
-          else: "Affected — #{@package.vendor} / #{@package.product}"}
+        Affected — {@package.vendor} / {@package.product}
+        <%!-- Which product is behind, when the section header says the case as
+              a whole is. Silent while a product is as derived as it can be. --%>
+        <AffectedComponents.derivation_marker state={@package.derivation_state} />
       </:title>
       <:actions>
         <.proposal_marks row_id={@package.id} marks={@marks} />
-        <%!-- Board B: an editing card's header carries no action links. --%>
-        <span :if={!@field_form} class="contents">
-          <button
-            :if={!@expanded?}
-            class="link link-hover text-primary"
-            phx-click="expand_package"
-            phx-value-id={@package.id}
-          >
-            Open
-          </button>
-          <button :if={@expanded?} class="link link-hover text-primary" phx-click="collapse_package">
-            Close
-          </button>
-          <button
-            :if={
-              @mode != :view and @package.id not in @marks.phantom and
-                @package.id not in @marks.deleted
-            }
-            class="link link-hover text-primary"
-            phx-click="edit_child"
-            phx-value-type="package"
-            phx-value-id={@package.id}
-          >
-            Edit
-          </button>
-          <button
-            :if={
-              @mode != :view and @package.id not in @marks.phantom and
-                @package.id not in @marks.deleted
-            }
-            class="link link-hover text-base-content/50 hover:text-error"
-            phx-click="remove_child"
-            phx-value-type="package"
-            phx-value-id={@package.id}
-            data-confirm={
-              if @mode == :propose,
-                do: "Propose removing this package?",
-                else: "Remove this package with all its channels and boundary facts?"
-            }
-          >
-            {if @mode == :propose, do: "Propose removal", else: "Remove"}
-          </button>
-          <button
-            :if={@can_refresh}
-            class="link link-hover text-primary"
-            phx-click="refresh_derivation"
-          >
-            Refresh ranges
-          </button>
-        </span>
+        <button
+          :if={@editable?}
+          class="link link-hover text-primary"
+          phx-click="edit_child"
+          phx-value-type="package"
+          phx-value-id={@package.id}
+        >
+          Edit
+        </button>
+        <button
+          :if={@editable?}
+          class="link link-hover text-base-content/50 hover:text-error"
+          phx-click="remove_child"
+          phx-value-type="package"
+          phx-value-id={@package.id}
+          data-confirm={
+            if @mode == :propose,
+              do: "Propose removing this package?",
+              else: "Remove this package with all its channels and boundary facts?"
+          }
+        >
+          {if @mode == :propose, do: "Propose removal", else: "Remove"}
+        </button>
       </:actions>
 
-      <p
-        :if={@package.repo_url || @package.allow_unreleased_fix}
-        class="text-xs font-mono text-base-content/60 -mt-1.5 mb-2"
-      >
-        <span :if={@package.repo_url}>{@package.repo_url}</span>
-        <span :if={@package.allow_unreleased_fix} class="font-sans">
-          · allows unreleased fixes
-        </span>
+      <AffectedComponents.product_meta
+        repo_url={@package.repo_url}
+        notes={product_notes(@package)}
+      />
+
+      <%!-- Whatever makes every range below suspect is stated once here rather
+            than repeated on each channel: a derivation that no longer matches
+            the facts, a problem deriving, or a fix every channel is waiting on. --%>
+      <p :if={@card_warnings != []} class="mb-2 text-xs text-warning">
+        ⚠ {Enum.join(@card_warnings, " · ")}
       </p>
 
-      <.affected_field_form :if={@field_form} form={@field_form} mode={@mode} />
+      <.card_section_header title="Ships as">
+        <:actions>
+          <button
+            :if={@mode != :view and @package.id not in @marks.phantom}
+            class="link link-hover text-primary text-xs"
+            phx-click="new_child"
+            phx-value-type="channel"
+            phx-value-affected_package_id={@package.id}
+          >
+            {if @mode == :propose, do: "Propose a channel", else: "Add channel"}
+          </button>
+        </:actions>
+      </.card_section_header>
 
-      <.affected_card_editor
-        :if={@expanded? && !@field_form}
-        package={@package}
-        mode={@mode}
-        marks={@marks}
-        can_refresh={@can_refresh}
-      />
+      <div class="space-y-4">
+        <AffectedComponents.channel_block
+          :for={{channel, derived} <- @channels}
+          id={"channel-#{channel.id}"}
+          purl={channel.purl}
+          fallback={channel.domain || channel.name}
+          subpath={channel.subpath}
+          versions={derived.versions}
+          timeline={derived.timeline}
+          timeline_id={"channel-timeline-#{channel.id}"}
+          muted={channel.id in @marks.deleted}
+        >
+          <:badges>
+            <span :if={Display.overridden_note(channel) != ""} class="badge badge-warning badge-xs">
+              {Display.overridden_note(channel)}
+            </span>
+            <.proposal_marks row_id={channel.id} marks={@marks} />
+          </:badges>
+          <:actions :if={@mode != :view}>
+            <.row_actions
+              row_id={channel.id}
+              type="channel"
+              noun="channel"
+              mode={@mode}
+              marks={@marks}
+            />
+          </:actions>
+          <%!-- A pending fix every channel shares is already stated on the
+                card, so only a problem peculiar to this channel repeats here. --%>
+          <:problem :if={derived.issues != [] or (derived.pending? and not @shared_pending?)}>
+            <p class="mt-1 text-xs text-warning">
+              ⚠ {channel_problem(derived)}
+            </p>
+          </:problem>
+        </AffectedComponents.channel_block>
+      </div>
 
-      <.affected_card_at_rest
-        :if={!@expanded?}
-        package={@package}
-        mode={@mode}
-        marks={@marks}
-        can_refresh={@can_refresh}
-      />
+      <p :if={@package.channels == []} class="text-sm text-base-content/60">
+        Nowhere to ship yet — add the registries and repositories this product is published
+        through.
+      </p>
+
+      <.disclosure
+        id={"affected-boundary-#{@package.id}"}
+        title="Boundary facts"
+        count={length(@package.version_events)}
+      >
+        <:actions>
+          <button
+            :if={@mode != :view and @package.id not in @marks.phantom}
+            class="link link-hover text-primary"
+            phx-click="new_child"
+            phx-value-type="event"
+            phx-value-affected_package_id={@package.id}
+          >
+            {if @mode == :propose, do: "Propose a boundary", else: "Add boundary"}
+          </button>
+        </:actions>
+        <:empty>Where the flaw entered and left this product — no facts recorded yet.</:empty>
+
+        <AffectedComponents.boundary_fact
+          :for={event <- @package.version_events}
+          event={event.event}
+          reference={Display.boundary_label(event)}
+          title={event.commit_sha}
+          scope={event.package_channel_id && scoped_channel_label(@package, event)}
+          note={event.note}
+          muted={event.id in @marks.deleted}
+        >
+          <:badges><.proposal_marks row_id={event.id} marks={@marks} /></:badges>
+          <:actions :if={@mode != :view}>
+            <.row_actions
+              row_id={event.id}
+              type="event"
+              noun="boundary fact"
+              mode={@mode}
+              marks={@marks}
+            />
+          </:actions>
+        </AffectedComponents.boundary_fact>
+      </.disclosure>
+
+      <.disclosure
+        id={"affected-files-#{@package.id}"}
+        title="Program files"
+        count={length(@package.program_files)}
+      >
+        <:empty>The files carrying the flaw — none recorded yet.</:empty>
+        <AffectedComponents.program_file
+          :for={file <- @package.program_files}
+          path={file.path}
+          modules={file.modules}
+          routines={file.routines}
+        />
+      </.disclosure>
     </.panel>
     """
   end
 
-  # The package's own field-edit form (vendor/product/repo/status/program
-  # files/CPE/allow_unreleased_fix), opened in place inside the expanded card
-  # — same anatomy (footer save/cancel/reasoning) as the content editors.
-  attr :form, :any, required: true
-  attr :mode, :atom, required: true
-
-  defp affected_field_form(assigns) do
-    ~H"""
-    <.edit_mode_notice mode={@mode} />
-    <.affected_package_form
-      form={@form}
-      id="child-form"
-      phx-change="validate_child"
-      phx-submit="submit_child"
-    >
-      <:actions>
-        <.edit_actions mode={@mode} cancel="cancel_child" />
-      </:actions>
-    </.affected_package_form>
-    """
+  # Standing exceptions that change how a product's versions are read.
+  defp product_notes(package) do
+    Enum.filter(
+      [
+        package.allow_unreleased_fix && "allows unreleased fixes",
+        !package.include_prereleases && "pre-releases excluded"
+      ],
+      & &1
+    )
   end
 
-  # At rest: a compact channels table (mock's Channel / Derived range /
-  # action columns) plus a disclosure footer for boundary facts, program
-  # files and derivation freshness — no always-open sub-tables.
-  attr :package, :map, required: true
-  attr :mode, :atom, required: true
-  attr :marks, :map, required: true
+  # Whether every channel is waiting on the same unreleased fix, in which case
+  # it is the product's problem rather than one channel's and belongs at the
+  # top of the card instead of under each set of ranges.
+  defp shared_pending?([]), do: false
 
-  attr :can_refresh, :boolean, required: true
-
-  defp affected_card_at_rest(assigns) do
-    ~H"""
-    <.channel_table rows={channel_rows(@package, :compact)} mode={@mode} marks={@marks} />
-    <p :if={@package.channels == [] and !@package.repo_url} class="text-sm text-base-content/60">
-      No channels yet.
-    </p>
-
-    <div class="flex items-center gap-3 text-xs text-base-content/50 mt-2">
-      <button
-        class="link link-hover"
-        phx-click={JS.toggle(to: "#affected-boundary-#{@package.id}")}
-      >
-        Boundary facts ▸
-      </button>
-      ·
-      <button
-        class="link link-hover"
-        phx-click={JS.toggle(to: "#affected-files-#{@package.id}")}
-      >
-        program files ({length(@package.program_files)}) ▸
-      </button>
-      <span :if={@package.derivation_cached_at}>
-        · derived <.relative_timestamp at={@package.derivation_cached_at} />
-      </span>
-      <button
-        :if={@can_refresh}
-        class="link link-hover text-primary ml-auto"
-        phx-click="refresh_derivation"
-      >
-        Refresh
-      </button>
-    </div>
-    <p :if={Display.derivation_issues(@package) != []} class="text-xs text-warning mt-1">
-      ⚠ {Enum.join(Display.derivation_issues(@package), " · ")}
-    </p>
-
-    <div id={"affected-boundary-#{@package.id}"} class="hidden mt-3 pt-3 border-t border-base-300">
-      <.boundary_facts_table package={@package} mode={@mode} marks={@marks} />
-    </div>
-    <div id={"affected-files-#{@package.id}"} class="hidden mt-3 pt-3 border-t border-base-300">
-      <.program_files files={@package.program_files} />
-    </div>
-    """
+  defp shared_pending?(channels) do
+    Enum.all?(channels, fn {_channel, derived} -> derived.pending? end)
   end
 
-  # The old always-shown "Version boundaries" table, kept as the on-demand
-  # disclosure body — badges tinted per the mock instead of solid-filled.
-  attr :package, :map, required: true
-  attr :mode, :atom, required: true
-  attr :marks, :map, required: true
+  defp card_warnings(package, channels) do
+    pending =
+      if shared_pending?(channels), do: ["a fix has no containing release yet"], else: []
 
-  defp boundary_facts_table(assigns) do
-    ~H"""
-    <.card_section_header title="Boundary facts">
-      <:actions>
-        <button
-          :if={@mode != :view and @package.id not in @marks.phantom}
-          class="btn btn-ghost btn-xs"
-          phx-click="new_child"
-          phx-value-type="event"
-          phx-value-affected_package_id={@package.id}
-        >
-          Add boundary
-        </button>
-      </:actions>
-    </.card_section_header>
-    <div :if={@package.version_events != []} class="overflow-x-auto">
-      <table class="table table-xs w-full">
-        <tbody>
-          <tr :for={event <- @package.version_events}>
-            <td>
-              <span class={["badge badge-sm", boundary_badge_class(event.event)]}>
-                {event.event}
-              </span>
-            </td>
-            <td class="font-mono text-xs" title={event.commit_sha}>
-              {Display.boundary_label(event)}
-            </td>
-            <td class="text-xs">
-              <span
-                :if={event.package_channel_id}
-                class="badge badge-ghost badge-sm font-mono"
-                title="Applies only to this channel"
-              >
-                {scoped_channel_label(@package, event)}
-              </span>
-            </td>
-            <td class="text-xs text-base-content/60">{event.note}</td>
-            <td :if={@mode != :view} class="text-right whitespace-nowrap">
-              <.proposal_marks row_id={event.id} marks={@marks} />
-              <.row_actions
-                row_id={event.id}
-                type="event"
-                noun="boundary fact"
-                mode={@mode}
-                marks={@marks}
-              />
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p :if={@package.version_events == []} class="text-sm text-base-content/60">
-      No boundary facts yet (introduced/fixed commits or versions).
-    </p>
-    """
+    Display.derivation_issues(package) ++ pending
   end
 
-  defp boundary_badge_class(:fixed), do: "text-success bg-success/15"
-  defp boundary_badge_class(_introduced), do: "text-warning bg-warning/15"
-
-  # Board C: the boundary timeline (read-only picture of derivation_cache),
-  # channels with per-row disclosure for their machinery, and program files —
-  # this is the in-place replacement for the old centered package modal.
-  attr :package, :map, required: true
-  attr :mode, :atom, required: true
-  attr :marks, :map, required: true
-
-  attr :can_refresh, :boolean, required: true
-
-  defp affected_card_editor(assigns) do
-    assigns = assign(assigns, :timeline_rows, Display.timeline_rows(assigns.package))
-
-    ~H"""
-    <.card_section_header title="Boundary facts → derived ranges">
-      <:actions>
-        <button
-          :if={@mode != :view and @package.id not in @marks.phantom}
-          class="btn btn-ghost btn-xs"
-          phx-click="new_child"
-          phx-value-type="event"
-          phx-value-affected_package_id={@package.id}
-        >
-          Add boundary
-        </button>
-      </:actions>
-    </.card_section_header>
-
-    <div :if={@timeline_rows != []} class="space-y-2 mb-4">
-      <TimelineComponents.version_timeline
-        :for={row <- @timeline_rows}
-        id={"#{@package.id}-#{row.label}"}
-        label={row.label}
-        nodes={row.nodes}
-        spans={row.spans}
-      />
-    </div>
-    <p :if={@timeline_rows == []} class="text-sm text-base-content/60 mb-4">
-      No boundary facts yet — the timeline fills in once introduced/fixed
-      commits or versions are recorded.
-    </p>
-
-    <.card_section_header title="Channels">
-      <:actions>
-        <button
-          :if={@mode != :view and @package.id not in @marks.phantom}
-          class="btn btn-ghost btn-xs"
-          phx-click="new_child"
-          phx-value-type="channel"
-          phx-value-affected_package_id={@package.id}
-        >
-          Add channel
-        </button>
-      </:actions>
-    </.card_section_header>
-    <.channel_table
-      rows={channel_rows(@package, :full)}
-      mode={@mode}
-      marks={@marks}
-      subpath?={Display.any_channel_subpath?(@package)}
-      edit_label="▸"
-    />
-
-    <.program_files files={@package.program_files} />
-
-    <div class="flex items-center gap-3 mt-3 pt-3 border-t border-base-300 text-xs text-base-content/50">
-      <span :if={Display.derivation_issues(@package) != []} class="text-warning">
-        ⚠ {Enum.join(Display.derivation_issues(@package), " · ")}
-      </span>
-      <span class="ml-auto">
-        <span :if={@package.derivation_cached_at}>
-          derived <.relative_timestamp at={@package.derivation_cached_at} /> ·
-        </span>
-        <button
-          :if={@can_refresh}
-          class="link link-hover text-primary"
-          phx-click="refresh_derivation"
-        >
-          Refresh
-        </button>
-      </span>
-    </div>
-    """
-  end
+  defp channel_problem(%{issues: [_ | _] = issues}), do: Enum.join(issues, " · ")
+  defp channel_problem(_pending), do: "fix has no containing release yet"
 
   attr :id, :string, required: true
   attr :heading, :string, required: true
@@ -2740,8 +2609,6 @@ defmodule VarselWeb.CaseDetailLive do
   # files) in place inside its expanded card, not the centered child modal —
   # true only for an *update* form (a brand-new package still has no card to
   # expand into, so "Add package" stays on the modal).
-  defp package_field_form?(%{type: "package", form: %{source: %{type: :update}}}), do: true
-  defp package_field_form?(_child_form), do: false
 
   defp update_child_form(socket, fun) do
     child_form = socket.assigns.child_form
@@ -2757,10 +2624,7 @@ defmodule VarselWeb.CaseDetailLive do
         []
 
       package ->
-        Enum.map(
-          package.channels,
-          &{Display.channel_label(package, &1) || to_string(&1.purl_type), &1.id}
-        )
+        Enum.map(package.channels, &{Display.channel_label(package, &1), &1.id})
     end
   end
 
@@ -2769,45 +2633,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp scoped_channel_label(package, event) do
     case Enum.find(package.channels, &(&1.id == event.package_channel_id)) do
       nil -> "(removed channel)"
-      channel -> Display.channel_label(package, channel) || to_string(channel.purl_type)
-    end
-  end
-
-  # A package's channels as the table renders them, plus the implicit git row
-  # a package with a repository gets. `:compact` words the git range the way
-  # the resting card does; `:full` the way the editor does, where there is
-  # room for the whole list.
-  defp channel_rows(package, git_detail) do
-    rows =
-      Enum.map(package.channels, fn channel ->
-        %{
-          id: channel.id,
-          name: Display.channel_label(package, channel) || "—",
-          title: Channel.purl_string(package, channel),
-          subpath: channel.subpath,
-          derived: Display.derived_versions_label(package, channel.id),
-          note: presence(Display.overridden_note(channel))
-        }
-      end)
-
-    if package.repo_url do
-      git =
-        case git_detail do
-          :compact -> Display.git_compact_label(package)
-          :full -> Display.derived_versions_label(package, "git")
-        end
-
-      rows ++
-        [
-          %{
-            id: nil,
-            name: "github (implicit)",
-            derived: git,
-            derived_title: Display.derived_versions_label(package, "git")
-          }
-        ]
-    else
-      rows
+      channel -> Display.channel_label(package, channel)
     end
   end
 

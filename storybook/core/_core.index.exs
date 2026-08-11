@@ -23,7 +23,9 @@ defmodule VarselWeb.Storybook.Core do
   def entry("console_search"), do: [name: "Console search", icon: {:local, "hero-magnifying-glass"}]
 
   def entry("count_label"), do: [name: "Count label", icon: {:local, "hero-hashtag"}]
+  def entry("disclosure"), do: [name: "Disclosure", icon: {:local, "hero-chevron-right"}]
   def entry("empty_state"), do: [name: "Empty state", icon: {:local, "hero-inbox"}]
+  def entry("field_list"), do: [name: "Field list", icon: {:local, "hero-list-bullet"}]
   def entry("header"), do: [name: "Header", icon: {:local, "hero-bars-3-bottom-left"}]
   def entry("icon"), do: [name: "Icon", icon: {:local, "hero-sparkles"}]
   def entry("input"), do: [name: "Input", icon: {:local, "hero-pencil-square"}]

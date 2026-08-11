@@ -20,22 +20,36 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
     data_layer: :embedded,
     extensions: [AshGraphql.Resource]
 
+  alias Varsel.Cases.PackageChannel.Kind
   alias Varsel.Cases.PackageChannel.PurlType
+  alias Varsel.Cases.PackageChannel.Validations.ConsistentIdentity
+  alias Varsel.Cases.PackageChannel.VersionType
 
   graphql do
     type :case_channel_input
   end
 
+  validations do
+    validate ConsistentIdentity
+  end
+
   attributes do
+    attribute :kind, Kind do
+      description "Whether this channel distributes a package (purl) or is a running service (domain, date-versioned)."
+      allow_nil? false
+      default :package
+      public? true
+    end
+
     attribute :purl_type, PurlType do
       description """
-      Package URL type of this distribution channel, e.g. :hex, :otp, :oci,
-      :sid, :hosted. List the distribution channels only — the source repo's
-      pkg:github channel is derived from the package's repo_url, so you normally
-      don't add it here (do so only for something like a second forge host).
+      Package URL type of this distribution channel, e.g. "hex", "otp", "oci",
+      "sid", "npm". Any purl type works. List the distribution channels only —
+      the source repository's own channel is derived from the package's
+      repo_url, so you normally don't add it here (do so only for something
+      like a second forge host).
       """
 
-      allow_nil? false
       public? true
     end
 
@@ -45,7 +59,12 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
     end
 
     attribute :name, :string do
-      description ~s{The purl name, e.g. "ash_authentication_phoenix" (hex), "stdlib" (otp). Nil only for :hosted channels.}
+      description ~s{The purl name, e.g. "ash_authentication_phoenix" (hex), "stdlib" (otp). Required for package channels.}
+      public? true
+    end
+
+    attribute :domain, :string do
+      description ~s{The domain a service channel answers on, e.g. "hex.pm". Set instead of the purl fields, and only on service channels.}
       public? true
     end
 
@@ -61,13 +80,18 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
       public? true
     end
 
+    attribute :version_type, VersionType do
+      description "Vocabulary of the derived version bounds. Nil takes the purl type's default (hex/npm semver, otp otp, oci other)."
+      public? true
+    end
+
     attribute :tag_prefix, :string do
-      description ~s{String prepended to OCI image tags, e.g. "v" for v1.2.3 tags. Nil or empty for bare version tags.}
+      description ~s{String prepended to every derived version, e.g. "v" for v1.2.3 tags. Nil or empty for bare versions.}
       public? true
     end
 
     attribute :tag_suffixes, {:array, :string} do
-      description ~s{OCI image-tag flavor suffixes (e.g. ["elixir", "erlang"]); the derived range repeats once per flavor with the suffix appended. A "-" entry is the bare tag, e.g. ["-", "special"] for 1.2.3 and 1.2.3-special.}
+      description ~s{Flavor suffixes appended to every derived version (e.g. ["elixir", "erlang"]); the derived range repeats once per flavor. A "-" entry is the bare version, e.g. ["-", "special"] for 1.2.3 and 1.2.3-special.}
       allow_nil? false
       default []
       public? true

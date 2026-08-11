@@ -125,11 +125,13 @@ defmodule Varsel.Cases.Projection do
   end
 
   defp apply_insert(%{target: :affected_package} = proposal, case_record) do
+    # A product that does not exist yet has derived nothing, which is what
+    # `:never` says — the calculation cannot run on a row with no id.
     phantom =
       proposal
       |> phantom_row(AffectedPackage, case_record.id)
       |> merge_preset_constants(proposal)
-      |> Map.merge(%{channels: [], version_events: []})
+      |> Map.merge(%{channels: [], version_events: [], derivation_state: :never})
 
     Map.update!(case_record, :affected_packages, &(&1 ++ [phantom]))
   end

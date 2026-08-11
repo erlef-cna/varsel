@@ -64,7 +64,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
       %{
         case_id: case_record.id,
         affected_package_id: package.id,
-        purl_type: :hex,
+        purl_type: "hex",
         name: "ash_authentication_phoenix",
         position: 0
       },
@@ -390,7 +390,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
   } do
     case_record = Ash.load!(case_record, [affected_packages: [:channels]], authorize?: false)
     [package] = case_record.affected_packages
-    hex_channel = Enum.find(package.channels, &(&1.purl_type == :hex))
+    hex_channel = Enum.find(package.channels, &(&1.purl_type == "hex"))
 
     Cases.edit_package_channel!(
       hex_channel,
@@ -539,47 +539,56 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
       assert entry["repo"] == "https://github.com/acme/acme_lib.git"
     end
 
-    test "gitlab repos get gitlab purls and collectionURL, subgroups included", %{
+    # gitlab has no registered purl type, so it takes the generic one with the
+    # repository in vcs_url rather than an invented pkg:gitlab.
+    test "a forge without a purl type of its own becomes pkg:generic", %{
       poc: poc,
       forge_case: case_record
     } do
       entry = git_entry(poc, case_record, "https://gitlab.com/group/subgroup/acme_lib")
 
       assert entry["collectionURL"] == "https://gitlab.com"
-      assert entry["packageName"] == "group/subgroup/acme_lib"
-      assert entry["packageURL"] == "pkg:gitlab/group/subgroup/acme_lib"
+      assert entry["packageName"] == "acme_lib"
+
+      assert entry["packageURL"] ==
+               "pkg:generic/acme_lib?vcs_url=git%2Bhttps:%2F%2Fgitlab.com%2Fgroup%2Fsubgroup%2Facme_lib"
     end
 
-    test "forges without a purl type keep the path but emit no packageURL", %{
+    test "a self-hosted forge is generic too, carrying its repository", %{
       poc: poc,
       forge_case: case_record
     } do
       entry = git_entry(poc, case_record, "https://git.sr.ht/~acme/acme_lib")
 
       assert entry["collectionURL"] == "https://git.sr.ht"
-      assert entry["packageName"] == "~acme/acme_lib"
-      refute Map.has_key?(entry, "packageURL")
+      assert entry["packageName"] == "acme_lib"
+      assert entry["packageURL"] =~ "pkg:generic/acme_lib?vcs_url="
       assert entry["repo"] == "https://git.sr.ht/~acme/acme_lib"
     end
 
-    test "a package without a repository renders no forge entry", %{
+    test "a package without a repository gets no repository channel", %{
       poc: poc,
       forge_case: case_record
     } do
       package =
-        Fixtures.add_affected_package(poc, case_record, %{repo_url: nil, product: "hosted-only"})
+        Fixtures.add_affected_package(poc, case_record, %{repo_url: nil, product: "service-only"})
 
       Cases.add_package_channel!(
-        %{case_id: case_record.id, affected_package_id: package.id, purl_type: :hosted},
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          kind: :service,
+          domain: "acme.example"
+        },
         actor: poc
       )
 
       case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
       result = render!(case_record, poc)
 
-      # Only the hosted entry renders: no repo, no forge entry.
       assert [entry] = cna(result)["affected"]
-      refute Map.has_key?(entry, "collectionURL")
+      assert entry["packageName"] == "acme.example"
+      assert entry["collectionURL"] == "https://acme.example"
       refute Map.has_key?(entry, "packageURL")
     end
   end
@@ -604,9 +613,10 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
           %{
             case_id: case_record.id,
             affected_package_id: package.id,
-            purl_type: :otp,
+            purl_type: "otp",
             name: application,
             subpath: subpath,
+            version_type: :otp,
             position: position
           },
           actor: poc
@@ -680,7 +690,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          purl_type: :otp,
+          purl_type: "otp",
           name: "rebar3"
         },
         actor: poc
@@ -727,7 +737,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          purl_type: :hex,
+          purl_type: "hex",
           name: "acme_lib"
         },
         actor: poc

@@ -51,11 +51,14 @@ defmodule Varsel.Cases.Proposable do
   ]
 
   @package_channel_fields [
+    :kind,
     :purl_type,
     :namespace,
     :name,
+    :domain,
     :qualifiers,
     :subpath,
+    :version_type,
     :tag_prefix,
     :tag_suffixes,
     :versions_override,

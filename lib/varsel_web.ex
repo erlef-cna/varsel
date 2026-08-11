@@ -88,6 +88,7 @@ defmodule VarselWeb do
 
       import Phoenix.HTML
       import VarselWeb.CoreComponents
+      import VarselWeb.DisclosureComponents
       import VarselWeb.ViewHelpers
 
       # HTML escaping functionality

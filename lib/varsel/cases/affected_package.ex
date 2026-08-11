@@ -32,7 +32,9 @@ defmodule Varsel.Cases.AffectedPackage do
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
+  alias Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel
   alias Varsel.Cases.AffectedPackage.Changes.FromPreset
+  alias Varsel.Cases.AffectedPackage.DerivationState
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.AffectedPackage.ProgramFile
   alias Varsel.Cases.Changes.ApplyProposedField
@@ -66,9 +68,15 @@ defmodule Varsel.Cases.AffectedPackage do
     defaults [:read]
 
     create :add do
-      description "Adds a logical product to a case."
+      description """
+      Adds a logical product to a case. A `repo_url` additionally gets the
+      repository its own distribution channel (pkg:github/... or pkg:generic),
+      so the source is published alongside the registries.
+      """
+
       primary? true
       accept [:case_id | Proposable.fields(__MODULE__)]
+      change AddRepositoryChannel
     end
 
     create :add_otp do
@@ -415,6 +423,64 @@ defmodule Varsel.Cases.AffectedPackage do
       `repo_url` with its case, trailing slashes and `.git` suffix normalized
       away, so the same repository compares equal however it was written.
       """
+    end
+
+    calculate :facts_changed_at,
+              :utc_datetime_usec,
+              expr(
+                fragment(
+                  "GREATEST(?, ?, ?)",
+                  updated_at,
+                  channels_changed_at,
+                  version_events_changed_at
+                )
+              ) do
+      description """
+      When this product last changed in any way derivation reads: its own
+      fields, its channels, or its boundary facts. `GREATEST` ignores nulls, so
+      a product with no children compares on its own timestamp.
+      """
+    end
+
+    calculate :derivation_state,
+              DerivationState,
+              expr(
+                cond do
+                  is_nil(derivation_cached_at) ->
+                    :never
+
+                  derivation_cached_at < facts_changed_at ->
+                    :outdated
+
+                  derivation_cached_at <
+                      fragment(
+                        # `interval '? hours'` cannot take a parameter — the quotes
+                        # make it a literal — so the span is multiplied instead.
+                        "now() - (interval '1 hour' * ?)",
+                        ^DerivationState.ageing_after_hours()
+                      ) ->
+                    :ageing
+
+                  true ->
+                    :current
+                end
+              ) do
+      description """
+      What the cached derivation is worth right now — whether the ranges it
+      holds can be believed at all. See `Varsel.Cases.AffectedPackage.DerivationState`.
+      """
+
+      public? true
+    end
+  end
+
+  aggregates do
+    max :channels_changed_at, :channels, :updated_at do
+      description "When any of this product's channels last changed."
+    end
+
+    max :version_events_changed_at, :version_events, :updated_at do
+      description "When any of this product's boundary facts last changed."
     end
   end
 end

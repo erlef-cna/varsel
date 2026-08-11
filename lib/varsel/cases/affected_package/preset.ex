@@ -24,6 +24,10 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
   * `:gleam` — the `pkg:sid/gleam.run/gleam` tool channel plus the ghcr.io
     OCI image channel with its tag flavors.
 
+  Every preset additionally gets the source repository's own channel, from the
+  package's `repo_url` (see
+  `Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel`).
+
   When vulnerable functionality moved from one OTP application to another
   over time (ftp/tftp split out of inets), the derived range of the *former*
   home is wrong by construction — the fix releases still ship that
@@ -96,9 +100,9 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
   @spec channels(t(), [String.t()] | nil) :: [map()]
   def channels(:gleam, _applications) do
     [
-      %{purl_type: :sid, namespace: "gleam.run", name: "gleam", position: 0},
+      %{purl_type: "sid", namespace: "gleam.run", name: "gleam", position: 0},
       %{
-        purl_type: :oci,
+        purl_type: "oci",
         name: "gleam",
         qualifiers: %{"repository_url" => "ghcr.io/gleam-lang"},
         tag_prefix: "v",
@@ -109,25 +113,35 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
   end
 
   # OTP releases the whole distribution under its own release versions, so the
-  # release channel leads the per-application ones. Elixir's applications version
-  # with Elixir itself, so their per-application channels already carry the
-  # release version — no separate release channel there.
+  # release channel leads the per-application ones. It is a `sid` channel (no
+  # registry publishes the OTP distribution) that nonetheless versions in OTP
+  # releases, hence the explicit version_type: sid itself implies nothing.
+  # Elixir's applications version with Elixir itself, so their per-application
+  # channels already carry the release version — no separate release channel
+  # there, and their `otp` channels version in semver rather than OTP releases.
   def channels(:otp, applications) do
-    release = %{purl_type: :sid, namespace: "erlang.org", name: "otp", position: 0}
+    release = %{
+      purl_type: "sid",
+      namespace: "erlang.org",
+      name: "otp",
+      version_type: :otp,
+      position: 0
+    }
 
-    [release | application_channels(applications, 1)]
+    [release | application_channels(applications, 1, :otp)]
   end
 
-  def channels(:elixir, applications), do: application_channels(applications, 0)
+  def channels(:elixir, applications), do: application_channels(applications, 0, :semver)
 
-  defp application_channels(applications, offset) do
+  defp application_channels(applications, offset, version_type) do
     applications
     |> Enum.with_index(offset)
     |> Enum.map(fn {application, position} ->
       %{
-        purl_type: :otp,
+        purl_type: "otp",
         name: application,
         subpath: application_subpath(application),
+        version_type: version_type,
         position: position
       }
     end)

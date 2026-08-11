@@ -164,37 +164,21 @@ SPDX-License-Identifier: Apache-2.0
           default_status={entry["defaultStatus"]}
         />
 
-        <div class="mt-2 flex flex-col gap-0.5">
-          <div class="flex items-baseline gap-3 py-0.5">
-            <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
-              default status
-            </span>
-            <span class="text-xs text-base-content/70">{entry["defaultStatus"]}</span>
-          </div>
-          <div :if={cpe_line(entry)} class="flex items-baseline gap-3 py-0.5">
-            <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
-              cpe
-            </span>
-            <span class="break-all font-mono text-xs text-base-content/70">{cpe_line(entry)}</span>
-          </div>
-        </div>
+        <.field_list
+          class="mt-2"
+          rows={[
+            {"default status", entry["defaultStatus"], :prose},
+            {"cpe", cpe_line(entry)}
+          ]}
+        />
 
-        <details :if={has_components?(entry)} class="mt-2">
-          <summary class="cursor-pointer text-xs text-base-content/50">
-            {components_summary(entry)}
-          </summary>
-          <div class="mt-2 flex flex-col gap-0.5 border-t border-dashed border-base-300 pt-2">
-            <div
-              :for={{label, value} <- component_field_rows(entry)}
-              class="flex items-baseline gap-3 py-0.5"
-            >
-              <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
-                {label}
-              </span>
-              <span class="break-all font-mono text-xs text-base-content/70">{value}</span>
-            </div>
-          </div>
-        </details>
+        <.disclosure
+          :if={has_components?(entry)}
+          id={"#{affected_card_id(index)}-components"}
+          title={components_summary(entry)}
+        >
+          <.field_list rows={component_field_rows(entry)} />
+        </.disclosure>
       </.panel>
 
       <.panel :if={present["workarounds"]} id="workarounds">
