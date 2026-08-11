@@ -243,6 +243,21 @@ defmodule Varsel.Cases.ReachabilityTest do
       assert versions(derive(repo, [], [], explicit)) == [{"1.1.0", "1.3.0"}]
     end
 
+    # gleam-lang/gleam carries a `nightly` tag. An explicit version compares
+    # against every tag in the universe, so a tag that names no version has to
+    # be dropped before anything tries to order it.
+    test "a tag that is not a version takes no part", %{repo: repo} do
+      StubGitBackend.stub_tags(%{
+        {repo, @intro} => ["1.16.0", "nightly"],
+        {repo, @fix} => ["1.18.1"]
+      })
+
+      StubGitBackend.stub_all_tags(%{repo => ["1.15.7", "1.16.0", "1.18.1", "nightly", "latest"]})
+
+      assert versions(derive(repo, [@intro], [@fix], [{:introduced, "1.15.7"}])) ==
+               [{"1.15.7", "1.18.1"}]
+    end
+
     test "an unresolvable intro is not an issue when an explicit version supplies the boundary",
          %{repo: repo} do
       StubGitBackend.stub_tags(%{{repo, @intro} => []})
