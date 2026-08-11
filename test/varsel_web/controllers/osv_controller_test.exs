@@ -57,9 +57,7 @@ defmodule VarselWeb.OsvControllerTest do
     |> Ash.ActionInput.for_action(:create_missing, %{})
     |> Ash.run_action!(authorize?: false)
 
-    OsvRecord
-    |> Ash.Query.for_read(:get, %{osv_id: "EEF-#{cve_id}"})
-    |> Ash.read_one!(authorize?: false)
+    Varsel.CVE.get_osv_record!("EEF-#{cve_id}", actor: nil)
   end
 
   describe "GET /osv/all.json" do

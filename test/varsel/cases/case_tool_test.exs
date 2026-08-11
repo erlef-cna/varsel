@@ -94,7 +94,7 @@ defmodule Varsel.Cases.CaseToolTest do
     } do
       [listed] = run(:list_case_proposals, %{"input" => %{"case_id" => case_record.id}}, actor)
 
-      [row] = run(:get_case_proposal, %{"input" => %{"id" => listed["id"]}}, actor)
+      row = run(:get_case_proposal, %{"id" => listed["id"]}, actor)
 
       assert row["reasoning"] =~ "a long paragraph of reasoning"
       assert row["id"] == listed["id"]

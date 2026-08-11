@@ -75,7 +75,9 @@ defmodule Varsel.Cases do
       select [:id, :target, :target_id, :operation, :field_name, :proposed_value, :state]
     end
 
-    tool :get_case_proposal, Proposal, :get_by_id
+    tool :get_case_proposal, Proposal, :read do
+      get_by :id
+    end
 
     # One typed propose_* tool per field/child kind (the generic :propose stays
     # private; the agent picks the tool that names what it is changing).
@@ -114,7 +116,7 @@ defmodule Varsel.Cases do
 
       list Proposal, :list_case_proposals, :list_for_case
       list Proposal, :list_open_case_proposals, :list_open_for_case
-      get Proposal, :get_case_proposal, :get_by_id, identity: false
+      get Proposal, :get_case_proposal, :read
 
       list Comment, :list_case_comments, :list_for_case
     end
@@ -328,7 +330,7 @@ defmodule Varsel.Cases do
       define :read_case_proposals, action: :read
       define :list_case_proposals, action: :list_for_case, args: [:case_id]
       define :list_open_case_proposals, action: :list_open_for_case, args: [:case_id]
-      define :get_case_proposal, action: :get_by_id, args: [:id]
+      define :get_case_proposal, action: :read, get_by: :id
       define :accept_case_proposal, action: :accept
       define :decline_case_proposal, action: :decline
       define :withdraw_case_proposal, action: :withdraw

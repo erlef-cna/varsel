@@ -367,18 +367,14 @@ defmodule Varsel.CAPEC.AttackPatternTest do
       stub_catalog(@sample_xml)
       run_sync()
 
-      pattern =
-        AttackPattern
-        |> Ash.Query.for_read(:get_by_capec_id, %{capec_id: 66}, authorize?: false)
-        |> Ash.Query.load(:weaknesses)
-        |> Ash.read_one!(authorize?: false)
+      pattern = Varsel.CAPEC.get_attack_pattern!(66, load: [:weaknesses], actor: nil)
 
       cwe_ids = pattern.weaknesses |> Enum.map(& &1.cwe_id) |> Enum.sort()
       assert cwe_ids == [89, 116]
     end
   end
 
-  describe "get_by_capec_id action" do
+  describe "fetching one attack pattern" do
     setup do
       stub_catalog(@sample_xml)
       run_sync()
@@ -386,22 +382,15 @@ defmodule Varsel.CAPEC.AttackPatternTest do
     end
 
     test "returns the correct attack pattern" do
-      result =
-        AttackPattern
-        |> Ash.Query.for_read(:get_by_capec_id, %{capec_id: 66}, authorize?: false)
-        |> Ash.read_one!()
+      result = Varsel.CAPEC.get_attack_pattern!(66, actor: nil)
 
       assert result.capec_id == 66
       assert result.name == "SQL Injection"
     end
 
-    test "returns nil for unknown CAPEC ID" do
-      result =
-        AttackPattern
-        |> Ash.Query.for_read(:get_by_capec_id, %{capec_id: 9999}, authorize?: false)
-        |> Ash.read_one()
-
-      assert {:ok, nil} = result
+    test "returns not-found for an unknown CAPEC ID" do
+      assert {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} =
+               Varsel.CAPEC.get_attack_pattern(9999, actor: nil)
     end
   end
 

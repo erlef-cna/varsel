@@ -72,9 +72,7 @@ defmodule Varsel.CVE.OsvRecordTest do
   end
 
   defp get_osv(osv_id \\ "EEF-#{@cve_id}") do
-    OsvRecord
-    |> Ash.Query.for_read(:get, %{osv_id: osv_id})
-    |> Ash.read_one!(authorize?: false)
+    Varsel.CVE.get_osv_record!(osv_id, actor: nil)
   end
 
   defp backdate_sync(hours) do

@@ -99,7 +99,7 @@ defmodule Varsel.CAPEC.AttackPatternToolTest do
 
   describe "get_attack_pattern" do
     test "carries every field of the record", %{actor: actor} do
-      [row] = run(:get_attack_pattern, %{"input" => %{"capec_id" => 63}}, actor)
+      row = run(:get_attack_pattern, %{"capec_id" => 63}, actor)
 
       assert Enum.sort(Map.keys(row)) ==
                ~w(abstraction capec_id consequences description extended_description
@@ -111,7 +111,7 @@ defmodule Varsel.CAPEC.AttackPatternToolTest do
     end
 
     test "loads no relationships", %{actor: actor} do
-      [row] = run(:get_attack_pattern, %{"input" => %{"capec_id" => 63}}, actor)
+      row = run(:get_attack_pattern, %{"capec_id" => 63}, actor)
 
       refute Map.has_key?(row, "weaknesses")
       refute Map.has_key?(row, "related_attack_pattern_relationships")
@@ -120,7 +120,7 @@ defmodule Varsel.CAPEC.AttackPatternToolTest do
 
   describe "get_attack_pattern_relations" do
     test "related weaknesses are identified, not expanded", %{actor: actor} do
-      [row] = run(:get_attack_pattern_relations, %{"input" => %{"capec_id" => 63}}, actor)
+      row = run(:get_attack_pattern_relations, %{"capec_id" => 63}, actor)
 
       assert Enum.sort(Map.keys(row)) ==
                ~w(capec_id name related_attack_pattern_relationships weaknesses)
@@ -131,7 +131,7 @@ defmodule Varsel.CAPEC.AttackPatternToolTest do
     end
 
     test "related attack patterns are identified, not expanded", %{actor: actor} do
-      [row] = run(:get_attack_pattern_relations, %{"input" => %{"capec_id" => 63}}, actor)
+      row = run(:get_attack_pattern_relations, %{"capec_id" => 63}, actor)
 
       assert [relationship] = row["related_attack_pattern_relationships"]
       assert relationship["nature"] == "child_of"
@@ -143,7 +143,7 @@ defmodule Varsel.CAPEC.AttackPatternToolTest do
     test "no nested record drags its own prose along", %{actor: actor} do
       json =
         :get_attack_pattern_relations
-        |> run(%{"input" => %{"capec_id" => 63}}, actor)
+        |> run(%{"capec_id" => 63}, actor)
         |> Jason.encode!()
 
       for field <- @prose_fields ++ ~w(potential_mitigations common_consequences) do
@@ -154,7 +154,7 @@ defmodule Varsel.CAPEC.AttackPatternToolTest do
 
   test "a listed pattern is a fraction of the detail payload", %{actor: actor} do
     [summary | _] = run(:list_attack_patterns, %{}, actor)
-    [detail] = run(:get_attack_pattern, %{"input" => %{"capec_id" => 63}}, actor)
+    detail = run(:get_attack_pattern, %{"capec_id" => 63}, actor)
 
     assert byte_size(Jason.encode!(summary)) * 10 < byte_size(Jason.encode!(detail))
   end

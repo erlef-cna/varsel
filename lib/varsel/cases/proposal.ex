@@ -96,13 +96,6 @@ defmodule Varsel.Cases.Proposal do
       pagination keyset?: true, required?: false
     end
 
-    read :get_by_id do
-      description "Fetches a single proposal, with the author's full reasoning."
-      argument :id, :uuid, allow_nil?: false
-      get? true
-      filter expr(id == ^arg(:id))
-    end
-
     read :list_for_case do
       description "All proposals of a case, newest first."
       argument :case_id, :uuid, allow_nil?: false

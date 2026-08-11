@@ -99,7 +99,7 @@ defmodule Varsel.CWE.WeaknessToolTest do
 
   describe "get_weakness" do
     test "carries the prose a caller asked for it by ID to read", %{actor: actor} do
-      [row] = run(:get_weakness, %{"input" => %{"cwe_id" => 79}}, actor)
+      row = run(:get_weakness, %{"cwe_id" => 79}, actor)
 
       assert Enum.sort(Map.keys(row)) ==
                ~w(common_consequences cwe_id description extended_description name
@@ -110,7 +110,7 @@ defmodule Varsel.CWE.WeaknessToolTest do
     end
 
     test "loads no relationships", %{actor: actor} do
-      [row] = run(:get_weakness, %{"input" => %{"cwe_id" => 79}}, actor)
+      row = run(:get_weakness, %{"cwe_id" => 79}, actor)
 
       refute Map.has_key?(row, "related_attack_patterns")
       refute Map.has_key?(row, "related_weakness_relationships")
@@ -119,7 +119,7 @@ defmodule Varsel.CWE.WeaknessToolTest do
 
   describe "relationship tools" do
     test "related attack patterns are identified, not expanded", %{actor: actor} do
-      [row] = run(:get_weakness_related_attack_patterns, %{"input" => %{"cwe_id" => 79}}, actor)
+      row = run(:get_weakness_related_attack_patterns, %{"cwe_id" => 79}, actor)
 
       assert Enum.sort(Map.keys(row)) == ~w(cwe_id name related_attack_patterns)
       assert [capec] = row["related_attack_patterns"]
@@ -133,7 +133,7 @@ defmodule Varsel.CWE.WeaknessToolTest do
     end
 
     test "related weaknesses are identified, not expanded", %{actor: actor} do
-      [row] = run(:get_weakness_related_weaknesses, %{"input" => %{"cwe_id" => 79}}, actor)
+      row = run(:get_weakness_related_weaknesses, %{"cwe_id" => 79}, actor)
 
       assert Enum.sort(Map.keys(row)) == ~w(cwe_id name related_weakness_relationships)
       assert [relationship] = row["related_weakness_relationships"]
@@ -146,7 +146,7 @@ defmodule Varsel.CWE.WeaknessToolTest do
 
     test "neither relationship tool leaks the prose fields", %{actor: actor} do
       for tool <- [:get_weakness_related_weaknesses, :get_weakness_related_attack_patterns] do
-        json = tool |> run(%{"input" => %{"cwe_id" => 79}}, actor) |> Jason.encode!()
+        json = tool |> run(%{"cwe_id" => 79}, actor) |> Jason.encode!()
 
         for field <- @bulk_fields, do: refute(json =~ field, "#{tool} leaked #{field}")
       end
@@ -155,7 +155,7 @@ defmodule Varsel.CWE.WeaknessToolTest do
 
   test "a listed weakness is a fraction of the detail payload", %{actor: actor} do
     [summary | _] = run(:list_weaknesses, %{}, actor)
-    [detail] = run(:get_weakness, %{"input" => %{"cwe_id" => 79}}, actor)
+    detail = run(:get_weakness, %{"cwe_id" => 79}, actor)
 
     assert byte_size(Jason.encode!(summary)) * 10 < byte_size(Jason.encode!(detail))
   end

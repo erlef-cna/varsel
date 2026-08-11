@@ -110,13 +110,6 @@ defmodule Varsel.CAPEC.AttackPattern do
       pagination keyset?: true, required?: false
     end
 
-    read :get_by_capec_id do
-      description "Fetches a single attack pattern by its integer CAPEC ID."
-      argument :capec_id, :integer, allow_nil?: false
-      get? true
-      filter expr(capec_id == ^arg(:capec_id))
-    end
-
     read :search do
       description """
       Full-text search over name, description, prerequisites, mitigations, and

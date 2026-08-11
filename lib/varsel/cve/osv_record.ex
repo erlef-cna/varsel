@@ -111,13 +111,6 @@ defmodule Varsel.CVE.OsvRecord do
       prepare build(sort: [osv_id: :asc])
     end
 
-    read :get do
-      description "Fetches a single OSV record by its OSV ID (EEF-CVE-...)."
-      argument :osv_id, :string, allow_nil?: false
-      get? true
-      filter expr(osv_id == ^arg(:osv_id))
-    end
-
     create :create do
       description "Persists a derived OSV record, upserting on the parent CVE record."
 

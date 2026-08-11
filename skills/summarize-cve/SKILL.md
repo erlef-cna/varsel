@@ -17,7 +17,7 @@ Produce a concise technical markdown summary of a CVE. The output is for a secur
 
 Pull the data from the Varsel MCP:
 
-- **Published CVE:** `mcp__varsel__get_cve(input: {cve_id: "CVE-..."})`.
+- **Published CVE:** `mcp__varsel__get_cve(cve_id: "CVE-...")`.
 - **Working case:** `mcp__varsel__get_case(input: {...})`, and `mcp__varsel__render_case_preview(input: {id: <case-id>})` for the rendered container (affected ranges, references, etc.).
 
 Extract:

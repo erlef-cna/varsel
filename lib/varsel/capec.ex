@@ -23,7 +23,9 @@ defmodule Varsel.CAPEC do
       select [:capec_id, :name, :description]
     end
 
-    tool :get_attack_pattern, AttackPattern, :get_by_capec_id do
+    tool :get_attack_pattern, AttackPattern, :read do
+      get_by :capec_id
+
       select [
         :capec_id,
         :name,
@@ -39,7 +41,9 @@ defmodule Varsel.CAPEC do
       ]
     end
 
-    tool :get_attack_pattern_relations, AttackPattern, :get_by_capec_id do
+    tool :get_attack_pattern_relations, AttackPattern, :read do
+      get_by :capec_id
+
       select [:capec_id, :name]
 
       load weaknesses: [:cwe_id, :name],
@@ -55,7 +59,7 @@ defmodule Varsel.CAPEC do
   graphql do
     queries do
       list AttackPattern, :list_attack_patterns, :read
-      get AttackPattern, :get_attack_pattern, :get_by_capec_id, identity: false
+      get AttackPattern, :get_attack_pattern, :read
       list AttackPattern, :search_attack_patterns, :search
     end
   end
@@ -63,7 +67,7 @@ defmodule Varsel.CAPEC do
   resources do
     resource AttackPattern do
       define :list_attack_patterns, action: :read
-      define :get_attack_pattern, action: :get_by_capec_id, args: [:capec_id]
+      define :get_attack_pattern, action: :read, get_by: :capec_id
       define :search_attack_patterns, action: :search, args: [:query]
       define :upsert_attack_pattern, action: :upsert
       define :sync_capec_catalog, action: :sync_capec_catalog

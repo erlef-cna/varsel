@@ -42,13 +42,6 @@ defmodule Varsel.CWE.View do
       description "Lists CWE views."
     end
 
-    read :get_by_view_id do
-      description "Fetches a single CWE view by its integer View ID."
-      argument :view_id, :integer, allow_nil?: false
-      get? true
-      filter expr(view_id == ^arg(:view_id))
-    end
-
     read :list_switchable do
       description """
       Lists views usable as a switch destination from the common-weaknesses

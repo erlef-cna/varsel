@@ -22,11 +22,13 @@ defmodule Varsel.CVE do
       load [:cve_id, :title, :date_published, :date_updated, :purls]
     end
 
-    tool :get_cve, CveRecord, :get_published do
+    tool :get_cve, CveRecord, :read do
+      get_by :cve_id
       load [:cve_id, :title, :date_published, :date_updated, :purls]
     end
 
-    tool :validate_cve, CveRecord, :get_published do
+    tool :validate_cve, CveRecord, :read do
+      get_by :cve_id
       load [:cve_id, :validation]
     end
 
@@ -45,7 +47,10 @@ defmodule Varsel.CVE do
     tool :validate_cve_record_eef, CveValidation, :validate_eef
 
     tool :list_osv_records, OsvRecord, :read
-    tool :get_osv_record, OsvRecord, :get
+
+    tool :get_osv_record, OsvRecord, :read do
+      get_by :osv_id
+    end
 
     tool :submit_vulnerability_report, VulnerabilityReport, :submit
 
@@ -75,7 +80,7 @@ defmodule Varsel.CVE do
       list CveRecord, :available_cve_ids, :available
 
       list OsvRecord, :list_osv_records, :read
-      read_one OsvRecord, :get_osv_record, :get
+      get OsvRecord, :get_osv_record, :read, identity: :unique_osv_id
 
       list VulnerabilityReport, :list_vulnerability_reports, :list_reports
 
@@ -150,7 +155,7 @@ defmodule Varsel.CVE do
     resource OsvRecord do
       define :list_osv_records, action: :read
       define :list_osv_feed, action: :list_feed
-      define :get_osv_record, action: :get, args: [:osv_id]
+      define :get_osv_record, action: :read, get_by: :osv_id
       define :create_osv_record, action: :create
       define :create_missing_osv_records, action: :create_missing
       define :sync_osv_record, action: :sync

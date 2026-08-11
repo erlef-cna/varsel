@@ -513,7 +513,7 @@ defmodule Varsel.CWE.WeaknessTest do
     end
   end
 
-  describe "get_by_cwe_id action" do
+  describe "fetching one weakness" do
     setup do
       stub_catalog(zip_xml(@sample_xml))
       run_sync()
@@ -521,22 +521,15 @@ defmodule Varsel.CWE.WeaknessTest do
     end
 
     test "returns the correct weakness" do
-      result =
-        Weakness
-        |> Ash.Query.for_read(:get_by_cwe_id, %{cwe_id: 79}, authorize?: false)
-        |> Ash.read_one!()
+      result = Varsel.CWE.get_weakness!(79, actor: nil)
 
       assert result.cwe_id == 79
       assert result.name =~ "Improper Neutralization"
     end
 
-    test "returns nil for unknown CWE ID" do
-      result =
-        Weakness
-        |> Ash.Query.for_read(:get_by_cwe_id, %{cwe_id: 9999}, authorize?: false)
-        |> Ash.read_one()
-
-      assert {:ok, nil} = result
+    test "returns not-found for an unknown CWE ID" do
+      assert {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} =
+               Varsel.CWE.get_weakness(9999, actor: nil)
     end
   end
 

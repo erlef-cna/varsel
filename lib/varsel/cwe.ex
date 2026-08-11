@@ -24,7 +24,9 @@ defmodule Varsel.CWE do
       select [:cwe_id, :name, :description]
     end
 
-    tool :get_weakness, Weakness, :get_by_cwe_id do
+    tool :get_weakness, Weakness, :read do
+      get_by :cwe_id
+
       select [
         :cwe_id,
         :name,
@@ -35,7 +37,9 @@ defmodule Varsel.CWE do
       ]
     end
 
-    tool :get_weakness_related_weaknesses, Weakness, :get_by_cwe_id do
+    tool :get_weakness_related_weaknesses, Weakness, :read do
+      get_by :cwe_id
+
       select [:cwe_id, :name]
 
       load related_weakness_relationships: [
@@ -47,7 +51,9 @@ defmodule Varsel.CWE do
       load_strict? true
     end
 
-    tool :get_weakness_related_attack_patterns, Weakness, :get_by_cwe_id do
+    tool :get_weakness_related_attack_patterns, Weakness, :read do
+      get_by :cwe_id
+
       select [:cwe_id, :name]
       load related_attack_patterns: [:capec_id, :name, :description]
       load_strict? true
@@ -57,7 +63,9 @@ defmodule Varsel.CWE do
       load [:member_weaknesses]
     end
 
-    tool :get_cwe_view, View, :get_by_view_id do
+    tool :get_cwe_view, View, :read do
+      get_by :view_id
+
       load [:member_weaknesses]
     end
   end
@@ -65,17 +73,17 @@ defmodule Varsel.CWE do
   graphql do
     queries do
       list Weakness, :list_weaknesses, :read
-      get Weakness, :get_weakness, :get_by_cwe_id, identity: false
+      get Weakness, :get_weakness, :read
       list Weakness, :search_weaknesses, :search
       list View, :list_cwe_views, :read
-      get View, :get_cwe_view, :get_by_view_id, identity: false
+      get View, :get_cwe_view, :read
     end
   end
 
   resources do
     resource Weakness do
       define :list_weaknesses, action: :read
-      define :get_weakness, action: :get_by_cwe_id, args: [:cwe_id]
+      define :get_weakness, action: :read, get_by: :cwe_id
       define :search_weaknesses, action: :search, args: [:query]
       define :upsert_weakness, action: :upsert
       define :sync_cwe_catalog, action: :sync_cwe_catalog
@@ -93,7 +101,7 @@ defmodule Varsel.CWE do
     resource View do
       define :list_views, action: :read
       define :list_switchable_views, action: :list_switchable
-      define :get_view, action: :get_by_view_id, args: [:view_id]
+      define :get_view, action: :read, get_by: :view_id
       define :upsert_view, action: :upsert
       define :destroy_view, action: :destroy
     end

@@ -18,7 +18,7 @@ Find the most appropriate CAPEC attack pattern(s) using the Varsel MCP's local C
 If you already picked a CWE (via `/find-cwe`), start there — MITRE maps each CWE to the attack patterns that exploit it, and Varsel exposes that link as its own tool:
 
 ```
-mcp__varsel__get_weakness_related_attack_patterns(input: {cwe_id: <ID>})
+mcp__varsel__get_weakness_related_attack_patterns(cwe_id: <ID>)
 # → { ..., "related_attack_patterns": [{"capec_id": 126, "name": "Path Traversal", "description": "..."}, ...] }
 ```
 
@@ -48,10 +48,10 @@ Pick the most specific pattern that describes *how* the attack works, not just t
 ## Verify a known ID
 
 ```
-mcp__varsel__get_attack_pattern(input: {capec_id: <ID>})
+mcp__varsel__get_attack_pattern(capec_id: <ID>)
 ```
 
-Check the name and description against the actual attack technique. To confirm the pattern exploits the weakness you identified, ask for its links separately — `get_attack_pattern_relations(input: {capec_id: <ID>})` returns a `weaknesses` array whose `cwe_id`s should include the case's CWE.
+Check the name and description against the actual attack technique. To confirm the pattern exploits the weakness you identified, ask for its links separately — `get_attack_pattern_relations(capec_id: <ID>)` returns a `weaknesses` array whose `cwe_id`s should include the case's CWE.
 
 ## Output
 

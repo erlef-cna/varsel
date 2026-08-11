@@ -106,13 +106,6 @@ defmodule Varsel.CWE.Weakness do
       pagination keyset?: true, required?: false
     end
 
-    read :get_by_cwe_id do
-      description "Fetches a single weakness by its integer CWE ID."
-      argument :cwe_id, :integer, allow_nil?: false
-      get? true
-      filter expr(cwe_id == ^arg(:cwe_id))
-    end
-
     read :search do
       description """
       Full-text search over name, description, mitigations, and consequences,
