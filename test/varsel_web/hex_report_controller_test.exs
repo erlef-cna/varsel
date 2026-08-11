@@ -98,6 +98,7 @@ defmodule VarselWeb.HexReportControllerTest do
       assert report.source == :hex
       assert report.summary == "Unsafe parsing"
       assert report.report_json["package"] == "reported_package"
+      assert report.report_json["report"] == "A crafted document can execute code."
       assert report.reporter_id == nil
     end
 

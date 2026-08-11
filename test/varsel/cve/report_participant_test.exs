@@ -40,6 +40,48 @@ defmodule Varsel.CVE.ReportParticipantTest do
     %{poc: poc, report: report}
   end
 
+  describe "an account that already holds the handle" do
+    defp participants_of(report, actor) do
+      report
+      |> Ash.load!([:participants], actor: actor)
+      |> Map.fetch!(:participants)
+    end
+
+    defp report_naming(username, role) do
+      CVE.submit_hex_vulnerability_report!(
+        %{
+          report_json: %{"report" => "Bad."},
+          summary: "Names #{username}",
+          participants: [%{role: role, strategy: :hex, username: username}]
+        },
+        authorize?: false
+      )
+    end
+
+    test "is found at intake rather than at the next sign-in", %{poc: poc} do
+      maintainer = Fixtures.sign_in_with_hex("known_maintainer", 6001)
+      report = report_naming("known_maintainer", :maintainer)
+
+      assert [%{user_id: user_id}] = participants_of(report, poc)
+      assert user_id == maintainer.id
+    end
+
+    test "takes the report when it is the reporter", %{poc: poc} do
+      reporter = Fixtures.sign_in_with_hex("known_reporter", 6002)
+      report = report_naming("known_reporter", :reporter)
+
+      assert report.reporter_id == reporter.id
+      assert participants_of(report, poc) == []
+    end
+
+    test "is not confused with the same handle at another provider", %{poc: poc} do
+      Fixtures.sign_in_with_github("crossed_handle", 6003)
+      report = report_naming("crossed_handle", :maintainer)
+
+      assert [%{user_id: nil}] = participants_of(report, poc)
+    end
+  end
+
   test "a POC sees everyone the intake named", %{poc: poc} do
     participants = CVE.list_report_participants!(actor: poc)
 

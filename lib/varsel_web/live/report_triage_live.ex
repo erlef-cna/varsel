@@ -172,6 +172,14 @@ defmodule VarselWeb.ReportTriageLive do
 
   defp actionable?(state), do: state in [:submitted, :triaged]
 
+  # A participant naming the reporter means they have not signed in yet.
+  # Without one, a missing reporter is an account that went away.
+  defp reporter_known?(%{reporter: nil} = report) do
+    not Enum.any?(report.participants, &(&1.role == :reporter))
+  end
+
+  defp reporter_known?(_report), do: true
+
   # Whether the triage block has anything to show; each form inside asks about
   # its own action, so this only decides the spacing around them.
   defp triage_actions?(actor, report) do
@@ -318,12 +326,12 @@ defmodule VarselWeb.ReportTriageLive do
           </h3>
           <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-base-content/60">
             <.user_badge
-              :if={@triage?}
+              :if={@triage? and reporter_known?(@report)}
               user={@report.reporter}
               class="items-center"
               name_class="text-base-content/60"
             />
-            <span :if={@triage?}>·</span>
+            <span :if={@triage? and reporter_known?(@report)}>·</span>
             <.relative_timestamp at={@report.inserted_at} />
           </div>
         </div>

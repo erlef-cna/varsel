@@ -53,11 +53,7 @@ defmodule VarselWeb.HexReportController do
       {:ok,
        %{
          summary: summary,
-         report_json: %{
-           "summary" => summary,
-           "description" => description,
-           "package" => package
-         },
+         report_json: %{"report" => description, "package" => package},
          participants: [reporter | maintainers]
        }}
     end

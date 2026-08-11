@@ -250,6 +250,12 @@ defmodule VarselWeb.ReportTriageLiveTest do
             summary: "forwarded by hex.pm",
             participants: [
               %{
+                role: :reporter,
+                strategy: :hex,
+                username: "triage_reporter",
+                email: "reporter@example.com"
+              },
+              %{
                 role: :maintainer,
                 strategy: :hex,
                 username: "triage_maintainer",
@@ -261,6 +267,28 @@ defmodule VarselWeb.ReportTriageLiveTest do
         )
 
       %{hex_report: report}
+    end
+
+    test "a reporter who has not signed in yet is not shown as deleted", %{conn: conn, poc: poc} do
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/reports")
+
+      assert html =~ "forwarded by hex.pm"
+      refute html =~ "Deleted user"
+    end
+
+    test "a reporter whose account went away still is", %{
+      conn: conn,
+      poc: poc,
+      hex_report: report
+    } do
+      report
+      |> Ash.load!([:participants], authorize?: false)
+      |> Map.fetch!(:participants)
+      |> Enum.each(&Ash.destroy!(&1, action: :spend, authorize?: false))
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/reports")
+
+      assert html =~ "Deleted user"
     end
 
     test "are listed for a POC", %{conn: conn, poc: poc} do

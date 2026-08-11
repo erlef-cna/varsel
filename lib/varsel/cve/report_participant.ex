@@ -57,6 +57,8 @@ defmodule Varsel.CVE.ReportParticipant do
       description "Records someone an intake named on a report."
       primary? true
       accept [:report_id, :role, :strategy, :username, :name, :email]
+
+      change Varsel.CVE.ReportParticipant.Changes.LinkKnownAccount
     end
 
     read :for_identity do
@@ -75,7 +77,18 @@ defmodule Varsel.CVE.ReportParticipant do
     end
 
     destroy :spend do
-      description "Drops a participant whose report became a case."
+      description """
+      Drops a participant the CNA no longer needs.
+
+      These rows hold personal data about people who never signed up here, so
+      we keep as little of it as processing a report and its case requires,
+      and no longer. When a process ends — the report becomes a case, or is
+      rejected — everything it no longer needs goes.
+
+      Anyone who registered an account in the meantime keeps their details
+      under their own control, where they can delete them themselves.
+      """
+
       primary? true
     end
   end
