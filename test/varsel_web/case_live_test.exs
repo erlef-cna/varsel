@@ -428,6 +428,16 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Open a case"
       assert html =~ "archive"
     end
+
+    test "the empty board offers no way in to someone who cannot open a case", %{conn: conn} do
+      collaborator = Fixtures.register_user("empty_board_collaborator")
+
+      {:ok, _lv, html} = conn |> log_in(collaborator) |> live(~p"/cases")
+
+      assert html =~ "No active cases."
+      assert html =~ "archive"
+      refute html =~ "Open a case"
+    end
   end
 
   describe "the references panel" do
