@@ -46,6 +46,8 @@ defmodule VarselWeb.CaseDetailLive do
     :cve_id,
     :cve_record,
     :affected_summary,
+    :derivation_state,
+    :derivation_cached_at,
     :derived_references,
     # :avatar_url wherever a user is drawn as an avatar disc.
     assignments: [user: [:avatar_url]],
@@ -1616,28 +1618,38 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
-  # One board-A/board-C style card per affected package: package identity in
-  # the header, at rest a compact channels table plus a disclosure footer; the
-  # package's own "Edit" opens the board-C editor in place (boundary
-  # timeline, channel disclosure rows, program files) instead of a modal.
-  # Channel and boundary child rows still use the shared `child_modal`.
+  # One card per affected product. Deriving runs case-wide, so its state and
+  # its button live here rather than on each card.
   defp affected_section(assigns) do
     ~H"""
     <.card_section_header title="Affected" level={:h2}>
       <:actions>
-        <div :if={@mode != :view} class="dropdown dropdown-end">
-          <div tabindex="0" role="button" class="link link-hover text-primary cursor-pointer text-xs">
-            Add package ▾
+        <div class="flex items-center gap-4">
+          <AffectedComponents.derivation_status
+            :if={@case_record.derivation_state}
+            state={@case_record.derivation_state}
+            at={@case_record.derivation_cached_at}
+            can_refresh={@can_refresh}
+            refreshing={@refreshing}
+          />
+          <div :if={@mode != :view} class="dropdown dropdown-end">
+            <div
+              tabindex="0"
+              role="button"
+              class="link link-hover text-primary cursor-pointer text-xs"
+            >
+              Add package ▾
+            </div>
+            <ul
+              tabindex="0"
+              class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-10 w-44 p-1 shadow"
+            >
+              <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
+              <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
+              <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
+              <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
+            </ul>
           </div>
-          <ul
-            tabindex="0"
-            class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-10 w-44 p-1 shadow"
-          >
-            <li><button phx-click="new_child" phx-value-type="package_otp">Erlang/OTP</button></li>
-            <li><button phx-click="new_child" phx-value-type="package_elixir">Elixir</button></li>
-            <li><button phx-click="new_child" phx-value-type="package_gleam">Gleam</button></li>
-            <li><button phx-click="new_child" phx-value-type="package">Custom package</button></li>
-          </ul>
         </div>
       </:actions>
     </.card_section_header>
@@ -1648,8 +1660,6 @@ defmodule VarselWeb.CaseDetailLive do
         package={package}
         mode={@mode}
         marks={@marks}
-        can_refresh={@can_refresh}
-        refreshing={@refreshing}
       />
 
       <p :if={@case_record.affected_packages == []} class="text-sm text-base-content/60">
@@ -1674,22 +1684,28 @@ defmodule VarselWeb.CaseDetailLive do
   attr :package, :map, required: true
   attr :mode, :atom, required: true
   attr :marks, :map, required: true
-  attr :can_refresh, :boolean, required: true
-  attr :refreshing, :boolean, required: true
 
   defp affected_package_card(assigns) do
+    channels = Display.channel_derivations(assigns.package)
+
     assigns =
       assign(assigns,
-        channels: Display.channel_derivations(assigns.package),
+        channels: channels,
+        shared_pending?: shared_pending?(channels),
+        card_warnings: card_warnings(assigns.package, channels),
         editable?:
           assigns.mode != :view and assigns.package.id not in assigns.marks.phantom and
-            assigns.package.id not in assigns.marks.deleted,
-        issues: Display.derivation_issues(assigns.package)
+            assigns.package.id not in assigns.marks.deleted
       )
 
     ~H"""
     <.panel>
-      <:title>Affected — {@package.vendor} / {@package.product}</:title>
+      <:title>
+        Affected — {@package.vendor} / {@package.product}
+        <%!-- Which product is behind, when the section header says the case as
+              a whole is. Silent while a product is as derived as it can be. --%>
+        <AffectedComponents.derivation_marker state={@package.derivation_state} />
+      </:title>
       <:actions>
         <.proposal_marks row_id={@package.id} marks={@marks} />
         <button
@@ -1722,31 +1738,24 @@ defmodule VarselWeb.CaseDetailLive do
         notes={product_notes(@package)}
       />
 
-      <%!-- A stale or failing derivation makes every range below it suspect, so
-            it is stated once at the top rather than repeated per channel. --%>
-      <p :if={@issues != []} class="mb-2 text-xs text-warning">
-        ⚠ {Enum.join(@issues, " · ")}
+      <%!-- Whatever makes every range below suspect is stated once here rather
+            than repeated on each channel: a derivation that no longer matches
+            the facts, a problem deriving, or a fix every channel is waiting on. --%>
+      <p :if={@card_warnings != []} class="mb-2 text-xs text-warning">
+        ⚠ {Enum.join(@card_warnings, " · ")}
       </p>
 
       <.card_section_header title="Ships as">
         <:actions>
-          <span class="flex items-center gap-3">
-            <AffectedComponents.derivation_status
-              state={@package.derivation_state}
-              at={@package.derivation_cached_at}
-              can_refresh={@can_refresh}
-              refreshing={@refreshing}
-            />
-            <button
-              :if={@mode != :view and @package.id not in @marks.phantom}
-              class="link link-hover text-primary text-xs"
-              phx-click="new_child"
-              phx-value-type="channel"
-              phx-value-affected_package_id={@package.id}
-            >
-              {if @mode == :propose, do: "Propose a channel", else: "Add channel"}
-            </button>
-          </span>
+          <button
+            :if={@mode != :view and @package.id not in @marks.phantom}
+            class="link link-hover text-primary text-xs"
+            phx-click="new_child"
+            phx-value-type="channel"
+            phx-value-affected_package_id={@package.id}
+          >
+            {if @mode == :propose, do: "Propose a channel", else: "Add channel"}
+          </button>
         </:actions>
       </.card_section_header>
 
@@ -1777,7 +1786,9 @@ defmodule VarselWeb.CaseDetailLive do
               marks={@marks}
             />
           </:actions>
-          <:problem :if={derived.pending? or derived.issues != []}>
+          <%!-- A pending fix every channel shares is already stated on the
+                card, so only a problem peculiar to this channel repeats here. --%>
+          <:problem :if={derived.issues != [] or (derived.pending? and not @shared_pending?)}>
             <p class="mt-1 text-xs text-warning">
               ⚠ {channel_problem(derived)}
             </p>
@@ -1856,6 +1867,22 @@ defmodule VarselWeb.CaseDetailLive do
       ],
       & &1
     )
+  end
+
+  # Whether every channel is waiting on the same unreleased fix, in which case
+  # it is the product's problem rather than one channel's and belongs at the
+  # top of the card instead of under each set of ranges.
+  defp shared_pending?([]), do: false
+
+  defp shared_pending?(channels) do
+    Enum.all?(channels, fn {_channel, derived} -> derived.pending? end)
+  end
+
+  defp card_warnings(package, channels) do
+    pending =
+      if shared_pending?(channels), do: ["a fix has no containing release yet"], else: []
+
+    Display.derivation_issues(package) ++ pending
   end
 
   defp channel_problem(%{issues: [_ | _] = issues}), do: Enum.join(issues, " · ")

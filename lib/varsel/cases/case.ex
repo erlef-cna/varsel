@@ -54,6 +54,7 @@ defmodule Varsel.Cases.Case do
     extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
+  alias Varsel.Cases.AffectedPackage.DerivationState
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
@@ -649,12 +650,32 @@ defmodule Varsel.Cases.Case do
       when the case was never published — for diffing against :preview.
       """
     end
+
+    calculate :derivation_state, DerivationState, DerivationState.Worst do
+      description """
+      What this case's derived version data is worth as a whole: the state of
+      whichever product most needs attention, since deriving runs case-wide and
+      the record is only as trustworthy as its least-derived product. Nil for a
+      case with no affected products.
+      """
+
+      public? true
+    end
   end
 
   aggregates do
     list :affected_repos, :affected_packages, :normalized_repo_url do
       description "The normalized repository URLs of every package this case affects."
       sort []
+    end
+
+    list :package_derivation_states, :affected_packages, :derivation_state do
+      description "Each affected product's derivation state, for the case-wide summary."
+      sort []
+    end
+
+    max :derivation_cached_at, :affected_packages, :derivation_cached_at do
+      description "When any of this case's products last derived."
     end
   end
 

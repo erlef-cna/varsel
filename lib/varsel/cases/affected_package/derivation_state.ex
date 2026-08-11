@@ -36,9 +36,31 @@ defmodule Varsel.Cases.AffectedPackage.DerivationState do
   # changed anywhere".
   @ageing_after_hours 24
 
+  # How loudly each state needs to be answered, so a case of several products
+  # can report the one that most needs attention. Ordered rather than compared
+  # by name because the states have no alphabetical relationship.
+  @severity %{current: 0, ageing: 1, never: 2, outdated: 3}
+
   @doc "Hours after which a current derivation reads as ageing."
   @spec ageing_after_hours() :: pos_integer()
   def ageing_after_hours, do: @ageing_after_hours
+
+  @doc """
+  How loudly a state needs answering — higher is worse. `:never` outranks
+  `:ageing` because nothing has been derived at all, while an ageing result is
+  still a result.
+  """
+  @spec severity(t()) :: non_neg_integer()
+  def severity(state), do: Map.fetch!(@severity, state)
+
+  @doc """
+  The state a group of products reports as a whole: the one that most needs
+  attention, since a case is only as derived as its least-derived product.
+  Nothing to report without any products.
+  """
+  @spec worst([t()]) :: t() | nil
+  def worst([]), do: nil
+  def worst(states), do: Enum.max_by(states, &severity/1)
 
   @impl AshGraphql.Type
   def graphql_type(_constraints), do: :affected_package_derivation_state

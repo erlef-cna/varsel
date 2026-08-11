@@ -214,6 +214,28 @@ defmodule VarselWeb.AffectedComponents do
     """
   end
 
+  @doc """
+  A quiet mark for one product's derivation, for when the case-wide status is
+  reported elsewhere and the only open question is *which* product is behind.
+
+  Renders nothing for a product that is as derived as it can be — a case is
+  usually all-current, and a row of "fine" marks would say nothing while
+  costing a reader the effort of checking each one.
+  """
+  attr :state, :atom, default: nil, values: [nil, :never, :outdated, :ageing, :current]
+
+  def derivation_marker(%{state: state} = assigns) when state in [nil, :current, :ageing] do
+    ~H""
+  end
+
+  def derivation_marker(assigns) do
+    ~H"""
+    <span class={["text-[0.68rem] font-semibold normal-case tracking-normal", state_tone(@state)]}>
+      {state_label(@state)}
+    </span>
+    """
+  end
+
   defp state_label(:never), do: "not derived"
   defp state_label(:outdated), do: "out of date"
   defp state_label(:ageing), do: "derived"
