@@ -105,6 +105,47 @@ defmodule Varsel.Cases.CaseTest do
                Cases.edit_case(case_record, %{description_md: "Nope."}, actor: collaborator)
     end
 
+    # Writing a child row is editing the case by another route, and an affected
+    # package carries `repo_url`, which drives server-side git egress.
+    test "nor write the case's facts", %{collaborator: collaborator, case_record: case_record} do
+      assert {:error, %Forbidden{}} =
+               Cases.add_affected_package(
+                 %{
+                   case_id: case_record.id,
+                   vendor: "acme",
+                   product: "acme_lib",
+                   repo_url: "https://github.com/acme/acme_lib"
+                 },
+                 actor: collaborator
+               )
+    end
+
+    test "but reads, comments and proposes", %{
+      collaborator: collaborator,
+      case_record: case_record
+    } do
+      assert {:ok, _} = Cases.get_case(case_record.id, actor: collaborator)
+
+      assert {:ok, _} =
+               Cases.post_case_comment(%{case_id: case_record.id, body: "?"}, actor: collaborator)
+
+      assert {:ok, _} =
+               Cases.propose_title(%{case_id: case_record.id, value: "Better"},
+                 actor: collaborator
+               )
+    end
+
+    test "an assigned supporter writes the case's facts", %{
+      supporter: supporter,
+      case_record: case_record
+    } do
+      assert {:ok, _} =
+               Cases.add_affected_package(
+                 %{case_id: case_record.id, vendor: "acme", product: "acme_lib"},
+                 actor: supporter
+               )
+    end
+
     test "neither may approve or publish", %{
       supporter: supporter,
       collaborator: collaborator,

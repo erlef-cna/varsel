@@ -100,9 +100,20 @@ defmodule Varsel.Cases.CaseCredit do
   end
 
   policies do
-    policy action_type([:read, :create, :update, :destroy]) do
+    policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    # Writing a case's facts is editing the case, so it needs a role as
+    # well as an assignment — an assigned collaborator proposes instead.
+    policy action_type([:create, :update, :destroy]) do
+      authorize_if actor_attribute_equals(:role, :poc)
+
+      authorize_if expr(
+                     ^actor(:role) == :supporter and
+                       exists(case.assignments, user_id == ^actor(:id))
+                   )
     end
 
     # Content freeze: child rows may only change while the parent case is editable.

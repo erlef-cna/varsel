@@ -93,15 +93,20 @@ the platform edge, not in the app.
   role, which is what every new sign-in starts as. Rights: submit a
   vulnerability report and read/withdraw their own, manage their own API keys
   and sessions, set a notification address one of their own linked providers
-  reported, and run the CVE **validation** actions (§6). They are refused
-  outright on `Case` — its policy is strict and admits only `:poc` and
-  `:supporter`, so a role-less caller gets a refusal there rather than an
-  empty list.
-- **Supporter** — a CNA collaborator scoped to the specific cases they are
-  assigned to. Can read and edit content on those cases; cannot run
-  lifecycle actions or publish.
+  reported, and run the CVE **validation** actions (§6). On `Case` they see
+  nothing until a POC assigns them to one; assignment then grants read,
+  propose and comment on **that case only** — never a direct write, never
+  resolving a proposal, never a lifecycle action.
+- **Supporter** — a CNA collaborator. Opens cases, and on the cases they are
+  assigned to edits content, resolves proposals, reopens, and takes the next
+  free CVE ID. Cannot approve or publish, cannot name which CVE ID they take,
+  and cannot assign anyone (themselves included) to a case.
 - **POC (point of contact)** — privileged CNA operator. Full lifecycle
-  authority, including publishing to MITRE and assigning roles.
+  authority, including publishing to MITRE, assigning roles, and granting
+  case access.
+
+Below POC the role says *what kind* of act someone may perform and the
+assignment says *which case* — only a POC creates an assignment.
 
 Roles live in `Varsel.Accounts.User.Role` (`:poc | :supporter`, plus `nil`)
 — see `user/role.ex`.
@@ -248,14 +253,15 @@ names is refused. **A new action on any resource is forbidden until someone
 writes a policy for it** — that is the property to check a report against, not
 the framework's default.
 
-`Case`'s strict policy is not merely "is anyone signed in": it admits `:poc`
-and `:supporter` only, so **an authenticated user with no role is refused
-there too**, not filtered to empty. Every other private resource (case
-children, proposals, comments) is filter-scoped and returns an empty list to
-an anonymous or role-less caller. Reading each
+`Case`'s strict policy asks only that someone is signed in; *which* cases they
+may see is decided by the filter policy after it, so a role-less caller is
+**filtered to the cases they are assigned to** — an empty list when they are
+assigned to none — rather than refused. Every other private resource (case
+children, proposals, comments) is filter-scoped the same way. Reading each
 resource as an anonymous actor and as a role-less one bears this out: the
-strict resources refuse, the filter-scoped ones return zero of the rows that
-exist. **An "empty list" is therefore not evidence of a missing policy**, and
+strict resources refuse the anonymous caller, the filter-scoped ones return
+zero of the rows that exist. **An "empty list" is therefore not evidence of a
+missing policy**, and
 a report premised on a private resource returning `{:ok, []}` rather than an
 error is out of model. (all `policies do` blocks)
 
@@ -313,10 +319,12 @@ claims:
   really an *authenticated*-read claim.)
 - **`repo_url` git egress** — reachable only by a **POC or a supporter
   assigned to that case** (the `AffectedPackage` create/update policy is
-  `role == :poc OR relates_to_actor_via([:case, :assignments, :user])` — the
-  actor is a POC, or the row's case has a `CaseAssignment` to the actor). A
-  finding here that assumes an *ordinary* authenticated user or anonymous
-  caller controls `repo_url` is out of model. (`affected_package.ex`)
+  `role == :poc OR (role == :supporter AND the row's case has a
+  CaseAssignment to the actor)`). An assigned user with **no role** can only
+  propose one, so a supporter or POC accepting the proposal is what reaches
+  the host. A finding here that assumes an *ordinary* authenticated user, an
+  assigned role-less collaborator, or an anonymous caller controls `repo_url`
+  is out of model. (`affected_package.ex`)
 - **Report intake** — reachable by **any authenticated user**. `report_json`
   is fully attacker-controlled at that privilege; downstream sinks (email,
   triage UI) are the question.
@@ -561,12 +569,19 @@ dependency bump; it does not change the disposition.
   the token/OAuth surface. Assumed to try: privilege escalation to
   supporter/POC, reading other users' data (reports, cases, PII), forging
   another reporter's identity, exhausting storage via unbounded reports.
-- **Malicious / compromised supporter.** A CNA collaborator assigned to at
-  least one case. Can read and edit content on assigned cases — including
-  setting `repo_url` to drive server-side git egress (§4). Assumed to try:
-  reaching cases they are *not* assigned to, self-promotion, self-assignment
-  (blocked — `CaseAssignment` create is POC-only), and abusing `repo_url` for
-  SSRF-style egress. **In scope** as a distinct actor.
+- **Malicious / compromised supporter.** A CNA collaborator. Can open cases,
+  and on assigned cases edit content — including setting `repo_url` to drive
+  server-side git egress (§4) — resolve proposals, reopen, and take a CVE ID.
+  Assumed to try: reaching cases they are *not* assigned to, self-promotion,
+  self-assignment (blocked — `CaseAssignment` create is POC-only), taking a
+  named or withheld CVE ID rather than the next free one, and abusing
+  `repo_url` for SSRF-style egress. **In scope** as a distinct actor.
+- **Malicious / compromised assigned collaborator.** An authenticated user
+  with **no role** whom a POC has assigned to a case — the intended shape for
+  an outside reporter or vendor contact. Can read that case, propose changes
+  to it, and comment. Assumed to try: writing to the case directly rather than
+  proposing, resolving their own proposal, and reaching any other case.
+  **In scope** as a distinct actor.
 - **Byzantine OAuth client (MCP/GraphQL).** A registered OAuth 2.1 client
   (DCR is enabled) presenting a bearer token. Bounded by the token's scope
   (`mcp` vs `gql`, enforced per surface) and the underlying user's role.
@@ -691,14 +706,18 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `high`.
    - (`user.ex`)
 
-5. **Case content is confined to assigned collaborators.**
-   Reads and edits of a case and all its child rows require POC or a
-   `CaseAssignment` for that case; supporters cannot self-assign (assignment
-   create/destroy is POC-only).
+5. **Case content is confined to assigned collaborators, and writing it
+   additionally needs a role.**
+   Reading a case and all its child rows requires POC or a `CaseAssignment`
+   for that case. *Editing* it requires POC or a supporter who is assigned —
+   an assigned user with no role may propose and comment but never write
+   directly, and never resolve a proposal. Nobody below POC can create an
+   assignment, so no one grants themselves either right.
    - *Violation symptom:* a supporter reads or edits a case they are not
-     assigned to.
+     assigned to; an assigned role-less user edits a case, accepts a proposal,
+     or gains access to a second case.
    - *Severity:* `high` (unpublished advisory content is embargoed).
-   - (`case.ex`, `case_assignment.ex`)
+   - (`case.ex`, `case_assignment.ex`, `proposal.ex`)
 
 6. **OAuth scope separation between surfaces.**
    An OAuth 2.1 access token carries a scope (`mcp` or `gql`); a token
