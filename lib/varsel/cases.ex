@@ -13,6 +13,7 @@ defmodule Varsel.Cases do
   alias Varsel.Cases.CaseAssignment
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseImpact
+  alias Varsel.Cases.CaseInvite
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.Comment
@@ -215,6 +216,7 @@ defmodule Varsel.Cases do
       define :reopen_case, action: :reopen
       define :close_case, action: :close
       define :refresh_case_derivation, action: :refresh_derivation
+      define :grant_case_access, action: :grant_access, args: [:strategy, :username]
       define :apply_case_proposal, action: :apply_proposal
     end
 
@@ -222,6 +224,13 @@ defmodule Varsel.Cases do
       define :list_case_assignments, action: :read
       define :assign_case_user, action: :assign
       define :unassign_case_user, action: :unassign
+    end
+
+    resource CaseInvite do
+      define :list_case_invites, action: :read
+      define :invite_to_case, action: :invite
+      define :withdraw_case_invite, action: :withdraw
+      define :list_case_invites_for_identity, action: :for_identity, args: [:strategy, :username]
     end
 
     resource AffectedPackage do
