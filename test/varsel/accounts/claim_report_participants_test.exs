@@ -25,15 +25,38 @@ defmodule Varsel.Accounts.ClaimReportParticipantsTest do
     CVE.list_report_participants!(actor: actor)
   end
 
-  test "signing in with the named hex handle claims the participant" do
+  test "signing in with the named hex handle hands over the report" do
     poc = Fixtures.register_user("claim_poc", :poc)
-    report_naming("reporter")
+    report = report_naming("reporter")
 
     user = Fixtures.sign_in_with_hex("reporter", 4001)
 
-    assert [participant] = participants(poc)
-    assert participant.user_id == user.id
-    assert participant.report_id
+    assert [%{user_id: user_id}] = participants(poc)
+    assert user_id == user.id
+
+    # What the sign-in link is for: the reporter can now read the report it
+    # sent them to.
+    assert Ash.reload!(report, authorize?: false).reporter_id == user.id
+    assert [%{id: id}] = CVE.list_vulnerability_reports!(actor: user)
+    assert id == report.id
+  end
+
+  test "a report that already has a reporter is not taken over" do
+    first = Fixtures.register_user("claim_incumbent")
+    report = report_naming("reporter")
+    Ash.Seed.update!(report, %{reporter_id: first.id})
+
+    Fixtures.sign_in_with_hex("reporter", 4008)
+
+    assert Ash.reload!(report, authorize?: false).reporter_id == first.id
+  end
+
+  test "a maintainer signing in does not become the reporter" do
+    report = report_naming("maintainer", :maintainer)
+
+    Fixtures.sign_in_with_hex("maintainer", 4009)
+
+    assert Ash.reload!(report, authorize?: false).reporter_id == nil
   end
 
   test "the handle matches regardless of how the provider spells it" do

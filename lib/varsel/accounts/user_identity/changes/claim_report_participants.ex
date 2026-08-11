@@ -41,10 +41,29 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants do
     participants =
       CVE.list_report_participants_for_identity!(strategy, identity.username, authorize?: false)
 
-    Enum.each(participants, fn participant ->
+    Enum.each(participants, &claim_participant(&1, identity))
+  end
+
+  defp claim_participant(participant, identity) do
+    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
+    CVE.link_report_participant_user!(participant, %{user_id: identity.user_id}, authorize?: false)
+
+    if participant.role == :reporter, do: claim_report(participant, identity)
+  end
+
+  # The report itself, not just the participant row: the sign-in link sends a
+  # reporter to their report, and the read policy finds it through `reporter`.
+  #
+  # Checked rather than rescued: this runs inside the sign-in transaction, so
+  # a report that already found its reporter must not fail the login.
+  defp claim_report(participant, identity) do
+    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
+    report = CVE.get_vulnerability_report!(participant.report_id, authorize?: false)
+
+    if is_nil(report.reporter_id) do
       # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-      CVE.link_report_participant_user!(participant, %{user_id: identity.user_id}, authorize?: false)
-    end)
+      CVE.link_vulnerability_report_reporter!(report, %{reporter_id: identity.user_id}, authorize?: false)
+    end
   end
 
   defp strategy_atom("github"), do: :github
