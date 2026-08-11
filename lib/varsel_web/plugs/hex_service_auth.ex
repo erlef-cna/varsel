@@ -11,6 +11,8 @@ defmodule VarselWeb.Plugs.HexServiceAuth do
   """
   @behaviour Plug
 
+  use VarselWeb, :verified_routes
+
   import Plug.Conn
 
   alias Varsel.HexIntake.Service
@@ -36,11 +38,10 @@ defmodule VarselWeb.Plugs.HexServiceAuth do
     end
   end
 
-  defp audience do
-    :varsel
-    |> Application.get_env(:hex_intake, [])
-    |> Keyword.get(:audience, "")
-  end
+  # The address hex.pm was told to post to. Built from the route rather than
+  # the request, so the caller's Host header cannot decide which audience its
+  # own token has to match.
+  defp audience, do: url(~p"/api/hex/reports")
 
   defp refuse(conn, _reason) do
     conn

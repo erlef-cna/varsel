@@ -46,8 +46,6 @@ defmodule VarselWeb.HexReportController do
     |> json(%{error: reason})
   end
 
-  # `package` is stored as hex.pm spells it; turning it into a purl happens
-  # when the case is opened.
   defp parse(%{"summary" => summary, "description" => description, "package" => package} = params)
        when is_binary(summary) and is_binary(description) and is_binary(package) do
     with {:ok, reporter} <- person(params["reporter"], :reporter),

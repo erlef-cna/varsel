@@ -8,7 +8,8 @@ defmodule VarselWeb.HexReportControllerTest do
   alias Varsel.CVE
   alias Varsel.Fixtures
 
-  @audience "http://localhost:4002/api/hex/reports"
+  # What the plug derives, so the token is addressed where the server listens.
+  defp audience, do: url(~p"/api/hex/reports")
 
   @signing_key %{
     "crv" => "P-256",
@@ -47,7 +48,7 @@ defmodule VarselWeb.HexReportControllerTest do
 
     claims =
       Enum.into(claims, %{
-        "aud" => @audience,
+        "aud" => audience(),
         "exp" => now + 60,
         "iat" => now,
         "iss" => "hexpm",
@@ -140,7 +141,7 @@ defmodule VarselWeb.HexReportControllerTest do
         key
         |> JOSE.JWK.from_map()
         |> JOSE.JWT.sign(%{"alg" => "ES256", "kid" => "hexpm-test"}, %{
-          "aud" => @audience,
+          "aud" => audience(),
           "exp" => System.system_time(:second) + 60,
           "iss" => "hexpm",
           "jti" => Ash.UUID.generate(),
@@ -152,6 +153,14 @@ defmodule VarselWeb.HexReportControllerTest do
 
       assert json_response(conn, 401)
       assert CVE.list_vulnerability_reports!(authorize?: false) == []
+    end
+
+    test "the token names a host the caller chose", %{conn: conn} do
+      token = token(%{"aud" => "https://evil.example/api/hex/reports"})
+
+      conn = submit(%{conn | host: "evil.example"}, payload(), token)
+
+      assert json_response(conn, 401)
     end
 
     test "the same token is replayed", %{conn: conn} do

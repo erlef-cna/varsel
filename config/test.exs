@@ -78,8 +78,7 @@ config :varsel,
     # Public half of a throwaway keypair; the private half lives in the test
     # that signs fixtures with it.
     jwks:
-      ~s({"keys":[{"crv":"P-256","kid":"hexpm-test","kty":"EC","x":"4pRM_ZlHTfTHVvAIxDEBraNmq06ojzDzL2MIHUzkqLk","y":"5HMC6Ycg9OjJGFbFs46n8rCTxB6VyGWcsLR3bnNWEtU"}]}),
-    audience: "http://localhost:4002/api/hex/reports"
+      ~s({"keys":[{"crv":"P-256","kid":"hexpm-test","kty":"EC","x":"4pRM_ZlHTfTHVvAIxDEBraNmq06ojzDzL2MIHUzkqLk","y":"5HMC6Ycg9OjJGFbFs46n8rCTxB6VyGWcsLR3bnNWEtU"}]})
   ],
   oauth2_issuer_url: "http://localhost:4002",
   oauth2_resource_url: "http://localhost:4002",

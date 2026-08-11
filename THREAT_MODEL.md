@@ -1146,11 +1146,11 @@ means the **CNA operator/deployer**, and — for the last item only — anyone
 7a. **Pin `HEX_INTAKE_JWKS` to hex.pm's public keys, and nothing else.** The
    key set is the only thing separating a real submission from a forged one,
    and it is trusted absolutely: any key in it can create reports naming
-   arbitrary people. `HEX_INTAKE_AUDIENCE` must equal the URL hex.pm is
-   configured to post to, or every submission is refused. Both unset means the
-   endpoint accepts nothing, which is the safe failure. Rotation is manual on
-   both sides: hex.pm publishes no key-discovery endpoint today, so a key
-   change there is a coordinated config change here.
+   arbitrary people. Unset means the endpoint accepts nothing, which is the
+   safe failure. Rotation is manual on both sides: hex.pm publishes no
+   key-discovery endpoint today, so a key change there is a coordinated
+   config change here. hex.pm must also be pointed at the same URL this
+   deployment serves, since the token's audience is checked against it.
 8. **API consumers: escape the markdown and HTML fields before rendering
    them.** The JSON API serves stored author content as written; Varsel
    sanitizes at its own render sinks, not at rest (§9).
