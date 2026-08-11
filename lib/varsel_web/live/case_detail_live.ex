@@ -1226,7 +1226,18 @@ defmodule VarselWeb.CaseDetailLive do
         amendment={amendment?(@case_record)}
       />
 
-      <.cve_picker_modal :if={@cve_picker} records={@cve_picker} />
+      <.cve_picker_modal
+        :if={@cve_picker}
+        records={@cve_picker}
+        can_choose?={
+          Cases.can_assign_case_cve_id?(
+            @current_user,
+            @case_record,
+            %{cve_record_id: Ash.UUID.generate()},
+            validate?: false
+          )
+        }
+      />
     </Layouts.app>
     """
   end
@@ -2379,11 +2390,17 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   attr :records, :list, required: true
+  attr :can_choose?, :boolean, required: true
 
   # Two ways to take an ID, kept visibly apart: the top half is the one-click
   # default (whatever is next in the pool), the bottom half is the deliberate
   # pick. Nothing is assigned by opening this — both halves need their own
   # button, so neither path can be taken by reflex.
+  #
+  # Only a caller who may name a record can see the pool (the reservations are
+  # unreadable to anyone else), so for everyone else the listing is absent and
+  # the top half says nothing about what is in it — an empty `records` there
+  # means "not visible", not "not there".
   defp cve_picker_modal(assigns) do
     {free, withheld} = Enum.split_with(assigns.records, &(&1.state == :reserved))
 
@@ -2395,13 +2412,15 @@ defmodule VarselWeb.CaseDetailLive do
         <div class="rounded-lg border border-base-300 bg-base-200 p-3">
           <p class="text-sm font-semibold">Take the next free ID</p>
           <p class="text-xs text-base-content/60 mt-0.5">
-            <span :if={@free != []}>
+            <span :if={!@can_choose? or @free != []}>
               The lowest free ID of the current year, chosen when you confirm.
             </span>
-            <span :if={@free == []}>The pool is empty — reserve more IDs first.</span>
+            <span :if={@can_choose? and @free == []}>
+              The pool is empty — reserve more IDs first.
+            </span>
           </p>
           <button
-            :if={@free != []}
+            :if={!@can_choose? or @free != []}
             type="button"
             class="btn btn-eef btn-sm mt-2"
             phx-click="confirm_assign_cve_id"
@@ -2411,7 +2430,7 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
 
         <form
-          :if={@free != [] or @withheld != []}
+          :if={@can_choose? and (@free != [] or @withheld != [])}
           phx-submit="confirm_assign_cve_id"
           class="rounded-lg border border-base-300 p-3"
         >
@@ -2471,7 +2490,10 @@ defmodule VarselWeb.CaseDetailLive do
           </button>
         </form>
 
-        <p :if={@free == [] and @withheld == []} class="text-sm text-base-content/60">
+        <p
+          :if={@can_choose? and @free == [] and @withheld == []}
+          class="text-sm text-base-content/60"
+        >
           No CVE IDs are available to assign.
         </p>
       </div>
