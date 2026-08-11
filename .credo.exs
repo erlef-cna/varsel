@@ -100,7 +100,9 @@
           {Credo.Check.Readability.AliasOrder, []},
           {Credo.Check.Readability.FunctionNames, []},
           {Credo.Check.Readability.LargeNumbers, []},
-          {Credo.Check.Readability.MaxLineLength, [priority: :low, max_length: 120]},
+          # mix format decides layout; a second opinion only creates rewrites it
+          # cannot satisfy, since the formatter will not split every construct.
+          {Credo.Check.Readability.MaxLineLength, false},
           {Credo.Check.Readability.ModuleAttributeNames, []},
           {Credo.Check.Readability.ModuleDoc, []},
           {Credo.Check.Readability.ModuleNames, []},
