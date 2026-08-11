@@ -6,6 +6,10 @@ defmodule Varsel.HexPm do
   @moduledoc """
   Thin client for hex.pm, via `hex_core`.
 
+  Talks to the same instance sign-in does: hex.pm is self-hostable, and asking
+  one host who a user is while asking another whether that user exists would
+  answer about two different people.
+
   Extra `hex_core` configuration (a stub HTTP adapter in tests) is merged in
   via `config :varsel, :hex_core, %{http_adapter: {MyAdapter, %{}}}`.
   """
@@ -55,6 +59,20 @@ defmodule Varsel.HexPm do
   end
 
   defp config do
-    Map.merge(:hex_core.default_config(), Application.get_env(:varsel, :hex_core, %{}))
+    :hex_core.default_config()
+    |> Map.merge(api_url())
+    |> Map.merge(Application.get_env(:varsel, :hex_core, %{}))
+  end
+
+  # The OAuth strategy's `base_url` is the site root and it appends `/api`,
+  # which is also how hex.pm's own default is shaped.
+  defp api_url do
+    :varsel
+    |> Application.get_env(:hex, [])
+    |> Keyword.get(:base_url)
+    |> case do
+      base_url when is_binary(base_url) -> %{api_url: Path.join(base_url, "api")}
+      _unset -> %{}
+    end
   end
 end
