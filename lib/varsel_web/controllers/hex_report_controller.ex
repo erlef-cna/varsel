@@ -9,14 +9,7 @@ defmodule VarselWeb.HexReportController do
 
   require Logger
 
-  @doc """
-  Takes a package report forwarded by hex.pm.
-
-  The sender treats any response other than 201 as an outage and does not
-  retry, so a rejection here costs the reporter their submission. Rejections
-  are logged with what was wrong: a schema drift on either side should be
-  loud rather than a quietly rising failure count.
-  """
+  @doc "Takes a package report forwarded by hex.pm."
   def create(conn, params) do
     case parse(params) do
       {:ok, attrs} -> submit(conn, attrs)
@@ -25,7 +18,7 @@ defmodule VarselWeb.HexReportController do
   end
 
   defp submit(conn, attrs) do
-    case CVE.submit_hex_vulnerability_report(attrs, authorize?: true) do
+    case CVE.submit_hex_vulnerability_report(attrs, actor: Ash.PlugHelpers.get_actor(conn)) do
       {:ok, report} ->
         url = url(~p"/reports")
 
@@ -35,7 +28,7 @@ defmodule VarselWeb.HexReportController do
         |> json(%{
           id: report.id,
           url: url,
-          sign_in_url: url(~p"/auth/user/hex?return_to=#{~p"/reports"}")
+          sign_in_url: url(~p"/auth/user/hex?#{%{return_to: ~p"/reports"}}")
         })
 
       {:error, error} ->
@@ -48,24 +41,20 @@ defmodule VarselWeb.HexReportController do
   end
 
   defp refuse(conn, reason) do
-    Logger.warning("Rejected a malformed hex.pm report: #{reason}")
-
     conn
     |> put_status(:bad_request)
     |> json(%{error: reason})
   end
 
-  # The payload is issue #94's contract, which hexpm/hexpm#1823 sends verbatim.
-  # It is kept whole in report_json: the package string in particular is stored
-  # as hex.pm spells it rather than parsed into a purl, which is a judgement a
-  # human makes when the case is opened.
+  # `package` is stored as hex.pm spells it; turning it into a purl happens
+  # when the case is opened.
   defp parse(%{"summary" => summary, "description" => description, "package" => package} = params)
        when is_binary(summary) and is_binary(description) and is_binary(package) do
     with {:ok, reporter} <- person(params["reporter"], :reporter),
          {:ok, maintainers} <- people(params["maintainers"]) do
       {:ok,
        %{
-         summary: String.slice(summary, 0, 2_000),
+         summary: summary,
          report_json: %{
            "summary" => summary,
            "description" => description,

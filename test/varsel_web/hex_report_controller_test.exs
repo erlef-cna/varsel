@@ -18,7 +18,7 @@ defmodule VarselWeb.HexReportControllerTest do
     "y" => "5HMC6Ycg9OjJGFbFs46n8rCTxB6VyGWcsLR3bnNWEtU"
   }
 
-  # The payload hexpm/hexpm#1823 posts, from its own client test.
+  # Copied from hex.pm's own client test, so a drift there shows up here.
   defp payload(overrides \\ %{}) do
     Map.merge(
       %{
@@ -82,9 +82,8 @@ defmodule VarselWeb.HexReportControllerTest do
       # The sender refuses a response whose Location disagrees with the body,
       # or whose links point off its configured origin.
       assert [^url] = get_resp_header(conn, "location")
-      assert URI.new!(url).host == URI.new!(@audience).host
-      assert URI.new!(sign_in_url).host == URI.new!(@audience).host
-      assert sign_in_url =~ "hex"
+      assert url == url(~p"/reports")
+      assert sign_in_url == url(~p"/auth/user/hex?#{%{return_to: ~p"/reports"}}")
       assert is_binary(id)
     end
 
@@ -166,6 +165,13 @@ defmodule VarselWeb.HexReportControllerTest do
       conn = submit(conn, Map.delete(payload(), "package"), token())
 
       assert json_response(conn, 400)
+      assert CVE.list_vulnerability_reports!(authorize?: false) == []
+    end
+
+    test "the summary is longer than the column takes", %{conn: conn} do
+      conn = submit(conn, payload(%{"summary" => String.duplicate("a", 2_001)}), token())
+
+      assert json_response(conn, 422)
       assert CVE.list_vulnerability_reports!(authorize?: false) == []
     end
 

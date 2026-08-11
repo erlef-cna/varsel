@@ -12,15 +12,10 @@ defmodule Varsel.CVE.ReportParticipant do
 
   A participant is a claim by the sending system about a person, not an account
   here and not a grant of access. `user_id` is stamped if and when a matching
-  identity signs in
-  (`Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants`).
+  identity signs in.
 
   Rows are transient: opening a case from the report consumes them into case
   assignments and invites, and the report keeps only its reporter link.
-
-  Only POCs may read them. A reporter learns nothing about who maintains the
-  package they reported, and a maintainer nothing about the reporter, until a
-  POC opens a case that puts them in the same room.
   """
 
   use Ash.Resource,
@@ -85,13 +80,11 @@ defmodule Varsel.CVE.ReportParticipant do
     # package's maintainers, and a reporter's contact details. Nobody but a POC
     # reads them on any surface. The reporter reads their own report instead,
     # which carries no participant data.
-    # Written as part of taking a report in, which has already proved which
-    # system is sending; that intake runs with no actor, so the provenance is
-    # the check. `:submit`, the actor-facing intake, manages no participants
-    # and must not start: a reporter naming their own maintainers would be
-    # writing the record that later grants case access.
+    # Written only by the intake the sending system is authenticated for. A
+    # reporter naming their own maintainers would be writing the record that
+    # later grants case access.
     policy action_type(:create) do
-      authorize_if accessing_from(VulnerabilityReport, :participants)
+      authorize_if actor_attribute_equals(:system, :hexpm)
       authorize_if actor_attribute_equals(:role, :poc)
     end
 

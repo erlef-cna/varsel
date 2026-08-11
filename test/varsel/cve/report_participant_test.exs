@@ -74,9 +74,21 @@ defmodule Varsel.CVE.ReportParticipantTest do
       assert %{participants: [_, _]} = Ash.load!(report, [:participants], actor: poc)
     end
 
-    # The create policy admits anything reaching participants through the
-    # report, so the actor-facing intake must never offer that route: a
-    # reporter naming maintainers would be writing their own case access.
+    # The intake action answers to the sending system's actor, not to the
+    # route in front of it, so a second caller reaching it gains nothing.
+    test "the intake action refuses anyone but the sending system" do
+      poc = Fixtures.register_user("intake_poc_denied", :poc)
+
+      attrs = %{
+        report_json: %{"package" => "acme"},
+        summary: "Smuggled",
+        participants: [%{role: :maintainer, strategy: :hex, username: "mallory"}]
+      }
+
+      assert {:error, %Forbidden{}} = CVE.submit_hex_vulnerability_report(attrs, actor: poc)
+      assert {:error, %Forbidden{}} = CVE.submit_hex_vulnerability_report(attrs, actor: nil)
+    end
+
     test "the actor-facing intake cannot carry participants" do
       reporter = Fixtures.register_user("participant_submitter")
 

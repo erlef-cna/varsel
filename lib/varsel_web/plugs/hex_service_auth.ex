@@ -4,23 +4,17 @@
 
 defmodule VarselWeb.Plugs.HexServiceAuth do
   @moduledoc """
-  Admits hex.pm's package-report intake, and nothing else.
+  Authenticates hex.pm's package-report intake.
 
-  hex.pm submits on a reporter's behalf rather than as them, so the credential
-  proves which system is calling rather than which person: a short-lived ES256
-  token verified by `Varsel.HexIntake.ServiceToken` against a pinned key set.
-
-  The request stays actor-less. Everything past this plug runs as no one, so
-  the route it guards is the whole of the authorization story and the action
-  behind it must not be reachable any other way.
+  A verified request runs as `Varsel.HexIntake.Service`. Nothing else builds
+  that actor, so holding it means a signature checked out here.
   """
   @behaviour Plug
 
   import Plug.Conn
 
+  alias Varsel.HexIntake.Service
   alias Varsel.HexIntake.ServiceToken
-
-  require Logger
 
   @impl Plug
   def init(opts), do: opts
@@ -29,7 +23,7 @@ defmodule VarselWeb.Plugs.HexServiceAuth do
   def call(conn, _opts) do
     with {:ok, token} <- bearer(conn),
          {:ok, _claims} <- ServiceToken.verify(token, audience()) do
-      conn
+      Ash.PlugHelpers.set_actor(conn, Service.hexpm())
     else
       {:error, reason} -> refuse(conn, reason)
     end
@@ -48,9 +42,7 @@ defmodule VarselWeb.Plugs.HexServiceAuth do
     |> Keyword.get(:audience, "")
   end
 
-  defp refuse(conn, reason) do
-    Logger.warning("Rejected a hex.pm report submission: #{reason}")
-
+  defp refuse(conn, _reason) do
     conn
     |> put_resp_content_type("application/json")
     |> put_resp_header("www-authenticate", ~s(Bearer error="invalid_token"))
