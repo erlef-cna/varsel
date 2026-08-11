@@ -12,27 +12,30 @@ defmodule Varsel.Fixtures do
   alias Varsel.CVE.CveRecord
 
   def register_user(handle, role \\ nil) do
-    user =
-      Ash.create!(
-        User,
-        %{
-          user_info: %{
-            "sub" => System.unique_integer([:positive]),
-            "preferred_username" => handle,
-            "name" => "#{handle} name",
-            "email" => "#{handle}@example.com"
-          },
-          oauth_tokens: %{"access_token" => "gho_token"}
-        },
-        action: :register_with_github,
-        authorize?: false
-      )
+    user = sign_in_with_github(handle, System.unique_integer([:positive]))
 
     if role && role != user.role do
       Ash.update!(user, %{role: role}, action: :set_role, authorize?: false)
     else
       user
     end
+  end
+
+  def sign_in_with_github(handle, sub) do
+    Ash.create!(
+      User,
+      %{
+        user_info: %{
+          "sub" => sub,
+          "preferred_username" => handle,
+          "name" => "#{handle} name",
+          "email" => "#{handle}@example.com"
+        },
+        oauth_tokens: %{"access_token" => "gho_token"}
+      },
+      action: :register_with_github,
+      authorize?: false
+    )
   end
 
   @doc "Creates an API key for `user` and returns `{api_key, plaintext}`."
