@@ -109,8 +109,16 @@ defmodule Varsel.Cases.Reachability do
           do: ["the introducing commit is contained in no release tag"],
           else: []
 
-      universe = Enum.uniq(all_tags ++ Enum.map(explicit, &elem(&1, 1)))
       kind = Keyword.fetch!(opts, :comparator)
+
+      # Only tags that name a version take part. A repository may tag anything
+      # — `nightly`, `latest`, a branch snapshot — and those neither bound a
+      # range nor compare against one, so they are dropped before anything
+      # tries to order them.
+      universe =
+        (all_tags ++ Enum.map(explicit, &elem(&1, 1)))
+        |> Enum.uniq()
+        |> Enum.filter(&VersionComparator.release?(kind, &1))
 
       affected =
         apply_explicit(derived_affected, explicit, universe, kind, derived_safe: fix_tags)

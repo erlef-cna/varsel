@@ -428,6 +428,16 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Open a case"
       assert html =~ "archive"
     end
+
+    test "the empty board offers no way in to someone who cannot open a case", %{conn: conn} do
+      collaborator = Fixtures.register_user("empty_board_collaborator")
+
+      {:ok, _lv, html} = conn |> log_in(collaborator) |> live(~p"/cases")
+
+      assert html =~ "No active cases."
+      assert html =~ "archive"
+      refute html =~ "Open a case"
+    end
   end
 
   describe "the references panel" do
@@ -505,6 +515,25 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Or choose a specific ID"
       # Opening the picker must not have taken an ID.
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == nil
+    end
+
+    # A supporter cannot read the reservations, so an empty listing tells them
+    # nothing about the pool — the picker must not report one either way.
+    test "a supporter is offered the next free ID without a claim about the pool", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Supporter picker"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+
+      html = lv |> element("button", "Assign CVE ID") |> render_click()
+
+      assert html =~ "Assign the next free ID"
+      refute html =~ "pool is empty"
+      refute html =~ "Or choose a specific ID"
     end
 
     test "the auto path takes the lowest free ID of the year", %{conn: conn, poc: poc} do

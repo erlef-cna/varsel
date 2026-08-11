@@ -15,7 +15,8 @@ defmodule Varsel.Cases.CaseTest do
   setup do
     %{
       poc: Fixtures.register_user("case_poc", :poc),
-      supporter: Fixtures.register_user("case_supporter", :supporter)
+      supporter: Fixtures.register_user("case_supporter", :supporter),
+      collaborator: Fixtures.register_user("case_collaborator")
     }
   end
 
@@ -28,9 +29,15 @@ defmodule Varsel.Cases.CaseTest do
       assert case_record.discovery == :unknown
     end
 
-    test "a supporter cannot open cases", %{supporter: supporter} do
+    test "a supporter opens a case too", %{supporter: supporter} do
+      case_record = Cases.open_case!(%{title: "Supporter case"}, actor: supporter)
+
+      assert case_record.state == :draft
+    end
+
+    test "a user with no role cannot open cases", %{collaborator: collaborator} do
       assert {:error, %Forbidden{}} =
-               Cases.open_case(%{title: "nope"}, actor: supporter)
+               Cases.open_case(%{title: "nope"}, actor: collaborator)
     end
 
     test "whoever opens the case is assigned to it", %{poc: poc} do
@@ -57,6 +64,134 @@ defmodule Varsel.Cases.CaseTest do
 
       assert length(Cases.list_cases!(actor: poc)) == 2
       assert [%{title: "assigned"}] = Cases.list_cases!(actor: supporter)
+    end
+
+    test "a user with no role sees only what they are assigned to", %{
+      poc: poc,
+      collaborator: collaborator
+    } do
+      assigned = Fixtures.open_case(poc, %{title: "assigned"})
+      _other = Fixtures.open_case(poc, %{title: "other"})
+
+      assert [] = Cases.list_cases!(actor: collaborator)
+
+      Cases.assign_case_user!(%{case_id: assigned.id, user_id: collaborator.id}, actor: poc)
+
+      assert [%{title: "assigned"}] = Cases.list_cases!(actor: collaborator)
+    end
+  end
+
+  describe "what each role may do to a case it is assigned to" do
+    setup %{poc: poc, supporter: supporter, collaborator: collaborator} do
+      case_record = Fixtures.open_case(poc)
+
+      for user <- [supporter, collaborator] do
+        Cases.assign_case_user!(%{case_id: case_record.id, user_id: user.id}, actor: poc)
+      end
+
+      %{case_record: case_record}
+    end
+
+    test "an assigned supporter edits content", %{supporter: supporter, case_record: case_record} do
+      assert %{description_md: "Edited."} =
+               Cases.edit_case!(case_record, %{description_md: "Edited."}, actor: supporter)
+    end
+
+    test "an assigned user with no role may not edit", %{
+      collaborator: collaborator,
+      case_record: case_record
+    } do
+      assert {:error, %Forbidden{}} =
+               Cases.edit_case(case_record, %{description_md: "Nope."}, actor: collaborator)
+    end
+
+    # Writing a child row is editing the case by another route, and an affected
+    # package carries `repo_url`, which drives server-side git egress.
+    test "nor write the case's facts", %{collaborator: collaborator, case_record: case_record} do
+      assert {:error, %Forbidden{}} =
+               Cases.add_affected_package(
+                 %{
+                   case_id: case_record.id,
+                   vendor: "acme",
+                   product: "acme_lib",
+                   repo_url: "https://github.com/acme/acme_lib"
+                 },
+                 actor: collaborator
+               )
+    end
+
+    test "but reads, comments and proposes", %{
+      collaborator: collaborator,
+      case_record: case_record
+    } do
+      assert {:ok, _} = Cases.get_case(case_record.id, actor: collaborator)
+
+      assert {:ok, _} =
+               Cases.post_case_comment(%{case_id: case_record.id, body: "?"}, actor: collaborator)
+
+      assert {:ok, _} =
+               Cases.propose_title(%{case_id: case_record.id, value: "Better"},
+                 actor: collaborator
+               )
+    end
+
+    test "an assigned supporter writes the case's facts", %{
+      supporter: supporter,
+      case_record: case_record
+    } do
+      assert {:ok, _} =
+               Cases.add_affected_package(
+                 %{case_id: case_record.id, vendor: "acme", product: "acme_lib"},
+                 actor: supporter
+               )
+    end
+
+    test "neither may approve or publish", %{
+      supporter: supporter,
+      collaborator: collaborator,
+      case_record: case_record
+    } do
+      reviewed = Cases.request_case_review!(case_record, actor: supporter)
+
+      for actor <- [supporter, collaborator] do
+        assert {:error, %Forbidden{}} = Cases.approve_case(reviewed, actor: actor)
+      end
+    end
+
+    test "an assigned supporter takes the next free CVE ID", %{
+      supporter: supporter,
+      case_record: case_record
+    } do
+      Fixtures.reserved_cve_record("CVE-2026-40001")
+
+      assigned = Cases.assign_case_cve_id!(case_record, %{}, actor: supporter)
+
+      assert Ash.load!(assigned, :cve_id, actor: supporter).cve_id == "CVE-2026-40001"
+    end
+
+    test "but may not name the ID they take", %{
+      poc: poc,
+      supporter: supporter,
+      case_record: case_record
+    } do
+      reserved = Fixtures.reserved_cve_record("CVE-2026-40002")
+
+      assert {:error, %Forbidden{}} =
+               Cases.assign_case_cve_id(case_record, %{cve_record_id: reserved.id}, actor: supporter)
+
+      # Refused outright rather than quietly given a different ID, and the
+      # record they named stays in the pool.
+      assert Varsel.CVE.get_cve_record!(reserved.id, actor: poc).state == :reserved
+      assert is_nil(Ash.reload!(case_record, actor: poc).cve_record_id)
+    end
+
+    test "a POC may name it", %{poc: poc, case_record: case_record} do
+      reserved = Fixtures.reserved_cve_record("CVE-2026-40003")
+
+      assigned =
+        Cases.assign_case_cve_id!(case_record, %{cve_record_id: reserved.id}, actor: poc)
+
+      assert Ash.load!(assigned, :cve_id, actor: poc).cve_id == "CVE-2026-40003"
     end
   end
 

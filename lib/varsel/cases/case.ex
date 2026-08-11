@@ -327,24 +327,31 @@ defmodule Varsel.Cases.Case do
     # Nothing about a case is public: a read needs someone to be asking, and
     # the read policy below then narrows to what that someone may see. Scoped
     # to reads so an action no policy names is forbidden by default rather than
-    # granted to any signed-in user.
+    # granted to any signed-in user. Which cases they may see cannot be decided
+    # here — `relates_to_actor_via` is a filter, and a strict policy has no row
+    # to filter yet — so this gate only asks that someone is signed in.
     policy action_type(:read) do
       access_type :strict
       forbid_if actor_absent()
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if actor_attribute_equals(:role, :supporter)
+      authorize_if always()
     end
 
-    # POCs see every case; supporters only cases they are assigned to.
+    # POCs see every case; everyone else only the cases they are assigned to,
+    # which is the whole of an unroled collaborator's access.
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:assignments, :user])
     end
 
-    # Content edits and review handoff: POC or assigned supporter.
+    # Content edits and review handoff: POC or assigned supporter. An assigned
+    # user with no role may propose and comment, but never write directly.
     policy action([:edit, :apply_proposal, :request_review, :refresh_derivation]) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:assignments, :user])
+
+      authorize_if expr(
+                     ^actor(:role) == :supporter and
+                       exists(assignments, user_id == ^actor(:id))
+                   )
     end
 
     # Content freeze: case content may only change in :draft or :review.
@@ -352,15 +359,44 @@ defmodule Varsel.Cases.Case do
       authorize_if expr(state in [:draft, :review])
     end
 
-    # Case lifecycle decisions are POC-only.
+    # Supporters open their own cases; POCs open any.
+    policy action(:open) do
+      authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if actor_attribute_equals(:role, :supporter)
+    end
+
+    # An assigned supporter takes the *next free* ID of the year; naming the
+    # record — a withheld ID, or one out of sequence — stays a POC decision.
+    # The forbid sits after the POC check, which short-circuits it, so it only
+    # ever judges everyone else.
+    policy action(:assign_cve_id) do
+      authorize_if actor_attribute_equals(:role, :poc)
+      forbid_if expr(not is_nil(^arg(:cve_record_id)))
+
+      authorize_if expr(
+                     ^actor(:role) == :supporter and
+                       exists(assignments, user_id == ^actor(:id))
+                   )
+    end
+
+    # Reopening puts a case back into drafting, which is work rather than a
+    # CNA decision, so an assigned supporter may do it.
+    policy action(:reopen) do
+      authorize_if actor_attribute_equals(:role, :poc)
+
+      authorize_if expr(
+                     ^actor(:role) == :supporter and
+                       exists(assignments, user_id == ^actor(:id))
+                   )
+    end
+
+    # The rest of the lifecycle — approving and publishing above all — is the
+    # CNA's own responsibility and stays with POCs.
     policy action([
-             :open,
              :adopt_cve_record,
              :request_changes,
              :approve,
-             :assign_cve_id,
              :publish,
-             :reopen,
              :close
            ]) do
       authorize_if actor_attribute_equals(:role, :poc)

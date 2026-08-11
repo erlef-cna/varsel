@@ -456,6 +456,7 @@ defmodule VarselWeb.CaseManagementLive do
           query={@query}
           expanded_lanes={@expanded_lanes}
           archive_match_count={@archive_match_count}
+          can_open?={Cases.can_open_case?(@current_user, %{})}
           socket={@socket}
         />
         <.archive_face
@@ -477,6 +478,7 @@ defmodule VarselWeb.CaseManagementLive do
   attr :query, :string, required: true
   attr :expanded_lanes, :any, required: true
   attr :archive_match_count, :integer, required: true
+  attr :can_open?, :boolean, required: true
   attr :socket, :any, required: true
 
   defp pipeline_face(assigns) do
@@ -505,12 +507,25 @@ defmodule VarselWeb.CaseManagementLive do
       />
     </BoardComponents.board>
 
-    <p :if={@all_empty? and @query == ""} class="text-center text-sm text-base-content/60 mt-4">
+    <p
+      :if={@all_empty? and @query == "" and @can_open?}
+      class="text-center text-sm text-base-content/60 mt-4"
+    >
       No active cases.
       <button type="button" class="link text-primary" phx-click="toggle_open_case">
         Open a case
       </button>
       to start one, or browse the <.link
+        patch={archive_path(@socket, "all", "", nil)}
+        class="link text-primary"
+      >archive</.link>.
+    </p>
+
+    <p
+      :if={@all_empty? and @query == "" and !@can_open?}
+      class="text-center text-sm text-base-content/60 mt-4"
+    >
+      No active cases. Browse the <.link
         patch={archive_path(@socket, "all", "", nil)}
         class="link text-primary"
       >archive</.link>.

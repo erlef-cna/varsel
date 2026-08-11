@@ -227,9 +227,15 @@ defmodule Varsel.Cases.Proposal do
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
 
+    # Resolving someone else's proposal is a reviewer's act, so it needs a role
+    # as well as an assignment — an unroled collaborator proposes and no more.
     policy action([:accept, :decline]) do
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+
+      authorize_if expr(
+                     ^actor(:role) == :supporter and
+                       exists(case.assignments, user_id == ^actor(:id))
+                   )
     end
 
     policy action(:withdraw) do
