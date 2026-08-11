@@ -20,6 +20,7 @@ defmodule Varsel.Cases.CaseAssignment do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
+  alias Varsel.Cases.Case
 
   graphql do
     type :case_assignment
@@ -66,7 +67,17 @@ defmodule Varsel.Cases.CaseAssignment do
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
 
-    policy action_type([:create, :destroy]) do
+    # Granting access is a POC decision — assignment is what access *is*, so a
+    # supporter who could assign themselves could reach any case. The one
+    # exception is the assignment `:open` makes for whoever opened the case,
+    # which arrives through the relationship and names an actor the caller
+    # cannot choose (the argument is private, see `Changes.AssignOpener`).
+    policy action_type(:create) do
+      authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if accessing_from(Case, :assignments)
+    end
+
+    policy action_type(:destroy) do
       authorize_if actor_attribute_equals(:role, :poc)
     end
   end
@@ -92,7 +103,7 @@ defmodule Varsel.Cases.CaseAssignment do
   end
 
   relationships do
-    belongs_to :case, Varsel.Cases.Case do
+    belongs_to :case, Case do
       allow_nil? false
       public? true
       attribute_writable? true
