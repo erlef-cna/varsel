@@ -2,14 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.CVE.HexPm do
+defmodule Varsel.HexPm do
   @moduledoc """
-  Thin client for checking package existence on hex.pm via `hex_core`.
+  Thin client for hex.pm, via `hex_core`.
 
-  Extra `hex_core` configuration (e.g. a stub HTTP adapter in tests) can be
-  merged in via
-
-      config :varsel, :hex_core, %{http_adapter: {MyAdapter, %{}}}
+  Extra `hex_core` configuration (a stub HTTP adapter in tests) is merged in
+  via `config :varsel, :hex_core, %{http_adapter: {MyAdapter, %{}}}`.
   """
 
   @doc """
@@ -47,35 +45,16 @@ defmodule Varsel.CVE.HexPm do
     end
   end
 
-  @doc """
-  Extracts the package names of all `pkg:hex/...` package URLs in a CVE
-  record's affected entries.
-
-  Namespaced purls (`pkg:hex/acme/foo`, private organization packages) are
-  skipped — their existence cannot be verified against the public repository.
-  Unparsable package URLs are skipped as well; the schema/lint validators are
-  responsible for flagging those.
-  """
-  @spec hex_package_names(map()) :: [String.t()]
-  def hex_package_names(cve_json) when is_map(cve_json) do
-    cve_json
-    |> get_in(["containers", "cna", "affected"])
-    |> List.wrap()
-    |> Enum.flat_map(fn affected ->
-      with %{"packageURL" => purl_string} <- affected,
-           {:ok, %Purl{type: "hex", namespace: [], name: name}} <- Purl.new(purl_string) do
-        [name]
-      else
-        _ -> []
-      end
-    end)
-    |> Enum.uniq()
+  @doc "Whether a hex.pm account with this username exists, and its canonical spelling."
+  @spec user(String.t()) :: {:ok, String.t()} | :not_found
+  def user(username) when is_binary(username) do
+    case :hex_api_user.get(config(), username) do
+      {:ok, {200, _headers, %{"username" => canonical}}} -> {:ok, canonical}
+      {:ok, {404, _headers, _body}} -> :not_found
+    end
   end
 
   defp config do
-    Map.merge(
-      :hex_core.default_config(),
-      Application.get_env(:varsel, :hex_core, %{})
-    )
+    Map.merge(:hex_core.default_config(), Application.get_env(:varsel, :hex_core, %{}))
   end
 end

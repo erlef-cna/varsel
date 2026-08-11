@@ -222,6 +222,24 @@ defmodule Varsel.Cases.Case do
       change Varsel.Cases.Case.Changes.RefreshDerivation
     end
 
+    update :grant_access do
+      description """
+      Puts someone on the case by their provider handle, whether or not they
+      have an account here yet: an assignment when the handle is one we hold an
+      identity for, an invite waiting for them when it is not. Which one the
+      caller gets back is the only difference they see — they asked to give a
+      person access, not to look up who exists.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :strategy, Varsel.Cases.CaseInvite.Strategy, allow_nil?: false
+      argument :username, :string, allow_nil?: false
+
+      change Varsel.Cases.Case.Changes.GrantAccess
+    end
+
     update :request_review do
       description "Marks a drafted case ready for POC review."
       accept []
@@ -402,6 +420,15 @@ defmodule Varsel.Cases.Case do
       authorize_if actor_attribute_equals(:role, :poc)
     end
 
+    policy action(:grant_access) do
+      authorize_if actor_attribute_equals(:role, :poc)
+
+      authorize_if expr(
+                     ^actor(:role) == :supporter and
+                       exists(assignments, user_id == ^actor(:id))
+                   )
+    end
+
     # :mark_published runs only through the AshOban bypass above.
     policy action(:mark_published) do
       forbid_if always()
@@ -424,10 +451,13 @@ defmodule Varsel.Cases.Case do
     # whose row moved since that load (StaleRecord) is what entitles the
     # update policies to trust `changeset.data`. :refresh_derivation is exempt:
     # it only rewrites derived caches and runs nested inside :publish, where a
-    # version bump would trip the outer changeset's own lock.
+    # version bump would trip the outer changeset's own lock. :grant_access is
+    # exempt for the same reason: it writes a child row and nothing on the case,
+    # so locking it would make two people adding two different collaborators
+    # collide.
     change optimistic_lock(:version),
       on: [:update],
-      where: [negate(action_is(:refresh_derivation))]
+      where: [negate(action_is([:refresh_derivation, :grant_access]))]
   end
 
   attributes do
@@ -547,6 +577,10 @@ defmodule Varsel.Cases.Case do
     end
 
     has_many :assignments, Varsel.Cases.CaseAssignment do
+      public? true
+    end
+
+    has_many :invites, Varsel.Cases.CaseInvite do
       public? true
     end
 

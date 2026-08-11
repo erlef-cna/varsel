@@ -4,11 +4,12 @@
 
 defmodule Varsel.Cases.CaseAssignment do
   @moduledoc """
-  Grants a user (typically a `:supporter`) access to one specific case.
+  Grants a user access to one specific case.
 
   Assignments are the only path by which non-POC users see and work on cases;
-  every policy in the Cases domain checks them. POCs manage assignments and
-  have full access regardless.
+  every policy in the Cases domain checks them. What that access amounts to
+  depends on the user's role — a supporter edits, an unroled collaborator
+  reads and proposes. POCs have full access regardless.
   """
 
   use Ash.Resource,
@@ -67,14 +68,14 @@ defmodule Varsel.Cases.CaseAssignment do
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
 
-    # Granting access is a POC decision — assignment is what access *is*, so a
-    # supporter who could assign themselves could reach any case. The one
-    # exception is the assignment `:open` makes for whoever opened the case,
-    # which arrives through the relationship and names an actor the caller
-    # cannot choose (the argument is private, see `Changes.AssignOpener`).
     policy action_type(:create) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if accessing_from(Case, :assignments)
+
+      authorize_if expr(
+                     ^actor(:role) == :supporter and
+                       exists(case.assignments, user_id == ^actor(:id))
+                   )
     end
 
     policy action_type(:destroy) do

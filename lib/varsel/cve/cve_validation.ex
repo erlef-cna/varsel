@@ -75,7 +75,7 @@ defmodule Varsel.CVE.CveValidation do
     `Varsel.CVE.CveSchema`)
   - `:cvelint` — the `cvelint` binary (see `Varsel.CVE.Cvelint`)
   - `:hex` — every `pkg:hex/...` package URL in the affected entries must
-    reference an existing package on hex.pm (see `Varsel.CVE.HexPm`)
+    reference an existing package on hex.pm (see `Varsel.HexPm`)
   """
 
   # AshGraphql.Resource is required even though this resource exposes no type
@@ -91,7 +91,7 @@ defmodule Varsel.CVE.CveValidation do
   alias Varsel.CVE.CveSchema
   alias Varsel.CVE.CveValidation.Error
   alias Varsel.CVE.CveValidation.Result
-  alias Varsel.CVE.HexPm
+  alias Varsel.HexPm
 
   graphql do
     # This resource has no GraphQL type of its own; it only exposes generic
@@ -185,7 +185,7 @@ defmodule Varsel.CVE.CveValidation do
 
   defp hex_errors(cve_json) do
     cve_json
-    |> HexPm.hex_package_names()
+    |> hex_package_names()
     |> Enum.flat_map(fn name ->
       case HexPm.package_exists?(name) do
         {:ok, true} ->
@@ -253,5 +253,24 @@ defmodule Varsel.CVE.CveValidation do
 
   defp error(source, code, message, path \\ nil) do
     struct(Error, %{source: source, code: code, message: message, path: path})
+  end
+
+  # The `pkg:hex/...` package names in a record's affected entries. Namespaced
+  # purls (`pkg:hex/acme/foo`, private organization packages) are skipped —
+  # their existence cannot be verified against the public repository — as are
+  # unparsable package URLs, which the schema/lint validators flag.
+  defp hex_package_names(cve_json) when is_map(cve_json) do
+    cve_json
+    |> get_in(["containers", "cna", "affected"])
+    |> List.wrap()
+    |> Enum.flat_map(fn affected ->
+      with %{"packageURL" => purl_string} <- affected,
+           {:ok, %Purl{type: "hex", namespace: [], name: name}} <- Purl.new(purl_string) do
+        [name]
+      else
+        _ -> []
+      end
+    end)
+    |> Enum.uniq()
   end
 end
