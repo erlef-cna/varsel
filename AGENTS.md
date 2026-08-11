@@ -23,6 +23,67 @@ This is a web application written using the Phoenix web framework.
 - Use the already included and available `:req` (`Req`) library for HTTP
   requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by
   default and is the preferred HTTP client for Phoenix apps
+- Pre-commit hooks (`prek`) run credo, dialyzer, format, reuse and sobelow.
+  **Never pass `--no-verify`.** A failing hook names a real problem: add the
+  missing SPDX header, run `mix format`, fix the finding. If a failure looks
+  unfixable, stop and ask rather than bypassing.
+- Never use `@impl true`; name the behaviour (`@impl Phoenix.LiveView`,
+  `@impl GenServer`, `@impl Ash.Type`). It documents which contract the
+  function fulfills and lets the compiler check the callback belongs to it.
+
+### Commits and PRs
+
+- **Never put an AI-attribution footer in a PR title or description.** PR
+  descriptions become the squashed commit message and stay content-only.
+- **The `Co-Authored-By: Claude ...` trailer on a commit depends on who did the
+  work.** A feature the assistant designed and wrote gets it. A change the
+  author diagnosed and directed, where the assistant applied a small mechanical
+  fix, does not. Judge per commit; include it when genuinely split.
+
+### Writing style
+
+Applies to code comments, moduledocs, commit messages, `THREAT_MODEL.md` and
+every other doc in this repo.
+
+- **Comments earn their place or don't exist.** Write one only for a
+  constraint, trade-off or gotcha the code cannot express, ideally one imposed
+  *elsewhere* (another module's cascade, an upstream API's rules, a spec), since
+  that survives local edits. The test: would this go stale if someone changed
+  the code below it? Then it was describing the code, and describing the code is
+  what the code is for. Default to none.
+- **Document what is, not what is not.** State the positive fact and stop. No
+  justifying an absence, no "rather than X", no contrasting with the approach
+  you didn't take. Reasoning about why a shape was chosen belongs in the commit
+  message, where it does not rot.
+- Moduledocs say what the module is *for*. Mechanics belong in the code.
+- **Go easy on em dashes.** Prefer a full stop, a colon, or a comma. Keep the
+  occasional one where it genuinely earns the pause; more than one per
+  paragraph means rewriting most of them.
+- When a change alters who can do what, grep the docs and moduledocs that
+  describe it. A stale doc is worse than none.
+
+### Editing THREAT_MODEL.md
+
+The model's value is that a triager reads only what they cannot derive, so the
+bar for adding anything is high. Before adding, find whether an existing section
+already covers it generally (§4 default-deny and policies-decide-everywhere, §6
+"all action parameters are attacker-controlled … the exceptions worth tabulating
+are where input *content* reaches a sensitive sink"). If it does, add nothing.
+
+- §5 is the side-effect inventory: things crossing **out** of the process
+  (egress, subprocess, email, disk). A write to the app's own Postgres is not a
+  host side effect, not even `REFRESH MATERIALIZED VIEW`.
+- §6a "outputs and expected sinks" means sinks where output shape or safety
+  matters to the receiver (HTML/XML, leaky URLs). An API response *schema*
+  change is API documentation (`priv/pages/api-access.md`), not a sink.
+- §11a known-non-findings earn a place only by correcting a **misreading**. A
+  static query with no caller input is not misread, so it gets no entry. Never
+  put a false claim in an entry header even to rebut it.
+- Cut parentheticals restating an example already named in the previous
+  sentence.
+
+Verify claims by running code rather than reasoning from the DSL: call an action
+as anonymous, role-less and POC to prove default-deny.
 
 ### Authorization guidelines
 
@@ -82,9 +143,37 @@ no option fixes it. Ask about the parent instead — `Ash.can?({case_record,
 :read}, actor)` answers the same POC-or-assigned question, before the write.
 
 **`authorize?: false` is banned in app code**, whatever the generic Ash rules
-below say — `AshCredo.Check.Warning.AuthorizeFalse` enforces it. Tests may use
-it. In app code, route through a policy, an `AshOban` bypass, or
-`accessing_from` instead.
+below say. `AshCredo.Check.Warning.AuthorizeFalse` enforces it (`.credo.exs`
+excludes only `test`). Tests may use it. Route around it by case:
+
+- *User-facing action refused by policy?* Add it to the resource policy and pass
+  the actor. Page-level `on_mount` gating is not a substitute for action-layer
+  policies.
+- *System or background op* (Oban `run fn`, generic action, notifier)? Forward
+  the AshOban context with `Varsel.ObanContext.forward(context)` and pass the
+  returned opts to the nested call. It re-adds the private `ash_oban?` flag only
+  when the outer context already had it, which clears the resource's
+  `AshObanInteraction` bypass. The helper exists because `Ash.Context.to_opts`
+  drops that flag on its own. Writes reached *through* `manage_relationship` do
+  not inherit it, so use `accessing_from` there.
+- *Row only ever written via a managed relationship?* Authorize by provenance:
+  `authorize_if accessing_from(ParentResource, :relationship_name)`. For a
+  many_to_many join the name is `:<name>_join_assoc`.
+- *Reading a public resource?* Just drop the flag; an actor-less authorized read
+  passes.
+- *Render/derivation internals needing full case data?* Thread the actor; an
+  actor who can read a case can read its children.
+
+⚠️ `# credo:disable-for-next-line` for these compiled checks must sit directly
+above the flagged token: for a multi-line call, above the line that opens it;
+for a pipe, above the piped segment.
+
+Nested calls that must run as someone other than the caller take
+`actor: <that actor>` explicitly. Do not express a permission as
+`context_equals`: action context is ambient state that any code path can set on
+its way in, and it carries no relationship to who is asking. It says "this call
+came through some code", not "this caller may do this". Authorize on the actor
+and the row.
 
 **Inspecting policies.** To see what a resource actually decides, rather than
 guessing:
@@ -99,6 +188,141 @@ front. To check behaviour rather than structure, read the resource as each
 actor (`Ash.read(Resource, actor: nil)`) and compare against
 `Ash.count!(Resource, authorize?: false)` — an empty result with rows present
 is a filter policy working, not a missing one.
+
+A refused error carries `.facts` (each check mapped to true/false/`:unknown`)
+and `.actor`; that pair is how `policy_status.ex` tells 401 from 403.
+`run_queries?: false` is not a strictness knob; it collapses everything to
+false.
+
+**Checks are walked in source order and the first decisive one halts.** So
+`authorize_if poc` / `forbid_if <arg present>` / `authorize_if supporter` reads
+exactly as written: a POC never reaches the forbid. Filter expressions need a
+row, so they work in neither a strict policy nor on a generic action. Making an
+action an `update` is what buys per-row filter policies.
+
+**Policies are load-bearing. Think about what a change permits, not just what it
+was meant to permit**, including on surfaces not exposed today. The policy is
+what will hold when one appears.
+
+### Migrations
+
+Migrations are **incremental**. A schema change gets a new named
+`mix ash.codegen <name>` migration on top of the existing ones. Never wipe or
+regenerate `initial_schema`, and never delete an applied migration (including a
+`*_dev.exs` from codegen): a live dev database is running against them, and
+undoing that by hand falls to the person whose database it is. Fix forward with
+a new migration instead. The hand-rolled `add_oban` migration must be preserved
+as-is.
+
+⚠️ **Non-interactive codegen turns a column rename into `remove` + `add`**,
+which drops the data. It does print a destructive-operation warning, easy to
+miss in tailed output. Always read a generated migration that touches an
+existing column and rewrite it as a real rename:
+
+```elixir
+rename table(:users), :email, to: :notification_email
+```
+
+Index drop/create around it is fine as generated. Confirm `down` round-trips by
+rolling back once.
+
+Use `MIX_ENV=test` for compile and verify loops. `mix compile --force` in the
+default dev env recompiles the whole tree and disrupts the running dev server.
+
+### Resource patterns
+
+**State integrity.** All four state-machine resources (Case, CveRecord,
+VulnerabilityReport, Proposal) carry `attribute :version, :integer` plus a
+resource-global `change optimistic_lock(:version), on: [:update]`, so a stale
+server-loaded snapshot fails with `StaleRecord`. That lock is what entitles
+policies and validations to trust `changeset.data`. `ValidNextState` sits
+**above** the AshOban bypass and exists for pre-flight `Ash.can?` visibility;
+enforcement stays with `transition_state`.
+
+Exempt an update from the lock only when it runs nested inside another update on
+the same row, or when concurrent unrelated writers would otherwise collide
+(`:refresh_derivation`, `:grant_access` on Case).
+
+**Content freezes are policies checking the current row**
+(`expr(state in [...])`, `expr(case.state in [...])`), never validations reading
+`changeset.data`.
+
+⚠️ On calculation-backed identities, `upsert_condition` works, but
+`return_skipped_upsert?` and `return_records?` on bulk upserts do not: the
+record-to-changeset mapping is keyed on identity attributes the changeset never
+has, so `BulkResult.records` comes back empty. Query state up front instead of
+reading the bulk result.
+
+### Testing
+
+- **Never `=~` against a raw response body or an `inspect` string.** Decode and
+  pattern match the structure; a final `=~` on one extracted string field is
+  fine.
+- **A mutating LiveView test must end on a `render(lv)`-based assertion**, never
+  a bare `render_click`/`render_submit` plus a database assert. The reload
+  happens one message after the event reply and the trailing render flushes it.
+  Without it the LiveView dies mid-query at test end, giving flaky
+  `DBConnection.ConnectionError` sandbox disconnects.
+- Sorting timestamps needs the module sorter:
+  `Enum.sort_by(x, & &1.inserted_at, DateTime)`. A bare `sort_by` compares
+  structs field-alphabetically (`:microsecond` before `:minute`), which flips
+  order across second boundaries and only fails when timestamps straddle one.
+- HTTP clients are mocked through config: `Req.Test` plugs for Req-based
+  clients, the `hex_core` HTTP adapter for hex.pm. See `config/test.exs`.
+
+### LiveView conventions
+
+**Notification-driven reloads.** Subscribed LiveViews use
+`AshPhoenix.LiveView.keep_live`, and `VarselWeb.LiveNotifications` (an
+`on_mount` hook in both router live_sessions) intercepts broadcasts at the
+`handle_info` stage. LiveViews write **no** `handle_info` for notifications and
+no hand-rolled reload functions; the pub_sub echo is the reload path. The hook
+drains queued same-topic broadcasts before refetching, because a reorder or bulk
+sync emits one notification per row.
+
+**Forms.** Data-entry LiveViews use `AshPhoenix.Form` with inline per-field
+errors via `<.input>`. Build with `for_create`/`for_update(..., as: "form",
+actor: current_user) |> to_form()`, validate on change, and re-assign the form
+on `{:error, form}`. Derived non-attribute inputs stay outside the form struct
+and are merged into params before submit. `<.input>`'s `label` is a **slot**,
+not a string attr. Per-row single-control list actions in `keep_live` lists stay
+raw by choice.
+
+⚠️ **Never name a `phx-value-*` param `value`.** The browser clobbers it with
+the element's DOM value, and tests do not catch it since they send what you
+tell them to. Use `selection`, `choice`, `row_id`, anything else.
+
+### Dev-only code
+
+Developer tooling lives in the **`dev/` directory**, which is in `elixirc_paths`
+for `:dev` and `:test` only. A compile-time config flag is not enough: Elixir
+resolves `import Foo.Bar` even inside an `if false` branch it discards, so a
+dev-only dependency breaks the prod compile however the branch is guarded. Only
+"not compiled at all" works. Plugs are fine in a dead branch since they are not
+resolved.
+
+- New dev-only module goes in `dev/` with no `if` wrapper inside it.
+- Fragments inside always-compiled modules guard with
+  `Mix.env() in [:dev, :test]` (compile-time only; Mix is absent in releases).
+- `VarselWeb.DevRouter` is forwarded at the root, last, and declares full
+  `/dev/...` paths itself, because these tools build redirects from their mount
+  path and cannot see through a forward.
+- Dev-only components need `use Phoenix.VerifiedRoutes, router:
+  VarselWeb.DevRouter`, and Tailwind scans `dev/` via an `@source` in app.css.
+
+### sobelow
+
+Prose after the directive crashes the parser: `# sobelow_skip ["SQL.Query"] -
+because X` makes sobelow parse the trailing text as Elixir and exit 1 with an
+`Enumerable.impl_for!/1` stacktrace and zero findings printed, which looks like
+an unrelated crash. Put the reason on its own comment line **above** the
+directive.
+
+`.sobelow-skips` pins `file:line`, so inserting anything above a skipped
+construct shifts its line and resurfaces a finding unrelated to your change.
+Regenerate the file with `mix sobelow --mark-skip-all`, then restore the SPDX
+header and the comment explaining each skip, which the rewrite drops. To tell
+whether a finding is yours or pre-existing, `git stash push -u` and re-run.
 
 ### Phoenix v1.8 guidelines
 
@@ -199,8 +423,16 @@ Reading a `visual_tests` page correctly:
 **New reusable markup gets a story.** When you extract a component, add
 `storybook/<folder>/<name>.story.exs` with a variation per state and register it in
 that folder's `_<folder>.index.exs`. A component without a story is invisible to
-the next person and unreviewable in both themes. ⚠️ Never name a component attr
-`id` if a story passes it — storybook eats it and the guard fails silently.
+the next person and unreviewable in both themes.
+
+⚠️ **Never name a component attr `id` if a story passes it.** Storybook consumes
+`id` for the sandbox element's own DOM id, so the component receives that string
+instead of what the variation passed. The failure is silent: the guard just
+evaluates false, and a *negated* guard stays true, so the story looks right
+while testing nothing. Name it `row_id`, `record_id`, `case_id`. Plain `id` is
+fine for attrs that genuinely are the DOM id. Calling the component directly
+through `project_eval` renders fine and hides this, so check the real storybook
+page.
 
 #### Seeing the live app
 
