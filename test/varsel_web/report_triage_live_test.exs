@@ -240,4 +240,47 @@ defmodule VarselWeb.ReportTriageLiveTest do
     assert report.state == :rejected
     assert report.triage_notes == "out of scope"
   end
+
+  describe "the people a sender named" do
+    setup do
+      report =
+        CVE.submit_hex_vulnerability_report!(
+          %{
+            report_json: %{"package" => "acme"},
+            summary: "forwarded by hex.pm",
+            participants: [
+              %{
+                role: :maintainer,
+                strategy: :hex,
+                username: "triage_maintainer",
+                email: "maintainer@example.com"
+              }
+            ]
+          },
+          authorize?: false
+        )
+
+      %{hex_report: report}
+    end
+
+    test "are listed for a POC", %{conn: conn, poc: poc} do
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/reports")
+
+      assert html =~ "Named by the sender"
+      assert html =~ "triage_maintainer"
+      assert html =~ "maintainer@example.com"
+    end
+
+    test "stay hidden from the reporter's own list", %{conn: conn, hex_report: report} do
+      reporter = Fixtures.register_user("triage_reporter_view")
+      Ash.Seed.update!(report, %{reporter_id: reporter.id})
+
+      {:ok, _lv, html} = conn |> log_in(reporter) |> live(~p"/reports")
+
+      assert html =~ "forwarded by hex.pm"
+      refute html =~ "Named by the sender"
+      refute html =~ "triage_maintainer"
+      refute html =~ "maintainer@example.com"
+    end
+  end
 end

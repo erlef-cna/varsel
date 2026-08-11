@@ -140,7 +140,7 @@ defmodule VarselWeb.ReportTriageLive do
   defp list_reports(socket) do
     CVE.list_vulnerability_reports!(
       actor: socket.assigns.current_user,
-      load: [reporter: [:display_name, :avatar_url]]
+      load: [:participants, reporter: [:display_name, :avatar_url]]
     )
   end
 
@@ -358,6 +358,22 @@ defmodule VarselWeb.ReportTriageLive do
           toggle="toggle_payload"
           body_class="max-h-56 overflow-y-auto"
         />
+      </div>
+
+      <div :if={@triage? and @report.participants != []} class="mt-2.5">
+        <p class="text-xs font-semibold text-base-content/60">
+          Named by the sender
+        </p>
+        <ul class="mt-1 space-y-0.5 text-xs">
+          <li
+            :for={participant <- @report.participants}
+            class="flex flex-wrap items-center gap-x-2 text-base-content/70"
+          >
+            <span class="badge badge-ghost badge-sm">{participant.role}</span>
+            <span class="font-mono">{participant.username}</span>
+            <span :if={participant.email} class="text-base-content/50">{participant.email}</span>
+          </li>
+        </ul>
       </div>
 
       <p :if={@report.triage_notes} class="mt-2 text-sm text-base-content/70 italic">
