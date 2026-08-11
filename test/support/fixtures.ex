@@ -21,6 +21,23 @@ defmodule Varsel.Fixtures do
     end
   end
 
+  def sign_in_with_hex(handle, sub) do
+    Ash.create!(
+      User,
+      %{
+        user_info: %{
+          "sub" => sub,
+          "preferred_username" => handle,
+          "name" => "#{handle} name",
+          "email" => "#{handle}@example.com"
+        },
+        oauth_tokens: %{"access_token" => "hex_token"}
+      },
+      action: :register_with_hex,
+      authorize?: false
+    )
+  end
+
   def sign_in_with_github(handle, sub) do
     Ash.create!(
       User,

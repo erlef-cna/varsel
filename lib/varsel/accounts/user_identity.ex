@@ -25,6 +25,7 @@ defmodule Varsel.Accounts.UserIdentity do
   alias Ash.Type.CiString
   alias Varsel.Accounts.User
   alias Varsel.Accounts.UserIdentity.Changes.ClaimCaseInvites
+  alias Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants
   alias Varsel.Accounts.UserIdentity.Changes.ReconcileUserNotificationEmail
 
   user_identity do
@@ -103,6 +104,7 @@ defmodule Varsel.Accounts.UserIdentity do
       change Varsel.Accounts.UserIdentity.Changes.ApplyProviderFields
       change ReconcileUserNotificationEmail
       change ClaimCaseInvites
+      change ClaimReportParticipants
     end
 
     destroy :destroy do
