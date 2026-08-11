@@ -12,32 +12,59 @@ defmodule Varsel.Test.HexHTTPStub do
 
       Application.put_env(:varsel, :hex_stub_packages, ["plug"])
       Application.put_env(:varsel, :hex_stub_packages, %{"plug" => ["1.0.0", "1.1.0"]})
+
+  Users are stubbed the same way through `:hex_stub_users`, a list of
+  usernames. hex.pm lowercases handles, so a lookup matches case-insensitively
+  and answers with the stored spelling:
+
+      Application.put_env(:varsel, :hex_stub_users, ["alice"])
   """
 
   @behaviour :hex_http
 
   @impl :hex_http
   def request(:get, url, _headers, _body, _adapter_config) do
-    name = url |> to_string() |> URI.parse() |> Map.fetch!(:path) |> Path.basename()
+    path = url |> to_string() |> URI.parse() |> Map.fetch!(:path)
+    name = Path.basename(path)
 
-    case stubbed_versions(name) do
-      {:ok, versions} ->
-        body =
-          :erlang.term_to_binary(%{
-            "name" => name,
-            "releases" => Enum.map(versions, &%{"version" => &1})
-          })
-
-        {:ok, {200, %{"content-type" => "application/vnd.hex+erlang"}, body}}
-
-      :error ->
-        {:ok, {404, %{"content-type" => "application/vnd.hex+erlang"}, :erlang.term_to_binary(%{})}}
+    if String.contains?(path, "/users/") do
+      user_response(name)
+    else
+      package_response(name)
     end
   end
 
   @impl :hex_http
   def request_to_file(_method, _url, _headers, _body, _filename, _adapter_config) do
     {:error, :not_supported}
+  end
+
+  defp package_response(name) do
+    case stubbed_versions(name) do
+      {:ok, versions} ->
+        ok(%{"name" => name, "releases" => Enum.map(versions, &%{"version" => &1})})
+
+      :error ->
+        not_found()
+    end
+  end
+
+  defp user_response(name) do
+    :varsel
+    |> Application.get_env(:hex_stub_users, [])
+    |> Enum.find(&(String.downcase(&1) == String.downcase(name)))
+    |> case do
+      nil -> not_found()
+      username -> ok(%{"username" => username})
+    end
+  end
+
+  defp ok(body) do
+    {:ok, {200, %{"content-type" => "application/vnd.hex+erlang"}, :erlang.term_to_binary(body)}}
+  end
+
+  defp not_found do
+    {:ok, {404, %{"content-type" => "application/vnd.hex+erlang"}, :erlang.term_to_binary(%{})}}
   end
 
   defp stubbed_versions(name) do
