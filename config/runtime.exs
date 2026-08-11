@@ -93,6 +93,14 @@ if config_env() != :test do
   # for development; it defaults to the public one.
   config :varsel, :hex, oauth_provider_config.("HEX", base_url: {"BASE_URL", "https://hex.pm"})
 
+  # hex.pm's report intake. The key set is pinned rather than fetched, so
+  # verification never waits on hex.pm and rotation is a deliberate change.
+  # The audience must be the URL hex.pm is configured to post to, since that
+  # is the value it puts in the token.
+  config :varsel, :hex_intake,
+    jwks: System.get_env("HEX_INTAKE_JWKS"),
+    audience: System.get_env("HEX_INTAKE_AUDIENCE")
+
   case {length(mitre_missing), config_env()} do
     {0, _env} ->
       config :varsel,

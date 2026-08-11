@@ -169,6 +169,14 @@ defmodule VarselWeb.HexReportControllerTest do
       assert CVE.list_vulnerability_reports!(authorize?: false) == []
     end
 
+    test "the payload is larger than intake allows", %{conn: conn} do
+      payload = payload(%{"description" => String.duplicate("a", 300_000)})
+      conn = submit(conn, payload, token())
+
+      assert json_response(conn, 422)
+      assert CVE.list_vulnerability_reports!(authorize?: false) == []
+    end
+
     test "a named person has no username to match on", %{conn: conn} do
       payload = payload(%{"reporter" => %{"name" => "Reporter", "email" => "r@example.com"}})
       conn = submit(conn, payload, token())
