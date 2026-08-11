@@ -221,10 +221,11 @@ sets `no_filter_static_forbidden_reads?: false`).
 
 **One pipeline authenticates a system rather than a person.** `/api/hex/reports`
 takes reports from hex.pm, which submits on a reporter's behalf and so cannot
-present that reporter's credential. The token proves which system is calling;
-no actor is resolved, and the single action it reaches is the only one written
-to be safe without one. Everything else on every other pipeline still runs as
-somebody. (`router.ex`, `hex_service_auth.ex`)
+present that reporter's credential. The token proves which system is calling,
+and the request then runs as that system: an actor with no role, which the
+intake action's policy names and nothing else grants. So the boundary here is
+the same one as everywhere else, with a non-human on the other side of it.
+(`router.ex`, `hex_service_auth.ex`, `service.ex`)
 
 **The boundary is enforced in one place.** The router runs a single
 `:live_user` hook that resolves the actor and nothing else; it does not gate
@@ -342,16 +343,14 @@ claims:
   is fully attacker-controlled at that privilege; downstream sinks (email,
   triage UI) are the question.
 - **hex.pm report intake** (`POST /api/hex/reports`) — reachable by **anyone
-  holding a signing key from the configured key set**, and by no one else. It
-  is the one write path that resolves no actor: the ES256 service token is
-  checked by a plug on its own pipeline, and the action behind it authorizes
-  unconditionally, so **the route is the entire authorization story**. Two
-  consequences for a triager. A finding that reaches
-  `VulnerabilityReport.submit_from_hex` from any other surface is in model and
-  serious, because nothing below the route would stop it. A finding premised on
-  an *unauthenticated* caller reaching it is out of model unless the token check
-  itself is defeated. An absent or unparseable key set admits nobody.
-  (`hex_service_auth.ex`, `service_token.ex`, `router.ex`)
+  holding a signing key from the configured key set**, and by no one else. The
+  ES256 service token is checked by a plug on its own pipeline, which is the
+  only thing that builds the actor `submit_from_hex` demands. A finding
+  premised on an *unauthenticated* caller reaching it is out of model unless
+  the token check itself is defeated; an absent or unparseable key set admits
+  nobody. Reaching the action from another surface gains nothing on its own,
+  since the actor is what it authorizes on.
+  (`hex_service_auth.ex`, `service_token.ex`, `service.ex`)
 - **CVE validation** (`validate_cve_record`, `…_schema`, `…_cvelint`,
   `…_hex_packages`, `…_eef`) — reachable by **any authenticated user**, over
   GraphQL and MCP. These actions read nothing and write nothing: they take a
@@ -459,7 +458,7 @@ from controlling only its size.
 | Surface | Parameter | Control kind | Attacker-controllable? | Sink / caller must |
 | --- | --- | --- | --- | --- |
 | `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The POC email is content-free (link only), so the payload never leaves the authenticated console. |
-| `submit_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; `package` is stored as sent, never parsed into a purl. Same triage UI and content-free POC email as a web report. |
+| `submit_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free POC email as a web report. |
 | `submit_from_hex` | `reporter` / `maintainers` (`name`, `username`, `email`) | data | **Yes — same** | `report_participants` rows. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact. A `username` later matches a hex sign-in and grants that account the participant row (§8) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
@@ -870,10 +869,9 @@ none of the authorization properties, by construction rather than by defect.
    the report they hang off. The reporter therefore cannot learn who maintains
    the package they reported, and the maintainers cannot learn who reported,
    until a POC opens a case that assigns them together.
-   Writing them is confined to the intake: the create policy admits the report
-   action's own provenance, and the actor-facing `:submit` manages no
-   participants. A reporter who could name maintainers would be writing the
-   record that later grants case access.
+   Writing them is confined to the sending system's own actor and to POCs. A
+   reporter who could name maintainers would be writing the record that later
+   grants case access.
    - *Violation symptom:* a non-POC reads a `report_participants` row by any
      route, or a caller attaches participants through `:submit`.
    - *Severity:* `moderate` (third-party PII disclosure).
@@ -1253,11 +1251,10 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 - Re-introducing a **route-level role gate** in the router. The model rests
   on there being exactly one place that decides (§4); a second one that can
   drift from the policies is the condition this section exists to catch.
-- **Another actor-less pipeline, or another action that authorizes
-  unconditionally.** `submit_from_hex` is safe because exactly one route
-  reaches it and that route checks a service token (§4). Reaching it from
-  GraphQL, MCP, or a second route removes the only control. The same applies
-  to any new `authorize_if always()` on a write.
+- **A second way to obtain a service actor.** `Varsel.HexIntake.Service` is
+  built in one place, after a token verifies, and that is what the intake
+  authorizes on (§4). Another builder makes the actor say less than the
+  policy reading it assumes.
 - **Exposing BEAM distribution beyond the private 6PN segment**, or clustering
   across a boundary the org does not control — the §3 exclusion assumes that
   port is unreachable, and nothing but the network keeps it so.
