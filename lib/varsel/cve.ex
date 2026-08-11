@@ -11,6 +11,7 @@ defmodule Varsel.CVE do
   alias Varsel.CVE.CveRecord
   alias Varsel.CVE.CveValidation
   alias Varsel.CVE.OsvRecord
+  alias Varsel.CVE.ReportParticipant
   alias Varsel.CVE.VulnerabilityReport
 
   admin do
@@ -170,6 +171,18 @@ defmodule Varsel.CVE do
       define :reject_vulnerability_report, action: :reject
       define :withdraw_vulnerability_report, action: :withdraw
       define :notify_pocs_of_vulnerability_report, action: :notify_pocs
+      define :submit_hex_vulnerability_report, action: :submit_from_hex
+    end
+
+    resource ReportParticipant do
+      define :list_report_participants, action: :read
+      define :record_report_participant, action: :record
+
+      define :list_report_participants_for_identity,
+        action: :for_identity,
+        args: [:strategy, :username]
+
+      define :link_report_participant_user, action: :link_user
     end
   end
 end
