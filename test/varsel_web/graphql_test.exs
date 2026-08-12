@@ -68,6 +68,40 @@ defmodule VarselWeb.GraphqlTest do
              ]
     end
 
+    test "getCveRecord fetches a single record by its cveId", %{conn: conn} do
+      poc = register_user("poc", :poc)
+      published_cve_record("CVE-#{@year}-3001", "Published thing")
+
+      body =
+        conn
+        |> with_api_key(poc)
+        |> gql(
+          "query($id: String!) { getCveRecord(cveId: $id) { cveId title } }",
+          %{"id" => "CVE-#{@year}-3001"}
+        )
+
+      assert body["data"]["getCveRecord"] == %{
+               "cveId" => "CVE-#{@year}-3001",
+               "title" => "Published thing"
+             }
+    end
+
+    test "getCveRecord hides unpublished records from a non-POC", %{conn: conn} do
+      register_user("bootstrap_poc", :poc)
+      supporter = register_user("supporter", :supporter)
+      reserved_cve_record("CVE-#{@year}-3002")
+
+      body =
+        conn
+        |> with_api_key(supporter)
+        |> gql(
+          "query($id: String!) { getCveRecord(cveId: $id) { cveId } }",
+          %{"id" => "CVE-#{@year}-3002"}
+        )
+
+      assert body["data"]["getCveRecord"] == nil
+    end
+
     test "validateCveSchema validates the Json scalar input", %{conn: conn} do
       poc = register_user("poc", :poc)
 

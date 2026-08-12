@@ -521,13 +521,6 @@ defmodule Varsel.CVE.CveRecord do
                  required?: false
     end
 
-    read :get_published do
-      description "Fetches a single published CVE record by its CVE ID."
-      argument :cve_id, :string, allow_nil?: false
-      get? true
-      filter expr(cve_id == ^arg(:cve_id) and state == :published)
-    end
-
     read :search do
       description """
       Full-text search over CVE ID, title, descriptions, affected packages,

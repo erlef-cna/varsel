@@ -74,7 +74,7 @@ defmodule Varsel.CVE do
   graphql do
     queries do
       list CveRecord, :list_published_cves, :list_published
-      get CveRecord, :get_published_cve, :get_published, identity: false
+      get CveRecord, :get_cve_record, :read, identity: :unique_cve_id
       list CveRecord, :search_cves, :search
       list CveRecord, :list_cves_by_purl, :list_by_purl
       list CveRecord, :list_all_cves, :list_all
@@ -119,7 +119,7 @@ defmodule Varsel.CVE do
       define :count_published_cve_records_by_quarter, action: :published_quarter_counts
       define :count_published_cve_records_by_cwe_subtree, action: :published_cwe_subtree_counts
       define :count_published_cve_records_in_cwe_view, action: :published_cwe_view_total
-      define :get_published_cve_record, action: :get_published, args: [:cve_id]
+      define :get_cve_record_by_cve_id, action: :read, get_by: [:cve_id]
       define :search_cve_records, action: :search, args: [:query]
       define :list_cve_records_by_purl, action: :list_by_purl, args: [:purl]
       define :available_cve_records, action: :available, args: [:year]
