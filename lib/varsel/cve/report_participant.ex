@@ -43,7 +43,7 @@ defmodule Varsel.CVE.ReportParticipant do
   paper_trail do
     change_tracking_mode :changes_only
     reference_source? false
-    ignore_attributes [:inserted_at, :updated_at]
+    ignore_attributes [:inserted_at, :updated_at, :email]
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, User, domain: Varsel.Accounts

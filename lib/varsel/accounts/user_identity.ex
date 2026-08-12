@@ -71,8 +71,9 @@ defmodule Varsel.Accounts.UserIdentity do
   paper_trail do
     change_tracking_mode :changes_only
     # OAuth tokens (and their expiry, which changes on every login) are
-    # deliberately not versioned
-    ignore_attributes [:access_token, :access_token_expires_at, :refresh_token]
+    # deliberately not versioned. Nor is the email: an audit trail records who
+    # changed what, and does not need to outlive the address itself.
+    ignore_attributes [:access_token, :access_token_expires_at, :refresh_token, :email]
     only_when_changed? true
     store_action_name? true
     # Identities are hard-deleted when a user disconnects a provider

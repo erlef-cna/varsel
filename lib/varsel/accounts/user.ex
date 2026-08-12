@@ -140,7 +140,7 @@ defmodule Varsel.Accounts.User do
 
   paper_trail do
     change_tracking_mode :changes_only
-    ignore_attributes [:inserted_at, :updated_at]
+    ignore_attributes [:inserted_at, :updated_at, :notification_email]
     only_when_changed? true
     store_action_name? true
     # Accounts are really deleted, so a version cannot point at its source row.
