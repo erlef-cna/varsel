@@ -42,7 +42,7 @@ defmodule VarselWeb.CveController do
   end
 
   def show_html(conn, %{"cve_id" => cve_id}) do
-    record = CVE.get_published_cve_record!(cve_id, actor: nil)
+    record = CVE.get_cve_record_by_cve_id!(cve_id, actor: nil)
     cve = record.cve_json
     cna = cve["containers"]["cna"] || %{}
 
@@ -57,7 +57,7 @@ defmodule VarselWeb.CveController do
     query = Ash.Query.select(CVE.CveRecord, [:id, :cve_json])
 
     record =
-      CVE.get_published_cve_record!(cve_id, actor: nil, query: query, load: [], strict?: true)
+      CVE.get_cve_record_by_cve_id!(cve_id, actor: nil, query: query, load: [], strict?: true)
 
     json(conn, record.cve_json)
   rescue
