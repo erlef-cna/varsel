@@ -374,10 +374,16 @@ defmodule VarselWeb.Layouts do
         </div>
       </div>
       <div class="border-t border-white/10">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-4 text-xs text-white/50">
-          © {Date.utc_today().year} Erlang Ecosystem Foundation. CVE data licensed <.link href={
-            ~p"/data-licensing"
-          }>CC-BY 4.0</.link>.
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/50">
+          <span>
+            © {Date.utc_today().year} Erlang Ecosystem Foundation. CVE data licensed <.link href={
+              ~p"/data-licensing"
+            }>CC-BY 4.0</.link>.
+          </span>
+          <span class="flex items-center gap-x-4">
+            <.link href={~p"/privacy-policy"}>Privacy Policy</.link>
+            <.link href={~p"/terms-and-conditions"}>Terms &amp; Conditions</.link>
+          </span>
         </div>
       </div>
     </footer>
