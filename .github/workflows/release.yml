@@ -220,6 +220,7 @@ jobs:
           OAUTH_GITHUB_CLIENT_ID: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}
           OAUTH_HEX_CLIENT_ID: ${{ vars.OAUTH_HEX_CLIENT_ID }}
           OAUTH_HEX_BASE_URL: ${{ vars.OAUTH_HEX_BASE_URL }}
+          HEX_INTAKE_JWKS: ${{ vars.HEX_INTAKE_JWKS }}
           TEST_DEPLOYMENT: ${{ vars.TEST_DEPLOYMENT }}
           CNA_EMAIL_FROM: ${{ vars.CNA_EMAIL_FROM }}
           SMTP_RELAY_HOST: ${{ vars.SMTP_RELAY_HOST }}
@@ -236,6 +237,7 @@ jobs:
           add GITHUB_CLIENT_ID "${OAUTH_GITHUB_CLIENT_ID}"
           add HEX_CLIENT_ID "${OAUTH_HEX_CLIENT_ID}"
           add HEX_BASE_URL "${OAUTH_HEX_BASE_URL}"
+          add HEX_INTAKE_JWKS "${HEX_INTAKE_JWKS}"
           add TEST_DEPLOYMENT "${TEST_DEPLOYMENT}"
           add CNA_EMAIL_FROM "${CNA_EMAIL_FROM}"
           add SMTP_RELAY_HOST "${SMTP_RELAY_HOST}"

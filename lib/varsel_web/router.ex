@@ -10,6 +10,7 @@ defmodule VarselWeb.Router do
   alias Elixir.AshAuthentication.Phoenix.Overrides.DaisyUI
   alias Varsel.Accounts.User
   alias VarselWeb.Plugs.ApiKeyAuth
+  alias VarselWeb.Plugs.HexServiceAuth
   alias VarselWeb.Plugs.OauthBearerAuth
   alias VarselWeb.Plugs.PublicResource
 
@@ -89,6 +90,13 @@ defmodule VarselWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # hex.pm's report intake. Authenticated as a system rather than a person,
+  # so no actor is set and the routes behind it carry no user identity.
+  pipeline :hex_intake do
+    plug :accepts, ["json"]
+    plug HexServiceAuth
+  end
+
   scope "/gql" do
     pipe_through [:graphql]
 
@@ -113,7 +121,9 @@ defmodule VarselWeb.Router do
           {"/data-licensing", "data-licensing"},
           {"/api-access", "api-access"},
           {"/coordinator-process", "coordinator-process"},
-          {"/maintainer-process", "maintainer-process"}
+          {"/maintainer-process", "maintainer-process"},
+          {"/privacy-policy", "privacy-policy"},
+          {"/terms-and-conditions", "terms-and-conditions"}
         ] do
       get path, PageController, :page, assigns: %{page_id: page_id}
       get "#{path}.html", PageController, :legacy_redirect, assigns: %{to: path}
@@ -303,6 +313,15 @@ defmodule VarselWeb.Router do
     pipe_through :api
 
     get "/all.json", OsvController, :index
+  end
+
+  # hex.pm forwards package reports here. The service token is the whole of
+  # the authorization: no actor is resolved, and nothing else may join this
+  # pipeline.
+  scope "/api/hex", VarselWeb do
+    pipe_through :hex_intake
+
+    post "/reports", HexReportController, :create
   end
 
   # Public HTML surface (browser pipeline: session, root layout, navbar).

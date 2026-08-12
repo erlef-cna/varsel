@@ -219,6 +219,14 @@ is no "inside the app, everything is trusted" zone — even LiveView mounts
 re-run authorization on refetch (pervasive `policies do` blocks; `config.exs`
 sets `no_filter_static_forbidden_reads?: false`).
 
+**One pipeline authenticates a system rather than a person.** `/api/hex/reports`
+takes reports from hex.pm, which submits on a reporter's behalf and so cannot
+present that reporter's credential. The token proves which system is calling,
+and the request then runs as that system: an actor with no role, which the
+intake action's policy names and nothing else grants. So the boundary here is
+the same one as everywhere else, with a non-human on the other side of it.
+(`router.ex`, `hex_service_auth.ex`, `service.ex`)
+
 **The boundary is enforced in one place.** The router runs a single
 `:live_user` hook that resolves the actor and nothing else; it does not gate
 routes by role, and there is no route-level allowlist to keep in step with
@@ -299,6 +307,12 @@ moment. (`socket_disconnect.ex`, `disconnect_sockets.ex`, `graphql_socket.ex`)
    (`actor_present()`) → arbitrary `report_json` persisted → content-free
    "go look" email to POCs (Oban); the payload itself never leaves the
    authenticated console. (`vulnerability_report.ex`, `emails.ex`)
+2a. **hex.pm report intake** — hex.pm (service token, no actor) →
+   `submit_from_hex` → report plus a `report_participants` row per person
+   hex.pm named. Those rows carry **third-party names and email addresses for
+   people who never signed up here**: the app's only store of personal data
+   about non-users. POC-only (§8 property 10a).
+   (`hex_report_controller.ex`, `report_participant.ex`)
 3. **Editorial** — POC/assigned-supporter → case + child rows (facts) →
    **render-time derivation clones `repo_url`** → rendered CNA container
    (`derivation.ex`, `git_repo.ex`).
@@ -328,6 +342,15 @@ claims:
 - **Report intake** — reachable by **any authenticated user**. `report_json`
   is fully attacker-controlled at that privilege; downstream sinks (email,
   triage UI) are the question.
+- **hex.pm report intake** (`POST /api/hex/reports`) — reachable by **anyone
+  holding a signing key from the configured key set**, and by no one else. The
+  ES256 service token is checked by a plug on its own pipeline, which is the
+  only thing that builds the actor `submit_from_hex` demands. A finding
+  premised on an *unauthenticated* caller reaching it is out of model unless
+  the token check itself is defeated; an absent or unparseable key set admits
+  nobody. Reaching the action from another surface gains nothing on its own,
+  since the actor is what it authorizes on.
+  (`hex_service_auth.ex`, `service_token.ex`, `service.ex`)
 - **CVE validation** (`validate_cve_record`, `…_schema`, `…_cvelint`,
   `…_hex_packages`, `…_eef`) — reachable by **any authenticated user**, over
   GraphQL and MCP. These actions read nothing and write nothing: they take a
@@ -435,6 +458,8 @@ from controlling only its size.
 | Surface | Parameter | Control kind | Attacker-controllable? | Sink / caller must |
 | --- | --- | --- | --- | --- |
 | `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The POC email is content-free (link only), so the payload never leaves the authenticated console. |
+| `submit_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free POC email as a web report. |
+| `submit_from_hex` | `reporter` / `maintainers` (`name`, `username`, `email`) | data | **Yes — same** | `report_participants` rows. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact. A `username` later matches a hex sign-in and grants that account the participant row (§8) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
 | `VersionEvent` | `commit_sha` | data | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
@@ -837,6 +862,21 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `moderate` (storage).
    - (`report_json_size.ex`, `rate_limit_submit.ex`, `hammer.ex`)
 
+10a. **People named on a report are visible to POCs only.**
+   A report forwarded by hex.pm names its reporter and the package's
+   maintainers, with the addresses hex.pm holds for them. Those rows are
+   readable at POC only — not by the reporter, not by a supporter, not through
+   the report they hang off. The reporter therefore cannot learn who maintains
+   the package they reported, and the maintainers cannot learn who reported,
+   until a POC opens a case that assigns them together.
+   Writing them is confined to the sending system's own actor and to POCs. A
+   reporter who could name maintainers would be writing the record that later
+   grants case access.
+   - *Violation symptom:* a non-POC reads a `report_participants` row by any
+     route, or a caller attaches participants through `:submit`.
+   - *Severity:* `moderate` (third-party PII disclosure).
+   - (`report_participant.ex`, `vulnerability_report.ex`)
+
 11. **CSRF / clickjacking / cross-origin hardening on the browser surface.**
    `protect_from_forgery` on browser pipelines; `x-frame-options: DENY` +
    `frame-ancestors 'none'`; `permissions-policy`, COOP `same-origin`, CORP
@@ -1103,6 +1143,14 @@ means the **CNA operator/deployer**, and — for the last item only — anyone
    restrict which ones at the network layer if that matters (§9).
 7. **Do not publish from a non-production instance** expecting a sandbox —
    the test MITRE endpoint is real staging (§9).
+7a. **Pin `HEX_INTAKE_JWKS` to hex.pm's public keys, and nothing else.** The
+   key set is the only thing separating a real submission from a forged one,
+   and it is trusted absolutely: any key in it can create reports naming
+   arbitrary people. Unset means the endpoint accepts nothing, which is the
+   safe failure. Rotation is manual on both sides: hex.pm publishes no
+   key-discovery endpoint today, so a key change there is a coordinated
+   config change here. hex.pm must also be pointed at the same URL this
+   deployment serves, since the token's audience is checked against it.
 8. **API consumers: escape the markdown and HTML fields before rendering
    them.** The JSON API serves stored author content as written; Varsel
    sanitizes at its own render sinks, not at rest (§9).
@@ -1203,6 +1251,10 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 - Re-introducing a **route-level role gate** in the router. The model rests
   on there being exactly one place that decides (§4); a second one that can
   drift from the policies is the condition this section exists to catch.
+- **A second way to obtain a service actor.** `Varsel.HexIntake.Service` is
+  built in one place, after a token verifies, and that is what the intake
+  authorizes on (§4). Another builder makes the actor say less than the
+  policy reading it assumes.
 - **Exposing BEAM distribution beyond the private 6PN segment**, or clustering
   across a boundary the org does not control — the §3 exclusion assumes that
   port is unreachable, and nothing but the network keeps it so.

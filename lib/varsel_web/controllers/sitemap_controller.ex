@@ -114,7 +114,9 @@ defmodule VarselWeb.SitemapController do
       ~p"/security-policy",
       ~p"/data-licensing",
       ~p"/api-access",
-      ~p"/contact"
+      ~p"/contact",
+      ~p"/privacy-policy",
+      ~p"/terms-and-conditions"
     ]
   end
 

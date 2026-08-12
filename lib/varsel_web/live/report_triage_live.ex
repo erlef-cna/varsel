@@ -140,7 +140,7 @@ defmodule VarselWeb.ReportTriageLive do
   defp list_reports(socket) do
     CVE.list_vulnerability_reports!(
       actor: socket.assigns.current_user,
-      load: [reporter: [:display_name, :avatar_url]]
+      load: [:participants, reporter: [:display_name, :avatar_url]]
     )
   end
 
@@ -171,6 +171,14 @@ defmodule VarselWeb.ReportTriageLive do
   defp state_text_class(_other), do: "text-base-content/60"
 
   defp actionable?(state), do: state in [:submitted, :triaged]
+
+  # A participant naming the reporter means they have not signed in yet.
+  # Without one, a missing reporter is an account that went away.
+  defp reporter_known?(%{reporter: nil} = report) do
+    not Enum.any?(report.participants, &(&1.role == :reporter))
+  end
+
+  defp reporter_known?(_report), do: true
 
   # Whether the triage block has anything to show; each form inside asks about
   # its own action, so this only decides the spacing around them.
@@ -318,12 +326,12 @@ defmodule VarselWeb.ReportTriageLive do
           </h3>
           <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-base-content/60">
             <.user_badge
-              :if={@triage?}
+              :if={@triage? and reporter_known?(@report)}
               user={@report.reporter}
               class="items-center"
               name_class="text-base-content/60"
             />
-            <span :if={@triage?}>·</span>
+            <span :if={@triage? and reporter_known?(@report)}>·</span>
             <.relative_timestamp at={@report.inserted_at} />
           </div>
         </div>
@@ -358,6 +366,22 @@ defmodule VarselWeb.ReportTriageLive do
           toggle="toggle_payload"
           body_class="max-h-56 overflow-y-auto"
         />
+      </div>
+
+      <div :if={@triage? and @report.participants != []} class="mt-2.5">
+        <p class="text-xs font-semibold text-base-content/60">
+          Named by the sender
+        </p>
+        <ul class="mt-1 space-y-0.5 text-xs">
+          <li
+            :for={participant <- @report.participants}
+            class="flex flex-wrap items-center gap-x-2 text-base-content/70"
+          >
+            <span class="badge badge-ghost badge-sm">{participant.role}</span>
+            <span class="font-mono">{participant.username}</span>
+            <span :if={participant.email} class="text-base-content/50">{participant.email}</span>
+          </li>
+        </ul>
       </div>
 
       <p :if={@report.triage_notes} class="mt-2 text-sm text-base-content/70 italic">

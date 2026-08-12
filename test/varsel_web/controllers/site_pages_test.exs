@@ -25,12 +25,21 @@ defmodule VarselWeb.SitePagesTest do
         {"/data-licensing", "Data Licensing"},
         {"/api-access", "API Access"},
         {"/coordinator-process", "Coordinator Process"},
-        {"/maintainer-process", "Maintainer Process"}
+        {"/maintainer-process", "Maintainer Process"},
+        {"/privacy-policy", "Privacy Policy"},
+        {"/terms-and-conditions", "Terms &amp; Conditions"}
       ] do
     test "GET #{path} renders", %{conn: conn} do
       conn = get(conn, unquote(path))
       assert html_response(conn, 200) =~ unquote(needle)
     end
+  end
+
+  test "every page footer reaches the legal pages", %{conn: conn} do
+    body = html_response(get(conn, ~p"/"), 200)
+
+    assert body =~ ~s(href="/privacy-policy")
+    assert body =~ ~s(href="/terms-and-conditions")
   end
 
   test "API samples reference the deployment's own URL", %{conn: conn} do
