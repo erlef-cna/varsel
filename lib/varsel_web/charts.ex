@@ -51,7 +51,7 @@ defmodule VarselWeb.Charts do
     geometry(build_points(dates, now))
   end
 
-  defp geometry(%{points: points, y_max: y_max}) do
+  defp geometry(%{points: points, y_max: y_max, tick_step: tick_step}) do
     n = length(points)
 
     plotted =
@@ -76,7 +76,7 @@ defmodule VarselWeb.Charts do
       label_y: @bottom + 20,
       sublabel_y: @bottom + 34,
       legend_y: @bottom + 52,
-      ticks: ticks(y_max),
+      ticks: ticks(y_max, tick_step),
       points: plotted,
       solid: solid_path(plotted),
       projection: projection(plotted, cur, nxt, y_max)
@@ -121,7 +121,7 @@ defmodule VarselWeb.Charts do
     next_count = round(daily_rate * 91)
     elapsed = quarter_elapsed_fraction(now)
 
-    y_max =
+    {y_max, tick_step} =
       counts |> Map.values() |> Kernel.++([projected, next_count]) |> Enum.max() |> nice_y_max()
 
     # leading zero-quarter
@@ -155,7 +155,7 @@ defmodule VarselWeb.Charts do
         []
       end
 
-    %{points: lead ++ body ++ tail, y_max: y_max}
+    %{points: lead ++ body ++ tail, y_max: y_max, tick_step: tick_step}
   end
 
   defp aggregate_quarters(dates) do
@@ -211,16 +211,17 @@ defmodule VarselWeb.Charts do
     (elapsed / total) |> min(1.0) |> max(0.0)
   end
 
-  # smallest 1-2-5 nice max giving 3–6 ticks
+  # Smallest 1-2-5 nice step whose snapped max gives 3–6 ticks; returns
+  # {y_max, tick_step} so the grid labels land on the same round numbers.
   defp nice_y_max(raw_max) do
     raw_max = max(raw_max, 1)
     magnitude = max(Integer.pow(10, max(floor(:math.log10(raw_max)) - 1, 0)), 1)
     steps = Enum.map([1, 2, 5, 10, 20, 25, 50, 100], &(&1 * magnitude))
 
-    Enum.find_value(steps, raw_max, fn step ->
+    Enum.find_value(steps, {raw_max, raw_max}, fn step ->
       snapped = ceil(raw_max / step) * step
       ticks = div(snapped, step)
-      if ticks >= 3 and ticks <= 6, do: snapped
+      if ticks >= 3 and ticks <= 6, do: {snapped, step}
     end)
   end
 
@@ -277,8 +278,7 @@ defmodule VarselWeb.Charts do
     %{projected_x: cur.x, projected_y: proj_y, triangle: triangle, extrapolation: extrapolation}
   end
 
-  defp ticks(y_max) do
-    step = max(div(y_max, 4), 1)
+  defp ticks(y_max, step) do
     for value <- 0..y_max//step, do: %{value: value, y: y_for(value, y_max)}
   end
 
