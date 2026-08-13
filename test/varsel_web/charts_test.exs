@@ -49,6 +49,12 @@ defmodule VarselWeb.ChartsTest do
       current = Enum.find(points, &(&1.kind == :current))
       assert current.count == 0
     end
+
+    test "snaps the axis to a nice max with a matching round tick step" do
+      dates = for day <- 1..23, do: DateTime.new!(Date.new!(2025, 1, day), ~T[00:00:00])
+
+      assert %{y_max: 25, tick_step: 5} = Charts.build_points(dates, @now)
+    end
   end
 
   describe "cve_activity_data_from/2" do
@@ -57,6 +63,7 @@ defmodule VarselWeb.ChartsTest do
 
       assert data.view_box =~ "0 0 700"
       assert [%{value: 0} | _] = data.ticks
+      assert Enum.map(data.ticks, & &1.value) == [0, 1, 2, 3, 4, 5, 6]
       # solid line + area cover the confirmed points.
       assert data.solid.line =~ ~r/\d+,\d+/
       assert data.solid.area =~ "Z"
