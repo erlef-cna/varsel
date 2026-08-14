@@ -20,6 +20,8 @@ Our initial message will include:
 - A summary of the reported vulnerability
 - The CVE ID we have reserved (or a note that we will assign one)
 - A request to confirm your preferred coordination channel (GitHub Advisory or email)
+- Access to follow the in-progress CVE record on this site (see
+  [§4](#4-following-the-cve-record-on-this-site))
 
 ### 1.2 You Contact the CNA
 
@@ -70,7 +72,32 @@ If your project is not hosted on GitHub, or you prefer email, you can coordinate
 everything through **cna@erlef.org**. Encrypted communication is also supported; see
 the [Contact page](/contact) for our GPG key and fingerprint.
 
-## 4. The Disclosure Process
+## 4. Following the CVE Record on This Site
+
+While the advisory and the patch work happen on GitHub or by email, the CVE
+record itself is drafted on this site, and granting you access to the
+in-progress case is our standard practice: we grant it to your GitHub or
+Hex.pm handle, and signing in with that account is all it takes. No prior
+registration is needed.
+
+On the case you see the draft record exactly as it will be published: the
+description, severity, affected version ranges, and credits. You can comment,
+and you can propose corrections to any field. Maintainers usually know the
+affected versions and the fix timeline better than anyone, and a proposal is
+exactly the right way to hand us that knowledge. The CNA reviews every
+proposal, and what is ultimately published is the CNA's decision, per our
+[governance policy](https://github.com/erlef-cna/.github/blob/main/GOVERNANCE.md).
+
+![An invited maintainer's view of an in-progress case: the draft record, their own suggestions, and the discussion](/images/guide/maintainer-view.png)
+
+One caveat: the site sends no emails yet. Your CNA contact tells you when
+there is something to look at, and nobody is notified of comments, so keep
+anything time-sensitive on the advisory thread or email.
+
+Everything on an unpublished case is embargoed and visible only to the people
+on it. The [Varsel Guide](/guide) has the rest of the detail.
+
+## 5. The Disclosure Process
 
 Once initial contact is established, the typical workflow is as follows:
 
@@ -167,7 +194,7 @@ Once initial contact is established, the typical workflow is as follows:
     its own announcements.
 :::
 
-## 5. Timelines & Embargo
+## 6. Timelines & Embargo
 
 > **Note:** **Do not make anything public before the advisory is published.** This includes public Pull Requests, commits to main, public issues, blog posts, social media posts, or any other public communication referencing the vulnerability. **If information becomes public, our disclosure timeline immediately shifts to 24 hours or less**, regardless of whether a patch is ready.
 
@@ -184,7 +211,7 @@ Key timeframes:
 Please remain reachable throughout the process. We will always try to give you a
 heads-up before we publish.
 
-## 6. What Not to Do
+## 7. What Not to Do
 
 The following actions break the embargo and can cause the CVE to be published
 immediately, even if no patch is available:
@@ -196,17 +223,18 @@ immediately, even if no patch is available:
 - Announcing a "security release" before the advisory is ready
 - Posting about the vulnerability on social media, a blog, or a mailing list
 
-## 7. Feedback
+## 8. Feedback
 
 Once you are through the process, we would love to hear your feedback on this document.
 If anything took extra time to figure out or required clarification, we want to know so
 we can make it clearer for future maintainers. You can reach us via the
 [Contact](/contact) page, or send a Pull Request directly to
-[this file on GitHub](https://github.com/erlef-cna/website/blob/main/maintainer-process.md).
+[this file on GitHub](https://github.com/erlef-cna/varsel/blob/main/priv/pages/maintainer-process.md).
 
-## 8. Further Resources
+## 9. Further Resources
 
 - [Contact](/contact) — Reach out to the CNA
 - [CVE Criteria](/cve-criteria) — What qualifies for a CVE
+- [Varsel Guide](/guide) — Following and contributing to a case on this site
 - [Security Policy](/security-policy) — Full disclosure policy & timelines
 - [EEF Security WG Guide](https://security.erlef.org/security_vulnerability_disclosure/) — Vulnerability handling best practices

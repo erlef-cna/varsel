@@ -97,13 +97,13 @@ gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
 
 - [ ] **Stale TODOs.** Every `TODO` in the record is still a `TODO` in the advisory's `patched_versions`. If the advisory now has a real fix version, propose the fix commit and re-derive.
 - [ ] **Version ranges match.** Each derived affected range matches the advisory's `vulnerable_version_range`. A mismatch means a wrong boundary SHA on the case — investigate before trusting either side.
-- [ ] **Credits coverage.** Every advisory credit appears with the right role (reporter → finder, remediation_developer → remediation developer, coordinator → analyst, …). Do not skip `pending` credits.
+- [ ] **Credits coverage.** Every advisory credit appears, carrying every role that applies: a GHSA holds one role per person, the CVE record may hold several. Do not skip `pending` credits.
 
 ### Source
 - [ ] `source.discovery` is `"EXTERNAL"`, `"INTERNAL"`, or `"UNKNOWN"`.
 
 ### Credits
-- [ ] Reporters → `finder`; fix authors → `remediation developer`; reviewers → `remediation reviewer`; analysts → `analyst`.
+- [ ] Each credit's roles match what the person did, per the CVE schema definitions (finder identified, reporter reported, analyst validated, coordinator facilitated the response, remediation developer/reviewer/verifier on the fix). Analyst and coordinator are distinct; a person carries every role that applies, not only the single one a GHSA could express.
 
 ### Workarounds
 - [ ] No entry says "apply patch"/"apply the patch".
