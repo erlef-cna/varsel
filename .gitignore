@@ -65,3 +65,4 @@ npm-debug.log
 # Local environment secrets
 .env
 
+priv/repo/dev_seeds/.docs_screenshots_manifest.json

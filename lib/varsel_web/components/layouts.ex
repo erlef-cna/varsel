@@ -359,6 +359,7 @@ defmodule VarselWeb.Layouts do
             <li><.link href={~p"/cve-criteria"}>CVE Criteria</.link></li>
             <li><.link href={~p"/maintainer-process"}>Maintainer Process</.link></li>
             <li><.link href={~p"/coordinator-process"}>Coordinator Process</.link></li>
+            <li><.link href={~p"/guide"}>Varsel Guide</.link></li>
           </ul>
         </div>
 
@@ -397,6 +398,7 @@ defmodule VarselWeb.Layouts do
       {"Security Policy", ~p"/security-policy"},
       {"Maintainer Process", ~p"/maintainer-process"},
       {"Coordinator Process", ~p"/coordinator-process"},
+      {"Varsel Guide", ~p"/guide"},
       {"Data Licensing", ~p"/data-licensing"},
       {"API Access", ~p"/api-access"},
       {"Contact", ~p"/contact"}

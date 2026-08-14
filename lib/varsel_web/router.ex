@@ -129,6 +129,18 @@ defmodule VarselWeb.Router do
       get "#{path}.html", PageController, :legacy_redirect, assigns: %{to: path}
     end
 
+    # The Varsel guide postdates the Jekyll site, so no legacy redirects.
+    for {path, page_id} <- [
+          {"/guide", "guide"},
+          {"/guide/filing-a-case", "guide-filing-a-case"},
+          {"/guide/review-and-publication", "guide-review-and-publication"},
+          {"/guide/affected-versions", "guide-affected-versions"},
+          {"/guide/record-conventions", "guide-record-conventions"},
+          {"/guide/ai-tooling", "guide-ai-tooling"}
+        ] do
+      get path, PageController, :page, assigns: %{page_id: page_id}
+    end
+
     # The old site's directory index and home `.html`.
     get "/data-licensing/index.html", PageController, :legacy_redirect, assigns: %{to: "/data-licensing"}
 

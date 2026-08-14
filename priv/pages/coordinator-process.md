@@ -30,7 +30,7 @@ Running a CNA takes time and resources. There are two ways to help:
    Use the *"Sign Up as a CNA Coordinator"* workflow in the `#cna-public` Slack
    channel to let us know you want to help.
 
-   ![Slack channel showing Reserve a CVE ID and Sign Up as a CNA Coordinator workflow buttons](/images/coordinator-process/slack-workflows.png)
+   ![Slack channel showing the Sign Up as a CNA Coordinator workflow button](/images/coordinator-process/slack-workflows.png)
 
 3. **Tell us your specialities**
 
@@ -94,14 +94,14 @@ work with on every report.
 
 Take some time to get familiar with how our CVE records look in practice. Browse the
 [published CVEs](/cves) on this site to see the level of detail we include in titles,
-descriptions, affected version ranges, and credits.
+descriptions, affected version ranges, and credits. The
+[Record Conventions](/guide/record-conventions) page spells out the house rules those
+records follow: how to write descriptions, score CVSS, classify, and credit people.
 
 For the underlying data format, refer to the
 [CVE JSON schema](https://github.com/CVEProject/cve-schema). All our records follow
 this schema, and this site validates them against it before publication (see
 [§7](#7-cna-internal-process--tooling)).
-[Vulnogram](https://vulnogram.github.io/) is a useful tool for visually editing and
-validating CVE JSON records.
 
 ## 6. The Coordination Process
 
@@ -116,10 +116,9 @@ validating CVE JSON records.
    Determine whether the report warrants a CVE. Check our
    [CVE Criteria](/cve-criteria) page for guidance.
 
-   - **If yes:** use the *"Reserve a CVE ID"* workflow in `#cna-public` on Slack, or ask a CNA Point of Contact directly.
+   - **If yes:** open a case in Varsel and take the next free CVE ID; see
+     [Filing a CVE](/guide/filing-a-case).
    - **If no:** it may still be a bug worth reporting. Open an issue or send a PR to the affected project instead.
-
-   ![Slack channel showing Reserve a CVE ID and Sign Up as a CNA Coordinator workflow buttons](/images/coordinator-process/slack-workflows.png)
 
 3. **Find Contact Information**
 
@@ -188,13 +187,14 @@ validating CVE JSON records.
 
 10. **Prepare the CVE Record**
 
-    Prepare the CVE JSON record and send it to the CNA Points of Contact privately
-    for review before publication.
+    Work the case in Varsel until it
+    [verifies clean](/guide/record-conventions), then send it to review for a
+    CNA Point of Contact.
 
 11. **Trigger Publication**
 
     Once the maintainer has merged the fix, released a new version, and published
-    the advisory, notify the CNA Points of Contact to publish the CVE.
+    the advisory, a CNA Point of Contact publishes the CVE from the approved case.
 :::
 
 ## 7. CNA Internal Process & Tooling
@@ -204,9 +204,17 @@ the application this site runs on. It manages CVE records through their whole
 lifecycle — reservation, drafting, publication to MITRE, and the derived OSV
 feeds.
 
-Varsel also ships a set of [Claude Code skills](https://github.com/erlef-cna/varsel/tree/main/skills)
-covering common coordinator tasks: scoring, classification, drafting, and
-validating a record before submission.
+As a coordinator you work in it directly: sign in with GitHub or Hex.pm, and
+once we grant you the `supporter` role (the app's name for the coordinator
+job), you open cases, draft records, and send them to review. The
+[Varsel Guide](/guide) documents all of it; start with
+[Filing a CVE](/guide/filing-a-case).
+
+Varsel also ships a Claude Code plugin of skills covering common coordinator
+tasks: scoring, classification, drafting, and validating a record before
+submission. [AI Tooling](/guide/ai-tooling) covers installing the plugin and
+connecting the MCP server; [API Access](/api-access) covers authentication
+and automating your work with other tooling.
 
 > **Note:** AI can be very helpful for these tasks, but every result must be verified by a human before submission. Do not rely on AI output without checking it yourself.
 
@@ -214,6 +222,8 @@ validating a record before submission.
 
 - [Contact](/contact) — Reach the CNA Points of Contact
 - [CVE Criteria](/cve-criteria) — What qualifies for a CVE
+- [Varsel Guide](/guide) — Working in the CNA's case tooling
+- [API Access](/api-access) — GraphQL and MCP access to the tooling
 - [Maintainer Process](/maintainer-process) — Share this with maintainers
 - [Security Policy](/security-policy) — Full disclosure policy & timelines
 - [CVSS v4.0 User Guide](https://www.first.org/cvss/v4.0/user-guide) — Learn to score vulnerabilities
@@ -221,4 +231,3 @@ validating a record before submission.
 - [New to CAPEC](https://capec.mitre.org/about/new_to_capec.html) — Learn attack pattern classification
 - [Package URL](https://packageurl.org/) — Package identifier format
 - [CVE JSON Schema](https://github.com/CVEProject/cve-schema) — Official CVE record format
-- [Vulnogram](https://vulnogram.github.io/) — Visual CVE JSON editor

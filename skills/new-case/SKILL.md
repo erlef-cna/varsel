@@ -587,8 +587,13 @@ candidate you ruled out and how.
 
 ### Credits
 
-Map the GHSA roles: `reporter` to `finder`, `remediation_developer` to `remediation_developer`,
-`reviewer` to `remediation_reviewer`, `coordinator` to `analyst`. Do not skip `pending` credits.
+Credit roles are the CVE schema's, by their definitions: `finder` identified the vulnerability,
+`reporter` reported it to the vendor or the CNA, `analyst` validated it or its severity,
+`coordinator` facilitated the coordinated response, `remediation_developer` prepared the fix,
+`remediation_reviewer` reviewed it, `remediation_verifier` tested it, plus `tool`, `sponsor`, and
+`other`. Analyst and coordinator are distinct roles; never fold one into the other. Assign every
+role that applies per person: a GHSA carries at most one role per credit, the CVE record has no
+such limit, and several roles per person is the common case. Do not skip `pending` credits.
 
 **`name` is the full real name only.** No handle, no affiliation, spelled with its correct
 diacritics. An affiliation goes in the separate `organization` field, never appended to the name,

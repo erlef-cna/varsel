@@ -26,6 +26,12 @@ defmodule VarselWeb.SitePagesTest do
         {"/api-access", "API Access"},
         {"/coordinator-process", "Coordinator Process"},
         {"/maintainer-process", "Maintainer Process"},
+        {"/guide", "Varsel Guide"},
+        {"/guide/filing-a-case", "Filing a CVE"},
+        {"/guide/review-and-publication", "Review &amp; Publication"},
+        {"/guide/affected-versions", "Affected Versions"},
+        {"/guide/record-conventions", "Record Conventions"},
+        {"/guide/ai-tooling", "AI Tooling"},
         {"/privacy-policy", "Privacy Policy"},
         {"/terms-and-conditions", "Terms &amp; Conditions"}
       ] do

@@ -44,13 +44,17 @@ in Sweden.
 ## Interfaces
 
 - **HTML** — the public site, plus a management UI for authenticated users
-  (GitHub OAuth; `poc` and `supporter` roles).
+  (GitHub or Hex.pm OAuth; `poc` and `supporter` roles).
 - **JSON** — `GET /cves/index.json`, `/cves/:cve_id.json`, `/osv/all.json`
-  and `/osv/:id.json`.
-- **GraphQL** — at `/gql`: public read access to published data, plus lifecycle
-  and user-management operations for points of contact.
-- **MCP** — at `/mcp`: public CVE/CWE/CAPEC tools, plus lifecycle tools gated
-  by personal API keys (managed at `/settings/tokens`).
+  and `/osv/:id.json`, without authentication.
+- **GraphQL** — at `/gql`, login required: the published data plus the case,
+  lifecycle, and user-management operations the caller's role allows.
+- **MCP** — at `/mcp`, login required: the same data and case operations as
+  tools for AI agents.
+
+Both API surfaces authenticate with OAuth 2.1 access tokens or personal API
+keys (managed at `/settings/tokens`); see
+[cna.erlef.org/api-access](https://cna.erlef.org/api-access).
 
 ## Agent skills
 

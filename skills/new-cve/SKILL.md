@@ -159,7 +159,7 @@ Use correct Unicode everywhere, including full diacritics in names (e.g. `Micha�
 - **Weakness** (`propose_weakness`): use `/find-cwe`.
 - **Impact** (`propose_impact`): use `/find-capec`.
 - **References** (`propose_reference`, `url` + `tags`), in order: vendor advisory (GHSA → `["vendor-advisory", "related"]`), then patch commit(s) (`["patch"]`), then for OTP the version-scheme doc (`["x_version-scheme"]`). Varsel auto-adds the `cna.erlef.org` and `osv.dev` references on ID assignment — do not propose them. If unpatched, omit the patch reference entirely.
-- **Credits** (`propose_credit`, `name` + `credit_type` [+ `organization`]): map GHSA roles — reporter → `finder`, remediation_developer → `remediation_developer`, reviewer → `remediation_reviewer`, coordinator → `analyst`. `name` is the full real name only — no handle, no affiliation — spelled with its correct diacritics. An affiliation goes in the separate `organization` field (e.g. `name: "Jonatan Männchen", organization: "EEF"`), never appended to `name`; Varsel renders `name / organization` for you. Do not skip `pending` credits.
+- **Credits** (`propose_credit`, `name` + `credit_type` [+ `organization`]): use the CVE schema roles by their definitions (analyst and coordinator are distinct), and give each person every role that applies — a GHSA carries only one per person. `name` is the full real name only — no handle, no affiliation — spelled with its correct diacritics. An affiliation goes in the separate `organization` field (e.g. `name: "Jonatan Männchen", organization: "EEF"`), never appended to `name`; Varsel renders `name / organization` for you. Do not skip `pending` credits.
 
 To remove a child row, use `propose_delete` with its `target` (e.g. `"reference"`) and `target_id`.
 

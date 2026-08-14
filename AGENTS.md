@@ -61,6 +61,15 @@ every other doc in this repo.
   paragraph means rewriting most of them.
 - When a change alters who can do what, grep the docs and moduledocs that
   describe it. A stale doc is worse than none.
+- The guide pages and the skills state the same CNA conventions twice: the
+  pages (`priv/pages/guide-record-conventions.md`, `guide-ai-tooling.md`) for
+  humans, the skills (`skills/*/SKILL.md`, chiefly `verify`, `new-case`,
+  `cvss`) for agents. A convention, guardrail, or workflow changed on either
+  side must be mirrored on the other in the same change.
+- A new page under `priv/pages/` needs a `.md.license` sidecar and entries in
+  four places, none automatic: the `router.ex` page list, `static_pages` in
+  `sitemap_controller.ex`, the nav/footer in `layouts.ex`, and the rendering
+  list in `site_pages_test.exs`.
 
 ### Editing THREAT_MODEL.md
 
