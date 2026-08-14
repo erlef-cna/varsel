@@ -121,9 +121,10 @@ defmodule VarselWeb.Router do
           {"/data-licensing", "data-licensing"},
           {"/api-access", "api-access"},
           {"/coordinator-process", "coordinator-process"},
-          {"/maintainer-process", "maintainer-process"},
-          {"/privacy-policy", "privacy-policy"},
-          {"/terms-and-conditions", "terms-and-conditions"}
+          {"/maintainer-process", "maintainer-process"}
+          # TODO: Re-enable once the privacy policy and terms are approved.
+          # {"/privacy-policy", "privacy-policy"},
+          # {"/terms-and-conditions", "terms-and-conditions"}
         ] do
       get path, PageController, :page, assigns: %{page_id: page_id}
       get "#{path}.html", PageController, :legacy_redirect, assigns: %{to: path}

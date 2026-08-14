@@ -31,9 +31,10 @@ defmodule VarselWeb.SitePagesTest do
         {"/guide/review-and-publication", "Review &amp; Publication"},
         {"/guide/affected-versions", "Affected Versions"},
         {"/guide/record-conventions", "Record Conventions"},
-        {"/guide/ai-tooling", "AI Tooling"},
-        {"/privacy-policy", "Privacy Policy"},
-        {"/terms-and-conditions", "Terms &amp; Conditions"}
+        {"/guide/ai-tooling", "AI Tooling"}
+        # TODO: Re-enable once the privacy policy and terms are approved.
+        # {"/privacy-policy", "Privacy Policy"},
+        # {"/terms-and-conditions", "Terms &amp; Conditions"}
       ] do
     test "GET #{path} renders", %{conn: conn} do
       conn = get(conn, unquote(path))
@@ -41,12 +42,13 @@ defmodule VarselWeb.SitePagesTest do
     end
   end
 
-  test "every page footer reaches the legal pages", %{conn: conn} do
-    body = html_response(get(conn, ~p"/"), 200)
-
-    assert body =~ ~s(href="/privacy-policy")
-    assert body =~ ~s(href="/terms-and-conditions")
-  end
+  # TODO: Re-enable once the privacy policy and terms are approved.
+  # test "every page footer reaches the legal pages", %{conn: conn} do
+  #   body = html_response(get(conn, ~p"/"), 200)
+  #
+  #   assert body =~ ~s(href="/privacy-policy")
+  #   assert body =~ ~s(href="/terms-and-conditions")
+  # end
 
   test "API samples reference the deployment's own URL", %{conn: conn} do
     body = html_response(get(conn, "/api-access"), 200)

@@ -120,9 +120,10 @@ defmodule VarselWeb.SitemapController do
       ~p"/security-policy",
       ~p"/data-licensing",
       ~p"/api-access",
-      ~p"/contact",
-      ~p"/privacy-policy",
-      ~p"/terms-and-conditions"
+      ~p"/contact"
+      # TODO: Re-enable once the privacy policy and terms are approved.
+      # ~p"/privacy-policy",
+      # ~p"/terms-and-conditions"
     ]
   end
 
