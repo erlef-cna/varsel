@@ -41,11 +41,15 @@
       # THE erlang/elixir of this project — the dev shell and the release
       # both get their toolchain from here, so a version bump (or build-flag
       # override) is a single change.
+      #
+      # beamMinimal builds OTP without wx (observer/debugger GUIs and the GTK
+      # stack behind them) and without systemd, which is what made epmd link
+      # libsystemd.
       beam = system:
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
-          erlang = pkgs.beam29Packages.erlang;
-          elixir = pkgs.beam29Packages.elixir_1_20;
+          erlang = pkgs.beamMinimal29Packages.erlang;
+          elixir = pkgs.beamMinimal29Packages.elixir_1_20;
         };
 
       # The mix release, built inside Nix from the flake source. The build

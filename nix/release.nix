@@ -22,8 +22,6 @@
 , git
 , cacert
 , removeReferencesTo
-, patchelf
-, systemdLibs
 , ncurses
 , zlib
 , openssl
@@ -222,7 +220,7 @@ stdenv.mkDerivation {
 
   __noChroot = true;
 
-  nativeBuildInputs = [ elixir nodejs git removeReferencesTo patchelf ];
+  nativeBuildInputs = [ elixir nodejs git removeReferencesTo ];
 
   # The explicit contract of what the shipped release may depend on: the
   # ERTS runtime libraries (rpaths in the bundled binaries), bash for the
@@ -237,7 +235,6 @@ stdenv.mkDerivation {
     (lib.getLib ncurses)
     (lib.getLib zlib)
     (lib.getLib openssl)
-    (lib.getLib systemdLibs)
     bashNonInteractive
   ];
 
@@ -275,6 +272,11 @@ stdenv.mkDerivation {
     # mix releases never use them (bin/varsel drives erlexec directly).
     rm "$out"/erts-*/bin/start "$out"/erts-*/bin/*.src
 
+    # `mix release` copies erts-*/bin wholesale. bin/varsel drives erlexec
+    # -> beam.smp, which spawns erl_child_setup and inet_gethost; epmd backs
+    # distribution (rel/env.sh.eex). The rest are build and operator tools.
+    rm "$out"/erts-*/bin/{ct_run,dialyzer,erlc,escript,typer,yielding_c_fun,run_erl,to_erl,heart,erl_call}
+
     # NIFs compiled during the deps build (bcrypt, picosat) carry gcc and
     # glibc-dev paths in their debug info; stripping it drops those
     # references. The OTP-shipped .so files are already stripped but copied
@@ -282,13 +284,6 @@ stdenv.mkDerivation {
     # a helper *executable* next to its NIF, so match that too.
     find "$out"/lib \( -name '*.so' -o -name 'spawner' \) \
       -exec chmod u+w {} + -exec strip --strip-debug {} +
-
-    # epmd genuinely links libsystemd, but its rpath names the full systemd
-    # package — ~150 MiB of gnutls/curl/pam/... in the image. Point it at
-    # the ABI-identical minimal systemd libs instead.
-    chmod u+w "$out"/erts-*/bin/epmd
-    patchelf --set-rpath "${lib.getLib systemdLibs}/lib:${lib.getLib stdenv.cc.libc}/lib" \
-      "$out"/erts-*/bin/epmd
 
     # Inert toolchain paths in dependency artifacts: yecc-generated parsers
     # (gen_smtp, absinthe, hex_core) embed the location of erlang's
@@ -315,7 +310,7 @@ stdenv.mkDerivation {
     runHook postInstall
   '';
 
-  # No generic fixup — the targeted strip/patchelf/scrub above is all the
+  # No generic fixup — the targeted strip/scrub above is all the
   # post-processing this release gets.
   dontFixup = true;
 
