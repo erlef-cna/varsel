@@ -76,6 +76,9 @@ defmodule Varsel.CVE.CveValidation do
   - `:cvelint` — the `cvelint` binary (see `Varsel.CVE.Cvelint`)
   - `:hex` — every `pkg:hex/...` package URL in the affected entries must
     reference an existing package on hex.pm (see `Varsel.HexPm`)
+  - `:eef` — EEF/CNA policy requirements the schema and cvelint leave
+    unchecked: a title, a CVSS v4 metric, a CWE, a CAPEC, and every
+    "semver"-typed version boundary parsing as SemVer
   """
 
   # AshGraphql.Resource is required even though this resource exposes no type
@@ -237,7 +240,57 @@ defmodule Varsel.CVE.CveValidation do
           error(:eef, "EEF005", "no CAPEC attack pattern recorded", "containers.cna.impacts")
         ]
 
-    title_error ++ cvss_error ++ cve_id_error ++ cwe_error ++ capec_error
+    title_error ++ cvss_error ++ cve_id_error ++ cwe_error ++ capec_error ++ semver_errors(cna)
+  end
+
+  # "semver"-typed version boundaries must parse as SemVer, or be one of the
+  # sentinel values the schema allows in their place ("0" for an open-ended
+  # introduced boundary, "*" for an open-ended upper bound). The schema and
+  # cvelint accept these fields as opaque strings.
+  defp semver_errors(cna) do
+    cna
+    |> Map.get("affected", [])
+    |> List.wrap()
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {affected, affected_index} ->
+      affected
+      |> Map.get("versions", [])
+      |> List.wrap()
+      |> Enum.with_index()
+      |> Enum.filter(fn {version_entry, _index} -> version_entry["versionType"] == "semver" end)
+      |> Enum.flat_map(fn {version_entry, version_index} ->
+        path = "containers.cna.affected[#{affected_index}].versions[#{version_index}]"
+
+        [
+          semver_error(version_entry["version"], "#{path}.version"),
+          semver_error(version_entry["lessThan"], "#{path}.lessThan"),
+          semver_error(version_entry["lessThanOrEqual"], "#{path}.lessThanOrEqual")
+          | semver_change_errors(version_entry["changes"], path)
+        ]
+      end)
+      |> Enum.reject(&is_nil/1)
+    end)
+  end
+
+  defp semver_change_errors(changes, path) do
+    changes
+    |> List.wrap()
+    |> Enum.with_index()
+    |> Enum.map(fn {change, change_index} ->
+      semver_error(change["at"], "#{path}.changes[#{change_index}].at")
+    end)
+  end
+
+  defp semver_error(value, _path) when value in [nil, "0", "*"], do: nil
+
+  defp semver_error(value, path) do
+    case Version.parse(value) do
+      {:ok, _version} ->
+        nil
+
+      :error ->
+        error(:eef, "EEF006", "#{inspect(value)} is not a valid SemVer version", path)
+    end
   end
 
   defp present?(list) when is_list(list), do: list != []

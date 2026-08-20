@@ -108,6 +108,55 @@ defmodule Varsel.CVE.CveValidationTest do
     assert %{valid: true, errors: []} = CVE.validate_cve_record_eef!(@valid_cve_json)
   end
 
+  test "the EEF policy validator flags a v-prefixed semver version" do
+    invalid =
+      put_in(
+        @valid_cve_json,
+        ["containers", "cna", "affected", Access.at(0), "versions", Access.at(0), "version"],
+        "v0.3.0"
+      )
+
+    assert %{valid: false, errors: errors} = CVE.validate_cve_record_eef!(invalid)
+    assert [%{code: "EEF006", message: message, path: path}] = errors
+    assert message =~ ~s("v0.3.0")
+    assert path == "containers.cna.affected[0].versions[0].version"
+  end
+
+  test "the EEF policy validator flags a v-prefixed semver version in a changes entry" do
+    invalid =
+      put_in(
+        @valid_cve_json,
+        ["containers", "cna", "affected", Access.at(0), "versions", Access.at(0), "changes"],
+        [%{"at" => "v1.1.0", "status" => "unaffected"}]
+      )
+
+    assert %{valid: false, errors: errors} = CVE.validate_cve_record_eef!(invalid)
+
+    assert [%{code: "EEF006", path: "containers.cna.affected[0].versions[0].changes[0].at"}] =
+             errors
+  end
+
+  test "the EEF policy validator accepts the 0 and * semver sentinels and non-semver version types" do
+    record =
+      update_in(
+        @valid_cve_json,
+        ["containers", "cna", "affected", Access.at(0), "versions"],
+        fn versions ->
+          versions ++
+            [
+              %{
+                "version" => "abc1234",
+                "lessThan" => "def5678",
+                "status" => "affected",
+                "versionType" => "git"
+              }
+            ]
+        end
+      )
+
+    assert %{valid: true, errors: []} = CVE.validate_cve_record_eef!(record)
+  end
+
   test "cvelint findings are reported" do
     # E004: descriptions must not have leading or trailing whitespace
     invalid =
