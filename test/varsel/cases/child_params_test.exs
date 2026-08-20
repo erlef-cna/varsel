@@ -6,6 +6,7 @@ defmodule Varsel.Cases.ChildParamsTest do
   use ExUnit.Case, async: true
 
   alias Varsel.Cases.ChildParams
+  alias Varsel.Cases.Derivation.Emit
 
   doctest ChildParams
 
@@ -27,6 +28,38 @@ defmodule Varsel.Cases.ChildParamsTest do
       params = ChildParams.normalize("credit", %{"tag_suffixes" => "OTP-, v"}, %{})
 
       assert params["tag_suffixes"] == "OTP-, v"
+    end
+
+    test "expands the since-creation checkbox to the OTP root commit" do
+      params =
+        ChildParams.normalize("package_otp", %{"affected_since_creation" => "true"}, %{})
+
+      assert params["introduced_commit"] == Emit.otp_root_commit()
+      refute Map.has_key?(params, "affected_since_creation")
+    end
+
+    test "unchecking since-creation clears the root commit" do
+      params =
+        ChildParams.normalize(
+          "package_otp",
+          %{"affected_since_creation" => "false", "introduced_commit" => Emit.otp_root_commit()},
+          %{}
+        )
+
+      assert params["introduced_commit"] == ""
+    end
+
+    test "unchecked since-creation keeps a hand-typed commit" do
+      sha = String.duplicate("a", 40)
+
+      params =
+        ChildParams.normalize(
+          "package_otp",
+          %{"affected_since_creation" => "false", "introduced_commit" => sha},
+          %{}
+        )
+
+      assert params["introduced_commit"] == sha
     end
 
     test "keeps the bare-tag marker as a suffix of its own" do

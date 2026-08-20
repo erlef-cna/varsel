@@ -19,6 +19,7 @@ defmodule VarselWeb.CaseFormComponents do
 
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseReference
+  alias Varsel.Cases.Derivation.Emit
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.VersionEvent
 
@@ -102,6 +103,13 @@ defmodule VarselWeb.CaseFormComponents do
   slot :actions, doc: "the row that submits or abandons the form"
 
   def preset_package_form(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :since_creation?,
+        assigns.form[:introduced_commit].value == Emit.otp_root_commit()
+      )
+
     ~H"""
     <.form for={@form} {@rest}>
       <.input
@@ -114,8 +122,22 @@ defmodule VarselWeb.CaseFormComponents do
         <:label>Affected applications (comma separated)</:label>
       </.input>
       <.input
+        :if={@preset == :otp}
+        id="otp-since-creation"
+        type="checkbox"
+        name="child[affected_since_creation]"
+        value={@since_creation?}
+      >
+        <:label>Affected since the beginning of OTP's git history</:label>
+        <:description>
+          Stands for the erlang/otp root commit; the record reports the
+          pre-R13B03 era as unknown.
+        </:description>
+      </.input>
+      <.input
         field={@form[:introduced_commit]}
         type="text"
+        readonly={@since_creation?}
         placeholder="40-char commit SHA"
         class="w-full input font-mono"
       >
