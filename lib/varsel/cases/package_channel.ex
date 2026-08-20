@@ -272,7 +272,7 @@ defmodule Varsel.Cases.PackageChannel do
       public? true
     end
 
-    attribute :versions_override, {:array, :map} do
+    attribute :versions_override, Varsel.Types.JsonObjectList do
       description """
       Escape hatch: raw CVE-schema version objects replacing the derived
       versions[] array for this channel.

@@ -1085,6 +1085,83 @@ defmodule VarselWeb.CaseLiveTest do
       assert modal =~ "Purl type"
       assert modal =~ "Version type"
       assert modal =~ "Version flavors"
+      assert modal =~ "Versions override"
+      assert modal =~ "Entry override"
+    end
+
+    test "the channel modal authors the versions_override escape hatch as JSON text", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+      package = Fixtures.add_affected_package(poc, case_record)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+
+      lv
+      |> element("button[phx-click=new_child][phx-value-type=channel]", "Add channel")
+      |> render_click()
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{
+          "kind" => "package",
+          "purl_type" => "hex",
+          "name" => "acme_lib",
+          "versions_override" =>
+            ~s([{"version": "0", "lessThan": "1.2.3", "status": "affected", "versionType": "semver"}])
+        }
+      })
+      |> render_submit()
+
+      package = Ash.load!(package, [:channels], authorize?: false)
+      assert [channel] = Enum.filter(package.channels, &(&1.purl_type == "hex"))
+
+      assert channel.versions_override == [
+               %{
+                 "version" => "0",
+                 "lessThan" => "1.2.3",
+                 "status" => "affected",
+                 "versionType" => "semver"
+               }
+             ]
+
+      # Re-opening the edit modal shows the stored override back as JSON.
+      lv
+      |> element(
+        ~s{button[phx-click=edit_child][phx-value-type=channel][phx-value-id="#{channel.id}"]},
+        "Edit"
+      )
+      |> render_click()
+
+      assert render(lv) =~ "&quot;version&quot;: &quot;0&quot;"
+    end
+
+    test "malformed versions_override JSON is rejected with a field error", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+      Fixtures.add_affected_package(poc, case_record)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+
+      lv
+      |> element("button[phx-click=new_child][phx-value-type=channel]", "Add channel")
+      |> render_click()
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{
+          "kind" => "package",
+          "purl_type" => "hex",
+          "name" => "acme_lib",
+          "versions_override" => "not json"
+        }
+      })
+      |> render_submit()
+
+      assert render(lv) =~ "is not valid JSON"
     end
 
     test "adds a reference with tag checkboxes and custom x_ tags", %{conn: conn, poc: poc} do
