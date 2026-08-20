@@ -9,14 +9,14 @@ defmodule VarselWeb.CveListLiveTest do
 
   alias Varsel.CVE.CveRecord
 
-  defp published(cve_id, title, metrics \\ []) do
+  defp published(cve_id, title, metrics \\ [], date_published \\ "2025-06-16T11:00:00.000Z") do
     cve_json = %{
       "dataType" => "CVE_RECORD",
       "dataVersion" => "5.2",
       "cveMetadata" => %{
         "cveId" => cve_id,
         "state" => "PUBLISHED",
-        "datePublished" => "2025-06-16T11:00:00.000Z",
+        "datePublished" => date_published,
         "dateUpdated" => "2025-06-17T12:00:00.000Z"
       },
       "containers" => %{
@@ -94,6 +94,86 @@ defmodule VarselWeb.CveListLiveTest do
     html = lv |> form("#cve-record-search", %{query: "zzzznotfound"}) |> render_change()
 
     assert html =~ "No CVEs match"
+  end
+
+  describe "URL pagination" do
+    # 30 published records, dated so the sort (date_published desc) is
+    # deterministic: CVE-2025-1030 is newest and leads page one,
+    # CVE-2025-1005..1001 land on page two (limit 25).
+    defp thirty_published do
+      for i <- 1..30 do
+        id = "CVE-2025-#{String.pad_leading(to_string(1000 + i), 4, "0")}"
+        date = "#{Date.add(~D[2025-01-01], i)}T11:00:00.000Z"
+        published(id, "title#{i}", [], date)
+      end
+    end
+
+    defp detail_link(id), do: ~s{a[href="/cves/#{id}.html"]}
+
+    # The pager form scopes the selector — the nav also links /cves.
+    @pager ~s{form[phx-submit="jump_page"]}
+
+    test "the dead render serves any page by offset, with real anchors", %{conn: conn} do
+      thirty_published()
+
+      html = conn |> get("/cves?offset=25") |> html_response(200)
+      document = LazyHTML.from_document(html)
+
+      assert document |> LazyHTML.query(detail_link("CVE-2025-1005")) |> Enum.count() == 1
+      assert document |> LazyHTML.query(detail_link("CVE-2025-1030")) |> Enum.count() == 0
+      assert document |> LazyHTML.query(~s{#{@pager} a[href="/cves"]}) |> Enum.count() == 1
+    end
+
+    test "the pager's next link patches to the next offset", %{conn: conn} do
+      thirty_published()
+
+      {:ok, lv, _html} = live(conn, ~p"/cves")
+
+      assert has_element?(lv, detail_link("CVE-2025-1030"))
+      refute has_element?(lv, detail_link("CVE-2025-1005"))
+
+      lv |> element("#{@pager} a", "»") |> render_click()
+      assert_patch(lv, "/cves?offset=25")
+
+      assert has_element?(lv, detail_link("CVE-2025-1005"))
+      refute has_element?(lv, detail_link("CVE-2025-1030"))
+
+      lv |> element("#{@pager} a", "«") |> render_click()
+      assert_patch(lv, "/cves")
+
+      assert has_element?(lv, detail_link("CVE-2025-1030"))
+    end
+
+    test "jump-to-page round-trips through the URL", %{conn: conn} do
+      thirty_published()
+
+      {:ok, lv, _html} = live(conn, ~p"/cves")
+
+      lv |> form(@pager, %{page: "2"}) |> render_submit()
+      assert_patch(lv, "/cves?offset=25")
+
+      assert has_element?(lv, detail_link("CVE-2025-1001"))
+    end
+
+    test "searching resets to the first page", %{conn: conn} do
+      thirty_published()
+
+      {:ok, lv, _html} = live(conn, ~p"/cves?offset=25")
+
+      lv |> form("#cve-record-search", %{query: "title30"}) |> render_change()
+      assert_patch(lv, "/cves")
+
+      assert has_element?(lv, detail_link("CVE-2025-1030"))
+    end
+
+    test "a malformed offset falls back to the first page", %{conn: conn} do
+      thirty_published()
+
+      for bad <- ["abc", "-25", "1e2"] do
+        {:ok, lv, _html} = live(conn, "/cves?offset=#{bad}")
+        assert has_element?(lv, detail_link("CVE-2025-1030"))
+      end
+    end
   end
 
   test "renders a compact severity chip, dashed when unscored", %{conn: conn} do

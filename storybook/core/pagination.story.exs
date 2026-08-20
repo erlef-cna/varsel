@@ -13,6 +13,9 @@ defmodule VarselWeb.Storybook.Core.Pagination do
   # The list card's footer row — full width, with its own top border.
   def container, do: {:div, class: "w-full"}
 
+  def step_path("prev"), do: "?offset=40"
+  def step_path("next"), do: "?offset=80"
+
   defp page(offset, count, limit \\ 20) do
     %Ash.Page.Offset{
       results: [],
@@ -33,6 +36,13 @@ defmodule VarselWeb.Storybook.Core.Pagination do
         id: :middle_page,
         description: "Typing a page number and pressing Enter pushes `jump_event`.",
         attributes: %{page: page(60, 128)}
+      },
+      %Variation{
+        id: :link_mode,
+        description:
+          "With `patch`, prev/next render as real patch-link anchors — crawlable, " <>
+            "and openable in a new tab — while the jump input keeps its event.",
+        attributes: %{page: page(60, 128), patch: &__MODULE__.step_path/1}
       },
       %Variation{
         id: :last_page,
