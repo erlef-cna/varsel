@@ -14,6 +14,8 @@ defmodule Varsel.Cases.ChildParams do
   child type, hence the type argument threaded through.
   """
 
+  alias Varsel.Cases.Derivation.Emit
+
   # Comma/newline separated text inputs that become {:array, :string} attributes.
   @list_params %{
     "package" => ~w(platforms),
@@ -36,6 +38,7 @@ defmodule Varsel.Cases.ChildParams do
     params =
       params
       |> Map.merge(parent)
+      |> expand_since_creation(type)
       |> merge_reference_tags(type)
       |> parse_classification_id(type)
       |> parse_qualifiers(type)
@@ -94,6 +97,27 @@ defmodule Varsel.Cases.ChildParams do
   end
 
   defp parse_program_files(params, _type), do: params
+
+  # The since-creation checkbox stands in for the erlang/otp root commit and
+  # reaches the changeset (and any proposal payload) as that commit, never as
+  # a boolean. Unchecking clears the commit only while it still holds the
+  # root, so a hand-typed SHA survives.
+  defp expand_since_creation(%{"affected_since_creation" => flag} = params, "package_otp") do
+    params = Map.delete(params, "affected_since_creation")
+
+    cond do
+      flag == "true" ->
+        Map.put(params, "introduced_commit", Emit.otp_root_commit())
+
+      params["introduced_commit"] == Emit.otp_root_commit() ->
+        Map.put(params, "introduced_commit", "")
+
+      true ->
+        params
+    end
+  end
+
+  defp expand_since_creation(params, _type), do: params
 
   defp split_file_list(file, key) do
     case file[key] do

@@ -9,6 +9,7 @@ defmodule VarselWeb.CaseLiveTest do
 
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Cases
+  alias Varsel.Cases.Derivation.Emit
   alias Varsel.Fixtures
 
   defp log_in(conn, user) do
@@ -989,6 +990,45 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==
                MapSet.new([{:introduced, intro_sha}, {:fixed, fix_sha}])
+
+      assert render(lv) =~ "Erlang / OTP"
+    end
+
+    test "the since-creation checkbox sets the OTP root commit as introduced", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+
+      lv |> element("button[phx-value-type=package_otp]", "Erlang/OTP") |> render_click()
+
+      # Checking the box expands into the (now read-only) commit input.
+      lv
+      |> form("#child-form", %{"child" => %{"affected_since_creation" => "true"}})
+      |> render_change()
+
+      root = Emit.otp_root_commit()
+
+      assert has_element?(
+               lv,
+               ~s{#child-form input[name="child[introduced_commit]"][readonly][value="#{root}"]}
+             )
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{"applications" => "ssh", "affected_since_creation" => "true"}
+      })
+      |> render_submit()
+
+      case_record =
+        Ash.load!(case_record, [affected_packages: [:version_events]], authorize?: false)
+
+      assert [package] = case_record.affected_packages
+      assert [event] = package.version_events
+      assert event.event == :introduced
+      assert event.commit_sha == root
 
       assert render(lv) =~ "Erlang / OTP"
     end
@@ -2161,6 +2201,32 @@ defmodule VarselWeb.CaseLiveTest do
       html = render(lv)
       assert html =~ "Gleam / Gleam"
       assert html =~ "proposed"
+    end
+
+    test "the since-creation checkbox travels expanded in the proposal payload", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/propose")
+
+      lv |> element("button[phx-value-type=package_otp]", "Erlang/OTP") |> render_click()
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{"applications" => "ssh", "affected_since_creation" => "true"}
+      })
+      |> render_submit(%{"reasoning" => "present since the initial import"})
+
+      assert [proposal] = Cases.list_open_case_proposals!(case_record.id, actor: poc)
+
+      assert proposal.proposed_value["value"]["introduced_commit"] ==
+               Emit.otp_root_commit()
+
+      refute Map.has_key?(proposal.proposed_value["value"], "affected_since_creation")
+
+      assert render(lv) =~ "Erlang / OTP"
     end
 
     test "the modal proposes inserts and edits; removals become delete proposals", %{

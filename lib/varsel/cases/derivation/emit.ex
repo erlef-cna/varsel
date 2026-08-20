@@ -56,6 +56,10 @@ defmodule Varsel.Cases.Derivation.Emit do
   @otp_root_commit "84adefa331c4159d432d22840663c38f155cd4c1"
   @first_otp_tag "R13B03"
 
+  @doc "The erlang/otp root commit (the pre-R13B03 boundary)."
+  @spec otp_root_commit() :: String.t()
+  def otp_root_commit, do: @otp_root_commit
+
   @doc "Whether `sha` is the erlang/otp root commit (the pre-R13B03 boundary)."
   @spec otp_root_commit?(String.t()) :: boolean()
   def otp_root_commit?(sha), do: sha == @otp_root_commit

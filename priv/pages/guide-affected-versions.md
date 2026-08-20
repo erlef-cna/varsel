@@ -51,6 +51,9 @@ wrong. Investigate before trusting either side.
   When staying unreleased is intentional (a hotfix released from a
   maintenance branch and not merged back, leaving one of several fix commits
   outside every release), allow unreleased fixes on the package.
+- **Vulnerable since the beginning of OTP's git history**: tick the OTP
+  preset's since-creation checkbox. It stands for the erlang/otp root commit,
+  and the record reports the pre-R13B03 era as unknown.
 - **No usable repository**: it is gone, or its tags are unreliable or
   incomplete. Enter explicit version boundaries instead of commits.
 - **Prereleases** count as releases unless the project opts out, as OTP
