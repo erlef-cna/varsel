@@ -574,8 +574,10 @@ rather than upstream.
 For orientation only, the dependencies that receive attacker-influenced input
 (so an upstream bug is actually *reachable* through Varsel, rather than dead
 code) are `exgit` (git data from a case's `repo_url`), `mdex` (author markdown
-/ CVE prose), and `cvelint` together with `exile`, which carries the record to
-it — any authenticated caller can hand `validate_cve_record*` an arbitrary
+/ CVE prose), `lumis` (the text of a fenced code block, parsed by the
+tree-sitter WASM grammar the fence's language names, among the configured
+few), and `cvelint` together with `exile`, which carries the record to it:
+any authenticated caller can hand `validate_cve_record*` an arbitrary
 `cve_json` (§5). `saxy` and `req` are fed only trusted or fixed-host data, so
 their surface is not attacker-reachable. This list informs prioritization of a
 dependency bump; it does not change the disposition.
@@ -1197,6 +1199,7 @@ a triager who hits one of those flags sees the justification there.
 | "An avatar URL exposes the MD5 of a user's email." | Known and accepted (§9): the hash confirms a guessed address to someone who can already read that user's row. Reported often because the hash is recognisable. |
 | "A concurrent edit fails with a stale-record error." | The optimistic lock doing its job (§4): the row moved between read and write, the write rolled back whole, and a reload-and-retry succeeds. Not a data race — it is what prevents one. |
 | "Markdown from the JSON API is not escaped." | Sanitization runs at each render sink, not at rest (§9). Escaping is the consumer's obligation (§10). |
+| "A code fence's language makes Lumis download a parser." | A fence is highlighted only in one of the languages listed in `config.exs`, whose parsers `mix release` fetches into the release ahead of time; any other name renders as plain text and Lumis is never asked for it (`markdown.ex`, `mix.exs`). |
 
 **An entry here describes an outcome, not a promise to disregard the
 evidence.** Each says what the code does and why the flag is expected. A
@@ -1274,7 +1277,7 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 | `OUT-OF-MODEL: unsupported-component` | Lands in the `/dev/*` tooling, or in the mock login (`/auth/user/mock/*`). | §3 |
 | `OUT-OF-MODEL: out-of-scope-goal` | Turns on something the application does not set out to do — today that is resisting volume-based DoS. Per-operation bounds (§8) still apply; a report that one is missing or ineffective is not this. | §3 |
 | `OUT-OF-MODEL: non-default-build` | Only manifests in a release built from a non-`prod` `MIX_ENV` (which ships `dev/`), or with `TEST_DEPLOYMENT` misconfigured. | §5a |
-| `OUT-OF-MODEL: report-upstream` | Lands in `exgit`/`mdex`/`cvelint`/`exile`/`saxy`/`req` internals; Varsel ships the fix by bumping the dep. | §6b |
+| `OUT-OF-MODEL: report-upstream` | Lands in `exgit`/`mdex`/`lumis`/`cvelint`/`exile`/`saxy`/`req` internals; Varsel ships the fix by bumping the dep. | §6b |
 | `BY-DESIGN: property-disclaimed` | Concerns a §9 disclaimed property (`repo_url` egress to any public host within privilege, non-transactional outbound effects, at-rest sanitization, unbounded row/outbound-traffic counts). | §9 |
 | `KNOWN-NON-FINDING` | Matches a §11a recurring false positive. | §11a |
 | `MODEL-GAP` | Routes to none of the above; triggers a §12 revision. | §12 |

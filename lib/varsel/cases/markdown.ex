@@ -9,6 +9,8 @@ defmodule Varsel.Cases.Markdown do
   value. Both derive from the same MDEx document, so they always agree.
   """
 
+  @languages Application.compile_env!(:varsel, :lumis_languages)
+
   # `unsafe: true` lets authors embed literal HTML in their markdown; the
   # `sanitize` pass (ammonia, MDEx's conservative default allow-list) then
   # strips scripts, event handlers, and dangerous attributes/URLs before the
@@ -19,10 +21,9 @@ defmodule Varsel.Cases.Markdown do
     sanitize: MDEx.Document.default_sanitize_options()
   ]
 
-  # Lumis highlighting is display-only: the supportingMedia HTML embedded in
-  # published CVE records stays free of site-specific `.l-*` token markup.
-  @display_options @options ++
-                     [syntax_highlight: [engine: :lumis, opts: [formatter: :html_linked]]]
+  @doc "The languages code blocks are highlighted in."
+  @spec languages() :: [String.t()]
+  def languages, do: @languages
 
   @doc "Renders markdown to HTML (the supportingMedia text/html value)."
   @spec to_html(String.t()) :: String.t()
@@ -37,13 +38,42 @@ defmodule Varsel.Cases.Markdown do
   syntax highlighting of fenced code blocks (`.lumis` / `.l-*` classes,
   styled by the generated `assets/vendor/css/lumis.css`).
 
+  Highlighting is display-only: the supportingMedia HTML embedded in
+  published CVE records stays free of site-specific `.l-*` token markup.
+
   The result is sanitized, so it is safe to render unescaped.
   """
   @spec to_display_html(String.t()) :: String.t()
   def to_display_html(markdown) when is_binary(markdown) do
     markdown
-    |> MDEx.to_html!(@display_options)
+    |> MDEx.parse_document!(@options)
+    |> MDEx.traverse_and_update(&highlight_code_block/1)
+    |> MDEx.to_html!()
     |> String.trim()
+  end
+
+  # The highlighted markup goes through the same sanitize pass as the rest of
+  # the document; MDEx's default allow-list admits the `pre`/`code`/`span`
+  # classes Lumis emits. A block Lumis cannot highlight renders as the plain
+  # code block. The literal keeps the newline that closes the fence's last
+  # line, which Lumis would render as one more, empty line.
+  defp highlight_code_block(%MDEx.CodeBlock{info: info, literal: literal} = block) do
+    source = String.trim_trailing(literal, "\n")
+
+    case Lumis.highlight(source, formatter: {:html_linked, language: fence_language(info)}) do
+      {:ok, html} -> %MDEx.HtmlBlock{literal: html}
+      {:error, _reason} -> block
+    end
+  end
+
+  defp highlight_code_block(node), do: node
+
+  # Plain text is a name Lumis answers without loading anything.
+  defp fence_language(info) do
+    case String.split(info, ~r/\s+/, parts: 2, trim: true) do
+      [language | _] when language in @languages -> language
+      _other -> "text"
+    end
   end
 
   @doc "Renders markdown to plain text (the descriptions[].value)."

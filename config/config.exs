@@ -52,10 +52,11 @@ config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
-# mdex_native reads this at compile time to decide which syntax highlighter NIF
-# feature to build; must be set before it compiles (mdex's markdown code-block
-# highlighting and VarselWeb.CoreComponents.code_block/1 both depend on Lumis).
-config :mdex_native, syntax_highlighter: :lumis
+# mdex_native reads this at compile time to pick its precompiled NIF variant.
+# Code blocks are highlighted by the `:lumis` package instead
+# (`Varsel.Cases.Markdown`, `VarselWeb.CoreComponents.code_block/1`), so the
+# variant with a second, statically linked Lumis inside the NIF stays out.
+config :mdex_native, syntax_highlighter: nil
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
@@ -196,6 +197,14 @@ config :varsel, VarselWeb.Endpoint,
 # The "from" address used for CNA notification emails (e.g. new vulnerability
 # report submissions sent to POCs).
 config :varsel, :cna_email_from, "cna@erlef.org"
+
+# The languages code blocks are highlighted in. Lumis fetches a language's
+# parser the first time it is used; `mix release` caches these into the
+# release (mix.exs) and `Varsel.Cases.Markdown` passes no other name through,
+# so the release never fetches one at runtime.
+config :varsel,
+       :lumis_languages,
+       ~w(elixir erlang iex bash json yaml toml diff heex eex html javascript)
 
 # Whether this instance is a (non-production) test deployment. When true, the
 # site serves a "disallow everything" robots.txt, sends a blanket

@@ -21,6 +21,14 @@ defmodule Varsel.Cases.MarkdownTest do
     display = Markdown.to_display_html(markdown)
     assert display =~ ~s(<pre class="lumis">)
     assert display =~ ~s(<span class="l-keyword-function">def</span>)
+    assert Regex.scan(~r/data-line="\d+"/, display) == [[~s(data-line="1")]]
+  end
+
+  test "display HTML leaves code blocks in other languages plain" do
+    display = Markdown.to_display_html("```brainfuck\n+++\n```")
+
+    assert display =~ ~s(<code class="language-plaintext")
+    refute display =~ "<span"
   end
 
   test "plain text strips inline formatting and keeps paragraph breaks" do
