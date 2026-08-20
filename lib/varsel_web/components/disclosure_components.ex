@@ -25,6 +25,12 @@ defmodule VarselWeb.DisclosureComponents do
   The header carries the title, an optional count, and the `actions` slot —
   all of which remain visible while collapsed, so nothing actionable hides
   behind the fold.
+
+  Plain `<details>` loses its open/closed state on the next LiveView patch —
+  that state lives only in the live DOM, and the server never renders it
+  back — so the colocated hook reasserts it after each update. This matters
+  wherever the disclosure sits inside something that re-renders on every
+  keystroke, e.g. a form validating on change.
   """
   attr :id, :string, required: true
   attr :title, :string, required: true
@@ -38,7 +44,7 @@ defmodule VarselWeb.DisclosureComponents do
 
   def disclosure(assigns) do
     ~H"""
-    <details id={@id} open={@open?} class={["group mt-3", @class]}>
+    <details id={@id} open={@open?} phx-hook=".PreserveOpen" class={["group mt-3", @class]}>
       <summary class="flex cursor-pointer list-none items-center gap-2 border-t border-base-300 pt-2 text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50 hover:text-base-content/70">
         <span class="inline-block transition-transform group-open:rotate-90" aria-hidden="true">
           ▸
@@ -62,6 +68,19 @@ defmodule VarselWeb.DisclosureComponents do
         {render_slot(@inner_block)}
       </div>
     </details>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".PreserveOpen">
+      export default {
+        mounted() {
+          this.updated()
+        },
+        updated() {
+          this.el.open = this.wasOpen ?? this.el.open
+        },
+        beforeUpdate() {
+          this.wasOpen = this.el.open
+        }
+      }
+    </script>
     """
   end
 
