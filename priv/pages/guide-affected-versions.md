@@ -46,7 +46,9 @@ wrong. Investigate before trusting either side.
 ## The Odd Cases
 
 - **The fix is in no release yet.** The derivation reports it as pending and
-  blocks publishing. When that is intentional (a hotfix released from a
+  blocks publishing. Once the release is tagged, refresh the derivation to
+  clear it; the cached result does not notice upstream changes on its own.
+  When staying unreleased is intentional (a hotfix released from a
   maintenance branch and not merged back, leaving one of several fix commits
   outside every release), allow unreleased fixes on the package.
 - **No usable repository**: it is gone, or its tags are unreliable or

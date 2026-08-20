@@ -326,7 +326,7 @@ defmodule VarselWeb.CaseDetailLive do
      socket
      |> assign(preview: :loading, refreshing: true)
      |> start_async(:preview, fn ->
-       {:ok, _} = Cases.refresh_case_derivation(case_record, actor: actor)
+       {:ok, _} = Cases.refresh_case_derivation(case_record, %{refresh: true}, actor: actor)
        Cases.get_case!(case_record.id, load: [:preview, :validation], actor: actor)
      end)}
   end

@@ -219,6 +219,13 @@ defmodule Varsel.Cases.Case do
       accept []
       require_atomic? false
 
+      argument :refresh, :boolean do
+        default false
+        allow_nil? false
+
+        description "Fetch the current state of each package repository before deriving, so tags pushed upstream since the last scan are seen. Set this when the repository may have changed: checking whether a pending fix has been released, or deriving right after a release."
+      end
+
       change Varsel.Cases.Case.Changes.RefreshDerivation
     end
 

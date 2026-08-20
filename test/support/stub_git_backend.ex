@@ -37,6 +37,7 @@ defmodule Varsel.Test.StubGitBackend do
 
   @tags_key {__MODULE__, :tags}
   @universe_key {__MODULE__, :universe}
+  @refreshed_key {__MODULE__, :refreshed}
 
   @doc "Declares, per `{repo, sha}`, the tags whose commit contains that sha."
   @spec stub_tags(%{{String.t(), String.t()} => [String.t()]}) :: :ok
@@ -67,8 +68,17 @@ defmodule Varsel.Test.StubGitBackend do
     {:ok, Enum.uniq(from_commits ++ extra)}
   end
 
+  # Recorded in the calling process's dictionary, so a test that runs the
+  # action in its own process reads the record back with `refreshed_repos/0`.
   @impl GitBackend
-  def refresh(_repo_url), do: :ok
+  def refresh(repo_url) do
+    Process.put(@refreshed_key, refreshed_repos() ++ [repo_url])
+    :ok
+  end
+
+  @doc "Repo URLs `refresh/1` was called with, oldest first."
+  @spec refreshed_repos() :: [String.t()]
+  def refreshed_repos, do: get(@refreshed_key, owners(), [])
 
   ## ----------------------------------------------------------------- storage
 
@@ -82,14 +92,14 @@ defmodule Varsel.Test.StubGitBackend do
   # This process if it declared the stub, else the nearest caller or ancestor
   # that did. Presence decides, not truthiness, so a deliberately empty stub
   # answers for its owner instead of falling through to an ancestor's.
-  defp get(key), do: get(key, owners())
+  defp get(key), do: get(key, owners(), %{})
 
-  defp get(_key, []), do: %{}
+  defp get(_key, [], default), do: default
 
-  defp get(key, [pid | rest]) do
+  defp get(key, [pid | rest], default) do
     case dictionary(pid) do
       %{^key => value} -> value
-      _undeclared -> get(key, rest)
+      _undeclared -> get(key, rest, default)
     end
   end
 

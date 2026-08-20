@@ -443,7 +443,9 @@ Once the affected package has been accepted:
 
 **Run `refresh_case_derivation` first.** The preview reads a cached derivation and does not
 recompute it, so a preview taken without refreshing shows stale or empty version data. Refresh
-after any affected-package change is accepted, every time.
+after any affected-package change is accepted, every time. Pass `refresh: true` when the package
+repository may have changed since the last derivation (a fix shows as unreleased but the tag
+should exist by now): it refetches the repository state before deriving.
 
 Then run `render_case_preview` and `validate_case`, and read three separate signals.
 

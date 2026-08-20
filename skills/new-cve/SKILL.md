@@ -175,6 +175,8 @@ mcp__varsel__refresh_case_derivation(id: <case-id>)
 
 ⚠️ **Refresh recomputes; the preview does not.** `render_case_preview` renders from the *cached* derivation and does **not** recompute it, so after accepting any affected-package change you must refresh or the preview shows stale ranges — often an affected entry with **no versions at all**, flagged as a `version derivation is out of date` blocker. `refresh_case_derivation` returns the freshly rendered preview itself (the same CNA container, validation result, overrides, and blockers as `render_case_preview`), so a single refresh both recomputes and shows you the result — no separate preview call needed here.
 
+Pass `refresh: true` when the package repository may have changed since the last derivation, most often when a fix shows as unreleased and the tag should exist by now. It refetches the repository state before deriving; without it, derivation can reuse recently cached git state and miss tags pushed in the meantime.
+
 Confirm each affected entry's derived `from X before Y` matches the advisory's first-affected / fixed versions. A wrong range means a wrong boundary SHA — fix it with a new proposal (which again needs accepting, then another refresh, before it takes effect).
 
 ## Step 9 — Verify
