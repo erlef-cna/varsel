@@ -24,9 +24,11 @@ This is a web application written using the Phoenix web framework.
   requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by
   default and is the preferred HTTP client for Phoenix apps
 - Pre-commit hooks (`prek`) run credo, dialyzer, format, reuse and sobelow.
-  **Never pass `--no-verify`.** A failing hook names a real problem: add the
-  missing SPDX header, run `mix format`, fix the finding. If a failure looks
-  unfixable, stop and ask rather than bypassing.
+  **Never pass `--no-verify` unless the user authorizes it for the current
+  context.** Authorization is scoped to that context, not standing for the
+  rest of the session; ask again next time it comes up. A failing hook names
+  a real problem: add the missing SPDX header, run `mix format`, fix the
+  finding. If a failure looks unfixable, stop and ask rather than bypassing.
 - Never use `@impl true`; name the behaviour (`@impl Phoenix.LiveView`,
   `@impl GenServer`, `@impl Ash.Type`). It documents which contract the
   function fulfills and lets the compiler check the callback belongs to it.
