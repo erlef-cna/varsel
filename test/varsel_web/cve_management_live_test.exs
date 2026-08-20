@@ -163,7 +163,8 @@ defmodule VarselWeb.VarselLiveTest do
     assert has_element?(lv, ~s{input[name="page"][value="1"]})
     assert html =~ "of 2"
 
-    lv |> element("button[phx-value-page=next]") |> render_click()
+    lv |> element(~s{form[phx-submit=jump_page] a}, "»") |> render_click()
+    assert_patch(lv, "/cves?offset=25")
     assert has_element?(lv, ~s{input[name="page"][value="2"]})
 
     lv |> form("form[phx-submit=jump_page]", %{"page" => "1"}) |> render_submit()

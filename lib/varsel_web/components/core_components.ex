@@ -933,6 +933,10 @@ defmodule VarselWeb.CoreComponents do
   A list that fits on one page keeps only its total — there is nowhere to page
   to, so the page size and the controls both go.
 
+  With `patch` set, prev/next render as patch links instead of pushing
+  `page_event` — real anchors a crawler can follow and a user can open in a
+  new tab; the caller's `handle_params` does the paging.
+
   Belongs in a `list_card/1` `footer` slot, which rules and gutters it. Guard
   that slot with `paged?/1` — at zero results this renders nothing, and an
   empty footer would still draw its rule.
@@ -941,6 +945,10 @@ defmodule VarselWeb.CoreComponents do
   attr :page_event, :string, default: "paginate"
   attr :jump_event, :string, default: "jump_page"
   attr :noun, :string, default: "case", doc: "singular; pluralized with a trailing \"s\""
+
+  attr :patch, :any,
+    default: nil,
+    doc: ~s{1-arity fun mapping "prev"/"next" to a patch path (nil when there is no such page)}
 
   def pagination(assigns) do
     last_page = AshLiveView.last_page(assigns.page)
@@ -968,16 +976,13 @@ defmodule VarselWeb.CoreComponents do
             detaching the submit binding. The prev/next buttons are
             type="button" so only Enter in the input submits. --%>
       <form :if={@pageable?} phx-submit={@jump_event} class="inline-flex items-center gap-2">
-        <button
-          type="button"
-          class={["px-1.5 rounded border", pbtn_class(AshLiveView.prev_page?(@page))]}
-          disabled={not AshLiveView.prev_page?(@page)}
-          phx-click={@page_event}
-          phx-value-page="prev"
-        >
-          «
-        </button>
-        Page
+        <.page_step
+          target="prev"
+          label="«"
+          enabled?={AshLiveView.prev_page?(@page)}
+          patch={@patch}
+          page_event={@page_event}
+        /> Page
         <input
           type="text"
           inputmode="numeric"
@@ -985,17 +990,39 @@ defmodule VarselWeb.CoreComponents do
           value={@page_number}
           class="w-9 text-center font-mono bg-base-100 border border-base-300 rounded px-1 py-0.5"
         /> of {@last_page}
-        <button
-          type="button"
-          class={["px-1.5 rounded border", pbtn_class(AshLiveView.next_page?(@page))]}
-          disabled={not AshLiveView.next_page?(@page)}
-          phx-click={@page_event}
-          phx-value-page="next"
-        >
-          »
-        </button>
+        <.page_step
+          target="next"
+          label="»"
+          enabled?={AshLiveView.next_page?(@page)}
+          patch={@patch}
+          page_event={@page_event}
+        />
       </form>
     </div>
+    """
+  end
+
+  # A step with nowhere to go renders the disabled button in link mode too,
+  # so the control keeps its footprint.
+  defp page_step(assigns) do
+    ~H"""
+    <.link
+      :if={@patch && @enabled?}
+      patch={@patch.(@target)}
+      class={["px-1.5 rounded border", pbtn_class(true)]}
+    >
+      {@label}
+    </.link>
+    <button
+      :if={is_nil(@patch) or not @enabled?}
+      type="button"
+      class={["px-1.5 rounded border", pbtn_class(@enabled?)]}
+      disabled={not @enabled?}
+      phx-click={is_nil(@patch) && @page_event}
+      phx-value-page={is_nil(@patch) && @target}
+    >
+      {@label}
+    </button>
     """
   end
 

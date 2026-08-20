@@ -17,9 +17,8 @@ defmodule VarselWeb.CveListLive do
   """
   use VarselWeb, :live_view
 
-  import AshPhoenix.LiveView, only: [keep_live: 4]
+  import AshPhoenix.LiveView, only: [keep_live: 4, page_link_params: 2]
   import VarselWeb.CveView, only: [package_display_name: 1]
-  import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
 
   alias Varsel.Cases
   alias Varsel.Cases.Validations.CveRecordAdoptable
@@ -44,13 +43,12 @@ defmodule VarselWeb.CveListLive do
     # everything the console adds hangs off that pool.
     console? = Ash.can?({CveRecord, :assign}, socket.assigns.current_user)
 
+    # Row-independent half of the adoption affordance; the per-row half is
+    # adoptable?/1 (see there for why it is split).
     socket =
-      socket
-      |> assign(
+      assign(socket,
         page_title: if(console?, do: "CVE records", else: "Issued CVEs"),
         console?: console?,
-        # Row-independent half of the adoption affordance; the per-row half is
-        # adoptable?/1 (see there for why it is split).
         may_adopt?: Ash.can?({Cases.Case, :adopt_cve_record}, socket.assigns.current_user),
         mitre_syncing?: false,
         query: "",
@@ -62,7 +60,6 @@ defmodule VarselWeb.CveListLive do
         confirming_reject_id: nil,
         withholding_id: nil
       )
-      |> keep_records_live()
 
     socket =
       if console?,
@@ -70,6 +67,21 @@ defmodule VarselWeb.CveListLive do
         else: socket
 
     {:ok, socket}
+  end
+
+  @impl Phoenix.LiveView
+  def handle_params(params, _url, socket) do
+    {:noreply,
+     socket
+     |> assign(:page_opts, count: true, offset: offset_param(params))
+     |> keep_records_live()}
+  end
+
+  defp offset_param(params) do
+    case Integer.parse(params["offset"] || "") do
+      {offset, ""} when offset >= 0 -> offset
+      _not_an_offset -> 0
+    end
   end
 
   # (Re)binds the paginated record page to the current filter/search. On a
@@ -327,19 +339,25 @@ defmodule VarselWeb.CveListLive do
   end
 
   def handle_event("filter", %{"filter" => filter}, socket) do
-    {:noreply, socket |> assign(filter: filter) |> keep_records_live()}
+    {:noreply, socket |> assign(filter: filter) |> push_patch(to: ~p"/cves")}
   end
 
   def handle_event("search", %{"query" => query}, socket) do
-    {:noreply, socket |> assign(query: query) |> keep_records_live()}
-  end
-
-  def handle_event("paginate", %{"page" => target}, socket) do
-    {:noreply, change_page(socket, :cve_records, target)}
+    {:noreply, socket |> assign(query: query) |> push_patch(to: ~p"/cves")}
   end
 
   def handle_event("jump_page", %{"page" => target}, socket) do
-    {:noreply, jump_to_page(socket, :cve_records, target)}
+    socket =
+      case Integer.parse(target) do
+        {number, ""} when number >= 1 ->
+          offset = (number - 1) * socket.assigns.cve_records.limit
+          push_patch(socket, to: records_path(offset: offset))
+
+        _not_a_page ->
+          socket
+      end
+
+    {:noreply, socket}
   end
 
   @impl Phoenix.LiveView
@@ -358,14 +376,30 @@ defmodule VarselWeb.CveListLive do
   end
 
   # The keep_live callback: page_opts is nil on the first run and the stored
-  # page (with the stability filter) on refetches/page changes.
+  # page (with the stability filter) on refetches/page changes. The fallback
+  # reads the URL-derived assign, so notification refetches stay on the page
+  # the URL names.
   defp list_cve_records(socket, page_opts) do
     CVE.list_all_cve_records!(
       actor: socket.assigns.current_user,
       query: records_query(socket.assigns.filter, socket.assigns.query, socket.assigns.current_user),
-      page: page_opts || [count: true, offset: 0]
+      page: page_opts || socket.assigns.page_opts
     )
   end
+
+  # The limit is dropped from the link deliberately: it is fixed server-side.
+  defp records_step_path(page, target) do
+    case page_link_params(page, target) do
+      :invalid -> nil
+      params -> records_path(Keyword.take(params, [:offset]))
+    end
+  end
+
+  # The first page is the bare path, so the list's canonical URL stays
+  # parameter-free.
+  defp records_path(offset: 0), do: ~p"/cves"
+  defp records_path([]), do: ~p"/cves"
+  defp records_path(params), do: ~p"/cves?#{params}"
 
   # Every active record — including :draft, which stays listed (and
   # editable) here as the manual escape hatch alongside the /cases flow.
@@ -586,12 +620,14 @@ defmodule VarselWeb.CveListLive do
                     >
                       {record.title || record.cve_id}
                     </.link>
-                    <span
+                    <.link
                       :if={not @console? and record.state == :published}
+                      href={~p"/cves/#{record.cve_id <> ".html"}"}
+                      phx-click={%JS{}}
                       class="font-semibold group-hover:text-primary"
                     >
                       {record.title || record.cve_id}
-                    </span>
+                    </.link>
                     <span
                       :if={@console? and record.state != :published}
                       class={record.state == :publishing && "font-semibold"}
@@ -599,10 +635,6 @@ defmodule VarselWeb.CveListLive do
                       {record.title || "—"}
                     </span>
                   </td>
-                  <%!-- The empty JS command shields the nested hex.pm links
-                        from the row's click-through: LiveView only executes
-                        the binding closest to the click target, and inline
-                        handlers are out (CSP). --%>
                   <td phx-click={%JS{}}>
                     <div :for={purl <- record.purls || []} class="text-xs break-all">
                       <.package_display_name purl={purl} link={true} />
@@ -682,7 +714,11 @@ defmodule VarselWeb.CveListLive do
           </div>
 
           <:footer :if={paged?(@cve_records)}>
-            <.pagination page={@cve_records} noun={if @console?, do: "record", else: "CVE"} />
+            <.pagination
+              page={@cve_records}
+              noun={if @console?, do: "record", else: "CVE"}
+              patch={&records_step_path(@cve_records, &1)}
+            />
           </:footer>
         </.list_card>
 
