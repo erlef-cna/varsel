@@ -67,7 +67,7 @@ defmodule Varsel.Cases.Derivation do
     emit_opts = [
       intro_shas: intro_shas,
       fix_shas: fix_shas,
-      otp_root_intro?: platform.kind == :otp and Enum.any?(intro_shas, &Emit.otp_root_commit?/1)
+      otp_root_intro?: platform.kind == :otp and unresolved_otp_root_intro?(global_events)
     ]
 
     channels =
@@ -130,6 +130,17 @@ defmodule Varsel.Cases.Derivation do
       |> Enum.split_with(&(&1.event == :introduced))
 
     {Enum.map(intros, & &1.commit_sha), Enum.map(fixes, & &1.commit_sha)}
+  end
+
+  # Whether the OTP root commit stands as the introduced boundary with nothing
+  # else to place it: an event pairing that commit with an explicit version
+  # (e.g. "0", "R1A") names where the range truly starts, so the pre-R13B03
+  # span is resolved rather than unknown.
+  defp unresolved_otp_root_intro?(events) do
+    Enum.any?(events, fn event ->
+      event.event == :introduced and is_binary(event.commit_sha) and
+        Emit.otp_root_commit?(event.commit_sha) and is_nil(event.version)
+    end)
   end
 
   ## --------------------------------------------------------------- channels
