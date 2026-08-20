@@ -66,7 +66,7 @@ defmodule Varsel.Cases.Derivation.Emit do
 
   `opts` carries the boundary facts the git version type needs
   (`:intro_shas` / `:fix_shas`) and whether the introducing commit is the OTP
-  root (`:otp_root_intro?`).
+  root with no explicit version to place it (`:otp_root_intro?`).
   """
   @spec channel(PackageChannel.t(), [range()], keyword()) :: %{
           required(String.t()) => [map()]

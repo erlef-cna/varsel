@@ -1586,15 +1586,12 @@ defmodule VarselWeb.CaseDetailLive do
           rows={3}
         />
 
-        <details class="mt-2">
-          <summary class="cursor-pointer text-sm text-base-content/60">
-            Advanced: CNA override
-          </summary>
+        <.disclosure id="cna-override-disclosure" title="Advanced: CNA override" class="mt-2">
           <label class="label mt-2 text-sm">
             RFC 7396 JSON Merge Patch applied to the rendered CNA container
           </label>
           <textarea name="cna_override_json" rows="4" class="w-full textarea font-mono text-sm">{pretty_json(@case_record.cna_override)}</textarea>
-        </details>
+        </.disclosure>
 
         <.edit_actions mode={@mode} cancel="cancel_edit" />
       </.form>

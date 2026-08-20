@@ -388,6 +388,81 @@ defmodule Varsel.Cases.DerivationTest do
     assert git_block["version"] == @intro_sha
   end
 
+  @otp_root_commit "84adefa331c4159d432d22840663c38f155cd4c1"
+
+  for {label, explicit_version} <- [
+        {"affected since creation (version \"0\")", "0"},
+        {"affected since OTP's first-ever release (version \"R1A\")", "R1A"}
+      ] do
+    test "an OTP root-commit intro with an explicit version (#{label}) is a single affected range, not a pre-R13B03 unknown split",
+         %{poc: poc, case: case_record} do
+      otp_repo = "https://github.com/erlang/otp"
+      explicit_version = unquote(explicit_version)
+
+      Req.Test.stub(OtpVersionsTable, fn conn ->
+        Plug.Conn.send_resp(conn, 200, """
+        OTP-26.2.5.15 : ssh-5.2.11.9 :
+        OTP-26.0 : ssh-5.0 :
+        """)
+      end)
+
+      on_exit(&OtpVersionsTable.reset/0)
+
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{
+          vendor: "Erlang",
+          product: "OTP",
+          repo_url: otp_repo
+        })
+
+      release_channel =
+        Cases.add_package_channel!(
+          %{
+            case_id: case_record.id,
+            affected_package_id: package.id,
+            purl_type: "sid",
+            namespace: "erlang.org",
+            name: "otp",
+            version_type: :otp
+          },
+          actor: poc
+        )
+
+      # The root commit is contained in every release: a POC can only reach it
+      # via git-history sentinel logic, never real tag containment, so no
+      # StubGitBackend entry is needed for it — it is the boundary before any
+      # tag exists.
+      StubGitBackend.stub_tags(%{
+        {otp_repo, @otp_root_commit} => ["OTP-26.0", "OTP-26.2.5.15"],
+        {otp_repo, @fix_sha} => ["OTP-26.2.5.15"]
+      })
+
+      for attrs <- [
+            %{event: :introduced, commit_sha: @otp_root_commit, version: explicit_version},
+            %{event: :fixed, commit_sha: @fix_sha}
+          ] do
+        Cases.add_version_event!(
+          Map.merge(%{case_id: case_record.id, affected_package_id: package.id}, attrs),
+          actor: poc
+        )
+      end
+
+      package = Ash.load!(package, [:channels, :version_events], authorize?: false)
+      assert {:ok, derivation} = Derivation.derive(package)
+
+      # A single affected range from the POC's explicit boundary, not the
+      # two-range "0 - R13B03: unknown" + "R13B03 - fix: affected" split.
+      assert derivation["channels"][release_channel.id]["versions"] == [
+               %{
+                 "version" => explicit_version,
+                 "lessThan" => "26.2.5.15",
+                 "status" => "affected",
+                 "versionType" => "otp"
+               }
+             ]
+    end
+  end
+
   test "pkg:otp channels of non-OTP repos derive semver ranges from the repo tags", %{
     poc: poc,
     case: case_record

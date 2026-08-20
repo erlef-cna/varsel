@@ -15,6 +15,7 @@ defmodule VarselWeb.CaseFormComponents do
   use Phoenix.Component
 
   import VarselWeb.CoreComponents
+  import VarselWeb.DisclosureComponents
 
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseReference
@@ -231,6 +232,35 @@ defmodule VarselWeb.CaseFormComponents do
       <.input field={@form[:position]} type="number">
         <:label>Position</:label>
       </.input>
+      <.disclosure id="channel-overrides-disclosure" title="Advanced: version and entry overrides">
+        <.input
+          field={@form[:versions_override]}
+          type="textarea"
+          value={json_value(@form[:versions_override])}
+          rows="4"
+          class="w-full textarea font-mono text-sm"
+        >
+          <:label>Versions override (JSON array)</:label>
+          <:description>
+            Escape hatch: raw CVE-schema version objects, replacing the derived
+            versions[] array wholesale — for a range derivation cannot express.
+            Leave empty to keep the derived versions.
+          </:description>
+        </.input>
+        <.input
+          field={@form[:entry_override]}
+          type="textarea"
+          value={json_value(@form[:entry_override])}
+          rows="4"
+          class="w-full textarea font-mono text-sm"
+        >
+          <:label>Entry override (JSON Merge Patch)</:label>
+          <:description>
+            Escape hatch: an RFC 7396 JSON Merge Patch applied to this channel's
+            rendered affected[] entry. Leave empty for none.
+          </:description>
+        </.input>
+      </.disclosure>
       <.propose_form_fields propose?={@propose?} />
       {render_slot(@actions)}
     </.form>
@@ -507,6 +537,15 @@ defmodule VarselWeb.CaseFormComponents do
 
       value ->
         value
+    end
+  end
+
+  # A :map / {:array, :map} attribute is edited as pretty-printed JSON text.
+  defp json_value(field) do
+    case field.value do
+      nil -> ""
+      value when is_map(value) or is_list(value) -> Jason.encode!(value, pretty: true)
+      value -> value
     end
   end
 
