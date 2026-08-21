@@ -21,24 +21,40 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
 
   Pre-releases order below the release of the same number (`29.0-rc1` < `29.0`;
   `R16A_RELEASE_CANDIDATE` < `R16A`).
+
+  `0` is the CVE record's name for "since the first version" and orders below
+  every release of either era. No OTP release was ever numbered 0; read as a
+  modern version it would sort after the whole R series.
   """
 
   @enforce_keys [:era, :segments, :prerelease?, :raw]
   defstruct [:era, :segments, :prerelease?, :raw]
 
   @type t :: %__MODULE__{
-          era: 0 | 1,
+          era: -1 | 0 | 1,
           segments: [integer()],
           prerelease?: boolean(),
           raw: String.t()
         }
 
-  # Era discriminators so one Erlang term order sorts legacy below modern.
+  # Era discriminators so one Erlang term order sorts the floor below legacy
+  # below modern.
+  @floor_era -1
   @r_era 0
   @modern_era 1
 
+  @floor "0"
+
+  @doc "The version naming the start of all history, which orders below every release."
+  @spec floor() :: String.t()
+  def floor, do: @floor
+
   @doc "Parses an OTP version string. `:error` for non-release tags."
   @spec parse(String.t()) :: {:ok, t()} | :error
+  def parse(@floor) do
+    {:ok, %__MODULE__{era: @floor_era, segments: [], prerelease?: false, raw: @floor}}
+  end
+
   def parse(version) when is_binary(version) do
     bare = strip_prefix(version)
 

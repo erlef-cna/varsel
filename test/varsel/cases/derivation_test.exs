@@ -401,8 +401,8 @@ defmodule Varsel.Cases.DerivationTest do
 
       Req.Test.stub(OtpVersionsTable, fn conn ->
         Plug.Conn.send_resp(conn, 200, """
-        OTP-26.2.5.15 : ssh-5.2.11.9 :
-        OTP-26.0 : ssh-5.0 :
+        OTP-26.2.5.15 : inets-9.1.0.1 ssh-5.2.11.9 :
+        OTP-26.0 : inets-9.0 ssh-5.0 :
         """)
       end)
 
@@ -428,12 +428,27 @@ defmodule Varsel.Cases.DerivationTest do
           actor: poc
         )
 
-      # The root commit is contained in every release: a POC can only reach it
-      # via git-history sentinel logic, never real tag containment, so no
-      # StubGitBackend entry is needed for it — it is the boundary before any
-      # tag exists.
+      app_channel =
+        Cases.add_package_channel!(
+          %{
+            case_id: case_record.id,
+            affected_package_id: package.id,
+            purl_type: "otp",
+            name: "inets",
+            version_type: :otp
+          },
+          actor: poc
+        )
+
+      # The root commit is contained in every release, R series included: the
+      # explicit version has to order below R13B03 to head the range.
       StubGitBackend.stub_tags(%{
-        {otp_repo, @otp_root_commit} => ["OTP-26.0", "OTP-26.2.5.15"],
+        {otp_repo, @otp_root_commit} => [
+          "OTP_R13B03",
+          "OTP_R16B03-1",
+          "OTP-26.0",
+          "OTP-26.2.5.15"
+        ],
         {otp_repo, @fix_sha} => ["OTP-26.2.5.15"]
       })
 
@@ -460,6 +475,22 @@ defmodule Varsel.Cases.DerivationTest do
                  "versionType" => "otp"
                }
              ]
+
+      # Since creation means the application's whole history too.
+      if explicit_version == "0" do
+        assert derivation["channels"][app_channel.id] == %{
+                 "versions" => [
+                   %{
+                     "version" => "0",
+                     "lessThan" => "9.1.0.1",
+                     "status" => "affected",
+                     "versionType" => "otp"
+                   }
+                 ],
+                 "pending" => [],
+                 "issues" => []
+               }
+      end
     end
   end
 
