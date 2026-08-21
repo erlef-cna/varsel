@@ -41,6 +41,7 @@ defmodule Varsel.Cases.Derivation.Emit do
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.PackageChannel.PurlType
   alias Varsel.Cases.Reachability
+  alias Varsel.Cases.Reachability.OTPVersion
 
   @type range :: Reachability.range()
 
@@ -171,7 +172,7 @@ defmodule Varsel.Cases.Derivation.Emit do
   # on the first release whose app version can't be resolved (reported as issue).
   defp otp_app_versions(channel, app, ranges) do
     Enum.reduce_while(ranges, %{"versions" => [], "issues" => []}, fn range, acc ->
-      with {:ok, from} <- OtpVersionsTable.first_shipped_version(bare(range.from), app),
+      with {:ok, from} <- app_lower_bound(bare(range.from), app),
            {:ok, until} <- app_upper_bound(range.until, app) do
         versions =
           acc["versions"] ++ decorated_ranges(channel, [%{from: from, until: until}], "otp")
@@ -182,6 +183,13 @@ defmodule Varsel.Cases.Derivation.Emit do
           {:halt, %{"versions" => [], "issues" => ["cannot resolve #{app}'s version for a range"]}}
       end
     end)
+  end
+
+  # A range from the start of history starts the application's there too.
+  defp app_lower_bound(from, app) do
+    if from == OTPVersion.floor(),
+      do: {:ok, from},
+      else: OtpVersionsTable.first_shipped_version(from, app)
   end
 
   defp app_upper_bound(:unbounded, _app), do: {:ok, :unbounded}

@@ -9,17 +9,19 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   (ssh-5.2.3.4, stdlib-6.2.2.1, ...). Needed to resolve `pkg:otp/<app>`
   channel boundaries from OTP release tags.
 
-  The official table only covers OTP-17.0 and later. The pre-17 R-series
-  (`OTP_R13B03` … `OTP_R16B03-1`) is filled from `priv/otp_pre17_versions.json`
-  and merged in. That file was generated once by reading every `OTP_R*` tag's
-  `lib/<app>/vsn.mk` (and `erts/vsn.mk`) — this history is immutable, so it is
+  The official table only covers OTP-17.0 and later. The R series from the
+  first open-source release (`OTP_R6B-0` … `OTP_R16B03-1`) is filled from
+  `priv/otp_pre17_versions.json` and merged in. That file was generated once by
+  reading every release tag's `lib/<app>/vsn.mk` (and `erts/vsn.mk`): erlang/otp
+  for R13B03 onwards, and the pre-R13B03 history erlang/otp's wiki grafts on
+  (`mfoemmel/erlang-otp`) for the rest. This history is immutable, so it is
   never regenerated.
 
   The official portion is fetched from the configured URL and cached in
   `:persistent_term` for an hour; the pre-17 portion is a compile-time constant.
   """
 
-  alias Varsel.Cases.Derivation.Platform
+  alias Varsel.Cases.Reachability.OTPVersion
 
   @cache_key {__MODULE__, :table}
   @cache_ttl_seconds 3600
@@ -43,7 +45,7 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   @doc "Every OTP release in the table, newest first."
   @spec releases() :: [String.t()]
   def releases do
-    rows() |> Map.keys() |> Enum.sort_by(&Platform.parse_version(strip(&1)), :desc)
+    rows() |> Map.keys() |> Enum.sort({:desc, OTPVersion})
   end
 
   @doc """
@@ -61,11 +63,9 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
         {:ok, version}
 
       :error ->
-        intro_version = Platform.parse_version(strip(intro_release))
-
         releases()
         |> Enum.reverse()
-        |> Enum.filter(fn release -> Platform.parse_version(strip(release)) >= intro_version end)
+        |> Enum.filter(&(OTPVersion.compare(&1, intro_release) != :lt))
         |> Enum.find_value(:error, &ok_app_version(&1, app))
     end
   end
@@ -90,9 +90,6 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   defp normalize_release("R" <> _ = release), do: "OTP_" <> release
   defp normalize_release("OTP-" <> _ = release), do: release
   defp normalize_release(release), do: "OTP-" <> release
-
-  defp strip("OTP-" <> version), do: version
-  defp strip(release), do: release
 
   # The official (fetched, cached) rows merged with the compile-time pre-17 rows.
   defp rows do

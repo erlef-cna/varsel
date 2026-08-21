@@ -45,31 +45,4 @@ defmodule Varsel.Cases.Derivation.Platform do
     |> String.trim_trailing("/")
     |> Kernel.==(@otp_repo)
   end
-
-  @doc """
-  Sortable representation of a numeric OTP version string: numeric parts, with
-  released versions ranking above pre-releases of the same number. Used by
-  `Varsel.Cases.Derivation.OtpVersionsTable` to order OTP releases.
-  """
-  @spec parse_version(String.t()) :: {[integer()], 0 | 1, String.t()}
-  def parse_version(version) do
-    {numeric, suffix} =
-      case String.split(version, "-", parts: 2) do
-        [n] -> {n, ""}
-        [n, s] -> {n, s}
-      end
-
-    nums =
-      numeric
-      |> String.split(".")
-      |> Enum.map(fn part ->
-        case Integer.parse(part) do
-          {i, ""} -> i
-          _ -> 0
-        end
-      end)
-
-    suffix_rank = if suffix == "", do: 1, else: 0
-    {nums, suffix_rank, suffix}
-  end
 end
