@@ -34,5 +34,19 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Result do
       default []
       public? true
     end
+
+    attribute :osv_record, :map do
+      description """
+      The OSV document the record would publish as, hex.pm versions included.
+      Nil when the record has no OSV representation; see osv_status.
+      """
+
+      public? true
+    end
+
+    attribute :osv_status, :string do
+      description "Why osv_record is nil."
+      public? true
+    end
   end
 end

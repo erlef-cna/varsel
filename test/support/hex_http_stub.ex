@@ -6,7 +6,8 @@ defmodule Varsel.Test.HexHTTPStub do
   @moduledoc """
   `:hex_http` adapter stub for tests.
 
-  Reports a package as existing when its name is in the
+  Serves the registry's `packages/<name>` resource as an unsigned protobuf
+  (the test config turns signature checks off) for every name in the
   `:hex_stub_packages` application env, which is either a list of names
   (packages without releases) or a map of name to released versions:
 
@@ -42,7 +43,19 @@ defmodule Varsel.Test.HexHTTPStub do
   defp package_response(name) do
     case stubbed_versions(name) do
       {:ok, versions} ->
-        ok(%{"name" => name, "releases" => Enum.map(versions, &%{"version" => &1})})
+        package = %{
+          repository: "hexpm",
+          name: name,
+          releases: Enum.map(versions, &%{version: &1, inner_checksum: <<>>, dependencies: []})
+        }
+
+        signed =
+          :hex_pb_signed.encode_msg(
+            %{payload: :hex_registry.encode_package(package), signature: <<>>},
+            :Signed
+          )
+
+        {:ok, {200, %{}, :zlib.gzip(signed)}}
 
       :error ->
         not_found()

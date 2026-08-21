@@ -38,6 +38,8 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   alias Varsel.Cases.Markdown
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.VersionEvent
+  alias Varsel.CVE.OsvConverter
+  alias Varsel.HexPm
 
   # The relationship tree the render reads. Calculation loads are strict — a
   # nested relationship only materializes the fields you name — so each is
@@ -99,12 +101,37 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
         override -> {MergePatch.apply(cna, override), ["cna_override"]}
       end
 
+    cve_record = cve_record(case_record, cna)
+    {osv_record, osv_status} = osv(cve_record, case_record.date_public)
+
     %Result{
-      cve_record: cve_record(case_record, cna),
+      cve_record: cve_record,
       overrides_applied: affected_overrides ++ cna_override_applied,
       # Derivation-level problems: pending fixes and git/channel issues.
-      blockers: affected_blockers
+      blockers: affected_blockers,
+      osv_record: osv_record,
+      osv_status: osv_status
     }
+  end
+
+  # The converter expects a record as MITRE returns it, so the preview stamps
+  # the datePublished MITRE would. A cna_override can hand it any shape, and
+  # the schema validator reports that; here it only costs the OSV document.
+  defp osv(cve_record, date_public) do
+    published_at = date_public || DateTime.utc_now()
+
+    with {:ok, osv} <-
+           cve_record
+           |> put_in(["cveMetadata", "datePublished"], DateTime.to_iso8601(published_at))
+           |> OsvConverter.convert(),
+         {:ok, osv} <- OsvConverter.enumerate_affected_versions(osv, &HexPm.package_versions/1) do
+      {osv, nil}
+    else
+      {:skip, reason} -> {nil, reason}
+      {:error, reason} -> {nil, reason}
+    end
+  rescue
+    error -> {nil, "OSV derivation failed: " <> Exception.message(error)}
   end
 
   # Cached derivation per affected package, keyed by id. A nil or stale cache
