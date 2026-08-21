@@ -11,10 +11,12 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   `27.0` parse identically.
 
     * **modern** — numeric (`17.0` and up), e.g. `27.3.4.3`, `29.0-rc1`.
-    * **legacy R-series** — `R13B03` … `R16B03-1`, optionally with an RC marker
-      (`R16A_RELEASE_CANDIDATE`, `R16B01_RC1`). Every R release orders *below*
-      every modern one (R16 preceded 17.0). A `release line` is `{:r, major,
-      letter}` (e.g. `R13B`); modern lines are the `major` integer.
+    * **legacy R-series** — `R6B-0` … `R16B03-1`, optionally with an RC marker
+      (`R16A_RELEASE_CANDIDATE`, `R16B01_RC1`). A re-release carries a letter
+      after the patch (`R10B-1a`) and orders right after the release it
+      replaces. Every R release orders *below* every modern one (R16 preceded
+      17.0). A `release line` is `{:r, major, letter}` (e.g. `R13B`); modern
+      lines are the `major` integer.
 
   Topic/feature tags such as `R16B03_yielding_binary_to_term` are not release
   versions — `parse/1` returns `:error` for them.
@@ -59,11 +61,11 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
     bare = strip_prefix(version)
 
     case r_parts(bare) do
-      {:ok, major, letter, minor, patch, rc?} ->
+      {:ok, major, letter, minor, patch, rerelease, rc?} ->
         {:ok,
          %__MODULE__{
            era: @r_era,
-           segments: [major, letter_rank(letter), minor, patch],
+           segments: [major, letter_rank(letter), minor, patch, rerelease],
            prerelease?: rc?,
            raw: version
          }}
@@ -153,18 +155,18 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
     end)
   end
 
-  # A real R-series release: R<major><letter>[<minor>][-<patch>] optionally
-  # followed by an RC marker. A trailing non-RC word makes it a topic tag
-  # (:error). `Regex.run` drops trailing empty groups, so pad to 6.
+  # A real R-series release: R<major><letter>[<minor>][-<patch>[<rerelease>]]
+  # optionally followed by an RC marker. A trailing non-RC word makes it a
+  # topic tag (:error). `Regex.run` drops trailing empty groups, so pad to 7.
   defp r_parts(bare) do
-    rx = ~r/\AR(\d+)([A-Z])(\d*)(?:-(\d+))?(_RC\d+|_RELEASE_CANDIDATE)?(_.+)?\z/
+    rx = ~r/\AR(\d+)([A-Z])(\d*)(?:-(\d+)([a-z])?)?(_RC\d+|_RELEASE_CANDIDATE)?(_.+)?\z/
 
     case Regex.run(rx, bare) do
       [_ | groups] ->
-        [major, letter, minor, patch, rc, topic] = pad(groups, 6)
+        [major, letter, minor, patch, rerelease, rc, topic] = pad(groups, 7)
 
         if topic == "",
-          do: {:ok, String.to_integer(major), letter, to_int(minor), to_int(patch), rc != ""},
+          do: {:ok, String.to_integer(major), letter, to_int(minor), to_int(patch), rerelease_rank(rerelease), rc != ""},
           else: :error
 
       _no_match ->
@@ -176,6 +178,9 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   defp to_int(s), do: String.to_integer(s)
 
   defp letter_rank(<<c>>) when c in ?A..?Z, do: c - ?A + 1
+
+  defp rerelease_rank(""), do: 0
+  defp rerelease_rank(<<c>>) when c in ?a..?z, do: c - ?a + 1
 
   defp pad(list, n), do: list ++ List.duplicate("", n - length(list))
 end

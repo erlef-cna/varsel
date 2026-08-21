@@ -9,10 +9,12 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   (ssh-5.2.3.4, stdlib-6.2.2.1, ...). Needed to resolve `pkg:otp/<app>`
   channel boundaries from OTP release tags.
 
-  The official table only covers OTP-17.0 and later. The pre-17 R-series
-  (`OTP_R13B03` … `OTP_R16B03-1`) is filled from `priv/otp_pre17_versions.json`
-  and merged in. That file was generated once by reading every `OTP_R*` tag's
-  `lib/<app>/vsn.mk` (and `erts/vsn.mk`) — this history is immutable, so it is
+  The official table only covers OTP-17.0 and later. The R series from the
+  first open-source release (`OTP_R6B-0` … `OTP_R16B03-1`) is filled from
+  `priv/otp_pre17_versions.json` and merged in. That file was generated once by
+  reading every release tag's `lib/<app>/vsn.mk` (and `erts/vsn.mk`): erlang/otp
+  for R13B03 onwards, and the pre-R13B03 history erlang/otp's wiki grafts on
+  (`mfoemmel/erlang-otp`) for the rest. This history is immutable, so it is
   never regenerated.
 
   The official portion is fetched from the configured URL and cached in

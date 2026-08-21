@@ -43,10 +43,11 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
     end
 
     test "every R release orders below every modern release, and among themselves" do
-      tags = ~w(OTP-17.0 OTP_R16B03-1 OTP_R13B03 OTP_R15B03-1 OTP_R14A OTP-27.0)
+      tags =
+        ~w(OTP-17.0 OTP_R16B03-1 OTP_R13B03 OTP_R15B03-1 OTP_R14A OTP-27.0 OTP_R6B-0 R10B-1a R10B-1 R10B-2)
 
       assert Enum.sort_by(tags, & &1, &(OTPVersion.compare(&1, &2) != :gt)) ==
-               ~w(OTP_R13B03 OTP_R14A OTP_R15B03-1 OTP_R16B03-1 OTP-17.0 OTP-27.0)
+               ~w(OTP_R6B-0 R10B-1 R10B-1a R10B-2 OTP_R13B03 OTP_R14A OTP_R15B03-1 OTP_R16B03-1 OTP-17.0 OTP-27.0)
     end
   end
 
