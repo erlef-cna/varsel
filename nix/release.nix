@@ -25,7 +25,6 @@
 , ncurses
 , zlib
 , openssl
-, bashNonInteractive
 , src
   # Passed explicitly from flake.nix (`beam`) — shared with the dev shell.
 , erlang
@@ -223,11 +222,10 @@ stdenv.mkDerivation {
   nativeBuildInputs = [ elixir nodejs git removeReferencesTo ];
 
   # The explicit contract of what the shipped release may depend on: the
-  # ERTS runtime libraries (rpaths in the bundled binaries), bash for the
-  # nix-patched script shebangs, and itself. Anything else — the
-  # erlang/elixir toolchain, the intermediate stage derivations, compilers
-  # pulled in via debug info — fails the build loudly, so image contents
-  # only ever change deliberately.
+  # ERTS runtime libraries (rpaths in the bundled binaries) and itself.
+  # Anything else — the erlang/elixir toolchain, the intermediate stage
+  # derivations, compilers pulled in via debug info — fails the build
+  # loudly, so image contents only ever change deliberately.
   allowedReferences = [
     "out"
     (lib.getLib stdenv.cc.libc)
@@ -235,7 +233,6 @@ stdenv.mkDerivation {
     (lib.getLib ncurses)
     (lib.getLib zlib)
     (lib.getLib openssl)
-    bashNonInteractive
   ];
 
   env = commonEnv;
@@ -276,6 +273,12 @@ stdenv.mkDerivation {
     # -> beam.smp, which spawns erl_child_setup and inet_gethost; epmd backs
     # distribution (rel/env.sh.eex). The rest are build and operator tools.
     rm "$out"/erts-*/bin/{ct_run,dialyzer,erlc,escript,typer,yielding_c_fun,run_erl,to_erl,heart,erl_call}
+
+    # Elixir's release scripts are POSIX sh (`#!/bin/sh` upstream); nixpkgs
+    # rewrote their shebang to its bash. The image's /bin/sh is busybox ash,
+    # which bin/varsel already runs under.
+    chmod u+w "$out"/releases/*/{elixir,iex}
+    sed -i '1s|^#!.*/bin/sh$|#!/bin/sh|' "$out"/releases/*/{elixir,iex}
 
     # NIFs compiled during the deps build (bcrypt, picosat) carry gcc and
     # glibc-dev paths in their debug info; stripping it drops those
