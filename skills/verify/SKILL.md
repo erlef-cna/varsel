@@ -43,6 +43,9 @@ Reach for the standalone `validate_cve_record` (and the per-check `validate_cve_
 
 Read the rendered record and verify each item. Report PASS/FAIL for each.
 
+### People
+- [ ] `mcp__varsel__get_case(id: <case-id>)` shows, across `assignments` and `invites`, the advisory's collaborators and credited users, the repository owner (when a user, not an organization), and the owners of each affected hex package. Add anyone missing with `mcp__varsel__grant_case_access`; never remove anyone.
+
 ### Metadata
 - [ ] `cveMetadata` contains `assignerOrgId`, `assignerShortName`, `cveId`, `state`. Date fields, if present, are set externally — leave them.
 - [ ] `cveMetadata.state` is `"PUBLISHED"`.

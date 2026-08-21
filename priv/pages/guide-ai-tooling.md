@@ -14,8 +14,9 @@ for supporters and Points of Contact alike.
 Varsel exposes a [Model Context Protocol](https://modelcontextprotocol.io)
 server at `/mcp`. It carries the same data and case operations your role
 allows in the UI: reading cases and records, searching the CWE and CAPEC
-catalogs, proposing field changes, commenting, refreshing derivations, and
-running the validators.
+catalogs, proposing field changes, commenting, giving people access to a case
+by their GitHub or Hex.pm handle, refreshing derivations, and running the
+validators.
 
 By design it carries **no** tools to accept or decline proposals, assign
 roles, or publish. An agent working over MCP states facts as proposals; a
@@ -63,7 +64,10 @@ agent's output is the facts, as proposals.
 
 Every change an agent makes is a proposal, and a human accepts it: agents
 never self-approve, and CVE ID assignment, proposal acceptance, and
-publishing happen in the UI only. Treat agent output as a draft: verify
-every score, classification, and boundary commit before accepting the
-proposal that carries it, with the
+publishing happen in the UI only. The one direct write is case access: the
+skills put the advisory's collaborators, the repository owner and the Hex.pm
+package owners on a case as they file it, the same assignment or invite a
+human would make by handle. Taking someone off a case stays in the UI. Treat
+agent output as a draft: verify every score, classification, and boundary commit
+before accepting the proposal that carries it, with the
 [record conventions](/guide/record-conventions) as the checklist.

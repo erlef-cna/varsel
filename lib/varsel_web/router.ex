@@ -310,7 +310,8 @@ defmodule VarselWeb.Router do
         :propose_delete,
         :withdraw_case_proposal,
         :list_case_comments,
-        :create_case_comment
+        :create_case_comment,
+        :grant_case_access
       ],
       otp_app: :varsel
   end

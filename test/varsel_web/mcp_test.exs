@@ -8,6 +8,7 @@ defmodule VarselWeb.McpTest do
   import Varsel.Fixtures
 
   alias AshAuthentication.Oauth2Server.Jwt
+  alias Varsel.Accounts.GitHub
   alias Varsel.CVE.CveRecord
 
   @year Date.utc_today().year
@@ -87,7 +88,7 @@ defmodule VarselWeb.McpTest do
                    propose_internal_notes
                    propose_otp_affected_package propose_version_event propose_delete
                    withdraw_case_proposal list_case_comments
-                   create_case_comment) do
+                   create_case_comment grant_case_access) do
       assert body =~ tool
     end
   end
@@ -125,6 +126,29 @@ defmodule VarselWeb.McpTest do
     |> mcp("tools/call", %{name: "assign_cve", arguments: %{id: record.id}})
 
     assert Ash.get!(CveRecord, record.id, authorize?: false).state == :draft
+  end
+
+  test "grant_case_access replies with the case's membership, not its body", %{conn: conn} do
+    Req.Test.stub(GitHub, fn conn -> Req.Test.json(conn, %{"login" => "octocat"}) end)
+
+    poc = register_user("poc", :poc)
+    {_api_key, plaintext} = create_api_key(poc)
+    case_record = open_case(poc)
+
+    body =
+      conn
+      |> put_req_header("authorization", "Bearer " <> plaintext)
+      |> mcp("tools/call", %{
+        name: "grant_case_access",
+        arguments: %{id: case_record.id, input: %{strategy: "github", username: "octocat"}}
+      })
+      |> json_response(200)
+
+    assert %{"result" => %{"content" => [%{"text" => text}]}} = body
+    row = Jason.decode!(text)
+
+    assert Enum.sort(Map.keys(row)) == ~w(assignments id invites)
+    assert [%{"username" => "octocat"}] = row["invites"]
   end
 
   test "lifecycle tools work with an OAuth access token", %{conn: conn} do
