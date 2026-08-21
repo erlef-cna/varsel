@@ -69,7 +69,7 @@ defmodule Varsel.MixProject do
     [
       {:absinthe_phoenix, "~> 2.0"},
       {:ash, "~> 3.0"},
-      {:ash_admin, "~> 1.0"},
+      {:ash_admin, "~> 1.0", runtime: Mix.env() in [:dev, :test]},
       {:ash_ai, github: "ash-project/ash_ai", ref: "043461cc2e56dec2ba1dcd9d6b9d17e02e8e3d05"},
       # override: ash_ai pins ash_authentication ~> 4.8 but only touches it in
       # dev-time generators; the OAuth2 server package needs 5.0.
@@ -92,7 +92,7 @@ defmodule Varsel.MixProject do
       {:cvss, "~> 0.1"},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:dns_cluster, "~> 0.2.0"},
-      {:ecto_psql_extras, "~> 0.6"},
+      {:ecto_psql_extras, "~> 0.6", only: [:dev, :test]},
       {:ecto_sql, "~> 3.13"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:ex_json_schema, "~> 0.10"},
