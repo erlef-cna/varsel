@@ -19,7 +19,7 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   `:persistent_term` for an hour; the pre-17 portion is a compile-time constant.
   """
 
-  alias Varsel.Cases.Derivation.Platform
+  alias Varsel.Cases.Reachability.OTPVersion
 
   @cache_key {__MODULE__, :table}
   @cache_ttl_seconds 3600
@@ -43,7 +43,7 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   @doc "Every OTP release in the table, newest first."
   @spec releases() :: [String.t()]
   def releases do
-    rows() |> Map.keys() |> Enum.sort_by(&Platform.parse_version(strip(&1)), :desc)
+    rows() |> Map.keys() |> Enum.sort({:desc, OTPVersion})
   end
 
   @doc """
@@ -61,11 +61,9 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
         {:ok, version}
 
       :error ->
-        intro_version = Platform.parse_version(strip(intro_release))
-
         releases()
         |> Enum.reverse()
-        |> Enum.filter(fn release -> Platform.parse_version(strip(release)) >= intro_version end)
+        |> Enum.filter(&(OTPVersion.compare(&1, intro_release) != :lt))
         |> Enum.find_value(:error, &ok_app_version(&1, app))
     end
   end
@@ -90,9 +88,6 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   defp normalize_release("R" <> _ = release), do: "OTP_" <> release
   defp normalize_release("OTP-" <> _ = release), do: release
   defp normalize_release(release), do: "OTP-" <> release
-
-  defp strip("OTP-" <> version), do: version
-  defp strip(release), do: release
 
   # The official (fetched, cached) rows merged with the compile-time pre-17 rows.
   defp rows do

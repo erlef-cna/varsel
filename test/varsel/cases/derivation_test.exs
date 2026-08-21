@@ -476,21 +476,21 @@ defmodule Varsel.Cases.DerivationTest do
                }
              ]
 
-      # Since creation means the application's whole history too.
-      if explicit_version == "0" do
-        assert derivation["channels"][app_channel.id] == %{
-                 "versions" => [
-                   %{
-                     "version" => "0",
-                     "lessThan" => "9.1.0.1",
-                     "status" => "affected",
-                     "versionType" => "otp"
-                   }
-                 ],
-                 "pending" => [],
-                 "issues" => []
-               }
-      end
+      # Since creation means the application's whole history too; R1A predates
+      # the table, so the application starts at its version in the first
+      # release that ships it, R13B03.
+      assert derivation["channels"][app_channel.id] == %{
+               "versions" => [
+                 %{
+                   "version" => unquote(if explicit_version == "0", do: "0", else: "5.2"),
+                   "lessThan" => "9.1.0.1",
+                   "status" => "affected",
+                   "versionType" => "otp"
+                 }
+               ],
+               "pending" => [],
+               "issues" => []
+             }
     end
   end
 
