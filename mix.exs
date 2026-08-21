@@ -145,7 +145,7 @@ defmodule Varsel.MixProject do
       varsel: [
         include_executables_for: [:unix],
         applications: [runtime_tools: :permanent],
-        steps: [:assemble, &cache_lumis_languages/1]
+        steps: [:assemble, &cache_lumis_languages/1, &drop_lumis_theme_css/1]
       ]
     ]
   end
@@ -171,6 +171,15 @@ defmodule Varsel.MixProject do
       {:ok, _html} = Lumis.highlight("x", formatter: {:html_linked, language: language})
     end
 
+    release
+  end
+
+  # Lumis ships a stylesheet per theme for applications to copy; this one
+  # generates its own (`mix generate_lumis_css`) and renders with `:html_linked`
+  # classes, so nothing reads them at runtime.
+  defp drop_lumis_theme_css(%Mix.Release{} = release) do
+    lumis = release.applications[:lumis]
+    File.rm_rf!(Path.join([release.path, "lib", "lumis-#{lumis[:vsn]}", "priv", "static"]))
     release
   end
 
