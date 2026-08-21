@@ -306,6 +306,32 @@ ruled out is worth one clause at most, and usually nothing.
 
 **Write the notes with the `propose_internal_notes` call.** `internal_notes` can only be set here.
 
+### Put the people on the case
+
+As soon as you have the `case_id`, give the people who own this vulnerability access to the case
+with `grant_case_access(id: <case-id>, input: {strategy, username})`, one call per person. It is
+not a proposal: the server checks the handle at its provider, assigns the person when they already
+have an account here, and otherwise leaves an invite that becomes access on their first sign-in.
+Nobody is emailed, so the advisory thread is where they hear about the case.
+
+Grant access to all of:
+
+- **The advisory's collaborators** (`strategy: "github"`): `collaborating_users[].login` from the
+  advisory you fetched in Step 0, and the `user.login` of each credit on it.
+- **The repository owner** (`strategy: "github"`): `owner.login` from
+  `gh api /repos/<owner>/<repo>` when `owner.type` is `User`. An organization is not an account
+  anyone can sign in as, so skip it; its people are reached through the advisory collaborators
+  and the package owners.
+- **The hex.pm package owners** (`strategy: "hex"`): `owners[].username` from the
+  `https://hex.pm/api/packages/<package>` response you fetched in Step 0, for each affected hex
+  package.
+
+`get_case` shows who is already there, as `assignments` (accounts) and `invites` (handles
+waiting), so a repeated run or an existing case adds only the people still missing. Granting the
+same handle twice is refused, which is harmless. A handle the provider does not know is refused
+too; do not retry it with a guessed spelling, report it to the user instead. Never remove anyone:
+taking people off a case is a human's decision in the UI.
+
 ## Step 6 - Propose the structured parts
 
 Everything else is a proposal that a human reviewer accepts. Give each a short `reasoning`: what

@@ -55,6 +55,8 @@ A case may already exist (an inbound vulnerability report accepted into a case, 
 
 The rest of this skill assumes you have a `case_id`.
 
+Once you have it, put the people on the case with `mcp__varsel__grant_case_access(id: <case-id>, input: {strategy, username})`, one call per person: the advisory's collaborators and credited users (`strategy: "github"`), the repository owner when it is a user rather than an organization (`strategy: "github"`), and the owners of each affected hex package from `https://hex.pm/api/packages/<package>` (`strategy: "hex"`). The server assigns people who have an account and invites the rest; `get_case` lists both as `assignments` and `invites`, so only add who is missing. Never remove anyone.
+
 ## Step 3 — CVSS scoring
 
 Use the `/cvss` skill to produce a CVSS v4.0 vector and score. Discuss severity, exploitability conditions, and any Supplemental metrics, then **wait for user confirmation** and propose it:
