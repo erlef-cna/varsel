@@ -8,7 +8,7 @@ defmodule Varsel.MixProject do
   def project do
     [
       app: :varsel,
-      version: "0.2.1",
+      version: "0.2.2",
       elixir: "~> 1.15",
       elixirc_options: [warnings_as_errors: true],
       elixirc_paths: elixirc_paths(Mix.env()),
