@@ -12,6 +12,7 @@ in
   packages = with pkgs; [
     cvelint
     flyctl
+    oxipng
     skopeo
   ];
 
@@ -99,6 +100,29 @@ in
       entry = "mix sobelow";
       files = "\\.exs?$";
       pass_filenames = false;
+    };
+
+    # Lossless PNG compression at a moderate level. oxipng's dry run exits 0
+    # either way, so the hook reads its summary; a file that is already at or
+    # below this level reports no saving, whatever level produced it.
+    oxipng = {
+      enable = true;
+      name = "oxipng";
+      entry = "${pkgs.writeShellApplication {
+        name = "oxipng-check";
+        runtimeInputs = [ pkgs.oxipng pkgs.gnugrep ];
+        text = ''
+          status=0
+          for file in "$@"; do
+            if ! oxipng --dry-run -o 6 --strip safe "$file" 2>&1 | grep -q "Total saved: 0 bytes"; then
+              echo "$file is not optimized; run: oxipng -o 6 --strip safe $file"
+              status=1
+            fi
+          done
+          exit "$status"
+        '';
+      }}/bin/oxipng-check";
+      files = "\\.png$";
     };
   };
 }
