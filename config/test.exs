@@ -61,7 +61,11 @@ config :varsel, :cna_email_from, "cna@erlef.org"
 config :varsel,
   token_signing_secret: "6efZN/F7dwuoM9KP4oUWol4pbbSwNQ8J",
   cvelint_bin: System.get_env("CVELINT_BIN", "cvelint"),
-  hex_core: %{http_adapter: {Varsel.Test.HexHTTPStub, %{}}},
+  hex_core: %{
+    http_adapter: {Varsel.Test.HexHTTPStub, %{}},
+    repo_verify: false,
+    repo_verify_origin: false
+  },
   github_api: [plug: {Req.Test, Varsel.Accounts.GitHub}],
   cwe_catalog: [plug: {Req.Test, Varsel.CWE.Weakness}],
   capec_catalog: [plug: {Req.Test, Varsel.CAPEC.AttackPattern}],

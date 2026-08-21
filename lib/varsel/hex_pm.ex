@@ -8,10 +8,40 @@ defmodule Varsel.HexPm do
 
   Talks to the same instance sign-in does: hex.pm is self-hostable, and asking
   one host who a user is while asking another whether that user exists would
-  answer about two different people.
+  answer about two different people. Users are looked up on that instance's
+  API; packages are read from its signed registry, which is unauthenticated
+  and not rate limited. The registry host and signing key follow the
+  instance: hex.pm's are hex_core's defaults, staging's and a local hexpm
+  checkout's are known here, and any other instance is expected at
+  `<base_url>/repo` with its key supplied through the `:hex_core` config.
 
   Extra `hex_core` configuration (a stub HTTP adapter in tests) is merged in
   via `config :varsel, :hex_core, %{http_adapter: {MyAdapter, %{}}}`.
+  """
+
+  @staging_repo_public_key """
+  -----BEGIN PUBLIC KEY-----
+  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA56Ac/wvs6VjHOC48BNFO
+  WPrxrogxKEvD3DeYWEbJaPvRLtlan9mw5fIjlA5zHsmwyWfItQmOWxayWD1rHPjP
+  FW7WHs7h3ceSI6g3sIgsUp5Tw1x1gedPm5n+pkPovfhLGADpi+WmkHLLIIAQUrmP
+  7mlRgnfkdizGuqTbG7qmRoGmAXqEiZMNBsm8TtfIsBPUjnZcHizwMdytSkwqfQsP
+  K0kbtVsGPpdRKdkf+uMfIG+mJPKrIc0YZdhfAiD2kwmzoij2K01l7TrI/U5g1Yb7
+  6O9nw0Y47KB6o9Hzwfkk/KUVPn0hrcGmkbAOKe03PxYTlyrockvEP9Hu6ncGvyby
+  FQIDAQAB
+  -----END PUBLIC KEY-----
+  """
+
+  # hexpm's dev signing key (test/fixtures/private.pem in its repository).
+  @dev_repo_public_key """
+  -----BEGIN PUBLIC KEY-----
+  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA70iFalPXSDJX0ZqQNYw2
+  yPyMWmpV4ssLwuGm4l3TjS50UgKYnyL2j7m0mmO7DhLNqRKn8IsIJoHeeuFhf5cv
+  W162mp2Kn2e9LXRobafYIM3hxzB8LZqeQjxPR6xsDkY5HgQsxtTkbNRq/8ODAjx6
+  XsZgFRSkjgD+nWO0D4i67+8lWSyGBaXAvyYQVRimkvm400PYD4RT2dk9lSrBjhAv
+  sZ+buCX/F8XuK2sOdhoFC7PXz4kO2q41IF1LjVfKz6WdXH91jUCUG80TAzK35lRT
+  GRes/NOIV/aYwt6fc3BjgzOg/X8ucFwuWi5Tn5lU+eFYHcv1Qyxxx9yi03pZ7hH4
+  iwIDAQAB
+  -----END PUBLIC KEY-----
   """
 
   @doc """
@@ -21,8 +51,8 @@ defmodule Varsel.HexPm do
   """
   @spec package_exists?(String.t()) :: {:ok, boolean()} | {:error, String.t()}
   def package_exists?(name) when is_binary(name) do
-    case :hex_api_package.get(config(), name) do
-      {:ok, {200, _headers, _body}} -> {:ok, true}
+    case :hex_repo.get_package(config(), name) do
+      {:ok, {200, _headers, _package}} -> {:ok, true}
       {:ok, {404, _headers, _body}} -> {:ok, false}
       {:ok, {status, _headers, _body}} -> {:error, "hex.pm returned #{status} for #{name}"}
       {:error, reason} -> {:error, "hex.pm request for #{name} failed: #{inspect(reason)}"}
@@ -37,9 +67,9 @@ defmodule Varsel.HexPm do
   """
   @spec package_versions(String.t()) :: {:ok, [String.t()]} | {:error, String.t()}
   def package_versions(name) when is_binary(name) do
-    case :hex_api_package.get(config(), name) do
-      {:ok, {200, _headers, body}} ->
-        {:ok, body |> Map.get("releases", []) |> Enum.map(& &1["version"])}
+    case :hex_repo.get_package(config(), name) do
+      {:ok, {200, _headers, %{releases: releases}}} ->
+        {:ok, Enum.map(releases, & &1.version)}
 
       {:ok, {status, _headers, _body}} ->
         {:error, "hex.pm returned #{status} for #{name}"}
@@ -60,19 +90,33 @@ defmodule Varsel.HexPm do
 
   defp config do
     :hex_core.default_config()
-    |> Map.merge(api_url())
+    |> Map.merge(instance_config())
     |> Map.merge(Application.get_env(:varsel, :hex_core, %{}))
   end
 
   # The OAuth strategy's `base_url` is the site root and it appends `/api`,
   # which is also how hex.pm's own default is shaped.
-  defp api_url do
+  defp instance_config do
     :varsel
     |> Application.get_env(:hex, [])
     |> Keyword.get(:base_url)
     |> case do
-      base_url when is_binary(base_url) -> %{api_url: Path.join(base_url, "api")}
-      _unset -> %{}
+      base_url when is_binary(base_url) ->
+        base_url = String.trim_trailing(base_url, "/")
+        Map.put(repo_config(base_url), :api_url, base_url <> "/api")
+
+      _unset ->
+        %{}
     end
   end
+
+  defp repo_config("https://hex.pm"), do: %{}
+
+  defp repo_config("https://staging.hex.pm"),
+    do: %{repo_url: "https://repo.staging.hex.pm", repo_public_key: @staging_repo_public_key}
+
+  defp repo_config("http://localhost:" <> _port = base_url),
+    do: %{repo_url: base_url <> "/repo", repo_public_key: @dev_repo_public_key}
+
+  defp repo_config(base_url), do: %{repo_url: base_url <> "/repo"}
 end

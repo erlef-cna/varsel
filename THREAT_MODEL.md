@@ -405,7 +405,8 @@ claims:
 
 - **Opens outbound network connections** — yes: to MITRE (`cveawg`,
   `cwe.mitre.org`, `capec.mitre.org`), to `raw.githubusercontent.com` for the
-  OTP versions table, to GitHub as the OAuth IdP, to the SMTP relay, and —
+  OTP versions table, to GitHub and hex.pm as OAuth IdPs and for handle
+  lookups, to `repo.hex.pm` for the package registry, to the SMTP relay, and —
   critically — **to the public https host a case's `repo_url` names** during
   derivation (see §6).
 - **Spawns a subprocess** — yes: the `cvelint` binary, run directly with a

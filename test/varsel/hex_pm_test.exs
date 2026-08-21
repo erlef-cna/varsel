@@ -51,11 +51,27 @@ defmodule Varsel.HexPmTest do
     assert_received {:requested, "https://hex.pm/api/users/alice"}
   end
 
-  test "package lookups follow the same instance" do
-    Application.put_env(:varsel, :hex, base_url: "http://localhost:4000")
+  test "package lookups read hex.pm's registry for hex.pm" do
+    Application.put_env(:varsel, :hex, base_url: "https://hex.pm")
 
     HexPm.package_exists?("plug")
 
-    assert_received {:requested, "http://localhost:4000/api/packages/plug"}
+    assert_received {:requested, "https://repo.hex.pm/packages/plug"}
+  end
+
+  test "package lookups read staging's registry for staging" do
+    Application.put_env(:varsel, :hex, base_url: "https://staging.hex.pm")
+
+    HexPm.package_exists?("plug")
+
+    assert_received {:requested, "https://repo.staging.hex.pm/packages/plug"}
+  end
+
+  test "package lookups read a local hexpm's registry under /repo" do
+    Application.put_env(:varsel, :hex, base_url: "http://localhost:4000")
+
+    HexPm.package_versions("plug")
+
+    assert_received {:requested, "http://localhost:4000/repo/packages/plug"}
   end
 end
