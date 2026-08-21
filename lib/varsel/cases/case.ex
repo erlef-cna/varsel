@@ -728,6 +728,15 @@ defmodule Varsel.Cases.Case do
       """
     end
 
+    calculate :published_osv, :map, Varsel.Cases.Case.Calculations.PublishedOsv do
+      filterable? false
+
+      description """
+      The OSV document currently published for the case's CVE record, or nil
+      when there is none — for diffing against :preview.
+      """
+    end
+
     calculate :derivation_state, DerivationState, DerivationState.Worst do
       description """
       What this case's derived version data is worth as a whole: the state of

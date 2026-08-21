@@ -38,7 +38,10 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
       {@repo, @fix_sha} => ["v2.10.0"]
     })
 
-    Application.put_env(:varsel, :hex_stub_packages, ["ash_authentication_phoenix"])
+    Application.put_env(:varsel, :hex_stub_packages, %{
+      "ash_authentication_phoenix" => ["1.0.0", "2.9.0", "2.10.0"]
+    })
+
     on_exit(fn -> Application.delete_env(:varsel, :hex_stub_packages) end)
 
     case_record =
@@ -431,6 +434,36 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     assert "ash_authentication_phoenix/hex: versions_override" in result.overrides_applied
     assert "ash_authentication_phoenix/hex: entry_override" in result.overrides_applied
     assert "cna_override" in result.overrides_applied
+  end
+
+  test "derives the OSV document from the rendered record, hex.pm versions included", %{
+    poc: poc,
+    case: case_record
+  } do
+    result = render!(case_record, poc)
+
+    assert result.osv_status == nil
+    assert result.osv_record["id"] == "EEF-CVE-2025-4754"
+    assert is_binary(result.osv_record["published"])
+
+    hex_entry = Enum.find(result.osv_record["affected"], &(&1["package"]["ecosystem"] == "Hex"))
+    assert hex_entry["package"]["name"] == "ash_authentication_phoenix"
+    assert [%{"type" => "SEMVER", "events" => [_ | _]}] = hex_entry["ranges"]
+    assert hex_entry["versions"] == ["1.0.0", "2.9.0"]
+  end
+
+  test "a cna_override the converter cannot read costs the OSV document, not the preview", %{
+    poc: poc,
+    case: case_record
+  } do
+    Cases.edit_case!(case_record, %{cna_override: %{"metrics" => ["not a metric"]}}, actor: poc)
+    case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+
+    result = render!(case_record, poc)
+
+    assert cna(result)["metrics"] == ["not a metric"]
+    assert result.osv_record == nil
+    assert result.osv_status =~ "OSV derivation failed"
   end
 
   test "render blockers are derivation-level only", %{poc: poc} do

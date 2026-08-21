@@ -2318,10 +2318,13 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
-      # The diff lives in the preview slide-over.
+      # The diff lives in the preview slide-over, under the CVE tab.
       refute html =~ "Diff to published"
       lv |> element("button", "Preview") |> render_click()
-      assert render_async(lv) =~ "Diff to published"
+      render_async(lv)
+
+      assert lv |> element(~s(button[phx-value-tab="cve"])) |> render_click() =~
+               "Diff to published"
 
       lv |> element("button", "Diff to published") |> render_click()
       html = render_async(lv)
@@ -2334,12 +2337,56 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ ~s(<span class="l-diff-plus">)
     end
 
+    test "the OSV tab diffs against the published OSV record", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      cve_record = Fixtures.published_cve_record("CVE-#{year}-55556", "Old title")
+
+      now = DateTime.utc_now()
+
+      Ash.create!(
+        Varsel.CVE.OsvRecord,
+        %{
+          osv_id: "EEF-CVE-#{year}-55556",
+          cve_record_id: cve_record.id,
+          osv_json: %{"id" => "EEF-CVE-#{year}-55556", "summary" => "Old summary"},
+          content_hash: "old",
+          modified_at: now,
+          synced_at: now
+        },
+        action: :create,
+        authorize?: false
+      )
+
+      case_record = Fixtures.open_case(poc, %{title: "New title"})
+
+      Varsel.Repo.query!(
+        "UPDATE cases SET cve_record_id = $1 WHERE id = $2",
+        [Ecto.UUID.dump!(cve_record.id), Ecto.UUID.dump!(case_record.id)]
+      )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      lv |> element("button", "Preview") |> render_click()
+      render_async(lv)
+      lv |> element(~s(button[phx-value-tab="osv"])) |> render_click()
+
+      lv |> element(~s(button[phx-value-tab="osv"][phx-value-view="diff"])) |> render_click()
+      html = render_async(lv)
+
+      # The case has no packages, so the preview derives no OSV document: the
+      # published one leaves in full.
+      assert html =~ "Old summary"
+      assert html =~ ~s(<span class="l-diff-minus">)
+    end
+
     test "never-published cases show no diff button in the preview", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
       lv |> element("button", "Preview") |> render_click()
-      refute render_async(lv) =~ "Diff to published"
+      render_async(lv)
+
+      refute lv |> element(~s(button[phx-value-tab="cve"])) |> render_click() =~
+               "Diff to published"
     end
   end
 
@@ -2353,7 +2400,7 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
       # Publish does not live in the band.
-      refute html =~ "Publish to MITRE"
+      refute html =~ ~s(phx-value-action="publish")
 
       lv |> element("button", "Preview") |> render_click()
       html = render_async(lv)
@@ -2378,7 +2425,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Hex packages exist"
     end
 
-    test "the Rendered JSON tab shows the open, syntax-tinted CNA container", %{
+    test "the CVE tab shows the open, syntax-tinted CNA container", %{
       conn: conn,
       poc: poc
     } do
@@ -2388,13 +2435,28 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Preview") |> render_click()
       render_async(lv)
 
-      html = lv |> element("button", "Rendered JSON") |> render_click()
+      html = lv |> element(~s(button[phx-value-tab="cve"])) |> render_click()
 
       # The JSON is open (no <details>), Lumis-highlighted: keys are
       # .l-property tokens, string values .l-string.
       refute html =~ "CNA container JSON"
       assert html =~ ~s(<span class="l-property">&quot;descriptions&quot;</span>)
       assert html =~ ~s(<span class="l-string">)
+    end
+
+    test "the OSV tab says why a record without packages has no OSV document", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "OSV case", description_md: "desc"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      lv |> element("button", "Preview") |> render_click()
+      render_async(lv)
+
+      html = lv |> element("button", "OSV") |> render_click()
+
+      assert html =~ "No OSV record: No hex, npm, or git repositories"
     end
 
     test "publish is visually gated in the footer while blockers exist", %{conn: conn, poc: poc} do
@@ -2406,7 +2468,7 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Preview") |> render_click()
       html = render_async(lv)
 
-      assert html =~ "Publish to MITRE"
+      assert html =~ ~s(phx-value-action="publish")
       assert html =~ "opacity-45"
       assert html =~ "blocking publish"
     end
