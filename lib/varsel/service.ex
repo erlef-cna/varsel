@@ -44,8 +44,9 @@ defmodule Varsel.Service do
   @type system_identity_claim() :: :identity_claim
 
   @typedoc """
-  Post-commit Ash notifiers loading a related row to decide which lifecycle
-  trigger to fire.
+  Post-commit Ash notifiers: loading a related row to decide which lifecycle
+  trigger to fire, and raising `Varsel.Notifications.Event` rows for the
+  notification fan-out.
   """
   @type system_notifier() :: :notifier
 

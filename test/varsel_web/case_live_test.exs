@@ -11,6 +11,7 @@ defmodule VarselWeb.CaseLiveTest do
   alias Varsel.Cases
   alias Varsel.Cases.Derivation.Emit
   alias Varsel.Fixtures
+  alias Varsel.Notifications
 
   defp log_in(conn, user) do
     conn
@@ -2543,6 +2544,46 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
       refute html =~ "Reports ("
+    end
+  end
+
+  describe "notification auto-read" do
+    test "visiting a case marks the actor's unread notifications for it as read", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Auto-read on visit"})
+
+      Notifications.record_notification!(
+        %{kind: :comment_posted, user_id: poc.id, case_id: case_record.id},
+        authorize?: false
+      )
+
+      assert [_unread] = Notifications.list_unread_notifications!(actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert render(lv) =~ case_record.title
+      assert Notifications.list_unread_notifications!(actor: poc) == []
+    end
+
+    test "visiting leaves another user's unread notifications for the same case untouched", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Not my notification"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Notifications.record_notification!(
+        %{kind: :comment_posted, user_id: supporter.id, case_id: case_record.id},
+        authorize?: false
+      )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert render(lv) =~ case_record.title
+      assert [_still_unread] = Notifications.list_unread_notifications!(actor: supporter)
     end
   end
 end

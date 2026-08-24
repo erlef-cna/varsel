@@ -52,7 +52,7 @@ defmodule Varsel.Cases.Case do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
-    notifiers: [Ash.Notifier.PubSub]
+    notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
 
   alias Varsel.Cases.AffectedPackage.DerivationState
   alias Varsel.Cases.Case.Discovery

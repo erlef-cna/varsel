@@ -29,6 +29,7 @@ defmodule VarselWeb.ReportTriageLive do
   alias Varsel.Cases
   alias Varsel.CVE
   alias Varsel.CVE.VulnerabilityReport
+  alias Varsel.Notifications
 
   @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
@@ -50,6 +51,12 @@ defmodule VarselWeb.ReportTriageLive do
         subscribe: "vulnerability_report:all",
         results: :lose
       )
+
+    if triage? and connected?(socket) do
+      Notifications.mark_kind_notifications_read!(:report_submitted,
+        actor: socket.assigns.current_user
+      )
+    end
 
     {:ok, if(triage?, do: assign_open_cases(socket), else: socket)}
   end
@@ -219,7 +226,12 @@ defmodule VarselWeb.ReportTriageLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      current_path={@current_path}
+      socket={@socket}
+    >
       <.page_header>
         <:eyebrow>CNA Console</:eyebrow>
         <:title>{if @triage?, do: "Report Triage", else: "My Reports"}</:title>

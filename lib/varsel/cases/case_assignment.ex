@@ -18,7 +18,7 @@ defmodule Varsel.Cases.CaseAssignment do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
-    notifiers: [Ash.Notifier.PubSub]
+    notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
   alias Varsel.Cases.Case
@@ -62,6 +62,10 @@ defmodule Varsel.Cases.CaseAssignment do
   end
 
   policies do
+    bypass AshOban.Checks.AshObanInteraction do
+      authorize_if always()
+    end
+
     # Assigned users may see who else works the case; POCs see everything.
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:system, :identity_claim)

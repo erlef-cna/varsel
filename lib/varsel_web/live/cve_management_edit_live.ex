@@ -89,7 +89,12 @@ defmodule VarselWeb.VarselEditLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      current_path={@current_path}
+      socket={@socket}
+    >
       <.page_header>
         <:eyebrow>CNA Console</:eyebrow>
         <:title>Edit <span class="font-mono">{@record.cve_id || "CVE"}</span></:title>

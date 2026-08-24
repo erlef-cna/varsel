@@ -173,6 +173,9 @@ defmodule VarselWeb.Router do
       live "/users", UserManagementLive, :index
       live "/settings/account", AccountSettingsLive, :index
       live "/settings/tokens", ApiKeySettingsLive, :index
+      live "/settings/notifications", NotificationSettingsLive, :index
+
+      live "/notifications", NotificationsLive, :index
     end
   end
 

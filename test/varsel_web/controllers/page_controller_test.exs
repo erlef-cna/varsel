@@ -5,9 +5,30 @@
 defmodule VarselWeb.PageControllerTest do
   use VarselWeb.ConnCase, async: false
 
+  alias AshAuthentication.Plug.Helpers, as: AuthPlug
+  alias Varsel.Fixtures
+
+  defp log_in(conn, user) do
+    conn
+    |> init_test_session(%{})
+    |> AuthPlug.store_in_session(user)
+  end
+
   test "GET /", %{conn: conn} do
     conn = get(conn, ~p"/")
     assert html_response(conn, 200) =~ "Erlang Ecosystem Foundation CNA"
+  end
+
+  test "an anonymous visitor's dead render carries no notification bell", %{conn: conn} do
+    conn = get(conn, ~p"/")
+    refute html_response(conn, 200) =~ ~s(aria-label="Notifications")
+  end
+
+  test "a signed-in visitor's dead render mounts the nested notification bell", %{conn: conn} do
+    user = Fixtures.register_user("page_bell_dead_render")
+    conn = conn |> log_in(user) |> get(~p"/")
+
+    assert html_response(conn, 200) =~ ~s(aria-label="Notifications")
   end
 
   describe "test deployment (search indexing blocked)" do

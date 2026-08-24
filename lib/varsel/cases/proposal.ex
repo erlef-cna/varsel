@@ -31,7 +31,7 @@ defmodule Varsel.Cases.Proposal do
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshPaperTrail.Resource, AshGraphql.Resource],
     fragments: [Varsel.Cases.Proposal.ProposeActions],
-    notifiers: [Ash.Notifier.PubSub]
+    notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
   alias Varsel.Cases.Proposal.Changes.ApplyToTarget

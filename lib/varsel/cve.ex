@@ -170,7 +170,6 @@ defmodule Varsel.CVE do
       define :accept_vulnerability_report, action: :accept
       define :reject_vulnerability_report, action: :reject
       define :withdraw_vulnerability_report, action: :withdraw
-      define :notify_pocs_of_vulnerability_report, action: :notify_pocs
       define :submit_hex_vulnerability_report, action: :submit_from_hex
       define :link_vulnerability_report_reporter, action: :link_reporter
     end
