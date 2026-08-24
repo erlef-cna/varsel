@@ -654,16 +654,25 @@ whatever the ecosystem publishes as. The well-known ones fill in their registry 
 type on their own, so leave `version_type` null unless the channel genuinely disagrees with its
 ecosystem (the OTP release channel is `pkg:sid` versioned `otp`, for instance).
 
-**A service is a `kind: "service"` channel**, not a purl type: pass the `domain` it answers on
-(e.g. `hex.pm`) and none of the purl fields. It is always versioned by date, through
-channel-scoped version events.
+**A service is a `kind: "service"` channel on the same package**, not a purl type and not a
+second affected product: pass the `domain` it answers on (e.g. `hex.pm`) and none of the purl
+fields. A published record renders the service as its own date-versioned `affected[]` entry, but
+that entry is still this package — same vendor/product/CPE/program files — beside the
+git-versioned repository entry. Do not model the deployment as a separate product to get the
+second entry.
+
+A service channel is versioned by date, through version events scoped to it: after the package
+(and so the channel) is accepted, `propose_version_event` with `package_channel_id` set to the
+service channel, `version` set to the date, and no commit SHA. The inline events below cannot
+carry the scope, since the channel has no id until the package proposal is accepted.
 
 **Do not add the repository channel.** It is derived from the package's `repo_url` when the
 package is created (`pkg:github/...`, or `pkg:generic` for a forge with no purl type of its own).
 Only add a forge channel for something like a second host.
 
-**Version events are package-global.** Pass `introduced` and `fixed` with full commit SHAs and a
-`note` explaining each boundary. If different channels genuinely need different versions, stop and
+**Inline version events are package-global.** Pass `introduced` and `fixed` with full commit SHAs
+and a `note` explaining each boundary. A service channel's date boundaries are not among them
+(see above). If different channels genuinely need different versions beyond that, stop and
 involve a human rather than forcing it.
 
 **Non-ASCII names need no special handling, and this question recurs.** Pass the real characters:
