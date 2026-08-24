@@ -2,11 +2,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.CAPEC.AttackPattern.OkResult do
-  @moduledoc false
-  use Ash.Type.Enum, values: [:ok]
-end
-
 defmodule Varsel.CAPEC.AttackPattern do
   @moduledoc """
   Represents a single CAPEC (Common Attack Pattern Enumeration and Classification)
@@ -40,12 +35,12 @@ defmodule Varsel.CAPEC.AttackPattern do
 
   import Ash.Expr
 
-  alias Varsel.CAPEC.AttackPattern.OkResult
   alias Varsel.CAPEC.AttackPatternRelationship
   alias Varsel.CAPEC.AttackPatternWeakness
   alias Varsel.CAPEC.CapecMetadata
   alias Varsel.CAPEC.CapecXmlParser
   alias Varsel.CWE.Weakness
+  alias Varsel.Types.OkResult
 
   require Ash.Query
 

@@ -28,7 +28,7 @@ defmodule Varsel.Notifications.Notification do
   alias Varsel.CVE.VulnerabilityReport
   alias Varsel.Notifications.Emails
   alias Varsel.Notifications.Kind
-  alias Varsel.Notifications.OkResult
+  alias Varsel.Types.OkResult
 
   require Ash.Query
 

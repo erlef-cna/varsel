@@ -2,11 +2,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.CVE.CveRecord.OkResult do
-  @moduledoc false
-  use Ash.Type.Enum, values: [:ok]
-end
-
 defmodule Varsel.CVE.CveRecord do
   @moduledoc """
   Represents a single CVE ID through its entire lifecycle — from reservation in the
@@ -111,10 +106,10 @@ defmodule Varsel.CVE.CveRecord do
 
   import Ash.Expr
 
-  alias Varsel.CVE.CveRecord.OkResult
   alias Varsel.CVE.CveRecord.Preparations.FilterByCwe
   alias Varsel.CVE.CveRecord.Validations.ValidCveRecord
   alias Varsel.CVE.MitreCveApi
+  alias Varsel.Types.OkResult
 
   require Ash.Query
   require Logger

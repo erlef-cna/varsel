@@ -47,9 +47,9 @@ defmodule Varsel.CVE.OsvRecord do
   import Ash.Expr
 
   alias Varsel.CVE.CveRecord
-  alias Varsel.CVE.CveRecord.OkResult
   alias Varsel.CVE.OsvConverter
   alias Varsel.HexPm
+  alias Varsel.Types.OkResult
 
   require Ash.Query
 

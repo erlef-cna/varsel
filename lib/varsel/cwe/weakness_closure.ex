@@ -2,11 +2,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.CWE.WeaknessClosure.OkResult do
-  @moduledoc false
-  use Ash.Type.Enum, values: [:ok]
-end
-
 defmodule Varsel.CWE.WeaknessClosure do
   @moduledoc """
   Transitive closure of `child_of` weakness relationships, scoped per CWE view.
@@ -35,7 +30,7 @@ defmodule Varsel.CWE.WeaknessClosure do
 
   alias Varsel.CWE.View
   alias Varsel.CWE.Weakness
-  alias Varsel.CWE.WeaknessClosure.OkResult
+  alias Varsel.Types.OkResult
 
   require Ash.Query
 

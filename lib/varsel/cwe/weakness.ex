@@ -2,11 +2,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.CWE.Weakness.OkResult do
-  @moduledoc false
-  use Ash.Type.Enum, values: [:ok]
-end
-
 defmodule Varsel.CWE.Weakness do
   @moduledoc """
   Represents a single CWE (Common Weakness Enumeration) entry from the MITRE CWE catalog.
@@ -44,9 +39,9 @@ defmodule Varsel.CWE.Weakness do
   alias Varsel.CWE.CatalogSync
   alias Varsel.CWE.View
   alias Varsel.CWE.ViewMembership
-  alias Varsel.CWE.Weakness.OkResult
   alias Varsel.CWE.WeaknessClosure
   alias Varsel.CWE.WeaknessRelationship
+  alias Varsel.Types.OkResult
 
   graphql do
     type :weakness
