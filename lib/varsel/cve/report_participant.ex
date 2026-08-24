@@ -102,7 +102,7 @@ defmodule Varsel.CVE.ReportParticipant do
     # reporter naming their own maintainers would be writing the record that
     # later grants case access.
     policy action_type(:create) do
-      authorize_if actor_attribute_equals(:system, :hexpm)
+      authorize_if actor_attribute_equals(:system, :hexpm_intake)
       authorize_if actor_attribute_equals(:role, :poc)
     end
 

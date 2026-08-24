@@ -1255,10 +1255,10 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 - Re-introducing a **route-level role gate** in the router. The model rests
   on there being exactly one place that decides (§4); a second one that can
   drift from the policies is the condition this section exists to catch.
-- **A second way to obtain a service actor.** `Varsel.HexIntake.Service` is
-  built in one place, after a token verifies, and that is what the intake
-  authorizes on (§4). Another builder makes the actor say less than the
-  policy reading it assumes.
+- **A second way to obtain a service actor.** `Varsel.Service` actors are
+  each built in one place, after a credential verifies, and that is what the
+  intake authorizes on (§4). Another builder makes the actor say less than
+  the policy reading it assumes.
 - **Exposing BEAM distribution beyond the private 6PN segment**, or clustering
   across a boundary the org does not control — the §3 exclusion assumes that
   port is unreachable, and nothing but the network keeps it so.

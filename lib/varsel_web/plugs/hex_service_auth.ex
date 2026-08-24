@@ -6,8 +6,8 @@ defmodule VarselWeb.Plugs.HexServiceAuth do
   @moduledoc """
   Authenticates hex.pm's package-report intake.
 
-  A verified request runs as `Varsel.HexIntake.Service`. Nothing else builds
-  that actor, so holding it means a signature checked out here.
+  A verified request runs as `Varsel.Service.hexpm_intake/0`. Nothing else
+  builds that actor, so holding it means a signature checked out here.
   """
   @behaviour Plug
 
@@ -15,8 +15,8 @@ defmodule VarselWeb.Plugs.HexServiceAuth do
 
   import Plug.Conn
 
-  alias Varsel.HexIntake.Service
   alias Varsel.HexIntake.ServiceToken
+  alias Varsel.Service
 
   @impl Plug
   def init(opts), do: opts
@@ -25,7 +25,7 @@ defmodule VarselWeb.Plugs.HexServiceAuth do
   def call(conn, _opts) do
     with {:ok, token} <- bearer(conn),
          {:ok, _claims} <- ServiceToken.verify(token, audience()) do
-      Ash.PlugHelpers.set_actor(conn, Service.hexpm())
+      Ash.PlugHelpers.set_actor(conn, Service.hexpm_intake())
     else
       {:error, reason} -> refuse(conn, reason)
     end
