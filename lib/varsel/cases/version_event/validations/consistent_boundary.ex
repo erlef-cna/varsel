@@ -14,10 +14,10 @@ defmodule Varsel.Cases.VersionEvent.Validations.ConsistentBoundary do
   use Ash.Resource.Validation
 
   @impl Ash.Resource.Validation
-  def validate(changeset, _opts, _context) do
+  def validate(changeset, _opts, context) do
     with :ok <- validate_boundary(changeset),
-         :ok <- validate_same_case(changeset) do
-      validate_channel_of_package(changeset)
+         :ok <- validate_same_case(changeset, context) do
+      validate_channel_of_package(changeset, context)
     end
   end
 
@@ -32,13 +32,13 @@ defmodule Varsel.Cases.VersionEvent.Validations.ConsistentBoundary do
     end
   end
 
-  defp validate_same_case(changeset) do
+  defp validate_same_case(changeset, context) do
     case_id = Ash.Changeset.get_attribute(changeset, :case_id)
     affected_package_id = Ash.Changeset.get_attribute(changeset, :affected_package_id)
 
     with false <- is_nil(case_id) or is_nil(affected_package_id),
          {:ok, %{case_id: package_case_id}} <-
-           Varsel.Cases.get_affected_package(affected_package_id, authorize?: false),
+           Varsel.Cases.get_affected_package(affected_package_id, Ash.Context.to_opts(context)),
          false <- package_case_id == case_id do
       {:error, field: :affected_package_id, message: "belongs to a different case"}
     else
@@ -47,13 +47,13 @@ defmodule Varsel.Cases.VersionEvent.Validations.ConsistentBoundary do
     end
   end
 
-  defp validate_channel_of_package(changeset) do
+  defp validate_channel_of_package(changeset, context) do
     package_channel_id = Ash.Changeset.get_attribute(changeset, :package_channel_id)
     affected_package_id = Ash.Changeset.get_attribute(changeset, :affected_package_id)
 
     with false <- is_nil(package_channel_id),
          {:ok, %{affected_package_id: channel_package_id}} <-
-           Varsel.Cases.get_package_channel(package_channel_id, authorize?: false),
+           Varsel.Cases.get_package_channel(package_channel_id, Ash.Context.to_opts(context)),
          false <- channel_package_id == affected_package_id do
       {:error, field: :package_channel_id, message: "belongs to a different package"}
     else

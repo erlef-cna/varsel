@@ -674,8 +674,8 @@ none of the authorization properties, by construction rather than by defect.
    Every action is policy-gated; the role→action matrix in §2 holds. No
    exposed action grants callers `authorize?: false`: outside tests the flag
    is banned by the `AshCredo.Check.Warning.AuthorizeFalse` credo check
-   (`.credo.exs`), so the few remaining uses are all internal changes and
-   validations, never a caller-reachable contract. Other internal operations
+   (`.credo.exs`), so the few remaining uses are all internal changes, never
+   a caller-reachable contract. Other internal operations
    run as the `Varsel.Service` actors the policies name (§4). Internal
    system operations that legitimately bypass the actor's policy do so through
    a bypass the actor cannot reach — the `AshObanInteraction` bypass for Oban
