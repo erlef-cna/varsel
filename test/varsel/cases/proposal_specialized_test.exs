@@ -209,6 +209,42 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
       assert proposal.proposed_value == %{"value" => %{"event" => "fixed", "commit_sha" => sha}}
     end
 
+    test "propose_version_event scopes a date boundary to a channel on accept", %{
+      poc: poc,
+      case: case_record
+    } do
+      package = Fixtures.add_affected_package(poc, case_record, %{repo_url: nil})
+
+      channel =
+        Cases.add_package_channel!(
+          %{
+            case_id: case_record.id,
+            affected_package_id: package.id,
+            kind: :service,
+            domain: "hex.pm"
+          },
+          actor: poc
+        )
+
+      proposal =
+        Cases.propose_version_event!(
+          %{
+            case_id: case_record.id,
+            target_id: package.id,
+            event: :introduced,
+            version: "2025-10-18",
+            package_channel_id: channel.id
+          },
+          actor: poc
+        )
+
+      accepted = Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      event = Ash.get!(Varsel.Cases.VersionEvent, accepted.applied_target_id, actor: poc)
+      assert event.package_channel_id == channel.id
+      assert event.version == "2025-10-18"
+    end
+
     test "propose_package_channel addresses a package via target_id", %{
       poc: poc,
       case: case_record

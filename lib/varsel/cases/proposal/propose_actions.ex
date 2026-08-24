@@ -281,11 +281,18 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
     end
 
     create :propose_version_event do
-      description "Proposes adding a version boundary event under an affected package (target_id)."
+      description """
+      Proposes adding a version boundary event under an affected package
+      (target_id). package_channel_id scopes the boundary to one channel of
+      that package — a date boundary on a service channel, or a channel whose
+      versions genuinely differ from the repo derivation.
+      """
+
       accept [:case_id, :target_id, :reasoning]
       argument :event, Varsel.Cases.VersionEvent.Event, allow_nil?: false
       argument :commit_sha, :string
       argument :version, :string
+      argument :package_channel_id, :uuid
       argument :note, :string
       change {PackProposal, target: :version_event, operation: :insert}
     end
