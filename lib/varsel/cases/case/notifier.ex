@@ -15,13 +15,14 @@ defmodule Varsel.Cases.Case.Notifier do
 
   use Ash.Notifier
 
-  @impl Ash.Notifier
-  def notify(%Ash.Notifier.Notification{data: %{state: :published} = record}) do
-    record = Ash.load!(record, :case, actor: Varsel.Service.notifier())
+  alias Varsel.Cases.Case
 
-    if record.case && record.case.state == :publishing do
-      AshOban.run_trigger(record.case, :mark_published)
-    end
+  @impl Ash.Notifier
+  def load(_resource, _action), do: [:case]
+
+  @impl Ash.Notifier
+  def notify(%Ash.Notifier.Notification{data: %{state: :published, case: %Case{state: :publishing} = case_record}}) do
+    AshOban.run_trigger(case_record, :mark_published)
 
     :ok
   end

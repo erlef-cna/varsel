@@ -2,7 +2,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.Notifications.OkResult do
-  @moduledoc false
+defmodule Varsel.Types.OkResult do
+  @moduledoc """
+  Return type for generic actions whose only result is that they ran.
+  """
+
   use Ash.Type.Enum, values: [:ok]
 end
