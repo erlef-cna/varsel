@@ -18,7 +18,7 @@ defmodule Varsel.Cases.Case.Notifier do
   alias Varsel.Cases.Case
 
   @impl Ash.Notifier
-  def load(_resource, _action), do: [:case]
+  def load(_resource, _action), do: [case: [:state]]
 
   @impl Ash.Notifier
   def notify(%Ash.Notifier.Notification{data: %{state: :published, case: %Case{state: :publishing} = case_record}}) do

@@ -239,6 +239,11 @@ defmodule Varsel.CVE.OsvRecordTest do
         authorize?: false
       )
 
+      assert Enum.any?(
+               all_enqueued(worker: Varsel.CVE.OsvRecord.SyncWorker),
+               &(&1.args["primary_key"]["id"] == osv.id)
+             )
+
       run_sync_triggers()
 
       withdrawn = get_osv()
