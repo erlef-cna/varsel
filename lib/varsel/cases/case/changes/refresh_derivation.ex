@@ -26,7 +26,7 @@ defmodule Varsel.Cases.Case.Changes.RefreshDerivation do
 
       if refresh?, do: refresh_repos(loaded.affected_packages)
 
-      Enum.each(loaded.affected_packages, &recompute/1)
+      Enum.each(loaded.affected_packages, &recompute(&1, context))
 
       {:ok, case_record}
     end)
@@ -40,15 +40,18 @@ defmodule Varsel.Cases.Case.Changes.RefreshDerivation do
     |> Enum.each(&GitBackend.refresh/1)
   end
 
-  # Derives fresh ranges and caches them on the package. This runs as a
-  # side effect of the already policy-gated refresh, not a user edit, so the
-  # cache write bypasses authorization.
-  defp recompute(package) do
+  @stamp %{private: %{refresh_derivation?: true}}
+
+  defp recompute(package, context) do
+    opts =
+      context
+      |> Ash.Context.to_opts()
+      |> Keyword.update(:context, @stamp, &Ash.Helpers.deep_merge_maps(&1, @stamp))
+
     {:ok, derivation} = Derivation.derive(package)
 
     package
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-    |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: derivation}, authorize?: false)
+    |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: derivation}, opts)
     |> Ash.update!()
   end
 end

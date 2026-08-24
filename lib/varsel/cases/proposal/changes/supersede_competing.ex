@@ -27,7 +27,7 @@ defmodule Varsel.Cases.Proposal.Changes.SupersedeCompeting do
     Ash.Changeset.after_action(changeset, fn _changeset, proposal ->
       proposal
       |> competing_query()
-      |> sweep(proposal, context.actor)
+      |> sweep(proposal, context)
 
       {:ok, proposal}
     end)
@@ -56,21 +56,21 @@ defmodule Varsel.Cases.Proposal.Changes.SupersedeCompeting do
   defp filter_target_id(query, nil), do: Ash.Query.filter(query, is_nil(target_id))
   defp filter_target_id(query, target_id), do: Ash.Query.filter(query, target_id == ^target_id)
 
-  defp sweep(nil, _proposal, _actor), do: :ok
+  @stamp %{private: %{proposal_sweep?: true}}
 
-  defp sweep(query, proposal, actor) do
-    # Accepting a proposal is allowed for assigned supporters, but :supersede is
-    # POC-only; a supporter's accept must still sweep competitors, so this
-    # internal cascade bypasses the actor's authorization by design.
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
+  defp sweep(nil, _proposal, _context), do: :ok
+
+  defp sweep(query, proposal, context) do
+    opts =
+      context
+      |> Ash.Context.to_opts()
+      |> Keyword.update(:context, @stamp, &Ash.Helpers.deep_merge_maps(&1, @stamp))
+
     Ash.bulk_update!(
       query,
       :supersede,
       %{resolution_note: "superseded by accepted proposal #{proposal.id}"},
-      actor: actor,
-      authorize?: false,
-      strategy: :stream,
-      return_errors?: true
+      Keyword.merge(opts, strategy: :stream, return_errors?: true)
     )
   end
 end

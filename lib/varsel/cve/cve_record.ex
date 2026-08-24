@@ -909,6 +909,7 @@ defmodule Varsel.CVE.CveRecord do
     # so the whole read is authorized regardless of state).
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if context_equals([:private, :assign_cve_id?], true)
       authorize_if expr(state == :published)
     end
 
@@ -928,7 +929,6 @@ defmodule Varsel.CVE.CveRecord do
     # The three MITRE sync actions also run on the nightly schedule through the
     # AshOban bypass.
     policy action([
-             :assign,
              :withhold,
              :request_publish,
              :update,
@@ -938,6 +938,12 @@ defmodule Varsel.CVE.CveRecord do
              :sync_reserved_from_mitre
            ]) do
       authorize_if actor_attribute_equals(:role, :poc)
+    end
+
+    policy action(:assign) do
+      authorize_if actor_attribute_equals(:role, :poc)
+      forbid_unless context_equals([:private, :assign_cve_id?], true)
+      authorize_if actor_attribute_equals(:role, :supporter)
     end
 
     # Pool population: :reserve and :import are the nested creates the sync

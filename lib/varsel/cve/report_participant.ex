@@ -106,9 +106,14 @@ defmodule Varsel.CVE.ReportParticipant do
       authorize_if actor_attribute_equals(:role, :poc)
     end
 
+    # Stamped by VulnerabilityReport.Changes.SpendParticipants, which lets a
+    # withdrawing reporter spend their own report's rows without ever being
+    # able to read them on a surface.
     policy action_type([:read, :update, :destroy]) do
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
+      forbid_unless context_equals([:private, :spend_participants?], true)
+      authorize_if relates_to_actor_via([:report, :reporter])
     end
   end
 

@@ -301,10 +301,17 @@ defmodule Varsel.Cases.AffectedPackage do
     end
 
     # Content freeze: child rows may only change while the parent case is
-    # editable. :store_derivation is untouched — it runs with authorization
-    # disabled as a side effect of the already-gated derivation refresh.
-    policy action_type([:create, :update, :destroy]) do
+    # editable.
+    policy action_type([:create, :destroy]) do
       authorize_if expr(case.state in [:draft, :review])
+    end
+
+    policy action([:edit, :apply_proposal]) do
+      authorize_if expr(case.state in [:draft, :review])
+    end
+
+    policy action(:store_derivation) do
+      authorize_if context_equals([:private, :refresh_derivation?], true)
     end
   end
 
