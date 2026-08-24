@@ -32,9 +32,11 @@ defmodule Varsel.Cases.Reachability do
   Non-release tags (`nightly`, `v1.19-latest`, OTP topic tags) drop out.
 
   The output (`t:result/0`) carries the ranges, `pending_fixes` (a fix commit in
-  no tag), an `open?` flag (some range is unbounded), `prerelease_conflict`
-  call-outs (an excluded pre-release whose status disagrees with its neighbours),
-  and issues. Serialization to CVE JSON is a separate concern.
+  no tag), `unreleased_intros` (introducing commits in no tag, with nothing else
+  supplying the intro boundary), an `open?` flag (some range is unbounded),
+  `prerelease_conflict` call-outs (an excluded pre-release whose status disagrees
+  with its neighbours), and issues. Serialization to CVE JSON is a separate
+  concern.
   """
 
   alias Varsel.Cases.Derivation.GitBackend
@@ -58,6 +60,7 @@ defmodule Varsel.Cases.Reachability do
           call_outs: [call_out()],
           open?: boolean(),
           pending_fixes: [String.t()],
+          unreleased_intros: [String.t()],
           issues: [String.t()]
         }
 
@@ -88,8 +91,8 @@ defmodule Varsel.Cases.Reachability do
   the human asserted it, so it is not second-guessed.
 
   `{:error, reason}` if the tag universe cannot be obtained (clone/fetch failure).
-  A commit that resolves to no tag is not fatal: an unresolvable intro yields an
-  issue, an unresolvable/unreleased fix becomes a `pending_fix`.
+  A commit that resolves to no tag is not fatal: an unreleased intro surfaces in
+  `unreleased_intros`, an unresolvable/unreleased fix in `pending_fixes`.
   """
   @spec derive(String.t(), [String.t()], [String.t()], keyword()) ::
           {:ok, result()} | {:error, term()}
@@ -102,11 +105,11 @@ defmodule Varsel.Cases.Reachability do
 
       derived_affected = MapSet.difference(intro_tags, fix_tags)
 
-      # A commit-derived intro is only "contained in no release" when no explicit
-      # version supplies the boundary either.
-      issues =
+      # A commit-derived intro is only unreleased when no explicit version
+      # supplies the boundary either.
+      unreleased_intros =
         if intros != [] and MapSet.size(intro_tags) == 0 and explicit_intros(explicit) == [],
-          do: ["the introducing commit is contained in no release tag"],
+          do: intros,
           else: []
 
       kind = Keyword.fetch!(opts, :comparator)
@@ -124,7 +127,7 @@ defmodule Varsel.Cases.Reachability do
         apply_explicit(derived_affected, explicit, universe, kind, derived_safe: fix_tags)
 
       result = deduce(universe, affected, opts)
-      {:ok, %{result | pending_fixes: pending, issues: result.issues ++ issues}}
+      {:ok, %{result | pending_fixes: pending, unreleased_intros: unreleased_intros}}
     end
   end
 
@@ -217,6 +220,7 @@ defmodule Varsel.Cases.Reachability do
       call_outs: prerelease_call_outs(kind, considered, excluded_prereleases),
       open?: has_open?,
       pending_fixes: [],
+      unreleased_intros: [],
       issues: []
     }
   end

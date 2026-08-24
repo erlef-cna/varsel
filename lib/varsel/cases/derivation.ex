@@ -28,13 +28,16 @@ defmodule Varsel.Cases.Derivation do
      used verbatim.
   3. A fixed commit contained in no release is *pending*: it still bounds the
      git-versioned channel, is reported in `"pending"`, and blocks publishing
-     unless the package allows unreleased fixes.
+     unless the package allows unreleased fixes. An introducing commit
+     contained in no release is reported in `"unreleased_intros"` and blocks
+     the same way unless the package allows unreleased intros.
 
   ## Result shape (JSON-safe, cached in jsonb, all string keys)
 
       %{
         "channels" => %{<channel-uuid> => %{"versions" => [...],
                                             "pending" => [...],
+                                            "unreleased_intros" => [...],
                                             "issues" => [...]}},
         # either bound is nil when the range is open on that side (the preview drops it)
         "cpe_matches" => [%{"versionStartIncluding" => _, "versionEndExcluding" => _}],
@@ -111,7 +114,14 @@ defmodule Varsel.Cases.Derivation do
   end
 
   defp empty_reachability do
-    %{ranges: [], call_outs: [], open?: false, pending_fixes: [], issues: []}
+    %{
+      ranges: [],
+      call_outs: [],
+      open?: false,
+      pending_fixes: [],
+      unreleased_intros: [],
+      issues: []
+    }
   end
 
   # Explicit `{event, version}` boundaries from the global events — releases the
@@ -154,6 +164,7 @@ defmodule Varsel.Cases.Derivation do
         %{
           "versions" => [],
           "pending" => [],
+          "unreleased_intros" => [],
           "issues" => ["service channels need channel-scoped version events"]
         }
 
@@ -161,6 +172,7 @@ defmodule Varsel.Cases.Derivation do
         channel
         |> Emit.channel(reach.ranges, emit_opts)
         |> Map.put("pending", pending)
+        |> Map.put("unreleased_intros", reach.unreleased_intros)
     end
   end
 
@@ -175,6 +187,7 @@ defmodule Varsel.Cases.Derivation do
         %{
           "versions" => [],
           "pending" => [],
+          "unreleased_intros" => [],
           "issues" => ["channel-scoped events lack an introduced boundary"]
         }
 
@@ -182,6 +195,7 @@ defmodule Varsel.Cases.Derivation do
         %{
           "versions" => [open_range(boundary_value(intro), version_type)],
           "pending" => [],
+          "unreleased_intros" => [],
           "issues" => []
         }
 
@@ -190,7 +204,7 @@ defmodule Varsel.Cases.Derivation do
           for fix <- fixes,
               do: bounded_range(boundary_value(intro), boundary_value(fix), version_type)
 
-        %{"versions" => versions, "pending" => [], "issues" => []}
+        %{"versions" => versions, "pending" => [], "unreleased_intros" => [], "issues" => []}
     end
   end
 

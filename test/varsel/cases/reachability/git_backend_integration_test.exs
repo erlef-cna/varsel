@@ -71,14 +71,14 @@ defmodule Varsel.Cases.Reachability.GitBackendIntegrationTest do
     assert result.open? == true
   end
 
-  test "an unresolvable intro reports an issue and no ranges" do
+  test "an unresolvable intro is reported unreleased and derives no ranges" do
     StubGitBackend.stub_tags(%{{@repo, "fix"} => ["2.0.0"]})
     StubGitBackend.stub_all_tags(%{@repo => ["1.0.0", "2.0.0"]})
 
     result = derive(["intro"], ["fix"], comparator: :semver)
 
     assert result.ranges == []
-    assert result.issues == ["the introducing commit is contained in no release tag"]
+    assert result.unreleased_intros == ["intro"]
   end
 
   test "OTP release tags flow through and non-release tags drop out" do

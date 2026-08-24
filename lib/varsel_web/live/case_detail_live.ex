@@ -1936,6 +1936,7 @@ defmodule VarselWeb.CaseDetailLive do
     Enum.filter(
       [
         package.allow_unreleased_fix && "allows unreleased fixes",
+        package.allow_unreleased_intro && "allows unreleased intros",
         !package.include_prereleases && "pre-releases excluded"
       ],
       & &1
