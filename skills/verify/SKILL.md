@@ -81,7 +81,7 @@ Detect the type from the first affected entry's `packageURL` and apply the match
 
 **OTP** (`pkg:otp/<lib>`):
 - [ ] Exactly two affected entries.
-- [ ] First: `pkg:otp/<lib>`, `versionType: "otp"`. Second: `pkg:github/erlang/otp`, `otp` blocks then `git` blocks.
+- [ ] First: `pkg:otp/<lib>?repository_url=…&vcs_url=…` (both qualifiers naming the erlang/otp repository), `versionType: "otp"`. Second: `pkg:github/erlang/otp`, `otp` blocks then `git` blocks.
 - [ ] First entry `programFiles` are library-root-relative (`src/ssh_sftpd.erl`); second entry `programFiles` are full repo path (`lib/ssh/src/ssh_sftpd.erl`).
 - [ ] Each entry has `programFiles`, `programRoutines`, `modules`.
 
