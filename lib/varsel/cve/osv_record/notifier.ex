@@ -15,22 +15,22 @@ defmodule Varsel.CVE.OsvRecord.Notifier do
 
   use Ash.Notifier
 
+  alias Ash.Notifier.Notification
   alias Varsel.CVE.OsvRecord
 
   @impl Ash.Notifier
-  def notify(%Ash.Notifier.Notification{data: %{state: state} = record}) when state in [:published, :rejected] do
-    record = Ash.load!(record, :osv_record, actor: Varsel.Service.notifier())
+  def load(_resource, _action), do: [:osv_record]
 
-    cond do
-      record.osv_record ->
-        AshOban.run_trigger(record.osv_record, :sync)
+  @impl Ash.Notifier
+  def notify(%Notification{data: %{state: state, osv_record: %OsvRecord{} = osv_record}})
+      when state in [:published, :rejected] do
+    AshOban.run_trigger(osv_record, :sync)
 
-      state == :published ->
-        AshOban.schedule(OsvRecord, :create_missing)
+    :ok
+  end
 
-      true ->
-        :ok
-    end
+  def notify(%Notification{data: %{state: :published}}) do
+    AshOban.schedule(OsvRecord, :create_missing)
 
     :ok
   end
