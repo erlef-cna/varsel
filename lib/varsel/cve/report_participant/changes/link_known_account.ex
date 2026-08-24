@@ -11,6 +11,7 @@ defmodule Varsel.CVE.ReportParticipant.Changes.LinkKnownAccount do
 
   alias Ash.Changeset
   alias Varsel.Accounts.UserIdentity
+  alias Varsel.Service
 
   require Ash.Query
 
@@ -25,14 +26,13 @@ defmodule Varsel.CVE.ReportParticipant.Changes.LinkKnownAccount do
     end
   end
 
-  # Unauthorized because the answer is never reported as such: the caller is a
-  # sending system that learns nothing about who exists here.
+  # The answer is never reported back: the caller is a sending system that
+  # learns nothing about who exists here.
   defp owner(strategy, username) do
     UserIdentity
     |> Ash.Query.filter(strategy == ^to_string(strategy) and username == ^username)
     |> Ash.Query.select([:user_id])
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-    |> Ash.read_one(authorize?: false)
+    |> Ash.read_one(actor: Service.identity_claim())
     |> case do
       {:ok, %{user_id: user_id}} -> user_id
       _none -> nil

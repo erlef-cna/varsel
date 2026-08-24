@@ -69,7 +69,14 @@ defmodule Varsel.Cases.CaseInvite do
   end
 
   policies do
-    policy action_type([:read, :create, :destroy]) do
+    policy action_type([:read, :destroy]) do
+      authorize_if actor_attribute_equals(:system, :identity_claim)
+      authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    # Inviting stays with people.
+    policy action_type(:create) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end

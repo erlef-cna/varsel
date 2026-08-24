@@ -219,13 +219,15 @@ is no "inside the app, everything is trusted" zone — even LiveView mounts
 re-run authorization on refetch (pervasive `policies do` blocks; `config.exs`
 sets `no_filter_static_forbidden_reads?: false`).
 
-**One pipeline authenticates a system rather than a person.** `/api/hex/reports`
-takes reports from hex.pm, which submits on a reporter's behalf and so cannot
-present that reporter's credential. The token proves which system is calling,
-and the request then runs as that system: an actor with no role, which the
-intake action's policy names and nothing else grants. So the boundary here is
-the same one as everywhere else, with a non-human on the other side of it.
-(`router.ex`, `hex_service_auth.ex`, `service.ex`)
+**Some actors are systems rather than people.** `Varsel.Service` defines one
+actor per internal system (`service.ex` lists them). Each is built only by
+the subsystem it names, carries no role, and may do exactly what the policies
+naming its system grant. One of them sits on a request boundary:
+`/api/hex/reports` takes reports from hex.pm, which submits on a reporter's
+behalf and so cannot present that reporter's credential. The token proves
+which system is calling, and the request then runs as that system. So the
+boundary there is the same one as everywhere else, with a non-human on the
+other side of it. (`router.ex`, `hex_service_auth.ex`, `service.ex`)
 
 **The boundary is enforced in one place.** The router runs a single
 `:live_user` hook that resolves the actor and nothing else; it does not gate
@@ -672,8 +674,9 @@ none of the authorization properties, by construction rather than by defect.
    Every action is policy-gated; the role→action matrix in §2 holds. No
    exposed action grants callers `authorize?: false`: outside tests the flag
    is banned by the `AshCredo.Check.Warning.AuthorizeFalse` credo check
-   (`.credo.exs`), so the few remaining uses are all internal
-   changes/validations/notifiers, never a caller-reachable contract. Internal
+   (`.credo.exs`), so the few remaining uses are all internal changes and
+   validations, never a caller-reachable contract. Other internal operations
+   run as the `Varsel.Service` actors the policies name (§4). Internal
    system operations that legitimately bypass the actor's policy do so through
    a bypass the actor cannot reach — the `AshObanInteraction` bypass for Oban
    jobs (a caller cannot forge the `ash_oban?` context) or an `accessing_from`
@@ -1255,9 +1258,9 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 - Re-introducing a **route-level role gate** in the router. The model rests
   on there being exactly one place that decides (§4); a second one that can
   drift from the policies is the condition this section exists to catch.
-- **A second way to obtain a service actor.** `Varsel.Service` actors are
-  each built in one place, after a credential verifies, and that is what the
-  intake authorizes on (§4). Another builder makes the actor say less than
+- **A second way to obtain a service actor.** Each `Varsel.Service` actor is
+  built only by the subsystem it names, and that is what the policies naming
+  its system authorize (§4). Another builder makes the actor say less than
   the policy reading it assumes.
 - **Exposing BEAM distribution beyond the private 6PN segment**, or clustering
   across a boundary the org does not control — the §3 exclusion assumes that

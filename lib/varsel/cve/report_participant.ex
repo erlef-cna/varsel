@@ -95,9 +95,9 @@ defmodule Varsel.CVE.ReportParticipant do
 
   policies do
     # Participant rows describe third parties who never asked to be here: a
-    # package's maintainers, and a reporter's contact details. Nobody but a POC
-    # reads them on any surface. The reporter reads their own report instead,
-    # which carries no participant data.
+    # package's maintainers, and a reporter's contact details. No person but a
+    # POC reads them on any surface. The reporter reads their own report
+    # instead, which carries no participant data.
     # Written only by the intake the sending system is authenticated for. A
     # reporter naming their own maintainers would be writing the record that
     # later grants case access.
@@ -107,6 +107,7 @@ defmodule Varsel.CVE.ReportParticipant do
     end
 
     policy action_type([:read, :update, :destroy]) do
+      authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
     end
   end

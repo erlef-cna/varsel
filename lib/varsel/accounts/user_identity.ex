@@ -123,10 +123,12 @@ defmodule Varsel.Accounts.UserIdentity do
       authorize_if always()
     end
 
-    # Identities are only ever read through the user they belong to, whose own
-    # policy already decided whether that row is visible. The OAuth tokens stay
-    # private attributes, so they are never readable through the API at all.
+    # People read identities through the user they belong to, whose own
+    # policy already decided whether that row is visible. The OAuth tokens
+    # stay private attributes, so they are never readable through the API at
+    # all.
     policy action_type(:read) do
+      authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if accessing_from(User, :identities)
     end
 

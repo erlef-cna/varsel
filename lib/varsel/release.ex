@@ -2,12 +2,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# Release tasks run outside the usual authorization context: there is no actor,
-# and no request that could carry one. What authorizes them is shell access to a
-# fully configured server — someone who has that can already reach the database
-# directly — so the Ash calls here pass `authorize?: false` by design.
-# credo:disable-for-this-file AshCredo.Check.Warning.AuthorizeFalse
-
 defmodule Varsel.Release do
   @moduledoc """
   Release tasks run inside the production release, e.g.
@@ -61,8 +55,8 @@ defmodule Varsel.Release do
     {:ok, _} = Application.ensure_all_started(@app)
 
     id
-    |> Varsel.Accounts.get_user_by_id!(authorize?: false)
-    |> Varsel.Accounts.set_user_role!(:poc, authorize?: false)
+    |> Varsel.Accounts.get_user_by_id!(actor: Varsel.Service.release_console())
+    |> Varsel.Accounts.set_user_role!(:poc, actor: Varsel.Service.release_console())
   end
 
   defp repos do
