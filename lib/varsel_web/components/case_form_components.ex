@@ -80,6 +80,9 @@ defmodule VarselWeb.CaseFormComponents do
       <.input field={@form[:allow_unreleased_fix]} type="checkbox">
         <:label>Allow publishing while a fix has no containing release</:label>
       </.input>
+      <.input field={@form[:allow_unreleased_intro]} type="checkbox">
+        <:label>Allow publishing while the introducing commit has no containing release</:label>
+      </.input>
       <.input field={@form[:include_prereleases]} type="checkbox">
         <:label>Include pre-release versions (rc/alpha/beta) in the affected ranges</:label>
       </.input>

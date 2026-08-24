@@ -218,13 +218,16 @@ defmodule Varsel.Cases.DerivationTest do
            ]
   end
 
-  test "an unresolvable commit becomes an issue", %{poc: poc, case: case_record} do
+  test "an unresolvable intro is reported unreleased on the derived channels", %{
+    poc: poc,
+    case: case_record
+  } do
     # The intro is not stubbed, so it resolves to no tag; the universe still needs
     # the fix's release plus an extra tag so the timeline is non-empty.
     StubGitBackend.stub_tags(%{{@repo, @fix_sha} => ["v2.0.0"]})
     StubGitBackend.stub_all_tags(%{@repo => ["v1.0.0"]})
 
-    {package, _channels} =
+    {package, channels} =
       package_with_channels(
         poc,
         case_record,
@@ -236,8 +239,8 @@ defmodule Varsel.Cases.DerivationTest do
       )
 
     assert {:ok, derivation} = Derivation.derive(package)
-    assert [issue] = derivation["issues"]
-    assert issue =~ "the introducing commit is contained in no release tag"
+    assert derivation["issues"] == []
+    assert derivation["channels"][channels[:hex].id]["unreleased_intros"] == [@intro_sha]
   end
 
   test "channel-scoped explicit events drive a service channel", %{poc: poc, case: case_record} do
@@ -489,6 +492,7 @@ defmodule Varsel.Cases.DerivationTest do
                  }
                ],
                "pending" => [],
+               "unreleased_intros" => [],
                "issues" => []
              }
     end

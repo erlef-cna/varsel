@@ -46,6 +46,7 @@ defmodule Varsel.Cases.Proposable do
     :program_files,
     :platforms,
     :allow_unreleased_fix,
+    :allow_unreleased_intro,
     :include_prereleases,
     :position
   ]

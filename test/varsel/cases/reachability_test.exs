@@ -258,21 +258,19 @@ defmodule Varsel.Cases.ReachabilityTest do
                [{"1.15.7", "1.18.1"}]
     end
 
-    test "an unresolvable intro is not an issue when an explicit version supplies the boundary",
+    test "an unresolvable intro is not unreleased when an explicit version supplies the boundary",
          %{repo: repo} do
       StubGitBackend.stub_tags(%{{repo, @intro} => []})
       StubGitBackend.stub_all_tags(%{repo => ["1.0.0", "1.1.0"]})
 
-      assert derive(repo, [@intro], [], [{:introduced, "1.0.0"}]).issues == []
+      assert derive(repo, [@intro], [], [{:introduced, "1.0.0"}]).unreleased_intros == []
     end
 
-    test "an unresolvable intro still reports an issue without one", %{repo: repo} do
+    test "an unresolvable intro is reported unreleased without one", %{repo: repo} do
       StubGitBackend.stub_tags(%{{repo, @intro} => []})
       StubGitBackend.stub_all_tags(%{repo => ["1.0.0"]})
 
-      assert derive(repo, [@intro], [], []).issues == [
-               "the introducing commit is contained in no release tag"
-             ]
+      assert derive(repo, [@intro], [], []).unreleased_intros == [@intro]
     end
   end
 

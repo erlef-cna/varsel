@@ -526,7 +526,10 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
   end
 
   test "a pending fix blocks publish unless allowed", %{poc: poc, case: case_record} do
-    StubGitBackend.stub_tags(%{{@repo, @fix_sha} => []})
+    StubGitBackend.stub_tags(%{
+      {@repo, @intro_sha} => ["v1.0.0", "v2.10.0"],
+      {@repo, @fix_sha} => []
+    })
 
     result = render!(case_record, poc)
     assert Enum.any?(result.blockers, &(&1 =~ "no containing release"))
@@ -538,6 +541,23 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
     result = render!(case_record, poc)
     refute Enum.any?(result.blockers, &(&1 =~ "no containing release"))
+  end
+
+  test "an unreleased intro blocks publish unless allowed", %{poc: poc, case: case_record} do
+    # The intro resolves to no tag; the fix still lands in its release.
+    StubGitBackend.stub_tags(%{{@repo, @fix_sha} => ["v2.10.0"]})
+    StubGitBackend.stub_all_tags(%{@repo => ["v1.0.0"]})
+
+    result = render!(case_record, poc)
+    assert Enum.any?(result.blockers, &(&1 =~ "intro #{@intro_sha} has no containing release"))
+
+    case_record = Ash.load!(case_record, [:affected_packages], authorize?: false)
+    [package] = case_record.affected_packages
+    Cases.edit_affected_package!(package, %{allow_unreleased_intro: true}, actor: poc)
+
+    case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+    result = render!(case_record, poc)
+    refute Enum.any?(result.blockers, &(&1 =~ "has no containing release"))
   end
 
   describe "forge handling on git channels" do

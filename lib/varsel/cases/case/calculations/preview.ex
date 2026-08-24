@@ -398,7 +398,8 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     issues ++
       channel_issues ++
       call_out_blockers(package, derivation) ++
-      Enum.uniq(pending_blockers(package, derivation))
+      Enum.uniq(pending_blockers(package, derivation)) ++
+      Enum.uniq(unreleased_intro_blockers(package, derivation))
   end
 
   # How a channel is named in a blocker or override message: its purl type, or
@@ -440,6 +441,16 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
         sha <- result["pending"] || [] do
       "#{package.product}/#{channel_label(channel)}: fix #{sha} has no containing release yet " <>
         "(set allow_unreleased_fix or a versions_override to publish anyway)"
+    end
+  end
+
+  defp unreleased_intro_blockers(%{allow_unreleased_intro: true}, _derivation), do: []
+
+  defp unreleased_intro_blockers(package, derivation) do
+    for {channel, result} <- overridable_channel_results(package, derivation),
+        sha <- result["unreleased_intros"] || [] do
+      "#{package.product}/#{channel_label(channel)}: intro #{sha} has no containing release " <>
+        "(set allow_unreleased_intro or a versions_override to publish anyway)"
     end
   end
 

@@ -386,6 +386,17 @@ defmodule Varsel.Cases.AffectedPackage do
       public? true
     end
 
+    attribute :allow_unreleased_intro, :boolean do
+      description """
+      Escape hatch: allow publishing while an introducing commit has no
+      containing release (e.g. a repository without release tags).
+      """
+
+      allow_nil? false
+      default false
+      public? true
+    end
+
     attribute :include_prereleases, :boolean do
       description """
       Whether pre-release tags (rc/alpha/beta) bound the derived version ranges.
