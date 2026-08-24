@@ -8,6 +8,7 @@
   flash={@flash}
   current_user={assigns[:current_user]}
   current_path={@conn.request_path}
+  socket={@conn}
 >
   <%!-- Test deployment warning: only rendered when indexing is blocked. --%>
   <div

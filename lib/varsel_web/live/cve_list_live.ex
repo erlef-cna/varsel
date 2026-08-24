@@ -518,7 +518,12 @@ defmodule VarselWeb.CveListLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      current_path={@current_path}
+      socket={@socket}
+    >
       <.page_header>
         <:eyebrow>{if @console?, do: "CNA Console", else: "EEF CNA"}</:eyebrow>
         <:title>{if @console?, do: "CVE records", else: "Issued CVEs"}</:title>

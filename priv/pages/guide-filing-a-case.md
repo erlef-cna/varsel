@@ -51,10 +51,13 @@ path from there to a published CVE.
 
    Grant the maintainer (and the reporter, if there is one) access by their
    GitHub or Hex.pm handle. Someone without an account gets an invite that
-   becomes access on their first sign-in. No email goes out, so tell them on
-   the advisory thread. Nobody is notified of comments either, so keep
-   anything time-sensitive on the advisory thread and use case comments for
-   what should stay on record with the case.
+   becomes access on their first sign-in. Assigning someone notifies them
+   in-app and by email, per their [notification
+   settings](/settings/notifications). Notification emails never carry case
+   details, only a link, so the advisory thread is still where they hear what
+   changed. The same holds for comments and proposals: keep anything
+   time-sensitive on the advisory thread and use case comments for what
+   should stay on record with the case.
 
 5. **Verify**
 

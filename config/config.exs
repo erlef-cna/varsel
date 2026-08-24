@@ -230,7 +230,8 @@ config :varsel,
     Varsel.CWE,
     Varsel.CVE,
     Varsel.Cases,
-    Varsel.Accounts
+    Varsel.Accounts,
+    Varsel.Notifications
   ]
 
 import_config "#{config_env()}.exs"

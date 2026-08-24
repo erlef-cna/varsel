@@ -5,8 +5,11 @@
 defmodule Varsel.Accounts.UserTest do
   use Varsel.DataCase, async: false
 
+  alias Ash.Error.Forbidden
+  alias Ash.Error.Invalid
   alias Varsel.Accounts
   alias Varsel.Accounts.User
+  alias Varsel.Notifications.Preference
 
   defp register_user(handle \\ nil) do
     handle = handle || "user#{System.unique_integer([:positive])}"
@@ -47,7 +50,7 @@ defmodule Varsel.Accounts.UserTest do
       supporter = register_user()
       target = register_user()
 
-      assert {:error, %Ash.Error.Forbidden{}} =
+      assert {:error, %Forbidden{}} =
                Accounts.set_user_role(target, :poc, actor: supporter)
     end
   end
@@ -57,7 +60,7 @@ defmodule Varsel.Accounts.UserTest do
       register_user()
       user = register_user()
 
-      assert {:error, %Ash.Error.Invalid{}} =
+      assert {:error, %Invalid{}} =
                Ash.update(user, %{role: :poc}, action: :update, actor: user)
     end
   end
@@ -131,6 +134,69 @@ defmodule Varsel.Accounts.UserTest do
         |> Ash.load!([:avatar_url], authorize?: false)
 
       assert user.avatar_url == nil
+    end
+  end
+
+  describe ":update_notification_settings authorization" do
+    test "a user updates their own notification settings" do
+      user = register_user()
+
+      updated =
+        Accounts.update_user_notification_settings!(
+          user,
+          %{
+            notification_email_mode: :daily_digest,
+            notification_preferences: [
+              %{kind: :comment_posted, in_app: false, email: true}
+            ]
+          },
+          actor: user
+        )
+
+      assert updated.notification_email_mode == :daily_digest
+
+      assert [%Preference{kind: :comment_posted, in_app: false, email: true}] =
+               updated.notification_preferences
+    end
+
+    test "a non-POC cannot update another user's notification settings" do
+      user = register_user()
+      other = register_user()
+
+      assert {:error, %Forbidden{}} =
+               Accounts.update_user_notification_settings(
+                 other,
+                 %{notification_email_mode: :daily_digest},
+                 actor: user
+               )
+    end
+
+    test "a POC cannot update another user's notification settings either" do
+      poc = register_poc()
+      other = register_user()
+
+      assert {:error, %Forbidden{}} =
+               Accounts.update_user_notification_settings(
+                 other,
+                 %{notification_email_mode: :daily_digest},
+                 actor: poc
+               )
+    end
+
+    test "rejects duplicate kinds in notification_preferences" do
+      user = register_user()
+
+      assert {:error, %Invalid{}} =
+               Accounts.update_user_notification_settings(
+                 user,
+                 %{
+                   notification_preferences: [
+                     %{kind: :comment_posted, in_app: false, email: true},
+                     %{kind: :comment_posted, in_app: true, email: false}
+                   ]
+                 },
+                 actor: user
+               )
     end
   end
 end

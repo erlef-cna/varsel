@@ -312,7 +312,9 @@ As soon as you have the `case_id`, give the people who own this vulnerability ac
 with `grant_case_access(id: <case-id>, input: {strategy, username})`, one call per person. It is
 not a proposal: the server checks the handle at its provider, assigns the person when they already
 have an account here, and otherwise leaves an invite that becomes access on their first sign-in.
-Nobody is emailed, so the advisory thread is where they hear about the case.
+This notifies the person in-app and by email, per their own notification settings, but the email
+carries no case details, only a link, so the advisory thread is still where they hear about the
+case.
 
 Grant access to all of:
 

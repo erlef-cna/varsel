@@ -40,7 +40,7 @@ defmodule VarselWeb.Layouts do
 
   ## Examples
 
-      <Layouts.app flash={@flash} current_user={@current_user} current_path={~p"/cves"}>
+      <Layouts.app flash={@flash} current_user={@current_user} current_path={~p"/cves"} socket={@socket}>
         <h1>Content</h1>
       </Layouts.app>
 
@@ -54,11 +54,15 @@ defmodule VarselWeb.Layouts do
     default: nil,
     doc: "the path being shown, which decides the active nav section"
 
+  attr :socket, :any,
+    default: nil,
+    doc: "the caller's `@socket` or `@conn`; `live_render/3` mounts the notification bell with it."
+
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <.site_nav current_user={@current_user} current_path={@current_path} />
+    <.site_nav current_user={@current_user} current_path={@current_path} socket={@socket} />
     <main class="flex-1">
       {render_slot(@inner_block)}
     </main>
@@ -160,6 +164,10 @@ defmodule VarselWeb.Layouts do
   attr :current_user, :any, default: nil, doc: "signed in with `nav_user_load/0` loaded"
   attr :current_path, :string, default: nil
 
+  attr :socket, :any,
+    default: nil,
+    doc: "the caller's `@socket` or `@conn`; `live_render/3` mounts the notification bell with it."
+
   def site_nav(assigns) do
     ~H"""
     <header class="eef-band border-b border-white/10 sticky top-0 z-40">
@@ -213,6 +221,12 @@ defmodule VarselWeb.Layouts do
         </ul>
 
         <div class="ml-auto flex items-center gap-2">
+          <%= if @socket && @current_user do %>
+            {live_render(@socket, VarselWeb.NotificationBellLive,
+              id: "notification-bell",
+              sticky: false
+            )}
+          <% end %>
           <.theme_toggle />
           <div :if={@current_user} class="dropdown dropdown-end">
             <div
@@ -229,6 +243,7 @@ defmodule VarselWeb.Layouts do
             >
               <li class="menu-title truncate">{@current_user.display_name}</li>
               <li><.link navigate={~p"/settings/account"}>Account</.link></li>
+              <li><.link navigate={~p"/settings/notifications"}>Notification settings</.link></li>
               <li :if={Varsel.Accounts.can_list_api_keys?(@current_user)}>
                 <.link navigate={~p"/settings/tokens"}>API Tokens</.link>
               </li>
@@ -292,7 +307,9 @@ defmodule VarselWeb.Layouts do
     "/cases",
     "/reports",
     "/users",
-    "/settings/tokens"
+    "/settings/tokens",
+    "/settings/notifications",
+    "/notifications"
   ]
 
   attr :href, :string,

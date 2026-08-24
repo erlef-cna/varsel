@@ -12,6 +12,13 @@ Sign in with your GitHub or Hex.pm account. Registration is open, but a
 fresh account holds no role; what you can do is decided by the role a CNA
 Point of Contact gives you and by the cases you are on.
 
+The bell in the header tracks what needs your attention (comments,
+proposals, review requests, publication) and links to the full list at
+[Notifications](/notifications). Pick what you hear about and whether it
+also reaches you by email at [Notification
+settings](/settings/notifications); notification emails carry no case
+details, just a link back here.
+
 ## Who Does What
 
 - **Supporters** ([coordinators](/coordinator-process)) do the case work:

@@ -58,9 +58,12 @@ and adopting an already-existing CVE record into a new case.
 
 Roles are granted under [Users](/users): new coordinators get the
 supporter role once they have signed in, and a change takes effect
-immediately, open sessions included. Case access works from the case by
-GitHub or Hex.pm handle and reaches people without an account via invites;
-removing someone is yours alone. No email goes out on any of it yet, so tell
-the person.
+immediately, open sessions included. No email goes out on a role change, so
+tell the person. Case access works from the case by GitHub or Hex.pm handle
+and reaches people without an account via invites; granting it notifies the
+person in-app and by email, per their [notification
+settings](/settings/notifications). That email is content-free, so still
+tell them what changed on the advisory thread. Removing someone is yours alone and sends
+nothing.
 
 ![The user management table with one account per role](/images/guide/user-management.png)

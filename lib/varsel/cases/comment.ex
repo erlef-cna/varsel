@@ -18,7 +18,7 @@ defmodule Varsel.Cases.Comment do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
-    notifiers: [Ash.Notifier.PubSub]
+    notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
 

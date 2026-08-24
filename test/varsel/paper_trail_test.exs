@@ -46,7 +46,8 @@ defmodule Varsel.PaperTrailTest do
     assert versions != []
 
     for version <- versions, {field, value} <- version.changes do
-      refute field =~ "email", "#{inspect(version.__struct__)} versions #{field}"
+      refute String.ends_with?(field, "email"),
+             "#{inspect(version.__struct__)} versions #{field}"
 
       refute is_binary(value) and String.contains?(value, "@"),
              "#{inspect(version.__struct__)} wrote an address into #{field}"

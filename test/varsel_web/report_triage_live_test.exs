@@ -11,6 +11,7 @@ defmodule VarselWeb.ReportTriageLiveTest do
   alias Varsel.Cases
   alias Varsel.CVE
   alias Varsel.Fixtures
+  alias Varsel.Notifications
 
   defp log_in(conn, user) do
     conn
@@ -309,6 +310,47 @@ defmodule VarselWeb.ReportTriageLiveTest do
       refute html =~ "Named by the sender"
       refute html =~ "triage_maintainer"
       refute html =~ "maintainer@example.com"
+    end
+  end
+
+  describe "notification auto-read" do
+    test "a POC visiting the triage queue marks their unread report_submitted notifications read",
+         %{
+           conn: conn,
+           poc: poc,
+           reporter: reporter
+         } do
+      report = submit_report(reporter, "auto-read on triage visit")
+
+      Notifications.record_notification!(
+        %{kind: :report_submitted, user_id: poc.id, vulnerability_report_id: report.id},
+        authorize?: false
+      )
+
+      assert [_unread] = Notifications.list_unread_notifications!(actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/reports")
+
+      assert render(lv) =~ "auto-read on triage visit"
+      assert Notifications.list_unread_notifications!(actor: poc) == []
+    end
+
+    test "a plain reporter's own visit does not touch anyone's notifications", %{
+      conn: conn,
+      poc: poc,
+      reporter: reporter
+    } do
+      report = submit_report(reporter, "reporter visit stays inert")
+
+      Notifications.record_notification!(
+        %{kind: :report_submitted, user_id: poc.id, vulnerability_report_id: report.id},
+        authorize?: false
+      )
+
+      {:ok, lv, _html} = conn |> log_in(reporter) |> live(~p"/reports")
+
+      assert render(lv) =~ "My Reports"
+      assert [_still_unread] = Notifications.list_unread_notifications!(actor: poc)
     end
   end
 end

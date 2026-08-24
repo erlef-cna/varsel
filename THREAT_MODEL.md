@@ -134,7 +134,7 @@ access says otherwise (`release.ex`).
 | CVE validation actions — any authenticated user | `validate_cve_record*` (GraphQL + MCP) | **cvelint subprocess**, **hex.pm egress** | **Yes — §6** |
 | Auth surface (GitHub **and Hex.pm** OAuth login, OAuth 2.1 server, API keys, sessions) | `/auth`, `/oauth/*`, `/sign-in`, `/settings/tokens`, `/settings/account` | GitHub + Hex.pm IdPs, DB | **Yes** |
 | Account linking (attach a second provider to an existing account) | `/settings/account/link/start/:strategy` | IdP, DB | **Yes — §6** |
-| CNA workbench (cases, reports, CVE lifecycle, user mgmt) — LiveView + GraphQL/MCP tools | `/cases`, `/reports`, `/users`, `/cves`, GraphQL/MCP POC tools | DB, **MITRE API**, **git egress** | **Yes** |
+| CNA workbench (cases, reports, CVE lifecycle, user mgmt, notifications) — LiveView + GraphQL/MCP tools | `/cases`, `/reports`, `/users`, `/cves`, `/notifications`, `/settings/notifications`, GraphQL/MCP POC tools | DB, **MITRE API**, **git egress** | **Yes** |
 | Render-time derivation (`exgit` git clone/fetch of package repos) | `Varsel.Cases.Derivation` | **Outbound git to `repo_url`** | **Yes — key boundary (§4)** |
 | Catalog sync (CWE/CAPEC/OTP-versions) — Oban jobs | scheduled workers | Outbound HTTPS to fixed hosts | **Yes (trusted-source egress)** |
 | `cvelint` subprocess (validates rendered CVE JSON) | `Varsel.CVE.Cvelint` | `Exile`, record piped to stdin | **Yes** |
@@ -248,20 +248,16 @@ flavours and they fail differently. A *strict* check (`actor_present()`,
 `Forbidden` error; a *filter* check (`relates_to_actor_via`,
 `expr(id == ^actor(:id))`) authorizes the action and narrows the rows, so an
 unauthorized caller gets an **empty result, not an error**. Both are correct
-outcomes. Five strict policies exist:
-
-- `Case`, `User`, `ApiKey` and `VulnerabilityReport` carry a strict policy on
-  reads, so an anonymous read refuses outright rather than returning nothing.
-- `Token` carries an action-scoped strict policy on `:list_sessions`, which
-  compares the requested subject to the actor's own id.
+outcomes. The top-level private resources carry a strict policy on reads, so
+an anonymous read refuses outright rather than returning nothing.
 
 **Those strict policies match reads only.** A policy that matches an action and
 grants is the whole decision for it, so a policy matching every action would
-decide every action no other policy names. Scoping these to `action_type(:read)`
-leaves each write to be named by a policy of its own, and an action no policy
-names is refused. **A new action on any resource is forbidden until someone
-writes a policy for it** — that is the property to check a report against, not
-the framework's default.
+decide every action no other policy names. Scoping the strict grants to
+`action_type(:read)` leaves each write to be named by a policy of its own, and
+an action no policy names is refused. **A new action on any resource is
+forbidden until someone writes a policy for it** — that is the property to
+check a report against, not the framework's default.
 
 `Case`'s strict policy asks only that someone is signed in; *which* cases they
 may see is decided by the filter policy after it, so a role-less caller is
@@ -306,9 +302,10 @@ moment. (`socket_disconnect.ex`, `disconnect_sockets.ex`, `graphql_socket.ex`)
    `state == :published` (CVE) or `always()` (OSV/CWE/CAPEC) → serialized
    JSON/HTML. No write path. (`cve_record.ex`, `osv_record.ex`)
 2. **Report intake** — authenticated user → `VulnerabilityReport.submit`
-   (`actor_present()`) → arbitrary `report_json` persisted → content-free
-   "go look" email to POCs (Oban); the payload itself never leaves the
-   authenticated console. (`vulnerability_report.ex`, `emails.ex`)
+   (`actor_present()`) → arbitrary `report_json` persisted → a
+   `report_submitted` notification to every POC, in-app and as a content-free
+   email per their preferences; the payload itself never leaves the
+   authenticated console (`vulnerability_report.ex`, `notifications/`).
 2a. **hex.pm report intake** — hex.pm (service token, no actor) →
    `submit_from_hex` → report plus a `report_participants` row per person
    hex.pm named. Those rows carry **third-party names and email addresses for
@@ -413,7 +410,8 @@ claims:
   derivation (see §6).
 - **Spawns a subprocess** — yes: the `cvelint` binary, run directly with a
   fixed argument list and fed the CVE JSON on its stdin (`cvelint.ex`).
-- **Sends email** — yes, to POC addresses via SMTP. (`emails.ex`)
+- **Sends email** — yes, to any user's `notification_email` via SMTP, gated by
+  that user's own per-kind and delivery-mode preferences. (`emails.ex`)
 - **Writes to disk** — no. `cvelint` reads from stdin, and `exgit` and the
   catalog unzip are **in-memory** (`cvelint.ex`, `weakness.ex`, `git_repo.ex`).
 
@@ -460,8 +458,8 @@ from controlling only its size.
 
 | Surface | Parameter | Control kind | Attacker-controllable? | Sink / caller must |
 | --- | --- | --- | --- | --- |
-| `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The POC email is content-free (link only), so the payload never leaves the authenticated console. |
-| `submit_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free POC email as a web report. |
+| `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The resulting notification emails are content-free (link only), so the payload never leaves the authenticated console. |
+| `submit_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free notification emails as a web report. |
 | `submit_from_hex` | `reporter` / `maintainers` (`name`, `username`, `email`) | data | **Yes — same** | `report_participants` rows. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact. A `username` later matches a hex sign-in and grants that account the participant row (§8) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
@@ -546,7 +544,7 @@ a trusted integration partner.
 | Atom/RSS feeds | Feed readers, cross-origin | **Yes** — built as an XML tree and encoded (`Saxy`), never concatenated, so every value is escaped as text or as an attribute by construction. Links are `~p` routes resolved against the endpoint, so they name the configured host and the request's `Host` never reaches the document (`feed_controller.ex`) | — |
 | Sitemap XML | Crawlers | **Yes** — same as the feeds: an XML tree, encoded (`Saxy`). The host is the configured `Endpoint.url()`, not the request's (`sitemap_controller.ex`) | — |
 | `avatar_url` on a user | Browser `img` | Public field, deliberately. With a linked GitHub account it is that account's picture; otherwise a Gravatar URL keyed on the MD5 of `notification_email`, which lets anyone who can read the row test a guess at that address (§9) (`user.ex`) | — |
-| POC notification email | Plain-text mail | Yes — `text_body`, fixed headers, and **content-free**: it carries only a link to the authenticated triage console, no report payload or reporter identity, since email is unencrypted in transit/at rest (`emails.ex`) | — |
+| Notification emails (immediate + digest) | Plain-text mail | Yes — `text_body`, fixed headers, and **content-free**: each carries only the event kind and a link to the authenticated console, never case or report content, since email offers no encryption we can rely on end to end (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
 
 Every markdown/HTML render sink sanitizes (ammonia allow-list) before `raw/1`,
@@ -1031,6 +1029,10 @@ number.
   accepted rather than pending. A report that a rolled-back publish still
   reached MITRE describes this, not a defect. (`cve_record.ex`,
   `mitre_cve_api.ex`)
+  `Varsel.Notifications.Notifier` raises its `Event` row *after* the source
+  action's transaction commits, so a crash in that window between commit and
+  the `Event` insert loses the notification for that action with no retry:
+  the source write stands, nobody is told. (`notifications/notifier.ex`)
 - **No allowlist on which public host `repo_url` may name.** `repo_url` is
   constrained to `https://` (rejecting exgit's `file://` local-file read and
   plaintext `http://`) and to a host that resolves to a public address —

@@ -38,6 +38,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Readiness
   alias Varsel.Cases.VersionEvent
   alias Varsel.CVE
+  alias Varsel.Notifications
   alias Varsel.Types.CVSS
   alias VarselWeb.AffectedComponents
   alias VarselWeb.CveView
@@ -172,7 +173,15 @@ defmodule VarselWeb.CaseDetailLive do
     socket |> put_flash(:error, "Case not found.") |> push_navigate(to: ~p"/cases")
   end
 
-  defp after_case_fetch(case_record, socket), do: assign_case(socket, case_record)
+  defp after_case_fetch(case_record, socket) do
+    if connected?(socket) do
+      Notifications.mark_case_notifications_read!(case_record.id,
+        actor: socket.assigns.current_user
+      )
+    end
+
+    assign_case(socket, case_record)
+  end
 
   @impl Phoenix.LiveView
   def handle_params(_params, _uri, socket) do
@@ -1030,7 +1039,12 @@ defmodule VarselWeb.CaseDetailLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      current_path={@current_path}
+      socket={@socket}
+    >
       <div class={@preview_open? && "opacity-45"}>
         <.page_header>
           <:eyebrow>

@@ -226,7 +226,12 @@ defmodule VarselWeb.AccountSettingsLive do
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} current_path={@current_path}>
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      current_path={@current_path}
+      socket={@socket}
+    >
       <.page_header>
         <:eyebrow>CNA Console</:eyebrow>
         <:title>Account</:title>
@@ -318,6 +323,13 @@ defmodule VarselWeb.AccountSettingsLive do
               </button>
             </li>
           </ul>
+
+          <.link
+            navigate={~p"/settings/notifications"}
+            class="link link-hover text-primary text-sm mt-3 inline-block"
+          >
+            Notification settings →
+          </.link>
         </.panel>
 
         <.panel>

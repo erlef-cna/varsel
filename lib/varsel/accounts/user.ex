@@ -30,6 +30,9 @@ defmodule Varsel.Accounts.User do
   alias Varsel.Accounts.User.Role
   alias Varsel.Accounts.UserIdentity
   alias Varsel.Cases.Proposal
+  alias Varsel.Notifications.EmailMode
+  alias Varsel.Notifications.Notification
+  alias Varsel.Notifications.Preference
 
   # Read while compiling, never at runtime — Mix is absent from a release.
   @mock_login? Mix.env() in ~w(dev test)a
@@ -47,8 +50,9 @@ defmodule Varsel.Accounts.User do
       authorize_if always()
     end
 
-    # The :notify_pocs Oban worker needs each POC's email; it reads through the
-    # Oban bypass (see the read policy), so grant it every field too.
+    # The notification fan-out and email/digest workers need role, address and
+    # preference fields; they read through the Oban bypass (see the read
+    # policy), so grant it every field too.
     field_policy_bypass :*, AshObanInteraction do
       authorize_if always()
     end
@@ -68,7 +72,13 @@ defmodule Varsel.Accounts.User do
     # Everything else is POC, self, or console only. The reconcile that runs after an
     # identity write reads the address and the identities' emails with no
     # actor; its stamped provenance admits it (see the read policies).
-    field_policy [:notification_email, :identity_emails, :role] do
+    field_policy [
+      :notification_email,
+      :identity_emails,
+      :role,
+      :notification_email_mode,
+      :notification_preferences
+    ] do
       authorize_if actor_attribute_equals(:system, :release_console)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
@@ -227,6 +237,14 @@ defmodule Varsel.Accounts.User do
       accept [:notification_email]
     end
 
+    update :update_notification_settings do
+      description "Sets the account's per-kind notification preferences and email delivery mode."
+      accept [:notification_email_mode, :notification_preferences]
+      require_atomic? false
+
+      validate Varsel.Accounts.User.Validations.UniquePreferenceKinds
+    end
+
     update :update do
       description "Updates a user's own editable profile fields (name)."
       # Role is intentionally NOT accepted here: :update is self-editable
@@ -285,8 +303,10 @@ defmodule Varsel.Accounts.User do
       authorize_if always()
     end
 
-    # The :notify_pocs Oban worker lists every POC to email them; it has no
-    # actor, so it authorizes through this bypass.
+    # The notification fan-out worker lists POCs and assigned users to notify
+    # them, and the email/digest workers read a recipient's address and
+    # preferences; none of these have an actor, so they authorize through
+    # this bypass.
     bypass AshObanInteraction do
       authorize_if always()
     end
@@ -336,6 +356,12 @@ defmodule Varsel.Accounts.User do
     # the addresses that user's own providers reported, and it decides where
     # their mail goes.
     policy action(:set_notification_email) do
+      authorize_if expr(id == ^actor(:id))
+    end
+
+    # Notification preferences are self-only, POCs included: nobody else
+    # decides what mail a user wants.
+    policy action(:update_notification_settings) do
       authorize_if expr(id == ^actor(:id))
     end
 
@@ -395,6 +421,20 @@ defmodule Varsel.Accounts.User do
       allow_nil? true
     end
 
+    attribute :notification_email_mode, EmailMode do
+      description "Whether requested notification emails go out immediately or as a daily digest."
+      allow_nil? false
+      default :immediate
+      public? true
+    end
+
+    attribute :notification_preferences, {:array, Preference} do
+      description "Per-kind in-app/email opt-in. A kind absent here defaults to both channels on."
+      allow_nil? false
+      default []
+      public? true
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -402,6 +442,10 @@ defmodule Varsel.Accounts.User do
   relationships do
     has_many :valid_api_keys, Varsel.Accounts.ApiKey do
       filter expr(valid)
+    end
+
+    has_many :notifications, Notification do
+      public? false
     end
 
     # The linked OAuth providers. Their emails are the candidates a user may
