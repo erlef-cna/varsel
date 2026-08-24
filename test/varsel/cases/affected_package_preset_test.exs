@@ -8,6 +8,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
   alias Ash.Error.Invalid
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
+  alias Varsel.Cases.PackageChannel.Calculations.Purl
   alias Varsel.Fixtures
 
   @intro_sha String.duplicate("a", 40)
@@ -57,10 +58,20 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
 
       assert [
                %{purl_type: "sid", namespace: "erlang.org", name: "otp", position: 0},
-               %{purl_type: "otp", name: "ssh", subpath: "lib/ssh", position: 1},
+               %{purl_type: "otp", name: "ssh", subpath: "lib/ssh", position: 1} = ssh,
                %{purl_type: "otp", name: "ssl", subpath: "lib/ssl", position: 2},
                %{purl_type: "github", namespace: "erlang", name: "otp"}
              ] = package.channels
+
+      assert ssh.qualifiers == %{
+               "repository_url" => "https://github.com/erlang/otp",
+               "vcs_url" => "git+https://github.com/erlang/otp.git"
+             }
+
+      # CVE-2026-58227's packageURL spelling, with vcs_url on the purl spec's
+      # vcs_tool+transport form (the published record predates that fix).
+      assert Purl.compose(ssh) ==
+               "pkg:otp/ssh?repository_url=https:%2F%2Fgithub.com%2Ferlang%2Fotp&vcs_url=git%2Bhttps:%2F%2Fgithub.com%2Ferlang%2Fotp.git"
 
       assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==
                MapSet.new([
@@ -164,9 +175,15 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
       assert package.cpe == nil
 
       assert [
-               %{purl_type: "otp", name: "elixir", subpath: "lib/elixir", version_type: :semver},
+               %{purl_type: "otp", name: "elixir", subpath: "lib/elixir", version_type: :semver} =
+                 elixir_channel,
                %{purl_type: "github", namespace: "elixir-lang", name: "elixir"}
              ] = package.channels
+
+      assert elixir_channel.qualifiers == %{
+               "repository_url" => "https://github.com/elixir-lang/elixir",
+               "vcs_url" => "git+https://github.com/elixir-lang/elixir.git"
+             }
 
       assert length(package.version_events) == 2
     end

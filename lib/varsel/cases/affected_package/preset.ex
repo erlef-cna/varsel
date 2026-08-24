@@ -128,12 +128,14 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
       position: 0
     }
 
-    [release | application_channels(applications, 1, :otp)]
+    [release | application_channels(applications, 1, :otp, attributes(:otp).repo_url)]
   end
 
-  def channels(:elixir, applications), do: application_channels(applications, 0, :semver)
+  def channels(:elixir, applications) do
+    application_channels(applications, 0, :semver, attributes(:elixir).repo_url)
+  end
 
-  defp application_channels(applications, offset, version_type) do
+  defp application_channels(applications, offset, version_type, repo_url) do
     applications
     |> Enum.with_index(offset)
     |> Enum.map(fn {application, position} ->
@@ -142,7 +144,11 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
         name: application,
         subpath: application_subpath(application),
         version_type: version_type,
-        position: position
+        position: position,
+        qualifiers: %{
+          "repository_url" => repo_url,
+          "vcs_url" => "git+#{repo_url}.git"
+        }
       }
     end)
   end
