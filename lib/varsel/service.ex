@@ -36,9 +36,10 @@ defmodule Varsel.Service do
   @type system_hexpm_intake() :: :hexpm_intake
 
   @typedoc """
-  Connects provider handles to accounts once the provider vouches for them:
-  claiming report participants and case invites on sign-in, and pointing a
-  new participant at the account already holding its handle.
+  Connects provider handles to accounts: claiming report participants and
+  case invites on sign-in, pointing intake-named people and their reports at
+  the accounts already holding their handles, and looking a handle up when
+  someone is granted case access.
   """
   @type system_identity_claim() :: :identity_claim
 

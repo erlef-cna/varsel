@@ -44,14 +44,13 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
     end
   end
 
-  # Unauthorized because the answer is never reported as such — the caller sees
-  # an assignment or an invite, neither of which says who else exists here.
+  # The answer is never reported back: the caller sees an assignment or an
+  # invite, neither of which says who else exists here.
   defp owner(strategy, username) do
     UserIdentity
     |> Ash.Query.filter(strategy == ^to_string(strategy) and username == ^username)
     |> Ash.Query.select([:user_id])
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-    |> Ash.read_one(authorize?: false)
+    |> Ash.read_one(actor: Varsel.Service.identity_claim())
     |> case do
       {:ok, %{user_id: user_id}} -> user_id
       _none -> nil

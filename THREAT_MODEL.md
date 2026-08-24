@@ -671,11 +671,10 @@ build** (`MIX_ENV=prod`) — a build that ships the mock login (§5a) provides
 none of the authorization properties, by construction rather than by defect.
 
 1. **Role-scoped authorization on every resource.**
-   Every action is policy-gated; the role→action matrix in §2 holds. No
-   exposed action grants callers `authorize?: false`: outside tests the flag
-   is banned by the `AshCredo.Check.Warning.AuthorizeFalse` credo check
-   (`.credo.exs`), so the few remaining uses are all internal changes, never
-   a caller-reachable contract. Other internal operations
+   Every action is policy-gated; the role→action matrix in §2 holds. Nothing
+   runs with `authorize?: false`: outside tests the flag is banned by the
+   `AshCredo.Check.Warning.AuthorizeFalse` credo check (`.credo.exs`), and
+   app code carries no use of it. Internal operations
    run as the `Varsel.Service` actors the policies name (§4). Internal
    system operations that legitimately bypass the actor's policy do so through
    a bypass the actor cannot reach — the `AshObanInteraction` bypass for Oban
@@ -1195,7 +1194,7 @@ a triager who hits one of those flags sees the justification there.
 | --- | --- |
 | "Route X has no authentication check." | No route does. The router resolves an actor and stops; the policy on the first action the page runs is the check. Grepping the router for a role gate finds nothing by design (§4). |
 | "Reading resource X as an anonymous caller returns success." | For a filter-scoped resource it returns `{:ok, []}` — success with no rows, which is how an Ash filter policy denies (§4). A finding only if rows actually come back, and none do. |
-| "`authorize?: false` appears in the code." | Every remaining use is inside a change, validation or notifier that runs *after* the enclosing action's policy admitted the caller; none sits on a path a caller selects. Caller-facing uses are banned by a credo check (property 1). |
+| "`authorize?: false` appears in the code." | Only in tests. App code carries none: the flag is banned by a credo check, and internal operations run as policy-named identities (property 1). |
 | "The `cvelint` call passes user input to an external program." | The binary is executed directly — no shell — with a fixed argument list, and the record reaches it on stdin rather than as an argument (property 13). |
 | "`Exgit.clone(repo_url)` is an SSRF sink." | Constrained to https and a public-resolving host, pinned at connect (property 12). The residual reach to *public* hosts is deliberate (§9) and needs POC/assignee privilege (§4). |
 | "A supporter can resolve proposals like a POC." | Accepting or declining a proposal on an assigned case is intended supporter authority; assignment is the grant (§11). |
