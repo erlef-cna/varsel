@@ -125,4 +125,10 @@ in
       files = "\\.png$";
     };
   };
+
+  # The upstream module wires `devenv:git-hooks:run` before `devenv:enterTest`,
+  # and the CLI resolves shell entry with `--mode all`, which pulls in every
+  # task on both sides of the target. Detaching it keeps the whole suite off
+  # shell entry; it still runs on commit and in CI.
+  tasks."devenv:git-hooks:run".before = lib.mkForce [ ];
 }
