@@ -15,18 +15,19 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecord do
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
-    Ash.Changeset.before_action(changeset, &publish(&1, context.actor))
+    Ash.Changeset.before_action(changeset, &publish(&1, context))
   end
 
-  defp publish(changeset, actor) do
+  defp publish(changeset, context) do
     case_record = changeset.data
+    actor = context.actor
 
     with :ok <- require_cve_record(case_record),
          {:ok, refreshed} <- Varsel.Cases.refresh_case_derivation(case_record, actor: actor),
          {:ok, %{preview: preview}} <- Ash.load(refreshed, [:preview], actor: actor),
          :ok <- check_blockers(preview.blockers),
          :ok <- check_validation(Varsel.CVE.validate_cve_record!(preview.cve_record)) do
-      hand_to_cve_record(changeset, case_record, preview.cve_record, actor)
+      hand_to_cve_record(changeset, case_record, preview.cve_record, context)
     else
       {:error, messages} ->
         Enum.reduce(messages, changeset, fn message, changeset ->
@@ -53,8 +54,11 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecord do
      end)}
   end
 
-  defp hand_to_cve_record(changeset, case_record, cve_json, actor) do
-    cve_record = Varsel.CVE.get_cve_record!(case_record.cve_record_id, authorize?: false)
+  defp hand_to_cve_record(changeset, case_record, cve_json, context) do
+    actor = context.actor
+
+    cve_record =
+      Varsel.CVE.get_cve_record!(case_record.cve_record_id, Ash.Context.to_opts(context))
 
     action =
       case cve_record.state do
