@@ -53,7 +53,7 @@ jobs:
         # Credo must not fail the build; findings are reported to GitHub instead.
         run: mix credo --strict --all --format sarif > credo.sarif || true
       - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: credo.sarif
           category: credo
@@ -170,7 +170,7 @@ jobs:
         # Report findings to GitHub rather than failing the build.
         run: zizmor --format sarif . > zizmor.sarif || true
       - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: zizmor.sarif
           category: zizmor
