@@ -35,15 +35,20 @@ defmodule Varsel.Cases.Changes.SupersedeOrphanedProposals do
     end)
   end
 
+  @stamp %{private: %{proposal_sweep?: true}}
+
   defp sweep(record, driving_proposal_id, context) do
+    opts =
+      context
+      |> Ash.Context.to_opts()
+      |> Keyword.update(:context, @stamp, &Ash.Helpers.deep_merge_maps(&1, @stamp))
+
     Proposal
     |> Ash.Query.filter(state == :open and target_id == ^record.id)
     |> exclude_driving_proposal(driving_proposal_id)
     |> Varsel.Cases.supersede_case_proposal!(
       %{resolution_note: "the targeted row was deleted"},
-      actor: context.actor,
-      authorize?: false,
-      bulk_options: [strategy: :stream, return_errors?: true]
+      Keyword.put(opts, :bulk_options, strategy: :stream, return_errors?: true)
     )
   end
 

@@ -364,6 +364,7 @@ defmodule Varsel.Cases.Case do
     # POCs see every case; everyone else only the cases they are assigned to,
     # which is the whole of an unroled collaborator's access.
     policy action_type(:read) do
+      authorize_if actor_attribute_equals(:system, :notifier)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:assignments, :user])
     end

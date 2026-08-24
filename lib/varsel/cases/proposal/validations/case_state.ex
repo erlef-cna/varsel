@@ -15,12 +15,12 @@ defmodule Varsel.Cases.Proposal.Validations.CaseState do
   use Ash.Resource.Validation
 
   @impl Ash.Resource.Validation
-  def validate(changeset, opts, _context) do
+  def validate(changeset, opts, context) do
     allowed = Keyword.fetch!(opts, :states)
     message = Keyword.fetch!(opts, :message)
     case_id = Ash.Changeset.get_attribute(changeset, :case_id)
 
-    case fetch_case_state(case_id) do
+    case fetch_case_state(case_id, context) do
       {:ok, state} ->
         if state in allowed do
           :ok
@@ -33,10 +33,10 @@ defmodule Varsel.Cases.Proposal.Validations.CaseState do
     end
   end
 
-  defp fetch_case_state(nil), do: :error
+  defp fetch_case_state(nil, _context), do: :error
 
-  defp fetch_case_state(case_id) do
-    case Varsel.Cases.get_case(case_id, authorize?: false) do
+  defp fetch_case_state(case_id, context) do
+    case Varsel.Cases.get_case(case_id, Ash.Context.to_opts(context)) do
       {:ok, %{state: state}} -> {:ok, state}
       {:error, _} -> :error
     end

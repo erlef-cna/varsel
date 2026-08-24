@@ -17,18 +17,18 @@ defmodule Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage do
   alias Ash.Resource.Validation
 
   @impl Validation
-  def validate(changeset, _opts, _context) do
+  def validate(changeset, _opts, context) do
     # A channel created through its package's `:channels` relationship has both
     # ids stamped by Ash *after* validation, and they agree by construction.
     # Presence itself is the relationship's `allow_nil? false` to enforce.
     case Ash.Changeset.get_attribute(changeset, :affected_package_id) do
       nil -> :ok
-      affected_package_id -> compare_case(changeset, affected_package_id)
+      affected_package_id -> compare_case(changeset, affected_package_id, context)
     end
   end
 
-  defp compare_case(changeset, affected_package_id) do
-    case Varsel.Cases.get_affected_package(affected_package_id, authorize?: false) do
+  defp compare_case(changeset, affected_package_id, context) do
+    case Varsel.Cases.get_affected_package(affected_package_id, Ash.Context.to_opts(context)) do
       {:ok, package} ->
         if package.case_id == Ash.Changeset.get_attribute(changeset, :case_id) do
           :ok

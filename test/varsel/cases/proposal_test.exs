@@ -191,7 +191,9 @@ defmodule Varsel.Cases.ProposalTest do
         proposed_value: %{"value" => "From supporter"}
       }
 
-      assert {:error, %Forbidden{}} =
+      # The CaseState validation reads the case as the proposer, so a case the
+      # unassigned supporter cannot see is refused as nonexistent.
+      assert {:error, %Ash.Error.Invalid{errors: [%{field: :case_id, message: "case does not exist"}]}} =
                Cases.create_case_proposal(params, actor: supporter)
 
       Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)

@@ -243,9 +243,14 @@ defmodule Varsel.Cases.Proposal do
       authorize_if relates_to_actor_via(:author)
     end
 
-    # Internal only — invoked from sweep changes with authorize?: false.
     policy action(:supersede) do
+      forbid_unless context_equals([:private, :proposal_sweep?], true)
       authorize_if actor_attribute_equals(:role, :poc)
+
+      authorize_if expr(
+                     ^actor(:role) == :supporter and
+                       exists(case.assignments, user_id == ^actor(:id))
+                   )
     end
   end
 

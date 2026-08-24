@@ -65,10 +65,11 @@ defmodule Varsel.Accounts.User do
       authorize_if always()
     end
 
-    # Everything else is POC-or-self only. The reconcile that runs after an
+    # Everything else is POC, self, or console only. The reconcile that runs after an
     # identity write reads the address and the identities' emails with no
     # actor; its stamped provenance admits it (see the read policies).
     field_policy [:notification_email, :identity_emails, :role] do
+      authorize_if actor_attribute_equals(:system, :release_console)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
       authorize_if accessing_from(UserIdentity, :user)
@@ -236,7 +237,7 @@ defmodule Varsel.Accounts.User do
     end
 
     update :set_role do
-      description "Sets a user's role. Restricted to POCs."
+      description "Sets a user's role. Restricted to POCs and the release console."
       accept [:role]
     end
 
@@ -303,6 +304,7 @@ defmodule Varsel.Accounts.User do
     end
 
     policy action_type(:read) do
+      authorize_if actor_attribute_equals(:system, :release_console)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
       # Users are also visible when loaded through a row the actor can read
@@ -323,7 +325,10 @@ defmodule Varsel.Accounts.User do
       authorize_if expr(id == ^actor(:id))
     end
 
+    # The console grant is how a deployment's first POC comes to be: setting a
+    # role otherwise requires a POC, which the first one has nobody to be.
     policy action(:set_role) do
+      authorize_if actor_attribute_equals(:system, :release_console)
       authorize_if actor_attribute_equals(:role, :poc)
     end
 

@@ -16,6 +16,7 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimCaseInvites do
   alias Ash.Changeset
   alias Varsel.Cases
   alias Varsel.Cases.CaseAssignment
+  alias Varsel.Service
 
   require Ash.Query
 
@@ -38,24 +39,21 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimCaseInvites do
   defp claim_for(nil, _identity), do: :ok
 
   defp claim_for(strategy, identity) do
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
     invites =
-      Cases.list_case_invites_for_identity!(strategy, identity.username, authorize?: false)
+      Cases.list_case_invites_for_identity!(strategy, identity.username, actor: Service.identity_claim())
 
     Enum.each(invites, &claim_invite(&1, identity))
   end
 
   defp claim_invite(invite, identity) do
     if !assigned?(invite, identity) do
-      # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
       Cases.assign_case_user!(
         %{case_id: invite.case_id, user_id: identity.user_id, note: invite.note},
-        authorize?: false
+        actor: Service.identity_claim()
       )
     end
 
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-    Cases.withdraw_case_invite!(invite, authorize?: false)
+    Cases.withdraw_case_invite!(invite, actor: Service.identity_claim())
   end
 
   # Checked rather than rescued: a unique violation would abort the transaction
@@ -63,8 +61,7 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimCaseInvites do
   defp assigned?(invite, identity) do
     CaseAssignment
     |> Ash.Query.filter(case_id == ^invite.case_id and user_id == ^identity.user_id)
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-    |> Ash.exists?(authorize?: false)
+    |> Ash.exists?(actor: Service.identity_claim())
   end
 
   defp strategy_atom("github"), do: :github

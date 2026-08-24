@@ -14,9 +14,12 @@ defmodule Varsel.CVE.OsvRecord.Changes.Sync do
   alias Varsel.CVE.OsvRecord
 
   @impl Ash.Resource.Change
-  def change(changeset, _opts, _context) do
+  def change(changeset, _opts, context) do
     record = changeset.data
-    cve_record = Varsel.CVE.get_cve_record!(record.cve_record_id, authorize?: false)
+
+    cve_record =
+      Varsel.CVE.get_cve_record!(record.cve_record_id, Varsel.ObanContext.forward(context))
+
     now = DateTime.utc_now()
 
     case OsvRecord.derive(cve_record) do

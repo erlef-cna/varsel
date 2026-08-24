@@ -17,6 +17,7 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants do
 
   alias Ash.Changeset
   alias Varsel.CVE
+  alias Varsel.Service
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, _context) do
@@ -37,9 +38,8 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants do
   defp claim_for(nil, _identity), do: :ok
 
   defp claim_for(strategy, identity) do
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
     participants =
-      CVE.list_report_participants_for_identity!(strategy, identity.username, authorize?: false)
+      CVE.list_report_participants_for_identity!(strategy, identity.username, actor: Service.identity_claim())
 
     Enum.each(participants, &claim_participant(&1, identity))
   end
@@ -49,13 +49,11 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants do
   defp claim_participant(%{role: :reporter} = participant, identity) do
     claim_report(participant, identity)
 
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-    CVE.spend_report_participant!(participant, authorize?: false)
+    CVE.spend_report_participant!(participant, actor: Service.identity_claim())
   end
 
   defp claim_participant(participant, identity) do
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-    CVE.link_report_participant_user!(participant, %{user_id: identity.user_id}, authorize?: false)
+    CVE.link_report_participant_user!(participant, %{user_id: identity.user_id}, actor: Service.identity_claim())
   end
 
   # The sign-in link sends a reporter to their report, and the read policy
@@ -64,12 +62,10 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants do
   # Checked rather than rescued: this runs inside the sign-in transaction, so
   # a report that already found its reporter must not fail the login.
   defp claim_report(participant, identity) do
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-    report = CVE.get_vulnerability_report!(participant.report_id, authorize?: false)
+    report = CVE.get_vulnerability_report!(participant.report_id, actor: Service.identity_claim())
 
     if is_nil(report.reporter_id) do
-      # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-      CVE.link_vulnerability_report_reporter!(report, %{reporter_id: identity.user_id}, authorize?: false)
+      CVE.link_vulnerability_report_reporter!(report, %{reporter_id: identity.user_id}, actor: Service.identity_claim())
     end
   end
 

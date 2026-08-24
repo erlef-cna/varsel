@@ -170,6 +170,13 @@ excludes only `test`). Tests may use it. Route around it by case:
 - *Row only ever written via a managed relationship?* Authorize by provenance:
   `authorize_if accessing_from(ParentResource, :relationship_name)`. For a
   many_to_many join the name is `:<name>_join_assoc`.
+- *Nested step of a policy-gated action, run as the caller?* Stamp the nested
+  call's changeset context and have its policy demand the stamp next to an
+  actor rule. The change deep-merges `%{private: %{<flag>: true}}` into the
+  `:context` of `Ash.Context.to_opts(context)`; the policy pairs
+  `context_equals([:private, :<flag>], true)` with the roles the enclosing
+  action admits. `:store_derivation`, `:supersede` and CveRecord `:assign`
+  work this way.
 - *Reading a public resource?* Just drop the flag; an actor-less authorized read
   passes.
 - *Render/derivation internals needing full case data?* Thread the actor; an
@@ -180,10 +187,11 @@ above the flagged token: for a multi-line call, above the line that opens it;
 for a pipe, above the piped segment.
 
 Nested calls that must run as someone other than the caller take
-`actor: <that actor>` explicitly. Do not express a permission as
-`context_equals`: action context is ambient state that any code path can set on
-its way in, and it carries no relationship to who is asking. It says "this call
-came through some code", not "this caller may do this". Authorize on the actor
+`actor: <that actor>` explicitly. `context_equals` alone is never a
+permission: action context is ambient state that any code path can set on its
+way in, and it carries no relationship to who is asking. It says "this call
+came through some code", not "this caller may do this". A stamp narrows an
+actor rule to one code path; it never replaces one. Authorize on the actor
 and the row.
 
 **Inspecting policies.** To see what a resource actually decides, rather than

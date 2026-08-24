@@ -32,7 +32,7 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
   alias Varsel.Cases.Proposal.Target
 
   @impl Ash.Resource.Validation
-  def validate(changeset, _opts, _context) do
+  def validate(changeset, _opts, context) do
     target = Ash.Changeset.get_attribute(changeset, :target)
     target_id = Ash.Changeset.get_attribute(changeset, :target_id)
     operation = Ash.Changeset.get_attribute(changeset, :operation)
@@ -42,7 +42,7 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
 
     with :ok <- validate_shape(target, target_id, operation, field_name, proposed_value),
          :ok <- validate_value(target, operation, field_name, proposed_value) do
-      validate_membership(target, target_id, operation, case_id)
+      validate_membership(target, target_id, operation, case_id, context)
     end
   end
 
@@ -320,9 +320,9 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
   end
 
   # Existence + case-membership: walk from the referenced row up to its case.
-  defp validate_membership(_target, nil, _operation, _case_id), do: :ok
+  defp validate_membership(_target, nil, _operation, _case_id, _context), do: :ok
 
-  defp validate_membership(target, target_id, operation, case_id) do
+  defp validate_membership(target, target_id, operation, case_id, context) do
     # For :insert the target_id references the *parent* kind; else the row itself.
     referenced =
       case operation do
@@ -330,11 +330,7 @@ defmodule Varsel.Cases.Proposal.Validations.ValidTarget do
         _other -> target
       end
 
-    # Data-integrity check inside the already policy-gated :propose validation:
-    # confirm the referenced row's true case membership, independent of what the
-    # proposing actor happens to be able to read.
-    # credo:disable-for-next-line AshCredo.Check.Warning.AuthorizeFalse
-    case Ash.get(Target.resource(referenced), target_id, authorize?: false) do
+    case Ash.get(Target.resource(referenced), target_id, Ash.Context.to_opts(context)) do
       {:ok, %{case_id: ^case_id}} ->
         :ok
 
