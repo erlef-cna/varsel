@@ -5,7 +5,6 @@
 defmodule Varsel.Cases.CasePublishHandoffTest do
   use Varsel.DataCase, async: false
 
-  alias Varsel.CVE.CveRecord
   alias Varsel.CVE.MitreCveApi
   alias Varsel.Fixtures
 
