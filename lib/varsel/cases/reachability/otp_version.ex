@@ -17,9 +17,6 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   nor orders against a numeric one.
 
   Pre-releases order below the release of the same number (`29.0-rc1` < `29.0`).
-
-  `0` is the CVE record's name for "since the first version" and orders below
-  every release.
   """
 
   @enforce_keys [:segments, :prerelease?, :raw]
@@ -31,23 +28,13 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
           raw: String.t()
         }
 
-  @floor "0"
-
   # An R-series tag or a topic tag built on one. Matched to be rejected, so an
   # `R16B03` neither parses as a version nor falls through to the numeric
   # parser, which would read its digits and order it among the numeric releases.
   @r_series ~r/\AR\d/
 
-  @doc "The version naming the start of all history, which orders below every release."
-  @spec floor() :: String.t()
-  def floor, do: @floor
-
   @doc "Parses an OTP version string. `:error` for non-release tags."
   @spec parse(String.t()) :: {:ok, t()} | :error
-  def parse(@floor) do
-    {:ok, %__MODULE__{segments: [], prerelease?: false, raw: @floor}}
-  end
-
   def parse(version) when is_binary(version) do
     bare = strip_prefix(version)
 
@@ -100,9 +87,8 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   ## ------------------------------------------------------------ internals
 
   # `{rank, segments, release_rank}`: rank 0 for a release, 1 for anything that
-  # is not one, so a non-release sorts last and never bounds a real range. The
-  # floor's empty segment list sorts below every release, and a release ranks
-  # above its pre-releases.
+  # is not one, so a non-release sorts last and never bounds a real range. A
+  # release ranks above its pre-releases.
   defp sort_key(%__MODULE__{} = v), do: {0, v.segments, if(v.prerelease?, do: 0, else: 1)}
 
   defp sort_key(version) when is_binary(version) do

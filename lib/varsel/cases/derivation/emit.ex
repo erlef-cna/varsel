@@ -41,7 +41,6 @@ defmodule Varsel.Cases.Derivation.Emit do
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.PackageChannel.PurlType
   alias Varsel.Cases.Reachability
-  alias Varsel.Cases.Reachability.OTPVersion
 
   @type range :: Reachability.range()
 
@@ -49,6 +48,10 @@ defmodule Varsel.Cases.Derivation.Emit do
   # list cannot carry an empty entry — Ash trims it away — so the bare flavor is
   # stored as this marker instead.
   @bare_tag "-"
+
+  # "By convention, typically 0 denotes the earliest possible version" (CVE
+  # Record Format 5.1).
+  @zero "0"
 
   # The root (parent-less) commit of erlang/otp: the squashed import its history
   # starts at, so a vulnerability introduced here predates every version the tag
@@ -183,11 +186,8 @@ defmodule Varsel.Cases.Derivation.Emit do
   end
 
   # A range from the start of history starts the application's there too.
-  defp app_lower_bound(from, app) do
-    if from == OTPVersion.floor(),
-      do: {:ok, from},
-      else: OtpVersionsTable.first_shipped_version(from, app)
-  end
+  defp app_lower_bound(@zero, _app), do: {:ok, @zero}
+  defp app_lower_bound(from, app), do: OtpVersionsTable.first_shipped_version(from, app)
 
   defp app_upper_bound(:unbounded, _app), do: {:ok, :unbounded}
   defp app_upper_bound(until, app), do: OtpVersionsTable.app_version(bare(until), app)
@@ -250,7 +250,12 @@ defmodule Varsel.Cases.Derivation.Emit do
   defp otp_sentinel(_channel, [%{from: from} | _]), do: unknown_range(bare(from), "otp")
 
   defp unknown_range(upper, version_type) do
-    %{"version" => "0", "lessThan" => upper, "status" => "unknown", "versionType" => version_type}
+    %{
+      "version" => @zero,
+      "lessThan" => upper,
+      "status" => "unknown",
+      "versionType" => version_type
+    }
   end
 
   defp prepend_root_sentinel(result, nil), do: result

@@ -48,16 +48,11 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
       assert OTPVersion.compare("29.0-rc1", "29.0") == :lt
     end
 
-    test "the floor orders below every release" do
-      assert OTPVersion.compare(OTPVersion.floor(), "17.0") == :lt
-      assert OTPVersion.compare(OTPVersion.floor(), "29.0-rc1") == :lt
-    end
-
     test "sorts an ascending timeline" do
-      tags = ~w(OTP-27.0 OTP-17.0 0 OTP-26.2.5 29.0-rc1 29.0)
+      tags = ~w(OTP-27.0 OTP-17.0 OTP-26.2.5 29.0-rc1 29.0)
 
       assert Enum.sort_by(tags, & &1, &(OTPVersion.compare(&1, &2) != :gt)) ==
-               ~w(0 OTP-17.0 OTP-26.2.5 OTP-27.0 29.0-rc1 29.0)
+               ~w(OTP-17.0 OTP-26.2.5 OTP-27.0 29.0-rc1 29.0)
     end
 
     # Neither bounds a range, so the only requirement is that they never displace
