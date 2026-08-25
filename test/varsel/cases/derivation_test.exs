@@ -548,6 +548,13 @@ defmodule Varsel.Cases.DerivationTest do
     # No sentinel row: the unlisted era is said by the default, not by a range.
     refute Enum.any?(channel["versions"], &(&1["status"] == "unknown"))
 
+    # One fix needs no transition, so this falls to the flat form — where the
+    # fix-carrying span has to be stated as an explicit unaffected range.
+    assert [
+             %{"version" => "26.0", "lessThan" => "26.2.5.15", "status" => "affected"},
+             %{"version" => "26.2.5.15", "lessThan" => "*", "status" => "unaffected"}
+           ] = channel["versions"]
+
     # CPE cannot say unknown, so the possibly-affected pre-import span folds
     # into the lowest match as a dropped lower bound.
     assert [%{"versionStartIncluding" => nil, "versionEndExcluding" => "26.2.5.15"}] =

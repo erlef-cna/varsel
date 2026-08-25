@@ -70,7 +70,7 @@ defmodule Varsel.Cases.Derivation.Emit do
           git(Keyword.get(opts, :intro_shas, []), Keyword.get(opts, :fix_shas, []))
 
         other ->
-          versions(channel, other, ranges, Keyword.get(opts, :boundaries))
+          versions(channel, other, ranges, opts)
       end
 
     result
@@ -116,7 +116,7 @@ defmodule Varsel.Cases.Derivation.Emit do
   # Every non-git range passes through the channel's tag decoration: one range
   # per flavor, each bound prefixed and suffixed. No suffixes means the bare
   # version, which is what most channels publish.
-  defp decorated_ranges(channel, ranges, version_type) do
+  defp decorated_ranges(channel, ranges, version_type, status) do
     prefix = channel.tag_prefix || ""
     suffixes = if channel.tag_suffixes in [nil, []], do: [@bare_tag], else: channel.tag_suffixes
 
@@ -124,7 +124,8 @@ defmodule Varsel.Cases.Derivation.Emit do
       version_object(
         decorate(prefix, bare(range.from), suffix),
         decorated_bound(prefix, range.until, suffix),
-        version_type
+        version_type,
+        status
       )
     end
   end
@@ -144,20 +145,34 @@ defmodule Varsel.Cases.Derivation.Emit do
   # the same facts as one open entry with a transition per fix, which the schema
   # resolves by applying every transition at or below the version asked about —
   # the fixes on that version's own line, and no others.
-  defp versions(channel, version_type, ranges, boundaries) do
+  defp versions(channel, version_type, ranges, opts) do
     vocabulary = vocabulary(channel, version_type)
+    statused = statused_ranges(ranges, opts)
 
     if VersionComparator.total_order?(version_type) do
-      flat_versions(channel, version_type, ranges, vocabulary)
+      flat_versions(channel, version_type, statused, vocabulary)
     else
-      status_change_versions(channel, version_type, ranges, boundaries, vocabulary)
+      status_change_versions(channel, version_type, statused, opts, vocabulary)
     end
   end
 
-  defp status_change_versions(channel, version_type, ranges, boundaries, vocabulary) do
+  defp status_change_versions(channel, version_type, statused, opts, vocabulary) do
+    boundaries = Keyword.get(opts, :boundaries)
+
     case status_change_entry(channel, version_type, boundaries, vocabulary) do
-      nil -> flat_versions(channel, version_type, ranges, vocabulary)
+      nil -> flat_versions(channel, version_type, statused, vocabulary)
       entry -> %{"versions" => [entry], "issues" => []}
+    end
+  end
+
+  # An `unknown` default leaves every unlisted version unclaimed, so the releases
+  # whose safety rests on the patch have to be stated: containment alone — "this
+  # release never held the introducing commit" — is the proof such a record
+  # declines to make.
+  defp statused_ranges(ranges, opts) do
+    case Keyword.get(opts, :default_status, :unaffected) do
+      :unknown -> [{ranges, "affected"}, {Keyword.get(opts, :fixed_ranges, []), "unaffected"}]
+      _unaffected -> [{ranges, "affected"}]
     end
   end
 
@@ -183,14 +198,18 @@ defmodule Varsel.Cases.Derivation.Emit do
     %{lower: &{:ok, &1}, upper: &{:ok, &1}, issue: nil}
   end
 
-  defp flat_versions(channel, version_type, ranges, vocabulary) do
+  defp flat_versions(channel, version_type, statused_ranges, vocabulary) do
     type = to_string(version_type)
 
-    ranges
-    |> Enum.reduce_while([], fn range, acc ->
+    statused_ranges
+    |> Enum.flat_map(fn {ranges, status} -> Enum.map(ranges, &{&1, status}) end)
+    |> Enum.reduce_while([], fn {range, status}, acc ->
       case translate_range(range, vocabulary) do
-        {:ok, translated} -> {:cont, [decorated_ranges(channel, [translated], type) | acc]}
-        :error -> {:halt, :error}
+        {:ok, translated} ->
+          {:cont, [decorated_ranges(channel, [translated], type, status) | acc]}
+
+        :error ->
+          {:halt, :error}
       end
     end)
     |> case do
@@ -272,9 +291,9 @@ defmodule Varsel.Cases.Derivation.Emit do
   # exists whether or not a release contains it.
   defp git([], _fix_shas), do: %{"versions" => [], "issues" => ["the introduced boundary has no commit SHA"]}
 
-  defp git([intro | _], []), do: %{"versions" => [version_object(intro, "*", "git")], "issues" => []}
+  defp git([intro | _], []), do: %{"versions" => [version_object(intro, "*", "git", "affected")], "issues" => []}
 
-  defp git([intro | _], [fix]), do: %{"versions" => [version_object(intro, fix, "git")], "issues" => []}
+  defp git([intro | _], [fix]), do: %{"versions" => [version_object(intro, fix, "git", "affected")], "issues" => []}
 
   defp git([intro | _], fixes) do
     chain = %{
@@ -290,11 +309,11 @@ defmodule Varsel.Cases.Derivation.Emit do
 
   ## ------------------------------------------------------------ shared
 
-  defp version_object(from, until, version_type) do
+  defp version_object(from, until, version_type, status) do
     %{
       "version" => from,
       "lessThan" => until,
-      "status" => "affected",
+      "status" => status,
       "versionType" => version_type
     }
   end

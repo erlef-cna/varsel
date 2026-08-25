@@ -31,7 +31,13 @@ defmodule Varsel.Cases.Reachability do
   open-ended; a fix followed by a re-introduction is simply the next range.
   Non-release tags (`nightly`, `v1.19-latest`, OTP topic tags) drop out.
 
-  The output (`t:result/0`) carries the ranges, `pending_fixes` (a fix commit in
+  The same run-cutting yields `fixed_ranges`: maximal runs of versions that
+  *carry a fix*, as opposed to versions that merely never contained the
+  introducing commit. The distinction matters only where unlisted versions fall
+  to `unknown`, since containment-based safety is exactly what such a record
+  declines to rely on.
+
+  The output (`t:result/0`) carries the ranges, `fixed_ranges`, `pending_fixes` (a fix commit in
   no tag), `unreleased_intros` (introducing commits in no tag, with nothing else
   supplying the intro boundary), an `open?` flag (some range is unbounded),
   `prerelease_conflict` call-outs (an excluded pre-release whose status disagrees
@@ -57,6 +63,7 @@ defmodule Varsel.Cases.Reachability do
 
   @type result :: %{
           ranges: [range()],
+          fixed_ranges: [range()],
           boundaries: boundaries(),
           call_outs: [call_out()],
           open?: boolean(),
@@ -143,7 +150,12 @@ defmodule Varsel.Cases.Reachability do
       affected =
         apply_explicit(derived_affected, explicit, universe, kind, derived_safe: fix_tags)
 
-      result = deduce(universe, affected, opts)
+      fixed =
+        fix_tags
+        |> MapSet.union(MapSet.new(for {:fixed, version} <- explicit, do: version))
+        |> MapSet.difference(affected)
+
+      result = deduce(universe, affected, Keyword.put(opts, :fixed, fixed))
 
       {:ok,
        %{
@@ -223,6 +235,8 @@ defmodule Varsel.Cases.Reachability do
   Options:
 
     * `:comparator` (required) — `:semver` | `:otp`.
+    * `:fixed` (default none) — the fix-carrying tag names; their runs come back
+      as `fixed_ranges`. A name in both sets counts as affected.
     * `:include_prereleases` (default `true`) — whether pre-release tags may bound
       ranges. `false` for OTP (it does not report them); excluded pre-releases are
       still checked and surface as `:prerelease_conflict` call-outs when their
@@ -232,12 +246,13 @@ defmodule Varsel.Cases.Reachability do
   def deduce(all_tags, affected, opts) do
     kind = Keyword.fetch!(opts, :comparator)
     include_prereleases = Keyword.get(opts, :include_prereleases, true)
+    fixed = Keyword.get(opts, :fixed, MapSet.new())
 
     labeled =
       for name <- Enum.uniq(all_tags), VersionComparator.release?(kind, name) do
         %{
           version: name,
-          affected?: MapSet.member?(affected, name),
+          status: version_status(name, affected, fixed),
           prerelease?: VersionComparator.prerelease?(kind, name)
         }
       end
@@ -247,10 +262,11 @@ defmodule Varsel.Cases.Reachability do
         do: {labeled, []},
         else: Enum.split_with(labeled, &(not &1.prerelease?))
 
-    {ranges, has_open?} = collapse(kind, considered)
+    {ranges, fixed_ranges, has_open?} = collapse(kind, considered)
 
     %{
       ranges: ranges,
+      fixed_ranges: fixed_ranges,
       boundaries: boundaries(kind, considered),
       call_outs: prerelease_call_outs(kind, considered, excluded_prereleases),
       open?: has_open?,
@@ -258,6 +274,14 @@ defmodule Varsel.Cases.Reachability do
       unreleased_intros: [],
       issues: []
     }
+  end
+
+  defp version_status(name, affected, fixed) do
+    cond do
+      MapSet.member?(affected, name) -> :affected
+      MapSet.member?(fixed, name) -> :fixed
+      true -> :untouched
+    end
   end
 
   ## ---------------------------------------------------------------- boundaries
@@ -282,7 +306,7 @@ defmodule Varsel.Cases.Reachability do
   end
 
   defp introduced_boundary(sorted) do
-    Enum.find_value(sorted, fn entry -> entry.affected? && entry.version end)
+    Enum.find_value(sorted, fn entry -> entry.status == :affected && entry.version end)
   end
 
   # The safe releases that close something, reduced to those none of the others
@@ -293,11 +317,11 @@ defmodule Varsel.Cases.Reachability do
   # `17.0.0.2` there while belonging to a line the flaw never reached, and
   # publishing it as a fix would state a transition that closes nothing.
   defp fix_boundaries(kind, sorted) do
-    affected = for entry <- sorted, entry.affected?, do: entry.version
+    affected = for entry <- sorted, entry.status == :affected, do: entry.version
 
     candidates =
       for entry <- sorted,
-          not entry.affected?,
+          entry.status != :affected,
           Enum.any?(affected, &VersionComparator.implies?(kind, &1, entry.version)),
           do: entry.version
 
@@ -320,7 +344,7 @@ defmodule Varsel.Cases.Reachability do
 
   defp fully_covered?(kind, sorted, introduced, fixed) do
     Enum.all?(sorted, fn entry ->
-      entry.affected? or
+      entry.status == :affected or
         VersionComparator.compare(kind, entry.version, introduced) == :lt or
         Enum.any?(fixed, &VersionComparator.implies?(kind, &1, entry.version))
     end)
@@ -362,32 +386,31 @@ defmodule Varsel.Cases.Reachability do
   # versions. Each run is one range `[first-affected, first-safe-after)` — or
   # open-ended when it reaches the newest version unfixed.
   defp collapse(kind, labeled) do
-    ranges =
+    runs =
       kind
       |> VersionComparator.sort(labeled, & &1.version)
       |> chunk_by_status()
-      |> ranges_from_runs()
 
-    {ranges, Enum.any?(ranges, &(&1.until == :unbounded))}
+    ranges = ranges_from_runs(runs, :affected)
+
+    {ranges, ranges_from_runs(runs, :fixed), Enum.any?(ranges, &(&1.until == :unbounded))}
   end
 
-  # Consecutive same-status runs across the whole timeline: {affected?, [entry]}.
-  # The leading unaffected run (pre-intro) is dropped by ranges_from_runs.
   defp chunk_by_status(sorted) do
     sorted
-    |> Enum.chunk_by(& &1.affected?)
-    |> Enum.map(fn [%{affected?: affected?} | _] = run -> {affected?, run} end)
+    |> Enum.chunk_by(& &1.status)
+    |> Enum.map(fn [%{status: status} | _] = run -> {status, run} end)
   end
 
-  # An affected run becomes [first, next-run's-first). The upper bound is the
-  # first version of the immediately following (unaffected) run; a trailing
-  # affected run has no follower -> :unbounded.
-  defp ranges_from_runs(runs) do
+  # A run of `status` becomes [first, next-run's-first). The upper bound is the
+  # first version of the immediately following run, whatever its status; a
+  # trailing run has no follower -> :unbounded.
+  defp ranges_from_runs(runs, status) do
     runs
     |> Enum.with_index()
     |> Enum.flat_map(fn
-      {{true, run}, index} -> [range_for(run, Enum.at(runs, index + 1))]
-      {{false, _run}, _index} -> []
+      {{^status, run}, index} -> [range_for(run, Enum.at(runs, index + 1))]
+      {{_other, _run}, _index} -> []
     end)
   end
 
@@ -395,7 +418,7 @@ defmodule Varsel.Cases.Reachability do
     %{from: List.first(run).version, until: upper_bound(next_run)}
   end
 
-  defp upper_bound({false, [safe | _]}), do: safe.version
+  defp upper_bound({_status, [next | _]}), do: next.version
   defp upper_bound(nil), do: :unbounded
 
   ## ---------------------------------------------------------------- prereleases
@@ -411,9 +434,9 @@ defmodule Varsel.Cases.Reachability do
     considered_sorted = VersionComparator.sort(kind, considered, & &1.version)
 
     for pre <- excluded,
-        pre.affected?,
+        pre.status == :affected,
         release = its_release(kind, considered_sorted, pre.version),
-        not release.affected? do
+        release.status != :affected do
       %{reason: :prerelease_conflict, version: pre.version, dag_label: :affected}
     end
   end

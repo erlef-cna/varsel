@@ -69,8 +69,10 @@ wrong. Investigate before trusting either side.
   the package's *versions outside the derived ranges* to **unknown** — for a
   repository whose history starts at a squashed import, or when nobody audited
   that far back. The record then claims nothing about them
-  (`defaultStatus: unknown`), and the CPE range drops its lower bound, treating
-  the older era as possibly affected. The default, **unaffected**, asserts
+  (`defaultStatus: unknown`) and instead lists the releases carrying the fix
+  explicitly as unaffected, since "never contained the introducing commit" is
+  the proof it just declined to make. The CPE range drops its lower bound,
+  treating the older era as possibly affected. The default, **unaffected**, asserts
   every release outside the derived ranges is known safe. The OTP preset
   selects unknown for a root-commit intro; it is an ordinary setting from there
   on.

@@ -318,6 +318,44 @@ defmodule Varsel.Cases.ReachabilityTest do
     end
   end
 
+  describe "fixed_ranges (fix-carrying spans)" do
+    test "a fixed run becomes one range, versions never containing the intro do not" do
+      # 0.9.x predates the intro: safe, but not by carrying the fix.
+      result =
+        Reachability.deduce(
+          ["0.9.0", "1.0.0", "1.0.1", "1.0.2", "1.0.3"],
+          MapSet.new(["1.0.0", "1.0.1"]),
+          comparator: :semver,
+          fixed: MapSet.new(["1.0.2", "1.0.3"])
+        )
+
+      assert versions(result) == [{"1.0.0", "1.0.2"}]
+      assert Enum.map(result.fixed_ranges, &{&1.from, &1.until}) == [{"1.0.2", :unbounded}]
+    end
+
+    test "a re-introduction bounds the fixed span and wins over the fixed label" do
+      result =
+        Reachability.deduce(
+          ["1.0.0", "1.1.0", "1.2.0", "2.0.0", "2.1.0"],
+          MapSet.new(["1.0.0", "2.0.0"]),
+          comparator: :semver,
+          fixed: MapSet.new(["1.1.0", "1.2.0", "2.0.0", "2.1.0"])
+        )
+
+      assert versions(result) == [{"1.0.0", "1.1.0"}, {"2.0.0", "2.1.0"}]
+
+      assert Enum.map(result.fixed_ranges, &{&1.from, &1.until}) == [
+               {"1.1.0", "2.0.0"},
+               {"2.1.0", :unbounded}
+             ]
+    end
+
+    test "without the fixed set there are no fixed ranges" do
+      result = deduce([{"1.0.0", true}, {"1.0.1", false}], comparator: :semver)
+      assert result.fixed_ranges == []
+    end
+  end
+
   describe "edge cases" do
     test "an affected span that is never fixed is open-ended" do
       result =

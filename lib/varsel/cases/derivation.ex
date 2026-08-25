@@ -73,7 +73,8 @@ defmodule Varsel.Cases.Derivation do
       intro_shas: intro_shas,
       fix_shas: fix_shas,
       boundaries: reach.boundaries,
-      default_status: default_status
+      default_status: default_status,
+      fixed_ranges: reach.fixed_ranges
     ]
 
     channels =
@@ -119,6 +120,7 @@ defmodule Varsel.Cases.Derivation do
   defp empty_reachability do
     %{
       ranges: [],
+      fixed_ranges: [],
       boundaries: %{introduced: nil, fixed: [], open?: false},
       call_outs: [],
       open?: false,

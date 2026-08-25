@@ -486,6 +486,75 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
   end
 
+  describe "an unknown default status" do
+    # Containment alone — "this release never held the introducing commit" — is
+    # the proof an unknown default declines to make, so the releases whose
+    # safety rests on the patch are stated explicitly.
+    test "appends the fix-carrying spans as unaffected ranges on a flat scheme" do
+      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
+
+      opts = [
+        default_status: :unknown,
+        fixed_ranges: [%{from: "v1.5.3", until: :unbounded}]
+      ]
+
+      assert %{"versions" => [affected, unaffected]} =
+               Emit.channel(channel, [range("v1.0.0", "v1.5.3")], opts)
+
+      assert affected == %{
+               "version" => "1.0.0",
+               "lessThan" => "1.5.3",
+               "status" => "affected",
+               "versionType" => "semver"
+             }
+
+      assert unaffected == %{
+               "version" => "1.5.3",
+               "lessThan" => "*",
+               "status" => "unaffected",
+               "versionType" => "semver"
+             }
+    end
+
+    test "an unaffected default publishes the affected ranges alone" do
+      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
+
+      opts = [
+        default_status: :unaffected,
+        fixed_ranges: [%{from: "v1.5.3", until: :unbounded}]
+      ]
+
+      assert %{"versions" => [affected]} =
+               Emit.channel(channel, [range("v1.0.0", "v1.5.3")], opts)
+
+      assert affected["status"] == "affected"
+    end
+
+    # A transition carries its own status, so the status-change form already
+    # states every fix-carrying span and adding ranges would say it twice.
+    test "the status-change form states its fixes through transitions alone" do
+      channel = %PackageChannel{
+        purl_type: "sid",
+        namespace: "erlang.org",
+        name: "otp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      opts = [
+        default_status: :unknown,
+        boundaries: %{introduced: "17.0", fixed: ["27.3.4.15", "28.5.0.4"], open?: true},
+        fixed_ranges: [%{from: "OTP-27.3.4.15", until: :unbounded}]
+      ]
+
+      assert %{"versions" => [entry]} =
+               Emit.channel(channel, [range("OTP-17.0", "OTP-27.3.4.15")], opts)
+
+      assert entry["status"] == "affected"
+      assert Enum.map(entry["changes"], & &1["at"]) == ["27.3.4.15", "28.5.0.4"]
+    end
+  end
+
   describe "the erlang/otp root commit" do
     @root "84adefa331c4159d432d22840663c38f155cd4c1"
 
