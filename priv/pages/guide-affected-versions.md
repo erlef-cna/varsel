@@ -53,9 +53,10 @@ wrong. Investigate before trusting either side.
   outside every release), allow unreleased fixes on the package.
 - **Vulnerable since the beginning of OTP's git history**: tick the OTP
   preset's since-creation checkbox. It stands for the erlang/otp root commit,
-  and the record reports the pre-R13B03 era as unknown. When the flaw is older
-  than the import too, give that boundary the version `0`: the range then
-  starts at `0`, on the release channel and on the application's.
+  and the record reports everything below the first affected release as
+  unknown. When the flaw is older than the import too, give that boundary the
+  version `0`: the range then starts at `0`, on the release channel and on the
+  application's.
 - **No usable repository**: it is gone, or its tags are unreliable or
   incomplete. Enter explicit version boundaries instead of commits.
 - **Prereleases** count as releases unless the project opts out, as OTP

@@ -144,8 +144,8 @@ defmodule Varsel.Cases.Derivation do
 
   # Whether the OTP root commit stands as the introduced boundary with nothing
   # else to place it: an event pairing that commit with an explicit version
-  # (e.g. "0", "R1A") names where the range truly starts, so the pre-R13B03
-  # span is resolved rather than unknown.
+  # (e.g. "0", "R1A") names where the range truly starts, so the span below it
+  # is resolved rather than unknown.
   defp unresolved_otp_root_intro?(events) do
     Enum.any?(events, fn event ->
       event.event == :introduced and is_binary(event.commit_sha) and

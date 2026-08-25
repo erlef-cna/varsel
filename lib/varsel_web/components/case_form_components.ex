@@ -133,8 +133,8 @@ defmodule VarselWeb.CaseFormComponents do
       >
         <:label>Affected since the beginning of OTP's git history</:label>
         <:description>
-          Stands for the erlang/otp root commit; the record reports the
-          pre-R13B03 era as unknown.
+          Stands for the erlang/otp root commit; the record reports everything
+          below the first affected release as unknown.
         </:description>
       </.input>
       <.input

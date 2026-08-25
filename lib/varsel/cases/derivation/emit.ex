@@ -50,18 +50,16 @@ defmodule Varsel.Cases.Derivation.Emit do
   # stored as this marker instead.
   @bare_tag "-"
 
-  # The root (parent-less) commit of erlang/otp — the R13B03 import that squashed
-  # all pre-R13B03 history. A vulnerability introduced *at* this commit predates
-  # every version our tag set can express, so we prepend an `unknown` sentinel
-  # range for the pre-R13B03 era rather than claiming to have derived it.
+  # The root (parent-less) commit of erlang/otp: the squashed import its history
+  # starts at, so a vulnerability introduced here predates every version the tag
+  # set can express.
   @otp_root_commit "84adefa331c4159d432d22840663c38f155cd4c1"
-  @first_otp_tag "R13B03"
 
-  @doc "The erlang/otp root commit (the pre-R13B03 boundary)."
+  @doc "The erlang/otp root commit, the start of derivable history."
   @spec otp_root_commit() :: String.t()
   def otp_root_commit, do: @otp_root_commit
 
-  @doc "Whether `sha` is the erlang/otp root commit (the pre-R13B03 boundary)."
+  @doc "Whether `sha` is the erlang/otp root commit, the start of derivable history."
   @spec otp_root_commit?(String.t()) :: boolean()
   def otp_root_commit?(sha), do: sha == @otp_root_commit
 
@@ -91,7 +89,7 @@ defmodule Varsel.Cases.Derivation.Emit do
           %{"versions" => decorated_ranges(channel, ranges, to_string(other)), "issues" => []}
       end
 
-    prepend_root_sentinel(result, sentinel_for(channel, version_type, opts))
+    prepend_root_sentinel(result, sentinel_for(channel, version_type, ranges, opts))
   end
 
   @doc """
@@ -107,19 +105,19 @@ defmodule Varsel.Cases.Derivation.Emit do
   cpeApplicability matches from the neutral ranges: each `[from, until)` is one
   non-overlapping `%{versionStartIncluding, versionEndExcluding}` (bare versions).
 
-  A range reaching back to the start of derivable history (`otp_root_intro?` —
-  the pre-R13B03 era) drops its lower bound instead of naming `R13B03`, matching
-  how NVD writes OTP's lowest affected line (`{versionEndExcluding: "23.3.4.15"}`,
-  no start). CPE has no way to say "unknown", so the pre-R13B03 span the
-  `versions[]` sentinel marks `unknown` is simply left unbounded below here — CPE
-  version comparison is consumer-defined and R-series tags do not collate against
-  numeric ones, so naming `R13B03` as a bound would be both unmatched and a
-  stronger claim than we can derive.
+  A range reaching back to the start of derivable history (`otp_root_intro?`)
+  drops its lower bound instead of naming the release there, matching how NVD
+  writes OTP's lowest affected line (`{versionEndExcluding: "23.3.4.15"}`, no
+  start). CPE has no way to say "unknown", so the span the `versions[]` sentinel
+  marks `unknown` is simply left unbounded below here — CPE version comparison is
+  consumer-defined and R-series tags do not collate against numeric ones, so
+  naming an R-series bound would be both unmatched and a stronger claim than we
+  can derive.
   """
   @spec cpe_matches([range()], keyword()) :: [map()]
   def cpe_matches(ranges, opts \\ []) do
-    # Reachability emits ranges in ascending release order, so the first one is
-    # the lowest — the only one that can reach back past R13B03.
+    # Reachability emits ranges in ascending release order, so the first is the
+    # lowest.
     drop_lower_bound? = Keyword.get(opts, :otp_root_intro?, false)
 
     for {range, index} <- Enum.with_index(ranges) do
@@ -221,31 +219,36 @@ defmodule Varsel.Cases.Derivation.Emit do
 
   ## ------------------------------------------------------------ root sentinel
 
-  # The `unknown` range covering the pre-R13B03 era, prepended when the vuln was
-  # introduced at the OTP root commit — the squashed import that erlang/otp's
-  # history starts at, so anything earlier is genuinely underivable rather than
-  # unaffected. `nil` (no sentinel) otherwise.
+  # The `unknown` range below the first affected release, prepended when the vuln
+  # was introduced at the OTP root commit: erlang/otp's history starts at that
+  # squashed import, so anything earlier is underivable rather than unaffected.
   #
-  #   * otp application channel -> {version:"0", lessThan:<app vsn at R13B03>, unknown}
-  #   * otp release channel     -> {version:"0", lessThan:"R13B03", unknown}
+  # The bound must not overlap the first range. CVE Record Format 5.1 resolves a
+  # version from the FIRST entry covering it, and the sentinel is prepended, so
+  # any overlap answers `unknown` for a version the ranges call affected.
   #
   # Only otp-versioned channels get one: a git channel is versioned in commit
   # SHAs and no commit precedes the root commit, and semver channels of other
   # products never see it.
-  defp sentinel_for(channel, :otp, opts) do
-    if Keyword.get(opts, :otp_root_intro?, false), do: otp_sentinel(channel)
+  defp sentinel_for(channel, :otp, ranges, opts) do
+    if Keyword.get(opts, :otp_root_intro?, false), do: otp_sentinel(channel, ranges)
   end
 
-  defp sentinel_for(_channel, _version_type, _opts), do: nil
+  defp sentinel_for(_channel, _version_type, _ranges, _opts), do: nil
 
-  defp otp_sentinel(%{purl_type: "otp", name: app}) when is_binary(app) do
-    case OtpVersionsTable.app_version(@first_otp_tag, app) do
+  defp otp_sentinel(_channel, []), do: nil
+
+  defp otp_sentinel(%{purl_type: "otp", name: app}, [%{from: from} | _]) when is_binary(app) do
+    # `app_lower_bound/2`, not `OtpVersionsTable.app_version/2`: the two disagree
+    # for an app younger than the release (ssh has no version at OTP_R6B-0), and
+    # only this one lands where `otp_app_versions/3` opens the range.
+    case app_lower_bound(bare(from), app) do
       {:ok, version} -> unknown_range(version, "otp")
       :error -> nil
     end
   end
 
-  defp otp_sentinel(_channel), do: unknown_range(@first_otp_tag, "otp")
+  defp otp_sentinel(_channel, [%{from: from} | _]), do: unknown_range(bare(from), "otp")
 
   defp unknown_range(upper, version_type) do
     %{"version" => "0", "lessThan" => upper, "status" => "unknown", "versionType" => version_type}
