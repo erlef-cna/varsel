@@ -127,11 +127,28 @@ defmodule Varsel.Cases.Reachability do
         apply_explicit(derived_affected, explicit, universe, kind, derived_safe: fix_tags)
 
       result = deduce(universe, affected, opts)
-      {:ok, %{result | pending_fixes: pending, unreleased_intros: unreleased_intros}}
+
+      {:ok,
+       %{
+         result
+         | pending_fixes: pending,
+           unreleased_intros: unreleased_intros,
+           issues: result.issues ++ unusable_explicit_issues(kind, explicit)
+       }}
     end
   end
 
   defp explicit_intros(explicit), do: for({:introduced, version} <- explicit, do: version)
+
+  # An explicit version the scheme cannot order never joins the universe, so it
+  # bounds nothing. Saying so beats letting the boundary vanish: OTP no longer
+  # orders R-series tags, and a POC who enters one would otherwise see a range
+  # that quietly ignores what they asserted.
+  defp unusable_explicit_issues(kind, explicit) do
+    for {event, version} <- explicit,
+        not VersionComparator.release?(kind, version),
+        do: "#{version} is not a version we can order, so it does not bound the #{event} boundary"
+  end
 
   # Explicit labels are asserted, so they override containment. An `:introduced`
   # version propagates forward — it and every later release up to the next

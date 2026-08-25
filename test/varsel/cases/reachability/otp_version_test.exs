@@ -9,9 +9,10 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
 
   describe "parse/1" do
     test "strips OTP-/OTP_ prefixes and keeps the raw name" do
-      assert {:ok, %OTPVersion{era: 1, raw: "OTP-27.3.4.3"}} = OTPVersion.parse("OTP-27.3.4.3")
-      assert {:ok, %OTPVersion{era: 0, raw: "OTP_R13B03"}} = OTPVersion.parse("OTP_R13B03")
-      assert {:ok, %OTPVersion{era: 1, raw: "27.0"}} = OTPVersion.parse("27.0")
+      assert {:ok, %OTPVersion{segments: [27, 3, 4, 3], raw: "OTP-27.3.4.3"}} =
+               OTPVersion.parse("OTP-27.3.4.3")
+
+      assert {:ok, %OTPVersion{segments: [27, 0], raw: "27.0"}} = OTPVersion.parse("27.0")
     end
 
     test "rejects topic/feature tags" do
@@ -19,14 +20,20 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
       assert OTPVersion.parse("R16B02_yielding_binary_to_term") == :error
     end
 
+    # The R series is out of scope: the digits in `R13B03` would otherwise reach
+    # the numeric parser and order the tag among the numeric releases.
+    test "rejects R-series releases" do
+      assert OTPVersion.parse("OTP_R13B03") == :error
+      assert OTPVersion.parse("R13B03") == :error
+      assert OTPVersion.parse("OTP_R16B03-1") == :error
+      assert OTPVersion.parse("R10B-1a") == :error
+      assert OTPVersion.parse("OTP_R16B01_RC1") == :error
+      assert OTPVersion.parse("OTP_R16A_RELEASE_CANDIDATE") == :error
+    end
+
     test "flags pre-releases" do
       assert {:ok, %OTPVersion{prerelease?: true}} = OTPVersion.parse("29.0-rc1")
-      assert {:ok, %OTPVersion{prerelease?: true}} = OTPVersion.parse("OTP_R16B01_RC1")
-
-      assert {:ok, %OTPVersion{prerelease?: true}} =
-               OTPVersion.parse("OTP_R16A_RELEASE_CANDIDATE")
-
-      assert {:ok, %OTPVersion{prerelease?: false}} = OTPVersion.parse("OTP_R16B03-1")
+      assert {:ok, %OTPVersion{prerelease?: false}} = OTPVersion.parse("29.0")
     end
   end
 
@@ -39,29 +46,39 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
 
     test "a pre-release orders below its release" do
       assert OTPVersion.compare("29.0-rc1", "29.0") == :lt
-      assert OTPVersion.compare("OTP_R16B01_RC1", "OTP_R16B01") == :lt
     end
 
-    test "every R release orders below every modern release, and among themselves" do
-      tags =
-        ~w(OTP-17.0 OTP_R16B03-1 OTP_R13B03 OTP_R15B03-1 OTP_R14A OTP-27.0 OTP_R6B-0 R10B-1a R10B-1 R10B-2)
+    test "the floor orders below every release" do
+      assert OTPVersion.compare(OTPVersion.floor(), "17.0") == :lt
+      assert OTPVersion.compare(OTPVersion.floor(), "29.0-rc1") == :lt
+    end
+
+    test "sorts an ascending timeline" do
+      tags = ~w(OTP-27.0 OTP-17.0 0 OTP-26.2.5 29.0-rc1 29.0)
 
       assert Enum.sort_by(tags, & &1, &(OTPVersion.compare(&1, &2) != :gt)) ==
-               ~w(OTP_R6B-0 R10B-1 R10B-1a R10B-2 OTP_R13B03 OTP_R14A OTP_R15B03-1 OTP_R16B03-1 OTP-17.0 OTP-27.0)
+               ~w(0 OTP-17.0 OTP-26.2.5 OTP-27.0 29.0-rc1 29.0)
+    end
+
+    # Neither bounds a range, so the only requirement is that they never displace
+    # one that does.
+    test "a non-release sorts above every release" do
+      assert OTPVersion.compare("nightly", "29.0") == :gt
+      assert OTPVersion.compare("OTP_R13B03", "17.0") == :gt
     end
   end
 
   describe "release?/1 and prerelease?/1" do
-    test "release? accepts modern + R-series, rejects topic tags" do
+    test "release? accepts numeric releases, rejects R-series and topic tags" do
       assert OTPVersion.release?("OTP-27.3.4.3")
-      assert OTPVersion.release?("OTP_R13B03")
+      refute OTPVersion.release?("OTP_R13B03")
       refute OTPVersion.release?("OTP_R16B03_yielding_binary_to_term")
     end
 
-    test "prerelease? detects rc and RC markers" do
+    test "prerelease? detects rc markers" do
       assert OTPVersion.prerelease?("29.0-rc3")
-      assert OTPVersion.prerelease?("OTP_R16B01_RC1")
       refute OTPVersion.prerelease?("29.0")
+      refute OTPVersion.prerelease?("OTP_R16B01_RC1")
     end
   end
 end

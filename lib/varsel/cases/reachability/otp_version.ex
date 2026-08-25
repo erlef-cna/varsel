@@ -7,45 +7,36 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   Parses and orders Erlang/OTP release versions, in the shape of Elixir's
   `Version`.
 
-  OTP has two eras. `OTP-`/`OTP_` prefixes are stripped first, so `OTP-27.0` and
-  `27.0` parse identically.
+  Versions are the numeric releases, `17.0` and up: `27.3.4.3`, `29.0-rc1`.
+  `OTP-`/`OTP_` prefixes are stripped first, so `OTP-27.0` and `27.0` parse
+  identically.
 
-    * **modern** — numeric (`17.0` and up), e.g. `27.3.4.3`, `29.0-rc1`.
-    * **legacy R-series** — `R6B-0` … `R16B03-1`, optionally with an RC marker
-      (`R16A_RELEASE_CANDIDATE`, `R16B01_RC1`). A re-release carries a letter
-      after the patch (`R10B-1a`) and orders right after the release it
-      replaces. Every R release orders *below* every modern one (R16 preceded
-      17.0). A `release line` is `{:r, major, letter}` (e.g. `R13B`); modern
-      lines are the `major` integer.
+  The legacy R series (`R6B-0` … `R16B03-1`) is **not** a version here.
+  `parse/1` returns `:error` for it, as it does for topic/feature tags such as
+  `R16B03_yielding_binary_to_term`, so an R tag neither bounds a derived range
+  nor orders against a numeric one.
 
-  Topic/feature tags such as `R16B03_yielding_binary_to_term` are not release
-  versions — `parse/1` returns `:error` for them.
-
-  Pre-releases order below the release of the same number (`29.0-rc1` < `29.0`;
-  `R16A_RELEASE_CANDIDATE` < `R16A`).
+  Pre-releases order below the release of the same number (`29.0-rc1` < `29.0`).
 
   `0` is the CVE record's name for "since the first version" and orders below
-  every release of either era. No OTP release was ever numbered 0; read as a
-  modern version it would sort after the whole R series.
+  every release.
   """
 
-  @enforce_keys [:era, :segments, :prerelease?, :raw]
-  defstruct [:era, :segments, :prerelease?, :raw]
+  @enforce_keys [:segments, :prerelease?, :raw]
+  defstruct [:segments, :prerelease?, :raw]
 
   @type t :: %__MODULE__{
-          era: -1 | 0 | 1,
           segments: [integer()],
           prerelease?: boolean(),
           raw: String.t()
         }
 
-  # Era discriminators so one Erlang term order sorts the floor below legacy
-  # below modern.
-  @floor_era -1
-  @r_era 0
-  @modern_era 1
-
   @floor "0"
+
+  # An R-series tag or a topic tag built on one. Matched to be rejected, so an
+  # `R16B03` neither parses as a version nor falls through to the numeric
+  # parser, which would read its digits and order it among the numeric releases.
+  @r_series ~r/\AR\d/
 
   @doc "The version naming the start of all history, which orders below every release."
   @spec floor() :: String.t()
@@ -54,25 +45,13 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   @doc "Parses an OTP version string. `:error` for non-release tags."
   @spec parse(String.t()) :: {:ok, t()} | :error
   def parse(@floor) do
-    {:ok, %__MODULE__{era: @floor_era, segments: [], prerelease?: false, raw: @floor}}
+    {:ok, %__MODULE__{segments: [], prerelease?: false, raw: @floor}}
   end
 
   def parse(version) when is_binary(version) do
     bare = strip_prefix(version)
 
-    case r_parts(bare) do
-      {:ok, major, letter, minor, patch, rerelease, rc?} ->
-        {:ok,
-         %__MODULE__{
-           era: @r_era,
-           segments: [major, letter_rank(letter), minor, patch, rerelease],
-           prerelease?: rc?,
-           raw: version
-         }}
-
-      :error ->
-        parse_modern(bare, version)
-    end
+    if Regex.match?(@r_series, bare), do: :error, else: parse_modern(bare, version)
   end
 
   defp parse_modern(bare, version) do
@@ -85,7 +64,6 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
       segments ->
         {:ok,
          %__MODULE__{
-           era: @modern_era,
            segments: segments,
            prerelease?: suffix != "",
            raw: version
@@ -110,7 +88,7 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   @spec release?(String.t()) :: boolean()
   def release?(version), do: match?({:ok, _}, parse(version))
 
-  @doc "Whether `version` is a pre-release (a modern `-suffix` or an R-series RC)."
+  @doc "Whether `version` is a pre-release (a `-suffix` release candidate)."
   @spec prerelease?(String.t()) :: boolean()
   def prerelease?(version) do
     case parse(version) do
@@ -121,15 +99,16 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
 
   ## ------------------------------------------------------------ internals
 
-  # `{era, segments, release_rank}`: lower era (R) first; a release ranks above
-  # its pre-releases.
-  defp sort_key(%__MODULE__{} = v), do: {v.era, v.segments, if(v.prerelease?, do: 0, else: 1)}
+  # `{rank, segments, release_rank}`: rank 0 for a release, 1 for anything that
+  # is not one, so a non-release sorts last and never bounds a real range. The
+  # floor's empty segment list sorts below every release, and a release ranks
+  # above its pre-releases.
+  defp sort_key(%__MODULE__{} = v), do: {0, v.segments, if(v.prerelease?, do: 0, else: 1)}
 
   defp sort_key(version) when is_binary(version) do
     case parse(version) do
       {:ok, v} -> sort_key(v)
-      # Not a release: sort last so it never bounds a real range.
-      :error -> {@modern_era + 1, [], 2}
+      :error -> {1, [], 0}
     end
   end
 
@@ -154,33 +133,4 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
       end
     end)
   end
-
-  # A real R-series release: R<major><letter>[<minor>][-<patch>[<rerelease>]]
-  # optionally followed by an RC marker. A trailing non-RC word makes it a
-  # topic tag (:error). `Regex.run` drops trailing empty groups, so pad to 7.
-  defp r_parts(bare) do
-    rx = ~r/\AR(\d+)([A-Z])(\d*)(?:-(\d+)([a-z])?)?(_RC\d+|_RELEASE_CANDIDATE)?(_.+)?\z/
-
-    case Regex.run(rx, bare) do
-      [_ | groups] ->
-        [major, letter, minor, patch, rerelease, rc, topic] = pad(groups, 7)
-
-        if topic == "",
-          do: {:ok, String.to_integer(major), letter, to_int(minor), to_int(patch), rerelease_rank(rerelease), rc != ""},
-          else: :error
-
-      _no_match ->
-        :error
-    end
-  end
-
-  defp to_int(""), do: 0
-  defp to_int(s), do: String.to_integer(s)
-
-  defp letter_rank(<<c>>) when c in ?A..?Z, do: c - ?A + 1
-
-  defp rerelease_rank(""), do: 0
-  defp rerelease_rank(<<c>>) when c in ?a..?z, do: c - ?a + 1
-
-  defp pad(list, n), do: list ++ List.duplicate("", n - length(list))
 end

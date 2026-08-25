@@ -53,8 +53,8 @@ defmodule Varsel.CVE.VersionResolution do
 
   A package resolves only if **every** boundary that could be consulted parses
   under its entry's `versionType`. A partially-understood product silently
-  understates its affected span: an OTP record bounded `R13B03 → 27.3.4.15`
-  answers "unaffected" for every version in that range if the R-series bound is
+  understates its affected span: a record bounded `R13B03 → 27.3.4.15` answers
+  "unaffected" for every version in that range if the unparseable bound is
   dropped, which is a false negative — the worst answer this code can give. When
   anything is unparseable the whole product returns `{:error, :unsupported}` and
   the caller declines to answer at all.
@@ -68,7 +68,7 @@ defmodule Varsel.CVE.VersionResolution do
   # The version schemes we can order:
   #
   #   * `semver` — via Elixir's `Version`, incl. pre-release precedence
-  #   * `otp` — modern numeric releases and legacy R-series tags on one timeline
+  #   * `otp` — the numeric releases, 17.0 and up
   #   * `date` — `YYYY-MM-DD`, as hosted services version themselves
   #
   # Everything else (git shas, `custom`, vendor strings) has no ordering we
@@ -187,9 +187,8 @@ defmodule Varsel.CVE.VersionResolution do
   end
 
   # "By convention, typically 0 denotes the earliest possible version" (schema).
-  # It has to sort below everything, which a scheme's own parser won't do on its
-  # own: OTP reads a bare "0" as a modern release and ranks it ABOVE every
-  # R-series tag, inverting any `0 → R13B03` range.
+  # It has to sort below everything, which a scheme's own parser will not
+  # necessarily do on its own.
   defp compare(_entry, :zero, :zero), do: :eq
   defp compare(_entry, :zero, _other), do: :lt
   defp compare(_entry, _other, :zero), do: :gt

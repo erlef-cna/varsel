@@ -14,7 +14,7 @@ defmodule Varsel.Cases.Derivation.Emit do
   purl type:
 
     * **semver** — bare bounded ranges.
-    * **otp** — OTP release bounds as published (`R13B03`, `27.3.4`). A channel
+    * **otp** — OTP release bounds as published (`17.0`, `27.3.4`). A channel
       naming a single OTP application (`pkg:otp/<app>`) has each bound
       translated to that application's own version through
       `Varsel.Cases.Derivation.OtpVersionsTable`.
@@ -110,9 +110,8 @@ defmodule Varsel.Cases.Derivation.Emit do
   writes OTP's lowest affected line (`{versionEndExcluding: "23.3.4.15"}`, no
   start). CPE has no way to say "unknown", so the span the `versions[]` sentinel
   marks `unknown` is simply left unbounded below here — CPE version comparison is
-  consumer-defined and R-series tags do not collate against numeric ones, so
-  naming an R-series bound would be both unmatched and a stronger claim than we
-  can derive.
+  consumer-defined, so naming the lowest release as a bound would be a stronger
+  claim than we can derive.
   """
   @spec cpe_matches([range()], keyword()) :: [map()]
   def cpe_matches(ranges, opts \\ []) do
@@ -240,7 +239,7 @@ defmodule Varsel.Cases.Derivation.Emit do
 
   defp otp_sentinel(%{purl_type: "otp", name: app}, [%{from: from} | _]) when is_binary(app) do
     # `app_lower_bound/2`, not `OtpVersionsTable.app_version/2`: the two disagree
-    # for an app younger than the release (ssh has no version at OTP_R6B-0), and
+    # for an app younger than the release (an app split out of another one), and
     # only this one lands where `otp_app_versions/3` opens the range.
     case app_lower_bound(bare(from), app) do
       {:ok, version} -> unknown_range(version, "otp")
@@ -271,7 +270,7 @@ defmodule Varsel.Cases.Derivation.Emit do
     }
   end
 
-  # Strip the tag prefix to the bare version. `OTP_R13B03` keeps its `R…` form.
+  # Strip the tag prefix to the bare version.
   defp bare(:unbounded), do: :unbounded
   defp bare("OTP-" <> rest), do: rest
   defp bare("OTP_" <> rest), do: rest

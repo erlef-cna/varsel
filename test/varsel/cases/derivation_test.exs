@@ -393,11 +393,8 @@ defmodule Varsel.Cases.DerivationTest do
 
   @otp_root_commit "84adefa331c4159d432d22840663c38f155cd4c1"
 
-  for {label, explicit_version} <- [
-        {"affected since creation (version \"0\")", "0"},
-        {"affected since OTP's first-ever release (version \"R1A\")", "R1A"}
-      ] do
-    test "an OTP root-commit intro with an explicit version (#{label}) is a single affected range, not a pre-R13B03 unknown split",
+  for {label, explicit_version} <- [{"affected since creation (version \"0\")", "0"}] do
+    test "an OTP root-commit intro with an explicit version (#{label}) is a single affected range, not an unknown split",
          %{poc: poc, case: case_record} do
       otp_repo = "https://github.com/erlang/otp"
       explicit_version = unquote(explicit_version)
@@ -443,8 +440,8 @@ defmodule Varsel.Cases.DerivationTest do
           actor: poc
         )
 
-      # The root commit is contained in every release, R series included: the
-      # explicit version has to order below R13B03 to head the range.
+      # The root commit is contained in every release, R tags included; those are
+      # not versions, so the explicit boundary heads the range.
       StubGitBackend.stub_tags(%{
         {otp_repo, @otp_root_commit} => [
           "OTP_R13B03",
@@ -469,7 +466,7 @@ defmodule Varsel.Cases.DerivationTest do
       assert {:ok, derivation} = Derivation.derive(package)
 
       # A single affected range from the POC's explicit boundary, not the
-      # two-range "0 - R13B03: unknown" + "R13B03 - fix: affected" split.
+      # two-range "0 - <first release>: unknown" + "affected" split.
       assert derivation["channels"][release_channel.id]["versions"] == [
                %{
                  "version" => explicit_version,
@@ -479,13 +476,11 @@ defmodule Varsel.Cases.DerivationTest do
                }
              ]
 
-      # Since creation means the application's whole history too; R1A predates
-      # the table, so the application starts at its version in the first
-      # release that ships it, R6B-0.
+      # Since creation means the application's whole history too.
       assert derivation["channels"][app_channel.id] == %{
                "versions" => [
                  %{
-                   "version" => unquote(if explicit_version == "0", do: "0", else: "2.5.1"),
+                   "version" => "0",
                    "lessThan" => "9.1.0.1",
                    "status" => "affected",
                    "versionType" => "otp"
@@ -496,6 +491,53 @@ defmodule Varsel.Cases.DerivationTest do
                "issues" => []
              }
     end
+  end
+
+  test "an explicit R-series boundary is reported as unusable rather than dropped", %{
+    poc: poc,
+    case: case_record
+  } do
+    otp_repo = "https://github.com/erlang/otp"
+
+    StubGitBackend.stub_tags(%{
+      {otp_repo, @otp_root_commit} => ["OTP_R13B03", "OTP-26.0", "OTP-26.2.5.15"],
+      {otp_repo, @fix_sha} => ["OTP-26.2.5.15"]
+    })
+
+    package =
+      Fixtures.add_affected_package(poc, case_record, %{
+        vendor: "Erlang",
+        product: "OTP",
+        repo_url: otp_repo
+      })
+
+    Cases.add_package_channel!(
+      %{
+        case_id: case_record.id,
+        affected_package_id: package.id,
+        purl_type: "sid",
+        namespace: "erlang.org",
+        name: "otp",
+        version_type: :otp
+      },
+      actor: poc
+    )
+
+    for attrs <- [
+          %{event: :introduced, commit_sha: @otp_root_commit, version: "R1A"},
+          %{event: :fixed, commit_sha: @fix_sha}
+        ] do
+      Cases.add_version_event!(
+        Map.merge(%{case_id: case_record.id, affected_package_id: package.id}, attrs),
+        actor: poc
+      )
+    end
+
+    package = Ash.load!(package, [:channels, :version_events], authorize?: false)
+    assert {:ok, derivation} = Derivation.derive(package)
+
+    assert [issue] = derivation["issues"]
+    assert issue =~ "R1A"
   end
 
   test "pkg:otp channels of non-OTP repos derive semver ranges from the repo tags", %{

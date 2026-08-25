@@ -19,12 +19,13 @@ defmodule Varsel.Cases.Reachability.VersionComparatorTest do
       assert VC.parse(:semver, "nightly") == :error
     end
 
-    test ":otp routes to OTP semantics incl. R-series" do
-      assert VC.compare(:otp, "OTP_R16B03-1", "OTP-17.0") == :lt
-      assert VC.release?(:otp, "OTP_R13B03")
+    test ":otp routes to OTP semantics" do
+      assert VC.compare(:otp, "OTP-26.2.5", "OTP-27.0") == :lt
+      assert VC.release?(:otp, "OTP-17.0")
+      refute VC.release?(:otp, "OTP_R13B03")
       refute VC.release?(:otp, "OTP_R16B03_yielding_binary_to_term")
-      assert {:ok, _} = VC.parse(:otp, "OTP_R14A")
-      assert VC.prerelease?(:otp, "OTP_R16B01_RC1")
+      assert {:ok, _} = VC.parse(:otp, "OTP-27.3.4.3")
+      assert VC.prerelease?(:otp, "29.0-rc1")
     end
   end
 
@@ -39,13 +40,13 @@ defmodule Varsel.Cases.Reachability.VersionComparatorTest do
              ]
     end
 
-    test "R-series sorts below modern under :otp" do
-      items = [%{v: "OTP-17.0"}, %{v: "OTP_R16B03-1"}, %{v: "OTP_R13B03"}]
+    test "sorts numeric releases ascending under :otp" do
+      items = [%{v: "OTP-27.0"}, %{v: "OTP-17.0"}, %{v: "OTP-26.2.5"}]
 
       assert VC.sort(:otp, items, & &1.v) == [
-               %{v: "OTP_R13B03"},
-               %{v: "OTP_R16B03-1"},
-               %{v: "OTP-17.0"}
+               %{v: "OTP-17.0"},
+               %{v: "OTP-26.2.5"},
+               %{v: "OTP-27.0"}
              ]
     end
   end

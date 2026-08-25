@@ -363,6 +363,7 @@ defmodule Varsel.Cases.Derivation.EmitTest do
         Plug.Conn.send_resp(conn, 200, """
         OTP-26.2.5.15 : ssh-5.2.11.9 stdlib-5.2.3.1 :
         OTP-26.0 : ssh-5.0 stdlib-5.0 :
+        OTP-17.0 : ssh-3.0.1 stdlib-2.0 :
         """)
       end)
 
@@ -374,9 +375,8 @@ defmodule Varsel.Cases.Derivation.EmitTest do
       refute Emit.otp_root_commit?(String.duplicate("a", 40))
     end
 
-    # A root-commit intro is contained by every tag, so the first range opens at
-    # erlang/otp's oldest, OTP_R6B-0. It shipped stdlib-1.8.1
-    # (priv/otp_pre17_versions.json).
+    # A root-commit intro is contained by every tag, and R tags are not versions,
+    # so the first range opens at the oldest numeric release, 17.0.
     test "prepends an unknown range to an OTP app channel, bounded by the app's version at the first affected release" do
       channel = %PackageChannel{
         purl_type: "otp",
@@ -386,39 +386,16 @@ defmodule Varsel.Cases.Derivation.EmitTest do
       }
 
       assert %{"versions" => [sentinel, released]} =
-               Emit.channel(channel, [range("OTP_R6B-0", "OTP-26.2.5.15")], otp_root_intro?: true)
+               Emit.channel(channel, [range("OTP-17.0", "OTP-26.2.5.15")], otp_root_intro?: true)
 
       assert sentinel == %{
                "version" => "0",
-               "lessThan" => "1.8.1",
+               "lessThan" => "2.0",
                "status" => "unknown",
                "versionType" => "otp"
              }
 
-      assert released["version"] == "1.8.1"
-    end
-
-    # ssh first shipped as 0.2 in R10B-0, four releases after OTP_R6B-0
-    # (priv/otp_pre17_versions.json), so both bounds resolve forward to it.
-    test "an app younger than the first affected release is bounded by its first shipped version" do
-      channel = %PackageChannel{
-        purl_type: "otp",
-        name: "ssh",
-        version_type: :otp,
-        tag_suffixes: []
-      }
-
-      assert %{"versions" => [sentinel, released]} =
-               Emit.channel(channel, [range("OTP_R6B-0", "OTP-26.2.5.15")], otp_root_intro?: true)
-
-      assert sentinel == %{
-               "version" => "0",
-               "lessThan" => "0.2",
-               "status" => "unknown",
-               "versionType" => "otp"
-             }
-
-      assert released["version"] == "0.2"
+      assert released["version"] == "2.0"
     end
 
     test "prepends an unknown range bounded by the first affected release to the OTP release channel" do
@@ -431,17 +408,17 @@ defmodule Varsel.Cases.Derivation.EmitTest do
       }
 
       assert %{"versions" => [sentinel, released]} =
-               Emit.channel(channel, [range("OTP_R6B-0", "OTP-26.2.5.15")], otp_root_intro?: true)
+               Emit.channel(channel, [range("OTP-17.0", "OTP-26.2.5.15")], otp_root_intro?: true)
 
       assert sentinel == %{
                "version" => "0",
-               "lessThan" => "R6B-0",
+               "lessThan" => "17.0",
                "status" => "unknown",
                "versionType" => "otp"
              }
 
       assert released == %{
-               "version" => "R6B-0",
+               "version" => "17.0",
                "lessThan" => "26.2.5.15",
                "status" => "affected",
                "versionType" => "otp"
@@ -459,13 +436,13 @@ defmodule Varsel.Cases.Derivation.EmitTest do
         tag_suffixes: []
       }
 
-      ranges = [range("OTP_R6B-0", "OTP_R13B03"), range("OTP-26.0", "OTP-26.2.5.15")]
+      ranges = [range("OTP-17.0", "OTP-18.0"), range("OTP-26.0", "OTP-26.2.5.15")]
 
       assert %{"versions" => [sentinel | affected]} =
                Emit.channel(channel, ranges, otp_root_intro?: true)
 
-      assert sentinel["lessThan"] == "R6B-0"
-      assert Enum.map(affected, & &1["version"]) == ["R6B-0", "26.0"]
+      assert sentinel["lessThan"] == "17.0"
+      assert Enum.map(affected, & &1["version"]) == ["17.0", "26.0"]
     end
 
     # `otp_root_intro?` holds whenever the root commit has no explicit version,

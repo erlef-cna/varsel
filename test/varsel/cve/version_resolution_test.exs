@@ -296,25 +296,24 @@ defmodule Varsel.CVE.VersionResolutionTest do
       assert resolve(versions, "1.5.0") == {:ok, :unaffected}
     end
 
-    # OTP reads a bare "0" as a modern release, which would rank it ABOVE every
-    # R-series tag and invert this range.
-    test "0 sorts below R-series OTP tags, not above them" do
+    test "0 sorts below every OTP release" do
       versions = [
-        %{"version" => "0", "lessThan" => "R13B03", "status" => "unknown", "versionType" => "otp"}
+        %{"version" => "0", "lessThan" => "17.0", "status" => "unknown", "versionType" => "otp"}
       ]
 
-      assert resolve(versions, "R13B02") == {:ok, :unknown}
-      assert resolve(versions, "R13B03") == {:ok, :unaffected}
+      assert resolve(versions, "16.0") == {:ok, :unknown}
+      assert resolve(versions, "17.0") == {:ok, :unaffected}
     end
   end
 
   describe "OTP versions" do
-    # CVE-2026-900001's release channel: the pre-R13B03 era is explicitly
-    # unknown, then affected up to 27.3.4.15, with two later lines.
+    # CVE-2026-900001's release channel, re-derived from 17.0: everything below
+    # the first affected release is explicitly unknown, then affected up to
+    # 27.3.4.15, with two later lines.
     @versions [
-      %{"version" => "0", "lessThan" => "R13B03", "status" => "unknown", "versionType" => "otp"},
+      %{"version" => "0", "lessThan" => "17.0", "status" => "unknown", "versionType" => "otp"},
       %{
-        "version" => "R13B03",
+        "version" => "17.0",
         "lessThan" => "27.3.4.15",
         "status" => "affected",
         "versionType" => "otp"
@@ -333,15 +332,12 @@ defmodule Varsel.CVE.VersionResolutionTest do
       }
     ]
 
-    test "R-series and modern releases order on one timeline" do
-      assert resolve(@versions, "R13B02") == {:ok, :unknown}
-      assert resolve(@versions, "R13B03") == {:ok, :affected}
-      assert resolve(@versions, "R16B02") == {:ok, :affected}
+    test "the sentinel answers unknown below the first affected release" do
+      assert resolve(@versions, "16.0") == {:ok, :unknown}
+      assert resolve(@versions, "17.0") == {:ok, :affected}
     end
 
-    # The reported bug: 19.2 sits inside R13B03 → 27.3.4.15 and was answered
-    # "not affected" because the R-series bound failed to parse.
-    test "a modern release inside the R-series-bounded range is affected" do
+    test "a release inside the first range is affected" do
       assert resolve(@versions, "19.2") == {:ok, :affected}
       assert resolve(@versions, "27.3.4.14") == {:ok, :affected}
     end
@@ -359,6 +355,24 @@ defmodule Varsel.CVE.VersionResolutionTest do
 
     test "an OTP- prefix is accepted on input" do
       assert resolve(@versions, "OTP-19.2") == {:ok, :affected}
+    end
+
+    # A record published before the R series was dropped. Its bound no longer
+    # parses, and the all-or-nothing rule declines the whole product rather than
+    # answering from the entries that do parse — which would understate the
+    # affected span. These records are re-derived from 17.0 and republished.
+    test "a legacy R-series bound makes the product unsupported" do
+      versions = [
+        %{
+          "version" => "R13B03",
+          "lessThan" => "27.3.4.15",
+          "status" => "affected",
+          "versionType" => "otp"
+        }
+      ]
+
+      assert resolve(versions, "19.2") == {:error, :unsupported}
+      refute VR.resolvable?(versions)
     end
   end
 
@@ -564,7 +578,7 @@ defmodule Varsel.CVE.VersionResolutionTest do
 
       assert VR.resolvable?([
                %{
-                 "version" => "R13B03",
+                 "version" => "17.0",
                  "lessThan" => "27.0",
                  "status" => "affected",
                  "versionType" => "otp"

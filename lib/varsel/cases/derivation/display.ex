@@ -141,9 +141,9 @@ defmodule Varsel.Cases.Derivation.Display do
 
   # Lay every edge onto one ordered list of boundary points, coalescing a fix
   # that lands on the same version as the next range's intro into a SINGLE node
-  # (a fix-and-reintroduce boundary — e.g. the `R13B03` where the unknown span
-  # meets the affected one). Placed nodes are evenly spaced across 6%–94%; open
-  # edges (`0` start / `*` end) hold no slot, tinting off the track edge. Nodes
+  # (a fix-and-reintroduce boundary, or where an unknown span meets an affected
+  # one). Placed nodes are evenly spaced across 6%–94%; open edges (`0` start /
+  # `*` end) hold no slot, tinting off the track edge. Nodes
   # and spans index the same list, so tints always meet their nodes.
   defp layout(edges, pending) do
     flat = Enum.flat_map(edges, fn {a, b} -> [a, b] end)

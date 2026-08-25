@@ -20,7 +20,7 @@ defmodule Varsel.Cases.PackageChannel.VersionType do
   use Ash.Type.Enum,
     values: [
       semver: "Semantic versions (1.2.3), the registry default.",
-      otp: "Erlang/OTP release or application versions (27.3.4, R13B03).",
+      otp: "Erlang/OTP release or application versions (27.3.4).",
       git: "Commit SHAs — opaque, only equality and containment are meaningful.",
       date: "Calendar dates (YYYY-MM-DD), how services version themselves.",
       other: "Anything else, e.g. image tags that are not versions."

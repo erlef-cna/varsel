@@ -129,14 +129,14 @@ defmodule VarselWeb.Storybook.Cve.AffectedRangeList do
       %Variation{
         id: :otp_with_unknown_era,
         description:
-          "CVE-2026-900001's release channel: the pre-R13B03 era is explicitly unknown — the " <>
-            "repository's history does not reach back that far — then affected up two lines. " <>
-            "R-series tags sort below the numeric ones.",
+          "CVE-2026-900001's release channel: everything below the first affected release is " <>
+            "explicitly unknown — the repository's history does not reach back that far — " <>
+            "then affected up two lines.",
         attributes: %{
           default_status: "unaffected",
           ranges: [
-            row(%{upper: "R13B03", status: :unknown}),
-            row(%{lower: "R13B03", upper: "27.3.4.15"}),
+            row(%{upper: "17.0", status: :unknown}),
+            row(%{lower: "17.0", upper: "27.3.4.15"}),
             row(%{lower: "28.0", upper: "28.5.0.4", branch_label: "maint-28"}),
             row(%{lower: "29.0", upper: "29.0.4", branch_label: "maint-29"})
           ]

@@ -201,27 +201,33 @@ defmodule VarselWeb.AffectedCheckerLiveTest do
                "✗ ssh in Erlang 26.2.5.2 is affected"
     end
 
-    # R-series tags don't parse as numeric releases; ordering them on one
-    # timeline is what makes a pre-17 record answerable at all.
-    test "an R-series range answers for modern releases inside it", %{conn: conn} do
+    test "a typed R release is answered as unsupported, never as safe", %{conn: conn} do
+      {:ok, view, _html} = mount(conn, otp_packages())
+
+      for typed <- ~w(R16B03 OTP_R13B03 R10B-1a) do
+        html = view |> form("form", %{version: typed}) |> render_change()
+
+        assert html =~ "R releases aren&#39;t supported"
+        refute html =~ "is not affected"
+      end
+    end
+
+    # A leading `R` only means the R series to an OTP checker.
+    test "an R-prefixed input elsewhere is just an unrecognizable version", %{conn: conn} do
       packages = [
         package(%{
-          "bare_name" => "otp",
-          "otp_release?" => true,
-          "versions" => [
-            %{
-              "version" => "R13B03",
-              "lessThan" => "27.3.4.15",
-              "status" => "affected",
-              "versionType" => "otp"
-            }
-          ]
+          "purl" => "pkg:hex/acme",
+          "bare_name" => "acme",
+          "versions" => [semver("1.0.0", "2.0.0")]
         })
       ]
 
       {:ok, view, _html} = mount(conn, packages)
 
-      assert view |> form("form", %{version: "19.2"}) |> render_change() =~ "is affected"
+      html = view |> form("form", %{version: "R16B03"}) |> render_change()
+
+      assert html =~ "not a recognizable version"
+      refute html =~ "R releases"
     end
   end
 

@@ -98,8 +98,10 @@ defmodule Varsel.Cases.ReachabilityTest do
     end
   end
 
-  describe "OTP R-series + modern spanning vulnerability" do
-    test "R releases sort below modern; each fixed separately is its own range" do
+  describe "OTP R-series tags" do
+    # R tags are not versions, so they drop out with `nightly` and the topic
+    # tags rather than bounding a range below the numeric ones.
+    test "an R release never bounds a range, affected or not" do
       result =
         deduce(
           [
@@ -112,10 +114,7 @@ defmodule Varsel.Cases.ReachabilityTest do
           include_prereleases: false
         )
 
-      assert versions(result) == [
-               {"OTP_R16B02", "OTP_R16B03"},
-               {"OTP-27.0", "OTP-27.1"}
-             ]
+      assert versions(result) == [{"OTP-27.0", "OTP-27.1"}]
     end
   end
 

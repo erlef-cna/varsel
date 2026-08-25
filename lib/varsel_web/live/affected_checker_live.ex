@@ -80,7 +80,23 @@ defmodule VarselWeb.AffectedCheckerLive do
   defp resolve(_package, ""), do: nil
 
   defp resolve(package, input) do
-    VersionResolution.resolve(package["versions"], package["default_status"], input)
+    if otp?(package) and r_series?(input) do
+      {:error, :r_series}
+    else
+      VersionResolution.resolve(package["versions"], package["default_status"], input)
+    end
+  end
+
+  defp otp?(package), do: package["otp_release?"] or package["otp_package?"]
+
+  # Only an OTP checker can be asked about an R release; elsewhere a leading `R`
+  # is just an unrecognizable version.
+  defp r_series?(input) do
+    input
+    |> String.trim()
+    |> String.replace_prefix("OTP-", "")
+    |> String.replace_prefix("OTP_", "")
+    |> then(&Regex.match?(~r/\AR\d/, &1))
   end
 
   @impl Phoenix.LiveView
@@ -215,6 +231,20 @@ defmodule VarselWeb.AffectedCheckerLive do
   defp verdict(%{verdict: {:error, :unparseable}} = assigns) do
     ~H"""
     <span class="text-sm text-base-content/40">not a recognizable version</span>
+    """
+  end
+
+  # R releases (R16B03 and earlier) are outside what this record covers: the
+  # derivation orders numeric releases only, so it has nothing to say about
+  # them either way. Warning-toned like `unknown`, never green.
+  defp verdict(%{verdict: {:error, :r_series}} = assigns) do
+    ~H"""
+    <span class="text-sm">
+      <b class="font-bold text-warning">? R releases aren't supported</b>
+      <span class="text-base-content/60">
+        — this record doesn't say whether R16B03 and earlier are affected
+      </span>
+    </span>
     """
   end
 
