@@ -15,6 +15,29 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
       assert {:ok, %OTPVersion{segments: [27, 0], raw: "27.0"}} = OTPVersion.parse("27.0")
     end
 
+    # The version scheme omits less significant parts only when they are 0, so
+    # every real release carries at least `<Major>.<Minor>`, and `-rc<N>` is its
+    # only suffix. https://www.erlang.org/doc/system/versions.html
+    test "rejects anything the version scheme does not describe" do
+      assert OTPVersion.parse("29") == :error
+      assert OTPVersion.parse("0") == :error
+      assert OTPVersion.parse("29.0.") == :error
+      assert OTPVersion.parse("29.0-latest") == :error
+      assert OTPVersion.parse("29.0-rc") == :error
+      assert OTPVersion.parse("nightly") == :error
+    end
+
+    # `numeric_segments/1` used to drop the parts it could not read, so a semver
+    # tag in an OTP repo parsed as 2.3 and a date as the year.
+    test "rejects a tag from another scheme rather than reading its digits" do
+      assert OTPVersion.parse("v1.2.3") == :error
+      assert OTPVersion.parse("2024-01-01") == :error
+    end
+
+    test "accepts the branch versions the scheme allows" do
+      assert {:ok, %OTPVersion{segments: [1, 2, 3, 4, 5]}} = OTPVersion.parse("1.2.3.4.5")
+    end
+
     test "rejects topic/feature tags" do
       assert OTPVersion.parse("OTP_R16B03_yielding_binary_to_term") == :error
       assert OTPVersion.parse("R16B02_yielding_binary_to_term") == :error

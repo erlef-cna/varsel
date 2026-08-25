@@ -303,10 +303,10 @@ defmodule Varsel.CVE.VersionResolution do
     if normalized == %{}, do: {:error, :unparseable}, else: {:ok, normalized}
   end
 
-  # A boundary is usable only if its own scheme can order it. Short semver
-  # (`1.5`) is zero-padded first: the CVE schema allows two-component versions
-  # and people type them, while the tag parser behind `VersionComparator`
-  # deliberately does not.
+  # A boundary is usable only if its own scheme can order it. Short input is
+  # zero-padded first (semver `1.5`, OTP `29`): people type a release the way
+  # they say it, while the tag parsers behind `VersionComparator` hold to their
+  # schemes' shapes.
   defp normalize(nil, _kind), do: :error
 
   defp normalize(value, kind) when is_binary(value) do
@@ -348,7 +348,12 @@ defmodule Varsel.CVE.VersionResolution do
     end
   end
 
-  defp pad(value, :otp), do: value
+  # An OTP version carries at least two parts, so a bare major (`29`, how the
+  # release is spoken and written) becomes `29.0`. The `OTP-` prefix and an
+  # `-rc<N>` suffix hold no dot of their own, so neither hides one.
+  defp pad(value, :otp) do
+    if String.contains?(value, "."), do: value, else: value <> ".0"
+  end
 
   # An absent status is `unknown`, not a guess in either direction.
   defp cast_status("affected"), do: :affected

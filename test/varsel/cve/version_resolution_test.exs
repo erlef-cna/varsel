@@ -357,6 +357,14 @@ defmodule Varsel.CVE.VersionResolutionTest do
       assert resolve(@versions, "OTP-19.2") == {:ok, :affected}
     end
 
+    # A release is spoken and written as its major alone ("OTP 29"), and that is
+    # what people type. The scheme itself has no one-part version.
+    test "a bare major is accepted on input" do
+      assert resolve(@versions, "19") == {:ok, :affected}
+      assert resolve(@versions, "OTP-19") == {:ok, :affected}
+      assert resolve(@versions, "30") == {:ok, :unaffected}
+    end
+
     # A record published before the R series was dropped. Its bound no longer
     # parses, and the all-or-nothing rule declines the whole product rather than
     # answering from the entries that do parse — which would understate the

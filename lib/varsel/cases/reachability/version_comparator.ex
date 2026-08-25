@@ -9,18 +9,27 @@ defmodule Varsel.Cases.Reachability.VersionComparator do
 
     * `:semver` — `Varsel.Cases.Reachability.SemverVersion` (hex and the wider
       ecosystem, over Elixir's `Version`).
-    * `:otp` — `Varsel.Cases.Reachability.OTPVersion` (modern numeric + legacy
-      R-series).
+    * `:otp` — `Varsel.Cases.Reachability.OTPVersion` (the numeric releases,
+      17.0 and up).
 
   Both target modules expose the same API (`parse/1`, `compare/2`, `release?/1`,
-  `prerelease?/1`); this module only picks between them. It carries no parsing or
-  ordering logic of its own.
+  `prerelease?/1`); this module only picks between them.
+
+  It answers for one value itself: `0`, the CVE record's "since the first
+  version". That is a bound rather than a release, so no scheme parses it, and
+  it orders below every version in any of them.
   """
 
   alias Varsel.Cases.Reachability.OTPVersion
   alias Varsel.Cases.Reachability.SemverVersion
 
   @type kind :: :semver | :otp
+
+  @zero "0"
+
+  @doc "The bound naming the start of all history, which orders below every version."
+  @spec zero() :: String.t()
+  def zero, do: @zero
 
   @spec module(kind()) :: module()
   defp module(:semver), do: SemverVersion
@@ -32,14 +41,22 @@ defmodule Varsel.Cases.Reachability.VersionComparator do
 
   @doc "Compares two versions under `kind`: `:lt` | `:eq` | `:gt`."
   @spec compare(kind(), String.t(), String.t()) :: :lt | :eq | :gt
+  def compare(_kind, @zero, @zero), do: :eq
+  def compare(_kind, @zero, _other), do: :lt
+  def compare(_kind, _other, @zero), do: :gt
   def compare(kind, a, b), do: module(kind).compare(a, b)
 
-  @doc "Whether `version` names a real release under `kind`."
+  @doc """
+  Whether `version` bounds a range under `kind`: a real release, or the zero
+  bound.
+  """
   @spec release?(kind(), String.t()) :: boolean()
+  def release?(_kind, @zero), do: true
   def release?(kind, version), do: module(kind).release?(version)
 
   @doc "Whether `version` is a pre-release under `kind`."
   @spec prerelease?(kind(), String.t()) :: boolean()
+  def prerelease?(_kind, @zero), do: false
   def prerelease?(kind, version), do: module(kind).prerelease?(version)
 
   @doc """

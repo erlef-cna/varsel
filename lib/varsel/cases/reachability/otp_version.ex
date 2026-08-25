@@ -9,7 +9,8 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
 
   Versions are the numeric releases, `17.0` and up: `27.3.4.3`, `29.0-rc1`.
   `OTP-`/`OTP_` prefixes are stripped first, so `OTP-27.0` and `27.0` parse
-  identically.
+  identically. A version has at least two dot-separated parts, and `-rc<N>` is
+  its only suffix; see the [version scheme](https://www.erlang.org/doc/system/versions.html).
 
   The legacy R series (`R6B-0` … `R16B03-1`) is **not** a version here.
   `parse/1` returns `:error` for it, as it does for topic/feature tags such as
@@ -28,34 +29,27 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
           raw: String.t()
         }
 
-  # An R-series tag or a topic tag built on one. Matched to be rejected, so an
-  # `R16B03` neither parses as a version nor falls through to the numeric
-  # parser, which would read its digits and order it among the numeric releases.
-  @r_series ~r/\AR\d/
+  # `<Major>.<Minor>[.<Patch>...]`, optionally a release candidate. Two parts is
+  # the minimum the version scheme allows, since less significant parts are
+  # omitted only when they are 0, and `-rc<N>` is its only suffix. Anchored, so
+  # a tag carrying anything else is not a version: the R series, `nightly`, a
+  # date, a semver tag in an OTP repo.
+  @release ~r/\A(\d+(?:\.\d+)+)(?:-rc(\d+))?\z/
 
   @doc "Parses an OTP version string. `:error` for non-release tags."
   @spec parse(String.t()) :: {:ok, t()} | :error
   def parse(version) when is_binary(version) do
-    bare = strip_prefix(version)
-
-    if Regex.match?(@r_series, bare), do: :error, else: parse_modern(bare, version)
+    case Regex.run(@release, strip_prefix(version)) do
+      [_, numeric] -> {:ok, build(numeric, false, version)}
+      [_, numeric, _rc] -> {:ok, build(numeric, true, version)}
+      nil -> :error
+    end
   end
 
-  defp parse_modern(bare, version) do
-    {numeric, suffix} = split_suffix(bare)
+  defp build(numeric, prerelease?, version) do
+    segments = numeric |> String.split(".") |> Enum.map(&String.to_integer/1)
 
-    case numeric_segments(numeric) do
-      [] ->
-        :error
-
-      segments ->
-        {:ok,
-         %__MODULE__{
-           segments: segments,
-           prerelease?: suffix != "",
-           raw: version
-         }}
-    end
+    %__MODULE__{segments: segments, prerelease?: prerelease?, raw: version}
   end
 
   @doc "Compares two OTP versions (strings or structs): `:lt` | `:eq` | `:gt`."
@@ -101,22 +95,4 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   defp strip_prefix("OTP-" <> rest), do: rest
   defp strip_prefix("OTP_" <> rest), do: rest
   defp strip_prefix(version), do: version
-
-  defp split_suffix(bare) do
-    case String.split(bare, "-", parts: 2) do
-      [n] -> {n, ""}
-      [n, s] -> {n, s}
-    end
-  end
-
-  defp numeric_segments(numeric) do
-    numeric
-    |> String.split(".")
-    |> Enum.flat_map(fn part ->
-      case Integer.parse(part) do
-        {i, ""} -> [i]
-        _ -> []
-      end
-    end)
-  end
 end
