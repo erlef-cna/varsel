@@ -31,6 +31,14 @@ channel's vocabulary: semver for a Hex package, OTP release and
 per-application versions for OTP, plain commit SHAs for the source
 repository. The CPE applicability ranges come out of the same derivation.
 
+Most channels state each affected span as a bounded range, `from X before Y`.
+OTP releases do not, because the version scheme only partially orders them: a
+maintenance release like `27.3.4.15` and a `28.0` each carry changes the other
+lacks, so no range can span the two. An OTP package with fixes on several
+maintenance lines is published instead as one entry open from the introducing
+release, carrying a transition per fix. A reader's version picks up the fixes
+on its own line and no others.
+
 ## Deriving
 
 Derivation runs when you press **Derive the case**, never on its own. The

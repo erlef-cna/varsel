@@ -18,6 +18,23 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   nor orders against a numeric one.
 
   Pre-releases order below the release of the same number (`29.0-rc1` < `29.0`).
+
+  ## Ordering
+
+  Versions of three parts or fewer are totally ordered. A version with more
+  parts is a *branch* off the base its first three parts name, and the scheme
+  puts it in order only against that base, versions below the base, and other
+  branches off the same base:
+
+  > Versions of the form `6.0.2.<X>` can be compared with normal versions
+  > smaller than or equal to `6.0.2`, and other versions on the form
+  > `6.0.2.<X>`. […] `6.0.3` will most likely not include all changes in
+  > `6.0.2.1` (note that these versions have no order).
+
+  So `27.3.4.15` and `28.0` are **incomparable**, and `compare/2` says so with
+  `:nc`. Callers that need one line — sorting a timeline, cutting it into
+  ranges — use `total_compare/2`. Callers deciding whether one version implies
+  another must respect `:nc`.
   """
 
   @enforce_keys [:segments, :prerelease?, :raw]
@@ -36,6 +53,10 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   # date, a semver tag in an OTP repo.
   @release ~r/\A(\d+(?:\.\d+)+)(?:-rc(\d+))?\z/
 
+  # `<Major>.<Minor>.<Patch>`. Parts beyond these name a branch off the version
+  # they follow.
+  @normal_parts 3
+
   @doc "Parses an OTP version string. `:error` for non-release tags."
   @spec parse(String.t()) :: {:ok, t()} | :error
   def parse(version) when is_binary(version) do
@@ -52,9 +73,53 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
     %__MODULE__{segments: segments, prerelease?: prerelease?, raw: version}
   end
 
-  @doc "Compares two OTP versions (strings or structs): `:lt` | `:eq` | `:gt`."
-  @spec compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt
+  @doc """
+  Compares two OTP versions (strings or structs), per the version scheme's
+  partial order: `:lt` | `:eq` | `:gt`, or `:nc` when the two lie on branches
+  that never meet.
+
+  A caller reducing a set of boundaries must treat `:nc` as "neither implies the
+  other" rather than as false.
+  """
+  @spec compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt | :nc
   def compare(left, right) do
+    if comparable?(left, right), do: total_compare(left, right), else: :nc
+  end
+
+  @doc """
+  Whether the scheme orders every pair of versions. OTP's does not: a branch
+  version and a release above its base have no order between them.
+  """
+  @spec total_order?() :: boolean()
+  def total_order?, do: false
+
+  @doc """
+  Whether the version scheme orders these two at all. False for versions on
+  branches that never meet (`27.3.4.15` and `28.0`).
+  """
+  @spec comparable?(String.t() | t(), String.t() | t()) :: boolean()
+  def comparable?(left, right) do
+    a = segments_of(left)
+    b = segments_of(right)
+
+    cond do
+      # Both normal: the scheme gives three-part versions a total order.
+      length(a) <= @normal_parts and length(b) <= @normal_parts -> true
+      # Both branches: ordered only along the same base.
+      length(a) > @normal_parts and length(b) > @normal_parts -> base(a) == base(b)
+      # One branch, one normal: the normal one must be at or below the base.
+      length(a) > @normal_parts -> base(b) <= base(a)
+      true -> base(a) <= base(b)
+    end
+  end
+
+  @doc """
+  Compares on one line, ordering incomparable versions by their segments so a
+  timeline can be sorted. `sort/3` and range-cutting want this; a caller
+  deciding implication wants `compare/2`.
+  """
+  @spec total_compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt
+  def total_compare(left, right) do
     ka = sort_key(left)
     kb = sort_key(right)
 
@@ -79,6 +144,17 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   end
 
   ## ------------------------------------------------------------ internals
+
+  defp base(segments), do: Enum.take(segments, @normal_parts)
+
+  defp segments_of(%__MODULE__{segments: segments}), do: segments
+
+  defp segments_of(version) when is_binary(version) do
+    case parse(version) do
+      {:ok, v} -> v.segments
+      :error -> []
+    end
+  end
 
   # `{rank, segments, release_rank}`: rank 0 for a release, 1 for anything that
   # is not one, so a non-release sorts last and never bounds a real range. A

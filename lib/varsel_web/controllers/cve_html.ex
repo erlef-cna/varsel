@@ -158,8 +158,9 @@ defmodule VarselWeb.CveHTML do
         kind:, branch_label:
       }
 
-  `changes` keep their array order, not a sorted one: the algorithm applies
-  them in the order given, so that is the order that explains the outcome.
+  `changes` keep their array order, so the page shows the record as published.
+  Resolution sorts them (`Varsel.CVE.VersionResolution.apply_changes/2`), which
+  is a separate question from how they read.
 
   `kind` is `:git` for commit-sha entries, whose values shorten at render;
   `:ordered` otherwise.

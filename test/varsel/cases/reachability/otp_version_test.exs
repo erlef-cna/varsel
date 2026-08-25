@@ -61,10 +61,44 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
   end
 
   describe "compare/2" do
-    test "orders modern versions numerically" do
+    test "orders versions numerically" do
       assert OTPVersion.compare("27.3.4.3", "27.3.4.10") == :lt
-      assert OTPVersion.compare("28.0.3", "27.3.4.3") == :gt
+      assert OTPVersion.compare("28.0.3", "27.3.5") == :gt
       assert OTPVersion.compare("OTP-27.0", "27.0") == :eq
+    end
+
+    # "Versions of the form 6.0.2.<X> can be compared with normal versions
+    # smaller than or equal to 6.0.2, and other versions on the form 6.0.2.<X>."
+    # https://www.erlang.org/doc/system/versions.html
+    test "a branch version orders against its base and below" do
+      assert OTPVersion.compare("27.3.4", "27.3.4.15") == :lt
+      assert OTPVersion.compare("27.0", "27.3.4.15") == :lt
+      assert OTPVersion.compare("27.3.4.15", "27.3.4.16") == :lt
+      assert OTPVersion.compare("28.0", "28.5.0.4") == :lt
+    end
+
+    test "a branch version has no order against anything above its base" do
+      assert OTPVersion.compare("27.3.4.15", "27.3.5") == :nc
+      assert OTPVersion.compare("27.3.4.15", "28.0") == :nc
+      assert OTPVersion.compare("28.0", "27.3.4.15") == :nc
+      assert OTPVersion.compare("27.0.3.4", "27.0.4") == :nc
+    end
+
+    test "branches off different bases never meet" do
+      assert OTPVersion.compare("27.3.4.15", "28.5.0.4") == :nc
+      assert OTPVersion.compare("22.3.4.12.1", "18.3.4.1.1") == :nc
+    end
+
+    test "comparable?/2 answers the same question as compare/2" do
+      assert OTPVersion.comparable?("27.3.4", "27.3.4.15")
+      refute OTPVersion.comparable?("27.3.4.15", "28.0")
+    end
+
+    # `sort/3` and range-cutting need one line through the whole set, so this
+    # stays total where `compare/2` declines.
+    test "total_compare/2 orders what compare/2 will not" do
+      assert OTPVersion.total_compare("27.3.4.15", "28.0") == :lt
+      assert OTPVersion.total_compare("28.0", "27.3.4.15") == :gt
     end
 
     test "a pre-release orders below its release" do

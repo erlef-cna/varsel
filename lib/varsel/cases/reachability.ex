@@ -57,11 +57,28 @@ defmodule Varsel.Cases.Reachability do
 
   @type result :: %{
           ranges: [range()],
+          boundaries: boundaries(),
           call_outs: [call_out()],
           open?: boolean(),
           pending_fixes: [String.t()],
           unreleased_intros: [String.t()],
           issues: [String.t()]
+        }
+
+  @typedoc """
+  The vulnerability's boundaries as the version scheme sees them, rather than as
+  one line: `introduced` is the version the flaw is present from, `fixed` the
+  versions that resolve it, none of which implies another.
+
+  `open?` says whether every release at or after `introduced` is accounted for —
+  affected, or closed by one of the fixes. Only then can a record state the
+  boundaries as one entry running to `*`; otherwise the flaw sits on part of the
+  tree and the ranges say it more precisely.
+  """
+  @type boundaries :: %{
+          introduced: String.t() | nil,
+          fixed: [String.t()],
+          open?: boolean()
         }
 
   @doc """
@@ -234,12 +251,79 @@ defmodule Varsel.Cases.Reachability do
 
     %{
       ranges: ranges,
+      boundaries: boundaries(kind, considered),
       call_outs: prerelease_call_outs(kind, considered, excluded_prereleases),
       open?: has_open?,
       pending_fixes: [],
       unreleased_intros: [],
       issues: []
     }
+  end
+
+  ## ---------------------------------------------------------------- boundaries
+
+  # The affected set stated as boundaries rather than as ranges.
+  #
+  # A range pairs a lower and an upper bound, which asserts an order between
+  # them. OTP's scheme does not always have one: a fix on the 27 maintenance
+  # branch and one on 28 lie on branches that never meet, so `27.3.4.15 → 28.0`
+  # would claim a span the scheme cannot express. Boundaries state each fix on
+  # its own and leave the reader's version to decide which apply.
+  defp boundaries(kind, considered) do
+    sorted = VersionComparator.sort(kind, considered, & &1.version)
+    introduced = introduced_boundary(sorted)
+    fixed = fix_boundaries(kind, sorted)
+
+    %{
+      introduced: introduced,
+      fixed: fixed,
+      open?: fully_covered?(kind, sorted, introduced, fixed)
+    }
+  end
+
+  defp introduced_boundary(sorted) do
+    Enum.find_value(sorted, fn entry -> entry.affected? && entry.version end)
+  end
+
+  # The safe releases that close something, reduced to those none of the others
+  # already covers.
+  #
+  # A safe release is a fix when an affected release sits at or below it. Being
+  # next on the sorted timeline is not enough: `18.0` may follow an affected
+  # `17.0.0.2` there while belonging to a line the flaw never reached, and
+  # publishing it as a fix would state a transition that closes nothing.
+  defp fix_boundaries(kind, sorted) do
+    affected = for entry <- sorted, entry.affected?, do: entry.version
+
+    candidates =
+      for entry <- sorted,
+          not entry.affected?,
+          Enum.any?(affected, &VersionComparator.implies?(kind, &1, entry.version)),
+          do: entry.version
+
+    Enum.reject(candidates, fn version ->
+      Enum.any?(candidates, fn other ->
+        other != version and VersionComparator.implies?(kind, other, version)
+      end)
+    end)
+  end
+
+  # Whether an entry open from `introduced` would claim only releases the
+  # derivation accounted for.
+  #
+  # The two sides ask different questions, which is the whole point. A consumer
+  # matches `lessThan: "*"` on one line, so the entry claims every release above
+  # its lower bound; a fix closes one only where the scheme orders the two. A
+  # flaw confined to the 17.0.0 branch therefore claims 18.0 and cannot close
+  # it, and must not be published open.
+  defp fully_covered?(_kind, _sorted, nil, _fixed), do: false
+
+  defp fully_covered?(kind, sorted, introduced, fixed) do
+    Enum.all?(sorted, fn entry ->
+      entry.affected? or
+        VersionComparator.compare(kind, entry.version, introduced) == :lt or
+        Enum.any?(fixed, &VersionComparator.implies?(kind, &1, entry.version))
+    end)
   end
 
   ## ------------------------------------------------------------ containment

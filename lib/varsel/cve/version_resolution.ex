@@ -29,25 +29,14 @@ defmodule Varsel.CVE.VersionResolution do
 
     * The **first matching entry wins** — the algorithm returns from inside the
       loop. Later entries covering the same version are not consulted.
-    * `changes` are applied **in array order**, each one overwriting the last.
-      They are not sorted, and a record may legitimately move a version back to
-      `affected` after an `unaffected` transition.
+    * `changes` are applied in **sorted** order, each one overwriting the last,
+      and a record may legitimately move a version back to `affected` after an
+      `unaffected` transition. For a partially ordered scheme "sorted" means any
+      topological sort, so transitions the scheme does not order may be applied
+      in either order — see `apply_changes/2`.
     * The answer is a *status*, one of `:affected`, `:unaffected`, `:unknown` —
       not a boolean. `:unknown` is a real answer meaning the record does not
       say, and must never be reported as safe.
-
-  ## `changes[]` is temporarily not resolved
-
-  Our own published records use `changes[]` to mean "one fix per release line",
-  which the spec does not: transitions apply in array order across the entire
-  range, so a chain fixed at `27.3.4` and `28.7.6` answers "unaffected" for
-  `28.0.0`. Resolving those records exactly as specified would therefore hand
-  out wrong "not affected" answers, so any entry carrying `changes[]` makes its
-  product `{:error, :unsupported}` and the checker declines to answer.
-
-  This is a data problem, not an algorithm one — see the temporary clause in
-  `comparable_entries/1`. The display is unaffected and still shows every
-  transition.
 
   ## All-or-nothing parsing
 
@@ -177,12 +166,29 @@ defmodule Varsel.CVE.VersionResolution do
 
   defp within_upper?(entry, input, upper), do: compare(entry, input, upper) == :lt
 
-  # `changes` refine the entry's status in ARRAY order — each transition at or
-  # below the input overwrites the previous answer, so a record can move a
-  # version back to affected after an unaffected transition.
+  # `changes` refine the entry's status: every transition at or below the input
+  # applies, and the schema iterates them "in sorted order", so the greatest one
+  # is the answer.
+  #
+  # For a partially ordered scheme "sorted order" is any topological sort: when
+  # A < B, A is considered first, and transitions the scheme does not order may
+  # come in either order. That is what makes this work for OTP — a fix on the 27
+  # maintenance branch is not at or below a 28 release, so it never applies
+  # there. `Enum.max_by` cannot express a partial order, so the greatest is
+  # found by the same relation that selected the applicable set.
   defp apply_changes(entry, input) do
-    Enum.reduce(entry.changes, entry.status, fn change, status ->
-      if compare(entry, input, change.at) == :lt, do: status, else: change.status
+    entry.changes
+    |> Enum.filter(&at_or_below?(entry, &1.at, input))
+    |> Enum.reduce(entry.status, fn change, status ->
+      if last_applicable?(entry, change, entry.changes, input), do: change.status, else: status
+    end)
+  end
+
+  # Whether no other applicable transition sits above this one. Incomparable
+  # transitions never both apply to one version, so at most one qualifies.
+  defp last_applicable?(entry, change, changes, input) do
+    Enum.all?(changes, fn other ->
+      not at_or_below?(entry, other.at, input) or at_or_below?(entry, other.at, change.at)
     end)
   end
 
@@ -194,6 +200,15 @@ defmodule Varsel.CVE.VersionResolution do
   defp compare(_entry, _other, :zero), do: :gt
   defp compare(%{kind: :date}, a, b), do: Date.compare(a, b)
   defp compare(%{kind: kind}, a, b), do: VersionComparator.compare(kind, a, b)
+
+  # Whether `a` is at or below `b` in the scheme's own order. Distinct from
+  # `compare/3`, which puts every version on one line so a range has bounds:
+  # here an unordered pair must answer "no", or a fix on one branch would close
+  # a vulnerability on another.
+  defp at_or_below?(_entry, :zero, _b), do: true
+  defp at_or_below?(_entry, _a, :zero), do: false
+  defp at_or_below?(%{kind: :date}, a, b), do: Date.compare(a, b) != :gt
+  defp at_or_below?(%{kind: kind}, a, b), do: VersionComparator.implies?(kind, a, b)
 
   ## --------------------------------------------------------------- preparation
 
@@ -213,22 +228,6 @@ defmodule Varsel.CVE.VersionResolution do
       cond do
         not supported_type?(version["versionType"]) ->
           {:cont, {:ok, acc}}
-
-        # TEMPORARY — remove this clause once the published records are fixed.
-        #
-        # Our own legacy records use `changes[]` to mean "a fix per release
-        # line", which is not what it means. The schema applies transitions in
-        # array order across the WHOLE range, so an entry open from 26.0 with
-        # transitions at 27.3.4 and 28.7.6 answers "unaffected" for 28.0.0 —
-        # 27.3.4 is below it and wins — when 28.0.0 is in fact affected until
-        # its own line's 28.7.6.
-        #
-        # Resolving these correctly-per-spec would therefore report a wrong
-        # "not affected" for real versions, so the whole product declines
-        # instead. The DISPLAY still shows every transition; only the checker
-        # stays silent. 75 of 316 corpus entries carry this shape.
-        version["changes"] not in [nil, []] ->
-          {:halt, {:error, :unsupported}}
 
         entry = comparable_entry(version) ->
           {:cont, {:ok, acc ++ [entry]}}

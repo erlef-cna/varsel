@@ -170,14 +170,83 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     setup do
       Req.Test.stub(OtpVersionsTable, fn conn ->
         Plug.Conn.send_resp(conn, 200, """
-        OTP-27.3.4.3 : ssh-5.2.3.4 stdlib-6.2.2.1 :
-        OTP-27.0 : ssh-5.2 stdlib-6.0 :
+        OTP-27.3.4.3 : ssh-5.2.3.4 stdlib-6.2.2.1 tftp-1.2.1 :
+        OTP-27.0 : ssh-5.2 stdlib-6.0 tftp-1.2 :
         OTP-26.2.5.15 : ssh-5.1.4.12 stdlib-5.2.3.4 :
         OTP-26.0 : ssh-5.0 stdlib-5.0 :
         """)
       end)
 
       on_exit(&OtpVersionsTable.reset/0)
+    end
+
+    # `tftp` split out of `inets` and first ships in OTP-27.0, so a span opening
+    # before it existed opens at its first version.
+    test "a lower bound before the app existed falls forward to its first version" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "tftp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      assert %{"versions" => [entry], "issues" => []} =
+               Emit.channel(channel, [range("OTP-26.0", "OTP-27.3.4.3")], [])
+
+      assert entry["version"] == "1.2"
+      assert entry["lessThan"] == "1.2.1"
+    end
+
+    # The release carries no `tftp`, so it states nothing about it. Falling
+    # forward here would name a version as the fix that never carried one.
+    test "an upper bound in a release without the app is an issue, not a later version" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "tftp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      assert Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], []) == %{
+               "versions" => [],
+               "issues" => ["cannot resolve tftp's version for a range"]
+             }
+    end
+
+    test "a fix transition in a release without the app is an issue too" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "tftp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      boundaries = %{introduced: "26.0", fixed: ["26.2.5.15", "27.3.4.3"], open?: true}
+
+      assert Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], boundaries: boundaries) ==
+               %{"versions" => [], "issues" => ["cannot resolve tftp's version for a range"]}
+    end
+
+    test "translates each fix transition to the app's own version" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "ssh",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      boundaries = %{introduced: "26.0", fixed: ["26.2.5.15", "27.3.4.3"], open?: true}
+
+      assert %{"versions" => [entry], "issues" => []} =
+               Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], boundaries: boundaries)
+
+      assert entry["version"] == "5.0"
+      assert entry["lessThan"] == "*"
+
+      assert entry["changes"] == [
+               %{"at" => "5.1.4.12", "status" => "unaffected"},
+               %{"at" => "5.2.3.4", "status" => "unaffected"}
+             ]
     end
 
     test "translates each OTP release bound to the app's own version" do
@@ -352,6 +421,67 @@ defmodule Varsel.Cases.Derivation.EmitTest do
       assert Emit.cpe_matches(ranges, otp_root_intro?: false) == [
                %{"versionStartIncluding" => "26.0", "versionEndExcluding" => "26.2.5.15"}
              ]
+    end
+  end
+
+  describe "OTP status-change form" do
+    defp otp_channel do
+      %PackageChannel{
+        purl_type: "sid",
+        namespace: "erlang.org",
+        name: "otp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+    end
+
+    test "several fixes become one open entry with a transition each" do
+      boundaries = %{introduced: "27.0", fixed: ["27.3.4.15", "28.5.0.4"], open?: true}
+
+      assert %{"versions" => [entry]} =
+               Emit.channel(otp_channel(), [], boundaries: boundaries)
+
+      assert entry == %{
+               "version" => "27.0",
+               "lessThan" => "*",
+               "status" => "affected",
+               "versionType" => "otp",
+               "changes" => [
+                 %{"at" => "27.3.4.15", "status" => "unaffected"},
+                 %{"at" => "28.5.0.4", "status" => "unaffected"}
+               ]
+             }
+    end
+
+    # `lessThan` says the same span. The open form would additionally claim every
+    # version above the bound, and a fix on a maintenance branch cannot close a
+    # line that does not exist yet.
+    test "a single fix stays a bounded range" do
+      boundaries = %{introduced: "26.0", fixed: ["26.2.5.15"], open?: true}
+      ranges = [range("OTP-26.0", "OTP-26.2.5.15")]
+
+      assert %{"versions" => [entry]} =
+               Emit.channel(otp_channel(), ranges, boundaries: boundaries)
+
+      assert entry == %{
+               "version" => "26.0",
+               "lessThan" => "26.2.5.15",
+               "status" => "affected",
+               "versionType" => "otp"
+             }
+    end
+
+    # An open entry claims everything above its lower bound, so it may only be
+    # used when the fixes actually account for that.
+    test "boundaries that would overclaim stay bounded ranges" do
+      boundaries = %{introduced: "27.0", fixed: ["27.3.4.15", "28.5.0.4"], open?: false}
+      ranges = [range("OTP-27.0", "OTP-27.3.4.15")]
+
+      assert %{"versions" => [entry]} =
+               Emit.channel(otp_channel(), ranges, boundaries: boundaries)
+
+      refute Map.has_key?(entry, "changes")
+      assert entry["lessThan"] == "27.3.4.15"
     end
   end
 

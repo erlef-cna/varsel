@@ -98,6 +98,51 @@ defmodule Varsel.Cases.ReachabilityTest do
     end
   end
 
+  describe "a bugfix backported to several branches introduces the flaw on each" do
+    # The releases between a branch point and the backport never carried the
+    # change, so they are not affected: 28.0 predates the backport that put the
+    # flaw on the 28 line.
+    test "each line's affected span starts where the backport landed" do
+      result =
+        deduce(
+          [
+            {"27.0", false},
+            {"27.3.4.9", false},
+            {"27.3.4.10", true},
+            {"27.3.4.14", true},
+            {"27.3.4.15", false},
+            {"28.0", false},
+            {"28.1", true},
+            {"28.5.0.3", true},
+            {"28.5.0.4", false}
+          ],
+          comparator: :otp,
+          include_prereleases: false
+        )
+
+      assert versions(result) == [{"27.3.4.10", "27.3.4.15"}, {"28.1", "28.5.0.4"}]
+    end
+
+    # An open entry from the first intro would claim 28.0, which the flaw never
+    # reached, so the boundaries cannot be published in the status-change form.
+    test "boundaries are not publishable open when a line predates the backport" do
+      result =
+        deduce(
+          [
+            {"27.3.4.10", true},
+            {"27.3.4.15", false},
+            {"28.0", false},
+            {"28.1", true},
+            {"28.5", true}
+          ],
+          comparator: :otp,
+          include_prereleases: false
+        )
+
+      refute result.boundaries.open?
+    end
+  end
+
   describe "OTP R-series tags" do
     # R tags are not versions, so they drop out with `nightly` and the topic
     # tags rather than bounding a range below the numeric ones.

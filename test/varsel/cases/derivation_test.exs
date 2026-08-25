@@ -353,35 +353,33 @@ defmodule Varsel.Cases.DerivationTest do
     package = Ash.load!(package, [:channels, :version_events], authorize?: false)
     assert {:ok, derivation} = Derivation.derive(package)
 
-    # ssh's own versions, resolved through otp_versions.table, as bounded ranges.
+    # ssh's own versions, resolved through otp_versions.table. Two fixes on lines
+    # the version scheme does not order become one open entry with a transition
+    # each, not two ranges asserting a span between them.
     assert derivation["channels"][otp_channel.id]["versions"] == [
              %{
                "version" => "5.0",
-               "lessThan" => "5.1.4.9",
+               "lessThan" => "*",
                "status" => "affected",
-               "versionType" => "otp"
-             },
-             %{
-               "version" => "5.2",
-               "lessThan" => "5.2.3.4",
-               "status" => "affected",
-               "versionType" => "otp"
+               "versionType" => "otp",
+               "changes" => [
+                 %{"at" => "5.1.4.9", "status" => "unaffected"},
+                 %{"at" => "5.2.3.4", "status" => "unaffected"}
+               ]
              }
            ]
 
-    # The sid release channel carries the OTP release versions (bare, bounded).
+    # The sid release channel carries the OTP release versions (bare).
     assert derivation["channels"][release_channel.id]["versions"] == [
              %{
                "version" => "26.0",
-               "lessThan" => "26.2.5.13",
+               "lessThan" => "*",
                "status" => "affected",
-               "versionType" => "otp"
-             },
-             %{
-               "version" => "27.0",
-               "lessThan" => "27.3.4.1",
-               "status" => "affected",
-               "versionType" => "otp"
+               "versionType" => "otp",
+               "changes" => [
+                 %{"at" => "26.2.5.13", "status" => "unaffected"},
+                 %{"at" => "27.3.4.1", "status" => "unaffected"}
+               ]
              }
            ]
 
@@ -466,7 +464,9 @@ defmodule Varsel.Cases.DerivationTest do
       assert {:ok, derivation} = Derivation.derive(package)
 
       # A single affected range from the POC's explicit boundary, not the
-      # two-range "0 - <first release>: unknown" + "affected" split.
+      # two-range "0 - <first release>: unknown" + "affected" split. One fix
+      # needs no transition — `lessThan` says the same span without claiming
+      # the versions above it.
       assert derivation["channels"][release_channel.id]["versions"] == [
                %{
                  "version" => explicit_version,

@@ -450,8 +450,11 @@ should exist by now): it refetches the repository state before deriving.
 Then run `render_case_preview` and `validate_case`, and read three separate signals.
 
 **1. The derived version range.** Confirm it is actually a version range, such as
-`from 0.3.1 before 1.5.3`. If you see raw commit SHAs where version numbers belong, or an empty
-range, the derivation resolved against the wrong repository. Check the rendered `vendor` and
+`from 0.3.1 before 1.5.3`. An OTP package fixed on several maintenance lines reads differently —
+one span open from the introducing release with a fix listed per line — because the OTP version
+scheme does not order `27.3.4.15` against `28.0`, so no single range can span them. If you see raw
+commit SHAs where version numbers belong, or an empty range, the derivation resolved against the
+wrong repository. Check the rendered `vendor` and
 `packageURL` too: a vendor you never supplied, or a purl pointing at a repository you never named,
 is the same symptom. The cause is almost always the wrong affected-package tool, so go back to
 Step 6.

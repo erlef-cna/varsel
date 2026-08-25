@@ -66,6 +66,48 @@ defmodule Varsel.Cases.Description.AffectedSummaryTest do
       assert Summary.summarize(affected) == "This issue affects earmark: from 1.4.1 onward."
     end
 
+    # An open range carrying `changes[]` is fixed, not unfixed: the transitions
+    # are its fix boundaries, one per release line.
+    test "an open range's fix transitions are named, not read as 'onward'" do
+      versions = [
+        %{
+          "version" => "27.0",
+          "lessThan" => "*",
+          "status" => "affected",
+          "versionType" => "otp",
+          "changes" => [
+            %{"at" => "27.3.4.15", "status" => "unaffected"},
+            %{"at" => "28.5.0.4", "status" => "unaffected"},
+            %{"at" => "29.0.4", "status" => "unaffected"}
+          ]
+        }
+      ]
+
+      affected = [entry("otp", "pkg:github/erlang/otp", versions)]
+
+      assert Summary.summarize(affected) ==
+               "This issue affects otp: from 27.0 before 27.3.4.15, 28.5.0.4, and 29.0.4."
+    end
+
+    test "a re-introducing transition is not a fix boundary" do
+      versions = [
+        %{
+          "version" => "1.0.0",
+          "lessThan" => "*",
+          "status" => "affected",
+          "versionType" => "semver",
+          "changes" => [
+            %{"at" => "1.5.0", "status" => "unaffected"},
+            %{"at" => "2.0.0", "status" => "affected"}
+          ]
+        }
+      ]
+
+      affected = [entry("plug", "pkg:hex/plug", versions)]
+
+      assert Summary.summarize(affected) == "This issue affects plug: from 1.0.0 before 1.5.0."
+    end
+
     test "lessThanOrEqual bounds the range like lessThan" do
       affected = [
         entry("thing", "pkg:hex/thing", [

@@ -37,6 +37,10 @@ defmodule Varsel.Cases.Reachability.SemverVersion do
   @spec compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt
   def compare(left, right), do: Version.compare(to_version(left), to_version(right))
 
+  @doc "Whether the scheme orders every pair of versions. Semver does."
+  @spec total_order?() :: boolean()
+  def total_order?, do: true
+
   @doc "Whether `version` is valid semver (a real release)."
   @spec release?(String.t()) :: boolean()
   def release?(version), do: match?({:ok, _}, parse(version))

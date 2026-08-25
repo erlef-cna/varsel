@@ -29,6 +29,21 @@ defmodule Varsel.Cases.Reachability.VersionComparatorTest do
     end
   end
 
+  describe "total_order?/1" do
+    # What decides whether a record can state an affected span as one bounded
+    # range, or needs an open entry with a transition per fix.
+    test "semver orders every pair; OTP's branch versions do not" do
+      assert VC.total_order?(:semver)
+      refute VC.total_order?(:otp)
+    end
+
+    # Nothing here compares their bounds, so nothing here can claim they branch.
+    test "a type this module does not order is not treated as branching" do
+      assert VC.total_order?(:date)
+      assert VC.total_order?(:other)
+    end
+  end
+
   describe "the zero bound" do
     test "orders below every version, in either scheme" do
       for kind <- [:semver, :otp] do

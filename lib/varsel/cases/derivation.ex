@@ -70,6 +70,7 @@ defmodule Varsel.Cases.Derivation do
     emit_opts = [
       intro_shas: intro_shas,
       fix_shas: fix_shas,
+      boundaries: reach.boundaries,
       otp_root_intro?: platform.kind == :otp and unresolved_otp_root_intro?(global_events)
     ]
 
@@ -116,6 +117,7 @@ defmodule Varsel.Cases.Derivation do
   defp empty_reachability do
     %{
       ranges: [],
+      boundaries: %{introduced: nil, fixed: [], open?: false},
       call_outs: [],
       open?: false,
       pending_fixes: [],

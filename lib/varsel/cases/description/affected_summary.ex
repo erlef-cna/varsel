@@ -19,6 +19,11 @@ defmodule Varsel.Cases.Description.AffectedSummary do
       This issue affects earmark: from 1.4.1 onward.
       This issue affects hex_core: from 0.1.0 before 0.12.1; hex: from 2.3.0 before 2.3.2.
 
+  A range fixed on several release lines carries its fixes as `changes[]` rather
+  than one upper bound, and the sentence names every one:
+
+      This issue affects OTP: from 27.0 before 27.3.4.15, 28.5.0.4, and 29.0.4.
+
   Erlang/OTP names the release and the application together, since a reader
   knows one or the other but the advisory concerns both:
 
@@ -135,7 +140,7 @@ defmodule Varsel.Cases.Description.AffectedSummary do
     lower = presence(version["version"])
     upper = version["lessThan"] |> presence() |> reject_star()
     inclusive = version["lessThanOrEqual"] |> presence() |> reject_star()
-    uppers = List.wrap(upper || inclusive)
+    uppers = List.wrap(upper || inclusive) ++ fix_transitions(version)
 
     if lower == nil and uppers == [] do
       nil
@@ -143,6 +148,20 @@ defmodule Varsel.Cases.Description.AffectedSummary do
       %{lower: zero_to_nil(lower), uppers: uppers, type: version["versionType"]}
     end
   end
+
+  # An open range carrying `changes[]` states its fixes as transitions rather
+  # than as an upper bound, one per release line — the shape a partially ordered
+  # scheme needs, since no single bound can span two lines that never meet.
+  # Every one of them ends an affected span, so the sentence names them all;
+  # reading only `lessThan` would say "onward" of a fixed vulnerability.
+  defp fix_transitions(%{"lessThan" => "*"} = version) do
+    for change <- List.wrap(version["changes"]),
+        change["status"] == "unaffected",
+        at = presence(change["at"]),
+        do: at
+  end
+
+  defp fix_transitions(_version), do: []
 
   defp zero_to_nil("0"), do: nil
   defp zero_to_nil(lower), do: lower

@@ -82,11 +82,8 @@ defmodule Varsel.Cases.Derivation.Emit do
         :git ->
           git(Keyword.get(opts, :intro_shas, []), Keyword.get(opts, :fix_shas, []))
 
-        :otp ->
-          otp_versions(channel, ranges)
-
         other ->
-          %{"versions" => decorated_ranges(channel, ranges, to_string(other)), "issues" => []}
+          versions(channel, other, ranges, Keyword.get(opts, :boundaries))
       end
 
     prepend_root_sentinel(result, sentinel_for(channel, version_type, ranges, opts))
@@ -153,44 +150,134 @@ defmodule Varsel.Cases.Derivation.Emit do
   defp decorated_bound(_prefix, :unbounded, _suffix), do: "*"
   defp decorated_bound(prefix, until, suffix), do: decorate(prefix, bare(until), suffix)
 
-  ## ------------------------------------------------------------ otp
+  ## ------------------------------------------------------------ versions
 
-  # A pkg:otp channel names one application, whose own versions differ from the
-  # release's; any other otp-versioned channel publishes the release versions.
-  defp otp_versions(%{purl_type: "otp", name: app} = channel, ranges) when is_binary(app) do
-    otp_app_versions(channel, app, ranges)
+  # A bounded `version → lessThan` range asserts that its bounds have an order.
+  # That holds for semver, dates and image tags, and not for a scheme whose
+  # versions branch: OTP's 27.3.4.15 and 28.0 each carry changes the other
+  # lacks, so a range spanning them claims something untrue. Those schemes state
+  # the same facts as one open entry with a transition per fix, which the schema
+  # resolves by applying every transition at or below the version asked about —
+  # the fixes on that version's own line, and no others.
+  defp versions(channel, version_type, ranges, boundaries) do
+    vocabulary = vocabulary(channel, version_type)
+
+    if VersionComparator.total_order?(version_type) do
+      flat_versions(channel, version_type, ranges, vocabulary)
+    else
+      status_change_versions(channel, version_type, ranges, boundaries, vocabulary)
+    end
   end
 
-  defp otp_versions(channel, ranges) do
-    %{"versions" => decorated_ranges(channel, ranges, "otp"), "issues" => []}
+  defp status_change_versions(channel, version_type, ranges, boundaries, vocabulary) do
+    case status_change_entry(channel, version_type, boundaries, vocabulary) do
+      nil -> flat_versions(channel, version_type, ranges, vocabulary)
+      entry -> %{"versions" => [entry], "issues" => []}
+    end
   end
 
-  # Translate each OTP release range into the application's own versions, halting
-  # on the first release whose app version can't be resolved (reported as issue).
-  defp otp_app_versions(channel, app, ranges) do
-    Enum.reduce_while(ranges, %{"versions" => [], "issues" => []}, fn range, acc ->
-      with {:ok, from} <- app_lower_bound(bare(range.from), app),
-           {:ok, until} <- app_upper_bound(range.until, app) do
-        versions =
-          acc["versions"] ++ decorated_ranges(channel, [%{from: from, until: until}], "otp")
+  # How a channel names the versions it publishes. A `pkg:otp` channel
+  # publishing OTP versions names one application, whose own versions differ
+  # from the release's; every other channel already speaks its package's
+  # vocabulary.
+  #
+  # The two ends resolve differently. A lower bound falls forward to the first
+  # release that ships the application, since a flaw introduced before the
+  # application existed still reaches it once it does. An upper bound is exact:
+  # a fix in a release that does not ship the application says nothing about
+  # that application, and answering with a later version would invent a fix.
+  defp vocabulary(%{purl_type: "otp", name: app}, :otp) when is_binary(app) do
+    %{
+      lower: &app_first_version(&1, app),
+      upper: &OtpVersionsTable.app_version(&1, app),
+      issue: "cannot resolve #{app}'s version for a range"
+    }
+  end
 
-        {:cont, %{acc | "versions" => versions}}
-      else
-        :error ->
-          {:halt, %{"versions" => [], "issues" => ["cannot resolve #{app}'s version for a range"]}}
+  defp vocabulary(_channel, _version_type) do
+    %{lower: &{:ok, &1}, upper: &{:ok, &1}, issue: nil}
+  end
+
+  defp flat_versions(channel, version_type, ranges, vocabulary) do
+    type = to_string(version_type)
+
+    ranges
+    |> Enum.reduce_while([], fn range, acc ->
+      case translate_range(range, vocabulary) do
+        {:ok, translated} -> {:cont, [decorated_ranges(channel, [translated], type) | acc]}
+        :error -> {:halt, :error}
       end
     end)
+    |> case do
+      :error -> %{"versions" => [], "issues" => [vocabulary.issue]}
+      acc -> %{"versions" => acc |> Enum.reverse() |> List.flatten(), "issues" => []}
+    end
   end
 
-  # A range from the start of history starts the application's there too.
-  defp app_lower_bound(from, app) do
-    if from == VersionComparator.zero(),
-      do: {:ok, from},
-      else: OtpVersionsTable.first_shipped_version(from, app)
+  defp translate_range(%{from: from, until: until}, vocabulary) do
+    with {:ok, from} <- vocabulary.lower.(bare(from)),
+         {:ok, until} <- translate_upper(until, vocabulary) do
+      {:ok, %{from: from, until: until}}
+    end
   end
 
-  defp app_upper_bound(:unbounded, _app), do: {:ok, :unbounded}
-  defp app_upper_bound(until, app), do: OtpVersionsTable.app_version(bare(until), app)
+  defp translate_upper(:unbounded, _vocabulary), do: {:ok, :unbounded}
+  defp translate_upper(until, vocabulary), do: vocabulary.upper.(bare(until))
+
+  defp status_change_entry(_channel, _version_type, nil, _vocabulary), do: nil
+  defp status_change_entry(_channel, _version_type, %{introduced: nil}, _vocabulary), do: nil
+  defp status_change_entry(_channel, _version_type, %{fixed: []}, _vocabulary), do: nil
+  defp status_change_entry(_channel, _version_type, %{open?: false}, _vocabulary), do: nil
+
+  # One fix needs no transition: `lessThan` states the same span, and states it
+  # better. An open entry claims every version above the bound, including ones
+  # not released yet, and a single fix on a branch can never close a line that
+  # does not exist yet, so the open form would report tomorrow's release
+  # affected. The bounded form claims only what was derived.
+  defp status_change_entry(_channel, _version_type, %{fixed: [_only_one]}, _vocabulary), do: nil
+
+  defp status_change_entry(channel, version_type, boundaries, vocabulary) do
+    %{introduced: introduced, fixed: fixed} = boundaries
+    prefix = channel.tag_prefix || ""
+
+    with {:ok, from} <- vocabulary.lower.(bare(introduced)),
+         {:ok, changes} <- translate_all(fixed, vocabulary) do
+      %{
+        "version" => prefix <> from,
+        "lessThan" => "*",
+        "status" => "affected",
+        "versionType" => to_string(version_type),
+        "changes" => Enum.map(changes, &%{"at" => prefix <> &1, "status" => "unaffected"})
+      }
+    else
+      :error -> nil
+    end
+  end
+
+  # Each fix is an upper bound of the span it closes, so all of them resolve
+  # exactly.
+  defp translate_all(versions, vocabulary) do
+    versions
+    |> Enum.reduce_while([], fn version, acc ->
+      case vocabulary.upper.(bare(version)) do
+        {:ok, translated} -> {:cont, [translated | acc]}
+        :error -> {:halt, :error}
+      end
+    end)
+    |> case do
+      :error -> :error
+      acc -> {:ok, Enum.reverse(acc)}
+    end
+  end
+
+  # The application's version where an affected span opens. `tftp` split out of
+  # `inets` long after some flaws were introduced, so a release predating the
+  # application resolves to the first version that ships it.
+  defp app_first_version(version, app) do
+    if version == VersionComparator.zero(),
+      do: {:ok, version},
+      else: OtpVersionsTable.first_shipped_version(version, app)
+  end
 
   ## ------------------------------------------------------------ git
 
@@ -237,17 +324,16 @@ defmodule Varsel.Cases.Derivation.Emit do
 
   defp otp_sentinel(_channel, []), do: nil
 
-  defp otp_sentinel(%{purl_type: "otp", name: app}, [%{from: from} | _]) when is_binary(app) do
-    # `app_lower_bound/2`, not `OtpVersionsTable.app_version/2`: the two disagree
-    # for an app younger than the release (an app split out of another one), and
-    # only this one lands where `otp_app_versions/3` opens the range.
-    case app_lower_bound(bare(from), app) do
+  # Through the channel's own vocabulary, so the sentinel closes exactly where
+  # the first range opens.
+  defp otp_sentinel(channel, [%{from: from} | _]) do
+    vocabulary = vocabulary(channel, :otp)
+
+    case vocabulary.lower.(bare(from)) do
       {:ok, version} -> unknown_range(version, "otp")
       :error -> nil
     end
   end
-
-  defp otp_sentinel(_channel, [%{from: from} | _]), do: unknown_range(bare(from), "otp")
 
   defp unknown_range(upper, version_type) do
     %{
