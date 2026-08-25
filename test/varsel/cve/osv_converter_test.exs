@@ -352,7 +352,11 @@ defmodule Varsel.CVE.OsvConverterTest do
                osv["affected"]
     end
 
-    test "converts lessThanOrEqual to last_affected and unaffected versions to fixed" do
+    # An unaffected row states where a fix landed; it does not open an affected
+    # span. Giving it the schema-required `introduced` event would have to
+    # invent one — `0` — claiming every version below the fix is affected, which
+    # is the opposite of what the row says.
+    test "an explicit unaffected row contributes no range" do
       affected =
         Map.put(@hex_affected, "versions", [
           %{
@@ -374,9 +378,7 @@ defmodule Varsel.CVE.OsvConverterTest do
                %{
                  "type" => "SEMVER",
                  "events" => [%{"introduced" => "1.0.0"}, %{"last_affected" => "1.5.0"}]
-               },
-               # a fix-only entry gets an introduced event to satisfy the OSV schema
-               %{"type" => "SEMVER", "events" => [%{"introduced" => "0"}, %{"fixed" => "2.0.0"}]}
+               }
              ]
     end
 

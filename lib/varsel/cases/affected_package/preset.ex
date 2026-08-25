@@ -39,6 +39,19 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
 
   @values [:otp, :elixir, :gleam]
 
+  # The root (parent-less) commit of erlang/otp: the squashed import its history
+  # starts at, so a vulnerability introduced here predates every version the tag
+  # set can express.
+  @otp_root_commit "84adefa331c4159d432d22840663c38f155cd4c1"
+
+  @doc "The erlang/otp root commit, the start of derivable history."
+  @spec otp_root_commit() :: String.t()
+  def otp_root_commit, do: @otp_root_commit
+
+  @doc "Whether `sha` is the erlang/otp root commit, the start of derivable history."
+  @spec otp_root_commit?(String.t()) :: boolean()
+  def otp_root_commit?(sha), do: sha == @otp_root_commit
+
   # Every published Gleam CVE repeats the derived range once per image flavor.
   @gleam_tag_suffixes ~w(elixir erlang node node-slim elixir-slim erlang-slim
                          erlang-alpine elixir-alpine node-alpine scratch)
@@ -165,7 +178,7 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
   """
   @spec payload_fields(t()) :: [atom()]
   def payload_fields(preset) do
-    arguments(preset) ++ [:program_files]
+    arguments(preset) ++ [:program_files, :default_status]
   end
 
   @doc "The specialized action's argument names for a preset."

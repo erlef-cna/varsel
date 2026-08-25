@@ -61,10 +61,19 @@ wrong. Investigate before trusting either side.
   outside every release), allow unreleased fixes on the package.
 - **Vulnerable since the beginning of OTP's git history**: tick the OTP
   preset's since-creation checkbox. It stands for the erlang/otp root commit,
-  and the record reports everything below the first affected release as
-  unknown. When the flaw is older than the import too, give that boundary the
-  version `0`: the range then starts at `0`, on the release channel and on the
+  and selects *unknown* for versions outside the derived ranges (below). When
+  the flaw is older than the import too, give that boundary the version `0`:
+  the range then starts at `0`, on the release channel and on the
   application's.
+- **Unsure whether releases older than the introducing commit are safe?** Set
+  the package's *versions outside the derived ranges* to **unknown** — for a
+  repository whose history starts at a squashed import, or when nobody audited
+  that far back. The record then claims nothing about them
+  (`defaultStatus: unknown`), and the CPE range drops its lower bound, treating
+  the older era as possibly affected. The default, **unaffected**, asserts
+  every release outside the derived ranges is known safe. The OTP preset
+  selects unknown for a root-commit intro; it is an ordinary setting from there
+  on.
 - **No usable repository**: it is gone, or its tags are unreliable or
   incomplete. Enter explicit version boundaries instead of commits.
 - **Prereleases** count as releases unless the project opts out, as OTP

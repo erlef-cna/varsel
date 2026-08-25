@@ -17,9 +17,9 @@ defmodule VarselWeb.CaseFormComponents do
   import VarselWeb.CoreComponents
   import VarselWeb.DisclosureComponents
 
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseReference
-  alias Varsel.Cases.Derivation.Emit
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.VersionEvent
 
@@ -86,6 +86,20 @@ defmodule VarselWeb.CaseFormComponents do
       <.input field={@form[:include_prereleases]} type="checkbox">
         <:label>Include pre-release versions (rc/alpha/beta) in the affected ranges</:label>
       </.input>
+      <.input
+        field={@form[:default_status]}
+        type="select"
+        options={[
+          {"Unaffected (known safe)", :unaffected},
+          {"Unknown (not derivable or audited)", :unknown}
+        ]}
+      >
+        <:label>Versions outside the derived ranges</:label>
+        <:description>
+          Unknown claims nothing about versions predating the introducing commit —
+          history the repository does not capture, or code never audited that far back.
+        </:description>
+      </.input>
       <.propose_form_fields propose?={@propose?} />
       {render_slot(@actions)}
     </.form>
@@ -110,7 +124,7 @@ defmodule VarselWeb.CaseFormComponents do
       assign(
         assigns,
         :since_creation?,
-        assigns.form[:introduced_commit].value == Emit.otp_root_commit()
+        assigns.form[:introduced_commit].value == Preset.otp_root_commit()
       )
 
     ~H"""

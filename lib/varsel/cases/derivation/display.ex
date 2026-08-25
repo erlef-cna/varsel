@@ -108,10 +108,12 @@ defmodule Varsel.Cases.Derivation.Display do
   defp timeline_row(_label, nil), do: nil
 
   defp timeline_row(label, derivation) do
+    # Only affected ranges lay vulnerable spans on the track; the explicit
+    # unaffected ranges an unknown-default package publishes are the gaps.
     ranges =
       derivation["versions"]
       |> List.wrap()
-      |> Enum.filter(&(&1["versionType"] in @renderable_version_types))
+      |> Enum.filter(&(&1["versionType"] in @renderable_version_types and &1["status"] == "affected"))
 
     pending? = (derivation["pending"] || []) != []
 

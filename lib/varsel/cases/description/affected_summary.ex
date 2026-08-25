@@ -99,7 +99,7 @@ defmodule Varsel.Cases.Description.AffectedSummary do
   defp entries(affected, status) do
     described =
       for entry <- affected,
-          ranges = status_ranges(entry, status),
+          ranges = status_ranges(entry, status) ++ default_spans(entry, status),
           ranges != [],
           do: %{name: product_name(entry), purl: entry["packageURL"], ranges: ranges}
 
@@ -135,6 +135,22 @@ defmodule Varsel.Cases.Description.AffectedSummary do
         range != nil,
         do: range
   end
+
+  # An entry whose `defaultStatus` is `unknown` leaves the span below its lowest
+  # affected range unlisted, and the sentence still owes the reader that claim.
+  defp default_spans(%{"defaultStatus" => "unknown"} = entry, "unknown") do
+    entry["versions"]
+    |> List.wrap()
+    |> Enum.find(fn version ->
+      version["status"] == "affected" and presence(version["version"]) not in [nil, "0"]
+    end)
+    |> case do
+      nil -> []
+      version -> [%{lower: nil, uppers: [version["version"]], type: version["versionType"]}]
+    end
+  end
+
+  defp default_spans(_entry, _status), do: []
 
   defp range(version) do
     lower = presence(version["version"])

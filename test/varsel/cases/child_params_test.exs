@@ -5,8 +5,8 @@
 defmodule Varsel.Cases.ChildParamsTest do
   use ExUnit.Case, async: true
 
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.ChildParams
-  alias Varsel.Cases.Derivation.Emit
 
   doctest ChildParams
 
@@ -34,7 +34,7 @@ defmodule Varsel.Cases.ChildParamsTest do
       params =
         ChildParams.normalize("package_otp", %{"affected_since_creation" => "true"}, %{})
 
-      assert params["introduced_commit"] == Emit.otp_root_commit()
+      assert params["introduced_commit"] == Preset.otp_root_commit()
       refute Map.has_key?(params, "affected_since_creation")
     end
 
@@ -42,7 +42,10 @@ defmodule Varsel.Cases.ChildParamsTest do
       params =
         ChildParams.normalize(
           "package_otp",
-          %{"affected_since_creation" => "false", "introduced_commit" => Emit.otp_root_commit()},
+          %{
+            "affected_since_creation" => "false",
+            "introduced_commit" => Preset.otp_root_commit()
+          },
           %{}
         )
 

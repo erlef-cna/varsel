@@ -5,6 +5,7 @@
 defmodule Varsel.Cases.Derivation.EmitTest do
   use ExUnit.Case, async: true
 
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Derivation.Emit
   alias Varsel.Cases.Derivation.OtpVersionsTable
   alias Varsel.Cases.PackageChannel
@@ -405,20 +406,20 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
 
     # NVD writes OTP's lowest affected line as a bare {versionEndExcluding: ...}
-    # (see CVE-2022-37026); R-series tags are never used as range bounds.
-    test "a root-commit intro drops the lowest range's lower bound" do
+    # (see CVE-2022-37026).
+    test "an unknown default drops the lowest range's lower bound" do
       ranges = [range("OTP-26.0", "OTP-26.2.5.15"), range("OTP-27.0", "OTP-27.3.4.3")]
 
-      assert Emit.cpe_matches(ranges, otp_root_intro?: true) == [
+      assert Emit.cpe_matches(ranges, default_status: :unknown) == [
                %{"versionStartIncluding" => nil, "versionEndExcluding" => "26.2.5.15"},
                %{"versionStartIncluding" => "27.0", "versionEndExcluding" => "27.3.4.3"}
              ]
     end
 
-    test "a non-root intro keeps every lower bound" do
+    test "an unaffected default keeps every lower bound" do
       ranges = [range("OTP-26.0", "OTP-26.2.5.15")]
 
-      assert Emit.cpe_matches(ranges, otp_root_intro?: false) == [
+      assert Emit.cpe_matches(ranges, default_status: :unaffected) == [
                %{"versionStartIncluding" => "26.0", "versionEndExcluding" => "26.2.5.15"}
              ]
     end
@@ -485,145 +486,12 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
   end
 
-  describe "OTP root-commit sentinel (otp_root_intro?: true)" do
+  describe "the erlang/otp root commit" do
     @root "84adefa331c4159d432d22840663c38f155cd4c1"
 
-    setup do
-      Req.Test.stub(OtpVersionsTable, fn conn ->
-        Plug.Conn.send_resp(conn, 200, """
-        OTP-26.2.5.15 : ssh-5.2.11.9 stdlib-5.2.3.1 :
-        OTP-26.0 : ssh-5.0 stdlib-5.0 :
-        OTP-17.0 : ssh-3.0.1 stdlib-2.0 :
-        """)
-      end)
-
-      on_exit(&OtpVersionsTable.reset/0)
-    end
-
     test "otp_root_commit?/1 recognises the root import commit" do
-      assert Emit.otp_root_commit?(@root)
-      refute Emit.otp_root_commit?(String.duplicate("a", 40))
-    end
-
-    # A root-commit intro is contained by every tag, and R tags are not versions,
-    # so the first range opens at the oldest numeric release, 17.0.
-    test "prepends an unknown range to an OTP app channel, bounded by the app's version at the first affected release" do
-      channel = %PackageChannel{
-        purl_type: "otp",
-        name: "stdlib",
-        version_type: :otp,
-        tag_suffixes: []
-      }
-
-      assert %{"versions" => [sentinel, released]} =
-               Emit.channel(channel, [range("OTP-17.0", "OTP-26.2.5.15")], otp_root_intro?: true)
-
-      assert sentinel == %{
-               "version" => "0",
-               "lessThan" => "2.0",
-               "status" => "unknown",
-               "versionType" => "otp"
-             }
-
-      assert released["version"] == "2.0"
-    end
-
-    test "prepends an unknown range bounded by the first affected release to the OTP release channel" do
-      channel = %PackageChannel{
-        purl_type: "sid",
-        namespace: "erlang.org",
-        name: "otp",
-        version_type: :otp,
-        tag_suffixes: []
-      }
-
-      assert %{"versions" => [sentinel, released]} =
-               Emit.channel(channel, [range("OTP-17.0", "OTP-26.2.5.15")], otp_root_intro?: true)
-
-      assert sentinel == %{
-               "version" => "0",
-               "lessThan" => "17.0",
-               "status" => "unknown",
-               "versionType" => "otp"
-             }
-
-      assert released == %{
-               "version" => "17.0",
-               "lessThan" => "26.2.5.15",
-               "status" => "affected",
-               "versionType" => "otp"
-             }
-    end
-
-    # A fix and re-introduction splits the timeline, so the second range starts
-    # well above the sentinel's bound.
-    test "the sentinel never overlaps the first affected range" do
-      channel = %PackageChannel{
-        purl_type: "sid",
-        namespace: "erlang.org",
-        name: "otp",
-        version_type: :otp,
-        tag_suffixes: []
-      }
-
-      ranges = [range("OTP-17.0", "OTP-18.0"), range("OTP-26.0", "OTP-26.2.5.15")]
-
-      assert %{"versions" => [sentinel | affected]} =
-               Emit.channel(channel, ranges, otp_root_intro?: true)
-
-      assert sentinel["lessThan"] == "17.0"
-      assert Enum.map(affected, & &1["version"]) == ["17.0", "26.0"]
-    end
-
-    # `otp_root_intro?` holds whenever the root commit has no explicit version,
-    # including when no release carries the vulnerability at all.
-    test "no sentinel when no range places the root commit" do
-      channel = %PackageChannel{
-        purl_type: "sid",
-        namespace: "erlang.org",
-        name: "otp",
-        version_type: :otp,
-        tag_suffixes: []
-      }
-
-      assert %{"versions" => versions} = Emit.channel(channel, [], otp_root_intro?: true)
-
-      assert versions == []
-    end
-
-    # erlang/otp's history starts at the root commit, so "0 → <root sha>" would
-    # claim a span of commits that does not exist.
-    test "a git channel carries no sentinel even when the intro is the root commit" do
-      channel = %PackageChannel{purl_type: "github", namespace: "erlang", name: "otp"}
-      opts = [otp_root_intro?: true, intro_shas: [@root], fix_shas: ["fix"]]
-
-      assert %{"versions" => versions} = Emit.channel(channel, [], opts)
-
-      refute Enum.any?(versions, &(&1["status"] == "unknown"))
-    end
-
-    test "no sentinel when the intro is not the root commit" do
-      channel = %PackageChannel{
-        purl_type: "otp",
-        name: "ssh",
-        version_type: :otp,
-        tag_suffixes: []
-      }
-
-      assert %{"versions" => versions} =
-               Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], otp_root_intro?: false)
-
-      refute Enum.any?(versions, &(&1["status"] == "unknown"))
-    end
-
-    # A semver channel never sees the root commit; the flag is OTP-only.
-    test "no sentinel on a semver channel" do
-      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
-
-      assert %{"versions" => versions} =
-               Emit.channel(channel, [range("v1.0.0", "v1.5.3")], otp_root_intro?: true)
-
-      refute Enum.any?(versions, &(&1["status"] == "unknown"))
+      assert Preset.otp_root_commit?(@root)
+      refute Preset.otp_root_commit?(String.duplicate("a", 40))
     end
   end
 end

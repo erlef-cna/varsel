@@ -9,7 +9,7 @@ defmodule VarselWeb.CaseLiveTest do
 
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Cases
-  alias Varsel.Cases.Derivation.Emit
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Fixtures
   alias Varsel.HexPm
   alias Varsel.Notifications
@@ -1011,7 +1011,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#child-form", %{"child" => %{"affected_since_creation" => "true"}})
       |> render_change()
 
-      root = Emit.otp_root_commit()
+      root = Preset.otp_root_commit()
 
       assert has_element?(
                lv,
@@ -2296,7 +2296,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert [proposal] = Cases.list_open_case_proposals!(case_record.id, actor: poc)
 
       assert proposal.proposed_value["value"]["introduced_commit"] ==
-               Emit.otp_root_commit()
+               Preset.otp_root_commit()
 
       refute Map.has_key?(proposal.proposed_value["value"], "affected_since_creation")
 

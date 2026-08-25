@@ -36,6 +36,7 @@ defmodule Varsel.Cases.Derivation do
 
       %{
         "channels" => %{<channel-uuid> => %{"versions" => [...],
+                                            "default_status" => "unaffected" | "unknown",
                                             "pending" => [...],
                                             "unreleased_intros" => [...],
                                             "issues" => [...]}},
@@ -66,18 +67,19 @@ defmodule Varsel.Cases.Derivation do
     pending = reach.pending_fixes
 
     {intro_shas, fix_shas} = boundary_shas(global_events)
+    default_status = package.default_status
 
     emit_opts = [
       intro_shas: intro_shas,
       fix_shas: fix_shas,
       boundaries: reach.boundaries,
-      otp_root_intro?: platform.kind == :otp and unresolved_otp_root_intro?(global_events)
+      default_status: default_status
     ]
 
     channels =
       Map.new(package.channels, fn channel ->
         events = Enum.filter(scoped_events, &(&1.package_channel_id == channel.id))
-        {channel.id, derive_channel(channel, reach, events, emit_opts, pending)}
+        {channel.id, derive_channel(channel, reach, events, emit_opts, pending, default_status)}
       end)
 
     {:ok,
@@ -144,27 +146,22 @@ defmodule Varsel.Cases.Derivation do
     {Enum.map(intros, & &1.commit_sha), Enum.map(fixes, & &1.commit_sha)}
   end
 
-  # Whether the OTP root commit stands as the introduced boundary with nothing
-  # else to place it: an event pairing that commit with an explicit version
-  # (e.g. "0", "R1A") names where the range truly starts, so the span below it
-  # is resolved rather than unknown.
-  defp unresolved_otp_root_intro?(events) do
-    Enum.any?(events, fn event ->
-      event.event == :introduced and is_binary(event.commit_sha) and
-        Emit.otp_root_commit?(event.commit_sha) and is_nil(event.version)
-    end)
-  end
-
   ## --------------------------------------------------------------- channels
 
-  defp derive_channel(channel, reach, scoped_events, emit_opts, pending) do
+  # A channel with verbatim (scoped) events keeps an `unaffected` default: its
+  # ranges are asserted by hand, so the fix-carrying spans an `unknown` default
+  # owes as explicit unaffected ranges are not derivable from them.
+  defp derive_channel(channel, reach, scoped_events, emit_opts, pending, default_status) do
     cond do
       scoped_events != [] ->
-        derive_scoped_channel(channel, scoped_events)
+        channel
+        |> derive_scoped_channel(scoped_events)
+        |> Map.put("default_status", "unaffected")
 
       channel.kind == :service ->
         %{
           "versions" => [],
+          "default_status" => "unaffected",
           "pending" => [],
           "unreleased_intros" => [],
           "issues" => ["service channels need channel-scoped version events"]
@@ -173,6 +170,7 @@ defmodule Varsel.Cases.Derivation do
       true ->
         channel
         |> Emit.channel(reach.ranges, emit_opts)
+        |> Map.put("default_status", to_string(default_status))
         |> Map.put("pending", pending)
         |> Map.put("unreleased_intros", reach.unreleased_intros)
     end

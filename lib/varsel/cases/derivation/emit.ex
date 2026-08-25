@@ -50,26 +50,13 @@ defmodule Varsel.Cases.Derivation.Emit do
   # stored as this marker instead.
   @bare_tag "-"
 
-  # The root (parent-less) commit of erlang/otp: the squashed import its history
-  # starts at, so a vulnerability introduced here predates every version the tag
-  # set can express.
-  @otp_root_commit "84adefa331c4159d432d22840663c38f155cd4c1"
-
-  @doc "The erlang/otp root commit, the start of derivable history."
-  @spec otp_root_commit() :: String.t()
-  def otp_root_commit, do: @otp_root_commit
-
-  @doc "Whether `sha` is the erlang/otp root commit, the start of derivable history."
-  @spec otp_root_commit?(String.t()) :: boolean()
-  def otp_root_commit?(sha), do: sha == @otp_root_commit
-
   @doc """
   The `versions[]` block for a repo-derived channel: `%{"versions" => [...],
   "issues" => [...]}`. `pending` is added by the caller (it is package-level).
 
   `opts` carries the boundary facts the git version type needs
-  (`:intro_shas` / `:fix_shas`) and whether the introducing commit is the OTP
-  root with no explicit version to place it (`:otp_root_intro?`).
+  (`:intro_shas` / `:fix_shas`), the derived `:boundaries`, and the package's
+  effective `:default_status`.
   """
   @spec channel(PackageChannel.t(), [range()], keyword()) :: %{
           required(String.t()) => [map()]
@@ -86,7 +73,7 @@ defmodule Varsel.Cases.Derivation.Emit do
           versions(channel, other, ranges, Keyword.get(opts, :boundaries))
       end
 
-    prepend_root_sentinel(result, sentinel_for(channel, version_type, ranges, opts))
+    result
   end
 
   @doc """
@@ -102,19 +89,17 @@ defmodule Varsel.Cases.Derivation.Emit do
   cpeApplicability matches from the neutral ranges: each `[from, until)` is one
   non-overlapping `%{versionStartIncluding, versionEndExcluding}` (bare versions).
 
-  A range reaching back to the start of derivable history (`otp_root_intro?`)
-  drops its lower bound instead of naming the release there, matching how NVD
-  writes OTP's lowest affected line (`{versionEndExcluding: "23.3.4.15"}`, no
-  start). CPE has no way to say "unknown", so the span the `versions[]` sentinel
-  marks `unknown` is simply left unbounded below here — CPE version comparison is
-  consumer-defined, so naming the lowest release as a bound would be a stronger
-  claim than we can derive.
+  Under an `unknown` `:default_status` the lowest match drops its lower bound.
+  CPE has no way to say "unknown" and an unmatched version reads as unaffected,
+  so the possibly-affected pre-introduction span is folded into the lowest
+  affected range instead — matching how NVD writes OTP's lowest affected line
+  (`{versionEndExcluding: "23.3.4.15"}`, no start).
   """
   @spec cpe_matches([range()], keyword()) :: [map()]
   def cpe_matches(ranges, opts \\ []) do
     # Reachability emits ranges in ascending release order, so the first is the
-    # lowest.
-    drop_lower_bound? = Keyword.get(opts, :otp_root_intro?, false)
+    # lowest — the only one the unknown pre-introduction span borders.
+    drop_lower_bound? = Keyword.get(opts, :default_status, :unaffected) == :unknown
 
     for {range, index} <- Enum.with_index(ranges) do
       # cpe has no "*" sentinel — an open range simply has no upper bound (nil,
@@ -301,53 +286,6 @@ defmodule Varsel.Cases.Derivation.Emit do
     }
 
     %{"versions" => [chain], "issues" => []}
-  end
-
-  ## ------------------------------------------------------------ root sentinel
-
-  # The `unknown` range below the first affected release, prepended when the vuln
-  # was introduced at the OTP root commit: erlang/otp's history starts at that
-  # squashed import, so anything earlier is underivable rather than unaffected.
-  #
-  # The bound must not overlap the first range. CVE Record Format 5.1 resolves a
-  # version from the FIRST entry covering it, and the sentinel is prepended, so
-  # any overlap answers `unknown` for a version the ranges call affected.
-  #
-  # Only otp-versioned channels get one: a git channel is versioned in commit
-  # SHAs and no commit precedes the root commit, and semver channels of other
-  # products never see it.
-  defp sentinel_for(channel, :otp, ranges, opts) do
-    if Keyword.get(opts, :otp_root_intro?, false), do: otp_sentinel(channel, ranges)
-  end
-
-  defp sentinel_for(_channel, _version_type, _ranges, _opts), do: nil
-
-  defp otp_sentinel(_channel, []), do: nil
-
-  # Through the channel's own vocabulary, so the sentinel closes exactly where
-  # the first range opens.
-  defp otp_sentinel(channel, [%{from: from} | _]) do
-    vocabulary = vocabulary(channel, :otp)
-
-    case vocabulary.lower.(bare(from)) do
-      {:ok, version} -> unknown_range(version, "otp")
-      :error -> nil
-    end
-  end
-
-  defp unknown_range(upper, version_type) do
-    %{
-      "version" => VersionComparator.zero(),
-      "lessThan" => upper,
-      "status" => "unknown",
-      "versionType" => version_type
-    }
-  end
-
-  defp prepend_root_sentinel(result, nil), do: result
-
-  defp prepend_root_sentinel(%{"versions" => versions} = result, sentinel) do
-    %{result | "versions" => [sentinel | versions]}
   end
 
   ## ------------------------------------------------------------ shared

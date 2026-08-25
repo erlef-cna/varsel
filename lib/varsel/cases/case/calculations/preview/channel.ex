@@ -36,7 +36,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
 
     entry =
       package
-      |> base_entry()
+      |> base_entry(channel_derivation["default_status"])
       |> put_program_info(program_files(package, channel))
       |> Map.merge(channel_constants(package, channel))
       |> put_versions(versions)
@@ -56,13 +56,10 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
 
   ## -------------------------------------------------------- entry assembly
 
-  # defaultStatus is always "unaffected": derivation labels every release, so
-  # affected/unknown eras are explicit versions[] ranges and everything else
-  # is genuinely unaffected.
-  defp base_entry(package) do
+  defp base_entry(package, default_status) do
     put_non_empty(
       %{
-        "defaultStatus" => "unaffected",
+        "defaultStatus" => default_status || "unaffected",
         "vendor" => package.vendor,
         "product" => package.product
       },

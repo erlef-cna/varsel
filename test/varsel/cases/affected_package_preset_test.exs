@@ -8,6 +8,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
   alias Ash.Error.Invalid
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.PackageChannel.Calculations.Purl
   alias Varsel.Fixtures
 
@@ -117,6 +118,53 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
                package.channels
 
       assert package.version_events == []
+    end
+
+    # The root commit is the squashed import erlang/otp's history starts at, so
+    # nothing older is derivable. The preset picks the default; it is an
+    # ordinary attribute afterwards and the UI may change it.
+    test "an intro at the root commit selects the unknown default", %{poc: poc, case: case_record} do
+      package =
+        Cases.add_otp_affected_package!(
+          %{
+            case_id: case_record.id,
+            applications: ["ssh"],
+            introduced_commit: Preset.otp_root_commit()
+          },
+          actor: poc
+        )
+
+      assert package.default_status == :unknown
+    end
+
+    test "an ordinary intro keeps the unaffected default", %{poc: poc, case: case_record} do
+      package =
+        Cases.add_otp_affected_package!(
+          %{case_id: case_record.id, applications: ["ssh"], introduced_commit: @intro_sha},
+          actor: poc
+        )
+
+      assert package.default_status == :unaffected
+    end
+
+    # The preset picks a default, it does not decide for the author. Someone who
+    # states the status means it, root commit or not.
+    test "an explicit default_status survives a root-commit intro", %{
+      poc: poc,
+      case: case_record
+    } do
+      package =
+        Cases.add_otp_affected_package!(
+          %{
+            case_id: case_record.id,
+            applications: ["ssh"],
+            introduced_commit: Preset.otp_root_commit(),
+            default_status: :unaffected
+          },
+          actor: poc
+        )
+
+      assert package.default_status == :unaffected
     end
 
     test "erts lives at the repository root, not under lib/", %{poc: poc, case: case_record} do

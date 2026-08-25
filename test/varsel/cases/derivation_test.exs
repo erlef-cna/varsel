@@ -477,6 +477,8 @@ defmodule Varsel.Cases.DerivationTest do
              ]
 
       # Since creation means the application's whole history too.
+      # The explicit "0" places the boundary, so the attribute stands and the
+      # pre-import era is not claimed unknown.
       assert derivation["channels"][app_channel.id] == %{
                "versions" => [
                  %{
@@ -486,11 +488,70 @@ defmodule Varsel.Cases.DerivationTest do
                    "versionType" => "otp"
                  }
                ],
+               "default_status" => "unaffected",
                "pending" => [],
                "unreleased_intros" => [],
                "issues" => []
              }
     end
+  end
+
+  test "an unknown default publishes no sentinel row and drops the CPE lower bound", %{
+    poc: poc,
+    case: case_record
+  } do
+    otp_repo = "https://github.com/erlang/otp"
+
+    package =
+      Fixtures.add_affected_package(poc, case_record, %{
+        vendor: "Erlang",
+        product: "OTP",
+        repo_url: otp_repo,
+        default_status: :unknown
+      })
+
+    release_channel =
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: "sid",
+          namespace: "erlang.org",
+          name: "otp",
+          version_type: :otp
+        },
+        actor: poc
+      )
+
+    StubGitBackend.stub_tags(%{
+      {otp_repo, @otp_root_commit} => ["OTP_R13B03", "OTP-26.0", "OTP-26.2.5.15"],
+      {otp_repo, @fix_sha} => ["OTP-26.2.5.15"]
+    })
+
+    for attrs <- [
+          %{event: :introduced, commit_sha: @otp_root_commit},
+          %{event: :fixed, commit_sha: @fix_sha}
+        ] do
+      Cases.add_version_event!(
+        Map.merge(%{case_id: case_record.id, affected_package_id: package.id}, attrs),
+        actor: poc
+      )
+    end
+
+    package = Ash.load!(package, [:channels, :version_events], authorize?: false)
+    assert {:ok, derivation} = Derivation.derive(package)
+
+    channel = derivation["channels"][release_channel.id]
+
+    assert channel["default_status"] == "unknown"
+
+    # No sentinel row: the unlisted era is said by the default, not by a range.
+    refute Enum.any?(channel["versions"], &(&1["status"] == "unknown"))
+
+    # CPE cannot say unknown, so the possibly-affected pre-import span folds
+    # into the lowest match as a dropped lower bound.
+    assert [%{"versionStartIncluding" => nil, "versionEndExcluding" => "26.2.5.15"}] =
+             derivation["cpe_matches"]
   end
 
   test "an explicit R-series boundary is reported as unusable rather than dropped", %{

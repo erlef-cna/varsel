@@ -34,6 +34,7 @@ defmodule Varsel.Cases.AffectedPackage do
 
   alias Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel
   alias Varsel.Cases.AffectedPackage.Changes.FromPreset
+  alias Varsel.Cases.AffectedPackage.DefaultStatus
   alias Varsel.Cases.AffectedPackage.DerivationState
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.AffectedPackage.ProgramFile
@@ -89,7 +90,7 @@ defmodule Varsel.Cases.AffectedPackage do
       version events afterwards.
       """
 
-      accept [:case_id, :program_files]
+      accept [:case_id, :program_files, :default_status]
 
       argument :applications, {:array, :string} do
         description ~s{Affected OTP applications (e.g. ["ssh"]); one pkg:otp channel each.}
@@ -119,7 +120,7 @@ defmodule Varsel.Cases.AffectedPackage do
       and version boundary facts from the given commits.
       """
 
-      accept [:case_id, :program_files]
+      accept [:case_id, :program_files, :default_status]
 
       argument :applications, {:array, :string} do
         description ~s{Affected Elixir applications (e.g. ["elixir"] or ["mix"]).}
@@ -149,7 +150,7 @@ defmodule Varsel.Cases.AffectedPackage do
       version boundary facts from the given commits.
       """
 
-      accept [:case_id, :program_files]
+      accept [:case_id, :program_files, :default_status]
 
       argument :introduced_commit, :string do
         description "Full SHA of the commit introducing the vulnerability."
@@ -204,7 +205,7 @@ defmodule Varsel.Cases.AffectedPackage do
 
     create :apply_proposal_insert_otp do
       description "Internal: creates the Erlang/OTP package proposed by an accepted preset :insert proposal."
-      accept [:case_id, :program_files]
+      accept [:case_id, :program_files, :default_status]
 
       argument :applications, {:array, :string} do
         allow_nil? false
@@ -226,7 +227,7 @@ defmodule Varsel.Cases.AffectedPackage do
 
     create :apply_proposal_insert_elixir do
       description "Internal: creates the Elixir package proposed by an accepted preset :insert proposal."
-      accept [:case_id, :program_files]
+      accept [:case_id, :program_files, :default_status]
 
       argument :applications, {:array, :string} do
         allow_nil? false
@@ -248,7 +249,7 @@ defmodule Varsel.Cases.AffectedPackage do
 
     create :apply_proposal_insert_gleam do
       description "Internal: creates the Gleam package proposed by an accepted preset :insert proposal."
-      accept [:case_id, :program_files]
+      accept [:case_id, :program_files, :default_status]
 
       argument :introduced_commit, :string do
         constraints match: Preset.commit_sha_regex()
@@ -394,6 +395,20 @@ defmodule Varsel.Cases.AffectedPackage do
 
       allow_nil? false
       default false
+      public? true
+    end
+
+    attribute :default_status, DefaultStatus do
+      description """
+      What the record claims about versions its ranges do not list — rendered
+      as affected[].defaultStatus. `:unaffected` asserts every unlisted version
+      is known safe; `:unknown` claims nothing about versions predating the
+      introducing commit (history the repository does not capture, or code
+      never audited that far back).
+      """
+
+      allow_nil? false
+      default :unaffected
       public? true
     end
 
