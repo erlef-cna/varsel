@@ -518,7 +518,7 @@ defmodule VarselWeb.CveHtmlTest do
       assert body =~ "data-phx-session"
     end
 
-    test "affected card anatomy: registry + repo links, default status, cpe row, disclosure", %{
+    test "affected card anatomy: registry + repo links, cpe row, disclosure", %{
       conn: conn
     } do
       publish()

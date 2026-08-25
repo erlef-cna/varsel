@@ -14,7 +14,7 @@ defmodule VarselWeb.DisclosureComponents do
   mode rather than a view.
 
   `field_list/1` is the flat label/value pairing both the published record and
-  the workspace use for the small print (default status, CPE, platforms).
+  the workspace use for the small print (CPE, platforms).
   """
 
   use Phoenix.Component

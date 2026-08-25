@@ -18,7 +18,6 @@ defmodule VarselWeb.Storybook.Core.FieldList do
         id: :default,
         attributes: %{
           rows: [
-            {"default status", "unaffected"},
             {"cpe", "cpe:2.3:a:erlang:erlang\\/otp:*:*:*:*:*:*:*:*"}
           ]
         }
@@ -44,7 +43,6 @@ defmodule VarselWeb.Storybook.Core.FieldList do
             "per row — a list usually mixes the two.",
         attributes: %{
           rows: [
-            {"default status", "unaffected", :prose},
             {"cpe", "cpe:2.3:a:erlang:erlang\\/otp:*:*:*:*:*:*:*:*"}
           ]
         }
