@@ -729,10 +729,10 @@ evidence that you have seen everything. To learn the real total, re-run the same
 
 **Varsel supplies most references itself.** Do not propose the patch commit: the renderer builds it
 from `repo_url` plus the fix version event. Do not propose the `cna.erlef.org` or `osv.dev` links
-either; those are added when the CVE ID is assigned in the UI. In practice you propose the vendor
-advisory (`["vendor-advisory", "related"]`) and, on OTP cases, the version-scheme doc
-(`["x_version-scheme"]`). That is the whole list. The renderer orders the rendered set itself:
-vendor advisory first, then patch-tagged, then the rest.
+either; those are added when the CVE ID is assigned in the UI. Do not propose the OTP version-scheme
+doc; any OTP-versioned entry derives it. In practice you propose the vendor advisory
+(`["vendor-advisory", "related"]`), and that is the whole list. The renderer orders the rendered set
+itself: vendor advisory first, then patch-tagged, then the rest.
 
 **To remove a child row**, use `propose_delete` with its `target` (for example `"reference"`) and
 `target_id`.

@@ -121,7 +121,7 @@ gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
 - [ ] First: vendor advisory `["vendor-advisory"]` (GHSA → `["vendor-advisory", "related"]`).
 - [ ] Second: `https://cna.erlef.org/cves/CVE-<num>.html` `["related"]` (add `"third-party-advisory"` if no vendor advisory).
 - [ ] Third: `https://osv.dev/vulnerability/EEF-CVE-<num>` `["related"]`.
-- [ ] OTP: `https://www.erlang.org/doc/system/versions.html#order-of-versions` `["x_version-scheme"]` present.
+- [ ] OTP: `https://www.erlang.org/doc/system/versions.html#order-of-versions` `["x_version-scheme"]` present — derived from any OTP-versioned entry, so its absence means no entry is OTP-versioned.
 - [ ] At least one `"patch"`-tagged reference, unless the vulnerability is unpatched.
 
 ### CVSS
