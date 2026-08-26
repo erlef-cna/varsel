@@ -76,6 +76,11 @@ wrong. Investigate before trusting either side.
   every release outside the derived ranges is known safe. The OTP preset
   selects unknown for a root-commit intro; it is an ordinary setting from there
   on.
+- **Everything is affected except what carries the fix?** Set the same setting
+  to **affected**. The record then lists the releases carrying the fix and
+  calls every other version vulnerable, which suits a product whose releases
+  cannot be enumerated, or a flaw as old as the code. The CPE ranges cover the
+  gaps between the fixed spans.
 - **No usable repository**: it is gone, or its tags are unreliable or
   incomplete. Enter explicit version boundaries instead of commits.
 - **Prereleases** count as releases unless the project opts out, as OTP

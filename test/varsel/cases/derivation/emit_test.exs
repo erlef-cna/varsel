@@ -555,6 +555,94 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
   end
 
+  describe "an affected default status" do
+    test "publishes the fix-carrying spans and nothing else" do
+      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
+
+      opts = [
+        default_status: :affected,
+        fixed_ranges: [%{from: "v1.5.3", until: :unbounded}]
+      ]
+
+      assert %{"versions" => [entry], "issues" => []} =
+               Emit.channel(channel, [range("v1.0.0", "v1.5.3")], opts)
+
+      assert entry == %{
+               "version" => "1.5.3",
+               "lessThan" => "*",
+               "status" => "unaffected",
+               "versionType" => "semver"
+             }
+    end
+
+    # Everything below the introducing release is affected too, so the entry has
+    # no lower bound to find.
+    test "the status-change form opens at the zero bound" do
+      channel = %PackageChannel{
+        purl_type: "sid",
+        namespace: "erlang.org",
+        name: "otp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      opts = [
+        default_status: :affected,
+        boundaries: %{introduced: "27.0", fixed: ["27.3.4.15", "28.5.0.4"], open?: true},
+        fixed_ranges: [%{from: "OTP-27.3.4.15", until: :unbounded}]
+      ]
+
+      assert %{"versions" => [entry]} =
+               Emit.channel(channel, [range("OTP-27.0", "OTP-27.3.4.15")], opts)
+
+      assert entry["version"] == "0"
+      assert entry["lessThan"] == "*"
+      assert entry["status"] == "affected"
+      assert Enum.map(entry["changes"], & &1["at"]) == ["27.3.4.15", "28.5.0.4"]
+    end
+  end
+
+  describe "cpe_matches/2 under an affected default" do
+    # CPE has one status, so everything not proven safe is matched.
+    test "matches the gap below the only fix" do
+      opts = [default_status: :affected, fixed_ranges: [%{from: "v1.5.3", until: :unbounded}]]
+
+      assert Emit.cpe_matches([], opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => "1.5.3"}
+             ]
+    end
+
+    test "matches each gap between fix-carrying spans" do
+      opts = [
+        default_status: :affected,
+        fixed_ranges: [%{from: "v1.2.0", until: "v2.0.0"}, %{from: "v3.0.0", until: :unbounded}]
+      ]
+
+      assert Emit.cpe_matches([], opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => "1.2.0"},
+               %{"versionStartIncluding" => "2.0.0", "versionEndExcluding" => "3.0.0"}
+             ]
+    end
+
+    # A bounded last span leaves everything above it affected again.
+    test "matches above a bounded last span" do
+      opts = [default_status: :affected, fixed_ranges: [%{from: "v1.2.0", until: "v2.0.0"}]]
+
+      assert Emit.cpe_matches([], opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => "1.2.0"},
+               %{"versionStartIncluding" => "2.0.0", "versionEndExcluding" => nil}
+             ]
+    end
+
+    test "matches everything when no fix is known" do
+      opts = [default_status: :affected, fixed_ranges: []]
+
+      assert Emit.cpe_matches([], opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => nil}
+             ]
+    end
+  end
+
   describe "the erlang/otp root commit" do
     @root "84adefa331c4159d432d22840663c38f155cd4c1"
 

@@ -4,13 +4,18 @@
 
 defmodule Varsel.Cases.AffectedPackage.DefaultStatus do
   @moduledoc """
-  What the record claims about versions its ranges do not list — rendered as
+  What the record claims about versions its ranges do not list, rendered as
   `affected[].defaultStatus`.
 
-  `:unknown` is for history the repository does not capture (a squashed
-  import) or code never audited that far back. The OTP preset selects it for an
+  `:unknown` is for history the repository does not capture (a squashed import)
+  or code never audited that far back. The OTP preset selects it for an
   introduction at the erlang/otp root commit, and it is an ordinary attribute
   from there on.
+
+  `:affected` inverts what the record lists: the ranges name the versions
+  carrying the fix, and everything else is vulnerable. It fits a product whose
+  releases cannot be enumerated, and a flaw present for as long as the code has
+  existed.
   """
 
   @behaviour AshGraphql.Type
@@ -18,7 +23,8 @@ defmodule Varsel.Cases.AffectedPackage.DefaultStatus do
   use Ash.Type.Enum,
     values: [
       unaffected: "Every version outside the derived ranges is known safe.",
-      unknown: "Nothing is claimed about versions predating the introducing commit."
+      unknown: "Nothing is claimed about versions predating the introducing commit.",
+      affected: "Every version outside the listed fixed spans is vulnerable."
     ]
 
   @impl AshGraphql.Type

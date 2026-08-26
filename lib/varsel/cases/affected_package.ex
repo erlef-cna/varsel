@@ -404,7 +404,8 @@ defmodule Varsel.Cases.AffectedPackage do
       as affected[].defaultStatus. `:unaffected` asserts every unlisted version
       is known safe; `:unknown` claims nothing about versions predating the
       introducing commit (history the repository does not capture, or code
-      never audited that far back).
+      never audited that far back); `:affected` inverts the record, listing the
+      fixed spans and calling everything else vulnerable.
       """
 
       allow_nil? false

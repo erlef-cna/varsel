@@ -91,13 +91,15 @@ defmodule VarselWeb.CaseFormComponents do
         type="select"
         options={[
           {"Unaffected (known safe)", :unaffected},
-          {"Unknown (not derivable or audited)", :unknown}
+          {"Unknown (not derivable or audited)", :unknown},
+          {"Affected (only the fixed versions are safe)", :affected}
         ]}
       >
         <:label>Versions outside the derived ranges</:label>
         <:description>
-          Unknown claims nothing about versions predating the introducing commit —
+          Unknown claims nothing about versions predating the introducing commit:
           history the repository does not capture, or code never audited that far back.
+          Affected inverts the record, listing only the versions carrying the fix.
         </:description>
       </.input>
       <.propose_form_fields propose?={@propose?} />

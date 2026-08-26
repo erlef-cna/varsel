@@ -89,27 +89,66 @@ defmodule Varsel.Cases.Derivation.Emit do
   cpeApplicability matches from the neutral ranges: each `[from, until)` is one
   non-overlapping `%{versionStartIncluding, versionEndExcluding}` (bare versions).
 
-  Under an `unknown` `:default_status` the lowest match drops its lower bound.
-  CPE has no way to say "unknown" and an unmatched version reads as unaffected,
-  so the possibly-affected pre-introduction span is folded into the lowest
-  affected range instead — matching how NVD writes OTP's lowest affected line
-  (`{versionEndExcluding: "23.3.4.15"}`, no start).
+  CPE has only one status, so a match means "possibly affected" and an unmatched
+  version reads as safe. Everything the record does not call unaffected is
+  therefore matched, which is the worst reading of what it says:
+
+    * `unaffected` default: the affected ranges.
+    * `unknown` default: the same, with the lowest match dropping its lower
+      bound so the unclaimed pre-introduction span falls inside it. This is how
+      NVD writes OTP's lowest affected line (`{versionEndExcluding:
+      "23.3.4.15"}`, no start).
+    * `affected` default: the gaps between the fix-carrying spans, since those
+      spans are the only versions the record calls safe.
   """
   @spec cpe_matches([range()], keyword()) :: [map()]
   def cpe_matches(ranges, opts \\ []) do
-    # Reachability emits ranges in ascending release order, so the first is the
-    # lowest — the only one the unknown pre-introduction span borders.
-    drop_lower_bound? = Keyword.get(opts, :default_status, :unaffected) == :unknown
+    case Keyword.get(opts, :default_status, :unaffected) do
+      :affected -> opts |> Keyword.get(:fixed_ranges, []) |> gaps_between()
+      :unknown -> affected_matches(ranges, true)
+      _unaffected -> affected_matches(ranges, false)
+    end
+  end
 
+  defp affected_matches(ranges, drop_lowest_bound?) do
+    # Reachability emits ranges in ascending release order, so the first is the
+    # lowest, and the only one an unclaimed span borders.
     for {range, index} <- Enum.with_index(ranges) do
       # cpe has no "*" sentinel — an open range simply has no upper bound (nil,
       # which the preview drops).
       upper = if range.until == :unbounded, do: nil, else: bare(range.until)
-      lower = if drop_lower_bound? and index == 0, do: nil, else: bare(range.from)
+      lower = if drop_lowest_bound? and index == 0, do: nil, else: bare(range.from)
 
       %{"versionStartIncluding" => lower, "versionEndExcluding" => upper}
     end
   end
+
+  # The spans an `affected` default leaves unlisted, which are the ones it calls
+  # vulnerable.
+  defp gaps_between(fixed_ranges) do
+    {gaps, last_end} =
+      Enum.reduce(fixed_ranges, {[], nil}, fn range, {matches, previous_end} ->
+        match = %{
+          "versionStartIncluding" => previous_end,
+          "versionEndExcluding" => bare(range.from)
+        }
+
+        {[match | matches], upper_of(range)}
+      end)
+
+    Enum.reverse(trailing_gap(last_end, fixed_ranges) ++ gaps)
+  end
+
+  # A fix carried to the newest release leaves nothing above it, so it opens no
+  # gap. Emitting one would match every version, the fixed ones included.
+  defp trailing_gap(_last_end, []), do: [%{"versionStartIncluding" => nil, "versionEndExcluding" => nil}]
+
+  defp trailing_gap(nil, _fixed_ranges), do: []
+
+  defp trailing_gap(last_end, _fixed_ranges), do: [%{"versionStartIncluding" => last_end, "versionEndExcluding" => nil}]
+
+  defp upper_of(%{until: :unbounded}), do: nil
+  defp upper_of(%{until: until}), do: bare(until)
 
   ## ------------------------------------------------------------ decoration
 
@@ -157,7 +196,10 @@ defmodule Varsel.Cases.Derivation.Emit do
   end
 
   defp status_change_versions(channel, version_type, statused, opts, vocabulary) do
-    boundaries = Keyword.get(opts, :boundaries)
+    boundaries =
+      opts
+      |> Keyword.get(:boundaries)
+      |> open_from_zero(Keyword.get(opts, :default_status, :unaffected))
 
     case status_change_entry(channel, version_type, boundaries, vocabulary) do
       nil -> flat_versions(channel, version_type, statused, vocabulary)
@@ -165,13 +207,22 @@ defmodule Varsel.Cases.Derivation.Emit do
     end
   end
 
+  # Under an `affected` default the entry has no lower bound to find: everything
+  # below the introducing release is vulnerable too.
+  defp open_from_zero(%{} = boundaries, :affected), do: %{boundaries | introduced: VersionComparator.zero()}
+
+  defp open_from_zero(boundaries, _default_status), do: boundaries
+
   # An `unknown` default leaves every unlisted version unclaimed, so the releases
   # whose safety rests on the patch have to be stated: containment alone — "this
   # release never held the introducing commit" — is the proof such a record
   # declines to make.
   defp statused_ranges(ranges, opts) do
+    fixed = Keyword.get(opts, :fixed_ranges, [])
+
     case Keyword.get(opts, :default_status, :unaffected) do
-      :unknown -> [{ranges, "affected"}, {Keyword.get(opts, :fixed_ranges, []), "unaffected"}]
+      :unknown -> [{ranges, "affected"}, {fixed, "unaffected"}]
+      :affected -> [{fixed, "unaffected"}]
       _unaffected -> [{ranges, "affected"}]
     end
   end

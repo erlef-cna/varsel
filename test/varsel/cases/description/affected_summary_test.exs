@@ -108,6 +108,46 @@ defmodule Varsel.Cases.Description.AffectedSummaryTest do
       assert Summary.summarize(affected) == "This issue affects plug: from 1.0.0 before 1.5.0."
     end
 
+    # An `affected` default lists what is safe, so the sentence is its
+    # complement.
+    test "an affected default reads as everything below the fixes" do
+      unaffected = fn version ->
+        %{
+          "version" => version,
+          "lessThan" => "*",
+          "status" => "unaffected",
+          "versionType" => "semver"
+        }
+      end
+
+      one = [
+        Map.put(
+          entry("plug", "pkg:hex/plug", [unaffected.("1.5.3")]),
+          "defaultStatus",
+          "affected"
+        )
+      ]
+
+      assert Summary.summarize(one) == "This issue affects plug: before 1.5.3."
+
+      several =
+        [
+          Map.put(
+            entry("plug", "pkg:hex/plug", [unaffected.("1.2.0"), unaffected.("3.0.0")]),
+            "defaultStatus",
+            "affected"
+          )
+        ]
+
+      assert Summary.summarize(several) == "This issue affects plug: before 1.2.0 and 3.0.0."
+    end
+
+    test "an affected default with no fix reads as every version" do
+      affected = [Map.put(entry("plug", "pkg:hex/plug", []), "defaultStatus", "affected")]
+
+      assert Summary.summarize(affected) == "This issue affects plug: all versions."
+    end
+
     test "lessThanOrEqual bounds the range like lessThan" do
       affected = [
         entry("thing", "pkg:hex/thing", [

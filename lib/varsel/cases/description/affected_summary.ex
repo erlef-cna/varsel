@@ -150,6 +150,25 @@ defmodule Varsel.Cases.Description.AffectedSummary do
     end
   end
 
+  # An `affected` default lists the fix-carrying spans and calls everything else
+  # vulnerable, so the affected sentence is their complement.
+  defp default_spans(%{"defaultStatus" => "affected"} = entry, "affected") do
+    fixed =
+      for version <- List.wrap(entry["versions"]),
+          version["status"] == "unaffected",
+          bound = presence(version["version"]),
+          bound != nil,
+          do: {bound, version["versionType"]}
+
+    case fixed do
+      [] ->
+        [%{lower: nil, uppers: [], type: nil}]
+
+      [{_bound, type} | _] = bounds ->
+        [%{lower: nil, uppers: Enum.map(bounds, &elem(&1, 0)), type: type}]
+    end
+  end
+
   defp default_spans(_entry, _status), do: []
 
   defp range(version) do

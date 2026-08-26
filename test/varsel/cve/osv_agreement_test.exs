@@ -156,6 +156,12 @@ defmodule Varsel.CVE.OsvAgreementTest do
     test "several fix-carrying spans" do
       assert_agrees("affected", [unaffected("1.2.0"), unaffected("3.0.0")])
     end
+
+    # What `Varsel.Cases.Derivation.Emit` publishes for this default: the
+    # fix-carrying spans alone, with no affected row beside them.
+    test "the emitted shape, a single unaffected row" do
+      assert_agrees("affected", [unaffected("1.5.3")])
+    end
   end
 
   describe "a changes[] chain" do
