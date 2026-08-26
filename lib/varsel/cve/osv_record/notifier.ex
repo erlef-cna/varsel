@@ -22,8 +22,7 @@ defmodule Varsel.CVE.OsvRecord.Notifier do
   def load(_resource, _action), do: [:osv_record]
 
   @impl Ash.Notifier
-  def notify(%Notification{data: %{state: state, osv_record: %OsvRecord{} = osv_record}})
-      when state in [:published, :rejected] do
+  def notify(%Notification{data: %{state: state, osv_record: %{} = osv_record}}) when state in [:published, :rejected] do
     AshOban.run_trigger(osv_record, :sync)
 
     :ok
