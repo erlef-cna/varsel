@@ -13,7 +13,8 @@ defmodule VarselWeb.Storybook.Case.ChannelBlock do
   def description, do: "One place a product ships, and the versions of it that carry the flaw."
 
   defp version(from, to, type \\ "semver", status \\ "affected") do
-    %{"version" => from, "lessThan" => to, "status" => status, "versionType" => type}
+    base = %{"version" => from, "status" => status, "versionType" => type}
+    if to, do: Map.put(base, "lessThan", to), else: base
   end
 
   def variations do
@@ -115,6 +116,51 @@ defmodule VarselWeb.Storybook.Case.ChannelBlock do
         slots: [
           ~s(<:problem><p class="mt-1 text-xs text-warning">⚠ fix c5210b4 has no containing release yet</p></:problem>)
         ]
+      },
+      %Variation{
+        id: :default_unknown,
+        description:
+          "A record that declines to answer for versions below its introducing commit says " <>
+            "so under the ranges. Without that line the same list would read as a claim " <>
+            "that everything else is safe.",
+        attributes: %{
+          purl: "pkg:otp/ssh",
+          versions: [version("5.2.11", "5.2.11.10", "otp")],
+          default_status: "unknown"
+        }
+      },
+      %Variation{
+        id: :default_unaffected,
+        description:
+          "The ordinary default prints no line: a list of affected ranges already reads as " <>
+            "a claim that everything else is safe.",
+        attributes: %{
+          purl: "pkg:hex/bandit",
+          versions: [version("1.0.0", "1.5.2")],
+          default_status: "unaffected"
+        }
+      },
+      %Variation{
+        id: :default_affected,
+        description:
+          "An inverted record: the ranges name the versions carrying the FIX, and the " <>
+            "default calls everything else vulnerable.",
+        attributes: %{
+          purl: "pkg:hex/plug",
+          versions: [version("1.14.2", nil, "semver", "unaffected")],
+          default_status: "affected"
+        }
+      },
+      %Variation{
+        id: :default_affected_nothing_listed,
+        description:
+          "The same inversion with nothing listed yet: no fixed span exists, so every " <>
+            "version is affected. An empty list here is a claim, not a gap.",
+        attributes: %{
+          purl: "pkg:hex/plug",
+          versions: [],
+          default_status: "affected"
+        }
       },
       %Variation{
         id: :nothing_derived,

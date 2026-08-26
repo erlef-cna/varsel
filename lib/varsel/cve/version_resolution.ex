@@ -62,23 +62,22 @@ defmodule Varsel.CVE.VersionResolution do
   #
   # Everything else (git shas, `custom`, vendor strings) has no ordering we
   # could apply, so a product using it can only be shown, never queried.
-  @supported_types ~w(semver otp date)
-
-  @doc "Whether a `versionType` this module can order."
-  @spec supported_type?(term()) :: boolean()
-  def supported_type?(type), do: type in @supported_types
+  defp kind("semver"), do: :semver
+  defp kind("otp"), do: :otp
+  defp kind("date"), do: :date
+  defp kind(_unorderable), do: nil
 
   @doc """
-  Whether this product can be asked about a version at all — the question a UI
-  must answer *before* offering an input, rather than discovering by trying.
+  Whether this product can be asked about a version at all: the question a UI
+  must answer *before* offering an input.
 
   False for a product whose entries this module cannot order end to end: git
-  shas, dates, vendor strings, or a boundary that won't parse under its own
-  declared scheme. Such a product can only be shown, not queried, so the caller
-  hides the input instead of taking a version it could never answer.
+  shas, vendor strings, or a boundary that won't parse under its own declared
+  scheme. Such a product can only be shown, not queried, so the caller hides
+  the input.
 
-  True says the entries are orderable, not that any particular input will be —
-  a typed string that isn't a version still comes back
+  True says the entries are orderable, not that any particular input will be.
+  A typed string that isn't a version still comes back
   `{:error, :unparseable}` from `resolve/3`.
   """
   @spec resolvable?([map()]) :: boolean()
@@ -224,26 +223,26 @@ defmodule Varsel.CVE.VersionResolution do
   # the versions it covers answered by some later entry, or by the default,
   # understating the affected span.
   defp comparable_entries(versions) do
-    Enum.reduce_while(versions, {:ok, []}, fn version, {:ok, acc} ->
-      cond do
-        not supported_type?(version["versionType"]) ->
-          {:cont, {:ok, acc}}
-
-        entry = comparable_entry(version) ->
-          {:cont, {:ok, acc ++ [entry]}}
-
-        true ->
-          {:halt, {:error, :unsupported}}
-      end
-    end)
+    versions
+    |> Enum.reduce_while([], &collect_entry/2)
+    |> case do
+      :unsupported -> {:error, :unsupported}
+      acc -> {:ok, Enum.reverse(acc)}
+    end
   end
 
+  defp collect_entry(version, acc) do
+    case kind(version["versionType"]) do
+      nil -> {:cont, acc}
+      kind -> add_entry(comparable_entry(version, kind), acc)
+    end
+  end
+
+  defp add_entry(nil, _acc), do: {:halt, :unsupported}
+  defp add_entry(entry, acc), do: {:cont, [entry | acc]}
+
   # `nil` when a boundary of an otherwise-supported type won't parse.
-  defp comparable_entry(version) do
-    type = version["versionType"]
-
-    kind = String.to_existing_atom(type)
-
+  defp comparable_entry(version, kind) do
     with {:ok, lower} <- normalize(version["version"], kind),
          {:ok, upper, inclusive?} <- upper_bound(version, kind),
          {:ok, changes} <- changes(version, kind) do
@@ -281,12 +280,16 @@ defmodule Varsel.CVE.VersionResolution do
     version
     |> Map.get("changes")
     |> List.wrap()
-    |> Enum.reduce_while({:ok, []}, fn change, {:ok, acc} ->
+    |> Enum.reduce_while([], fn change, acc ->
       case normalize(change["at"], kind) do
-        {:ok, at} -> {:cont, {:ok, acc ++ [%{at: at, status: cast_status(change["status"])}]}}
+        {:ok, at} -> {:cont, [%{at: at, status: cast_status(change["status"])} | acc]}
         :error -> {:halt, :error}
       end
     end)
+    |> case do
+      :error -> :error
+      acc -> {:ok, Enum.reverse(acc)}
+    end
   end
 
   # The input must parse under at least one scheme the product uses, and is kept

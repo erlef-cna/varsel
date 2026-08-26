@@ -111,6 +111,12 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
       assert OTPVersion.compare("6.0.2.0.1", "6.0.2.1") == :nc
     end
 
+    # A patch contains everything its base does, pre-release or not.
+    test "a pre-release of a version a patch hangs off is below it" do
+      assert OTPVersion.compare("27.3.4-rc1", "27.3.4.15") == :lt
+      assert OTPVersion.compare("27.0-rc1", "27.3.4.15") == :lt
+    end
+
     test "branches off different bases never meet" do
       assert OTPVersion.compare("27.3.4.15", "28.5.0.4") == :nc
       assert OTPVersion.compare("22.3.4.12.1", "18.3.4.1.1") == :nc

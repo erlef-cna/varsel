@@ -343,6 +343,34 @@ defmodule Varsel.Cases.Derivation.EmitTest do
              }
     end
 
+    # A consumer walking the commit graph reaches only the commits descending
+    # from an intro it was given, so an intro left out takes its whole branch
+    # with it.
+    test "a change backported to several branches states every introducing commit" do
+      second_intro = String.duplicate("d", 40)
+      opts = [intro_shas: [@intro, second_intro], fix_shas: [@fix1]]
+
+      assert %{"versions" => versions, "issues" => []} = Emit.channel(repo_channel(), [], opts)
+
+      assert Enum.map(versions, & &1["version"]) == [@intro, second_intro]
+      assert Enum.map(versions, & &1["lessThan"]) == [@fix1, @fix1]
+    end
+
+    test "each introducing commit carries the whole fix chain" do
+      second_intro = String.duplicate("d", 40)
+      opts = [intro_shas: [@intro, second_intro], fix_shas: [@fix1, @fix2]]
+
+      assert %{"versions" => [first, second]} = Emit.channel(repo_channel(), [], opts)
+
+      assert first["version"] == @intro
+      assert second["version"] == second_intro
+
+      for entry <- [first, second] do
+        assert entry["lessThan"] == "*"
+        assert Enum.map(entry["changes"], & &1["at"]) == [@fix1, @fix2]
+      end
+    end
+
     test "multiple fixes render a changes[] chain (SHAs aren't orderable)" do
       opts = [intro_shas: [@intro], fix_shas: [@fix1, @fix2]]
 

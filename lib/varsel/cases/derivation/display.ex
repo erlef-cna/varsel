@@ -26,11 +26,12 @@ defmodule Varsel.Cases.Derivation.Display do
   @doc """
   Every channel of a package paired with what its derivation produced:
 
-      [{channel, %{versions:, pending?:, issues:, timeline:}}]
+      [{channel, %{versions:, default_status:, pending?:, issues:, timeline:}}]
 
   `versions` is the raw CVE `versions[]` the cache holds, ready for the same
-  components the published record renders through. `timeline` is nil for a
-  channel whose versions cannot be laid on a line (commit SHAs).
+  components the published record renders through, and `default_status` is
+  what the record says about everything they leave out. `timeline` is nil for
+  a channel whose versions cannot be laid on a line (commit SHAs).
   """
   @spec channel_derivations(struct()) :: [{struct(), map()}]
   def channel_derivations(package) do
@@ -40,6 +41,7 @@ defmodule Varsel.Cases.Derivation.Display do
       {channel,
        %{
          versions: derivation["versions"] || [],
+         default_status: derivation["default_status"],
          pending?: (derivation["pending"] || []) != [],
          issues: derivation["issues"] || [],
          timeline: timeline_row(channel_row_label(channel), derivation)
@@ -108,24 +110,15 @@ defmodule Varsel.Cases.Derivation.Display do
   defp timeline_row(_label, nil), do: nil
 
   defp timeline_row(label, derivation) do
-    # Only affected ranges lay vulnerable spans on the track; the explicit
-    # unaffected ranges an unknown-default package publishes are the gaps.
-    ranges =
+    entries =
       derivation["versions"]
       |> List.wrap()
-      |> Enum.filter(&(&1["versionType"] in @renderable_version_types and &1["status"] == "affected"))
+      |> Enum.filter(&(&1["versionType"] in @renderable_version_types))
 
-    pending? = (derivation["pending"] || []) != []
+    edges = vulnerable_edges(entries, derivation["default_status"])
 
-    # Each range is a {start_edge, stop_edge} pair. `"0"` (since the beginning)
-    # and `"*"` (never fixed) are OPEN edges — no dot, the vulnerable tint just
-    # runs off that side of the track. Everything else is a placed node.
-    edges =
-      Enum.map(ranges, fn range ->
-        {edge(:intro, range["version"]), edge(:fix, range["lessThan"])}
-      end)
-
-    pending = if pending?, do: [{:pending, "fix unreleased"}], else: []
+    pending =
+      if (derivation["pending"] || []) == [], do: [], else: [{:pending, "fix unreleased"}]
 
     if edges == [] and pending == [] do
       nil
@@ -134,6 +127,49 @@ defmodule Varsel.Cases.Derivation.Display do
       %{label: label, nodes: nodes, spans: spans}
     end
   end
+
+  # Each vulnerable span is a `{start_edge, stop_edge}` pair. `"0"` (since the
+  # beginning) and `"*"` (never fixed) are OPEN edges: no dot, the vulnerable
+  # tint just runs off that side of the track. Everything else is a placed node.
+  #
+  # An `affected` default lists what is safe, so its vulnerable spans are the
+  # gaps between those entries. A record that also lists affected entries of its
+  # own (only a hand-written `versions_override` does) states them outright.
+  defp vulnerable_edges(entries, "affected") do
+    case Enum.filter(entries, &(&1["status"] == "affected")) do
+      [] -> entries |> Enum.filter(&(&1["status"] == "unaffected")) |> gap_edges()
+      listed -> Enum.map(listed, &affected_edges/1)
+    end
+  end
+
+  defp vulnerable_edges(entries, _default_status) do
+    entries
+    |> Enum.filter(&(&1["status"] == "affected"))
+    |> Enum.map(&affected_edges/1)
+  end
+
+  defp affected_edges(row), do: {edge(:intro, row["version"]), edge(:fix, row["lessThan"])}
+
+  # The spans between the safe ones, which an `affected` default calls
+  # vulnerable. A safe span reaching either end of the track closes it there.
+  defp gap_edges(safe_entries) do
+    {edges, last_end} =
+      Enum.reduce(safe_entries, {[], :start}, fn row, {edges, gap_start} ->
+        {prepend_gap(edges, gap_start, gap_stop(row)), gap_start(row)}
+      end)
+
+    Enum.reverse(prepend_gap(edges, last_end, :end))
+  end
+
+  defp prepend_gap(edges, same, same), do: edges
+  defp prepend_gap(edges, start, stop), do: [{start, stop} | edges]
+
+  # A safe span opening at the start of history leaves no gap below it.
+  defp gap_stop(%{"version" => "0"}), do: :start
+  defp gap_stop(row), do: edge(:fix, row["version"])
+
+  defp gap_start(%{"lessThan" => "*"}), do: :end
+  defp gap_start(row), do: edge(:intro, row["lessThan"])
 
   # A range boundary is a placed node {kind, label} or an open edge :start / :end.
   defp edge(:intro, "0"), do: :start

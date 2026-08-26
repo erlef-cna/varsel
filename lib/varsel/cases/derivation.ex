@@ -36,7 +36,7 @@ defmodule Varsel.Cases.Derivation do
 
       %{
         "channels" => %{<channel-uuid> => %{"versions" => [...],
-                                            "default_status" => "unaffected" | "unknown",
+                                            "default_status" => "unaffected" | "unknown" | "affected",
                                             "pending" => [...],
                                             "unreleased_intros" => [...],
                                             "issues" => [...]}},
@@ -64,23 +64,20 @@ defmodule Varsel.Cases.Derivation do
       Enum.split_with(package.version_events, & &1.package_channel_id)
 
     reach = reachability(package, platform, global_events)
-    pending = reach.pending_fixes
-
     {intro_shas, fix_shas} = boundary_shas(global_events)
-    default_status = package.default_status
 
     emit_opts = [
       intro_shas: intro_shas,
       fix_shas: fix_shas,
       boundaries: reach.boundaries,
-      default_status: default_status,
+      default_status: package.default_status,
       fixed_ranges: reach.fixed_ranges
     ]
 
     channels =
       Map.new(package.channels, fn channel ->
         events = Enum.filter(scoped_events, &(&1.package_channel_id == channel.id))
-        {channel.id, derive_channel(channel, reach, events, emit_opts, pending, default_status)}
+        {channel.id, derive_channel(channel, reach, events, emit_opts)}
       end)
 
     {:ok,
@@ -92,8 +89,6 @@ defmodule Varsel.Cases.Derivation do
      }}
   end
 
-  # Run the reachability engine over the package's global commit facts. Without a
-  # repo_url (or without commit facts) there is nothing to resolve.
   defp reachability(%{repo_url: nil}, _platform, _events), do: empty_reachability()
 
   defp reachability(package, platform, events) do
@@ -130,15 +125,13 @@ defmodule Varsel.Cases.Derivation do
     }
   end
 
-  # Explicit `{event, version}` boundaries from the global events — releases the
-  # repository never tagged, which git containment therefore cannot place. An
+  # Releases the repository never tagged, which git containment cannot place. An
   # event may carry both a SHA and a version: the SHA bounds the git entry, the
   # version names the untagged release for the versioned channels.
   defp explicit_versions(events) do
     for %{version: version} = event <- events, is_binary(version), do: {event.event, version}
   end
 
-  # Introduced / fixed commit SHAs from the global (non-channel-scoped) events.
   defp boundary_shas(events) do
     {intros, fixes} =
       events
@@ -150,64 +143,58 @@ defmodule Varsel.Cases.Derivation do
 
   ## --------------------------------------------------------------- channels
 
-  # A channel with verbatim (scoped) events keeps an `unaffected` default: its
-  # ranges are asserted by hand, so the fix-carrying spans an `unknown` default
-  # owes as explicit unaffected ranges are not derivable from them.
-  defp derive_channel(channel, reach, scoped_events, emit_opts, pending, default_status) do
-    cond do
-      scoped_events != [] ->
-        channel
-        |> derive_scoped_channel(scoped_events)
-        |> Map.put("default_status", "unaffected")
-
-      channel.kind == :service ->
-        %{
-          "versions" => [],
-          "default_status" => "unaffected",
-          "pending" => [],
-          "unreleased_intros" => [],
-          "issues" => ["service channels need channel-scoped version events"]
-        }
-
-      true ->
-        channel
-        |> Emit.channel(reach.ranges, emit_opts)
-        |> Map.put("default_status", to_string(default_status))
-        |> Map.put("pending", pending)
-        |> Map.put("unreleased_intros", reach.unreleased_intros)
-    end
+  # Scoped ranges are asserted by hand, so the unaffected spans an `unknown`
+  # default would owe cannot be derived from them.
+  defp derive_channel(channel, _reach, [_ | _] = scoped_events, _emit_opts) do
+    channel
+    |> derive_scoped_channel(scoped_events)
+    |> Map.put("default_status", "unaffected")
   end
 
-  # Channel-scoped explicit events: used verbatim as one range.
+  defp derive_channel(%{kind: :service}, _reach, [], _emit_opts) do
+    []
+    |> channel_result(["service channels need channel-scoped version events"])
+    |> Map.put("default_status", "unaffected")
+  end
+
+  defp derive_channel(channel, reach, [], emit_opts) do
+    channel
+    |> Emit.channel(reach.ranges, emit_opts)
+    |> Map.put("default_status", to_string(Keyword.fetch!(emit_opts, :default_status)))
+    |> Map.put("pending", reach.pending_fixes)
+    |> Map.put("unreleased_intros", reach.unreleased_intros)
+  end
+
   defp derive_scoped_channel(channel, events) do
     intro = Enum.find(events, &(&1.event == :introduced))
     fixes = Enum.filter(events, &(&1.event == :fixed))
-    version_type = channel |> Emit.version_type() |> to_string()
 
-    cond do
-      intro == nil ->
-        %{
-          "versions" => [],
-          "pending" => [],
-          "unreleased_intros" => [],
-          "issues" => ["channel-scoped events lack an introduced boundary"]
-        }
+    scoped_versions(intro, fixes, channel |> Emit.version_type() |> to_string())
+  end
 
-      fixes == [] ->
-        %{
-          "versions" => [open_range(boundary_value(intro), version_type)],
-          "pending" => [],
-          "unreleased_intros" => [],
-          "issues" => []
-        }
+  defp scoped_versions(nil, _fixes, _version_type) do
+    channel_result([], ["channel-scoped events lack an introduced boundary"])
+  end
 
-      true ->
-        versions =
-          for fix <- fixes,
-              do: bounded_range(boundary_value(intro), boundary_value(fix), version_type)
+  defp scoped_versions(intro, [], version_type) do
+    channel_result([bounded_range(boundary_value(intro), "*", version_type)], [])
+  end
 
-        %{"versions" => versions, "pending" => [], "unreleased_intros" => [], "issues" => []}
-    end
+  defp scoped_versions(intro, fixes, version_type) do
+    versions =
+      for fix <- fixes,
+          do: bounded_range(boundary_value(intro), boundary_value(fix), version_type)
+
+    channel_result(versions, [])
+  end
+
+  defp channel_result(versions, issues) do
+    %{
+      "versions" => versions,
+      "pending" => [],
+      "unreleased_intros" => [],
+      "issues" => issues
+    }
   end
 
   defp boundary_value(%{version: version}) when not is_nil(version), do: version
@@ -221,6 +208,4 @@ defmodule Varsel.Cases.Derivation do
       "versionType" => version_type
     }
   end
-
-  defp open_range(from, version_type), do: bounded_range(from, "*", version_type)
 end

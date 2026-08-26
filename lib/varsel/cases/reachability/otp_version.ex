@@ -58,8 +58,7 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   # date, a semver tag in an OTP repo.
   @release ~r/\A(\d+(?:\.\d+)+)(?:-rc(\d+))?\z/
 
-  # `<Major>.<Minor>.<Patch>`. Parts beyond these name a branch off the version
-  # they follow.
+  # `<Major>.<Minor>.<Patch>`.
   @normal_parts 3
 
   @doc "Parses an OTP version string. `:error` for non-release tags."
@@ -96,11 +95,7 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
       trunk?(a) and trunk?(b) -> total_compare(left, right)
       prefix?(a, b) -> :lt
       prefix?(b, a) -> :gt
-      # Two patches of the same maintenance version, so only their last part
-      # differs and it counts up.
       not trunk?(a) and not trunk?(b) and base(a) == base(b) -> total_compare(left, right)
-      # A maintenance patch contains the version it hangs off, and so everything
-      # at or below it. Above it, only history can say.
       not trunk?(a) and trunk?(b) and under_ancestry?(b, a) -> :gt
       not trunk?(b) and trunk?(a) and under_ancestry?(a, b) -> :lt
       true -> :nc
@@ -112,6 +107,8 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   # Whether `version` is at or below some version `branch` descends from. The
   # ancestry is the whole chain, not just the immediate base: `17.0.0.1.1`
   # descends from `17.0.0.1` and so outranks its sibling `17.0.0.0`.
+  # A pre-release of a version the patch hangs off is below it either way, so
+  # segment order settles this.
   defp under_ancestry?(version, branch) do
     Enum.any?(ancestry(branch), &(version <= &1))
   end

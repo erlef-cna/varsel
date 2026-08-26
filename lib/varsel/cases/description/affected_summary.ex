@@ -7,9 +7,8 @@ defmodule Varsel.Cases.Description.AffectedSummary do
   Builds the "This issue affects …" sentence appended to every published
   description, from the record's own `affected[]`.
 
-  The sentence restates the versions block in prose. Deriving it rather than
-  asking an author to type it is the point: the two can then never disagree, and
-  a version change rewrites the sentence for free.
+  The sentence restates the versions block in prose, derived from it, so the
+  two can never disagree and a version change rewrites the sentence for free.
 
   ## Shapes
 
@@ -308,9 +307,6 @@ defmodule Varsel.Cases.Description.AffectedSummary do
   defp version(raw, decorate) do
     raw |> decorate.() |> String.replace(~r/\s/, "\u00A0")
   end
-
-  # A version containing whitespace would otherwise wrap mid-version. The
-  # escape keeps the codepoint visible in source rather than an invisible byte.
 
   ## -------------------------------------------------------------- product
 
