@@ -16,10 +16,17 @@ defmodule VarselWeb.Storybook.User.UserName do
         attributes: %{user: %{name: "Alex Rivera"}}
       },
       %Variation{
+        id: :no_name_set,
+        description: """
+        The provider reported no name, so `display_name` falls back to the
+        handle the account signed in with.
+        """,
+        attributes: %{user: %{name: nil, display_name: "alexrivera"}}
+      },
+      %Variation{
         id: :hidden,
         description: """
-        A user whose row the viewer may see but whose name they may not —
-        field policies redact it, leaving nothing to show.
+        Neither name field reached the component, so there is nothing to show.
         """,
         attributes: %{user: %{}}
       },
