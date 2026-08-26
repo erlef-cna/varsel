@@ -84,6 +84,33 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
       assert OTPVersion.compare("27.0.3.4", "27.0.4") == :nc
     end
 
+    # Branching is recursive: `18.2.4.0.1` branches from `18.2.4.0`, not from
+    # `18.2.4`, so it is no sibling of `18.2.4.1`. Verified against erlang/otp's
+    # own ancestry — these are its only three five-part tags.
+    test "a branch of a branch orders against its own base, not the three-part one" do
+      assert OTPVersion.compare("18.2.4", "18.2.4.0.1") == :lt
+      assert OTPVersion.compare("18.2.4.0.1", "18.2.4.1") == :nc
+
+      assert OTPVersion.compare("18.3.4", "18.3.4.1.1") == :lt
+      assert OTPVersion.compare("18.3.4.1", "18.3.4.1.1") == :lt
+      assert OTPVersion.compare("18.3.4.1.1", "18.3.4.2") == :nc
+
+      assert OTPVersion.compare("22.3.4.12", "22.3.4.12.1") == :lt
+      assert OTPVersion.compare("22.3.4.12.1", "22.3.4.13") == :nc
+    end
+
+    # https://www.erlang.org/doc/system/versions.html
+    test "the version scheme's own branching examples" do
+      assert OTPVersion.compare("6.0.2", "6.0.2.1") == :lt
+      assert OTPVersion.compare("6.0.2.1", "6.0.2.2") == :lt
+      assert OTPVersion.compare("6.0.1", "6.0.2.1") == :lt
+      assert OTPVersion.compare("6.0.2.1", "6.0.3") == :nc
+
+      # A second branch from the same base inserts a 0 rather than reusing 1.
+      assert OTPVersion.compare("6.0.2", "6.0.2.0.1") == :lt
+      assert OTPVersion.compare("6.0.2.0.1", "6.0.2.1") == :nc
+    end
+
     test "branches off different bases never meet" do
       assert OTPVersion.compare("27.3.4.15", "28.5.0.4") == :nc
       assert OTPVersion.compare("22.3.4.12.1", "18.3.4.1.1") == :nc

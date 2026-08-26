@@ -49,7 +49,15 @@ defmodule Varsel.Cases.Derivation.OtpRoundTripPropertyTest do
           _ -> for patch <- 1..branch_depth//1, do: "#{major}.#{List.last(minors)}.0.#{patch}"
         end
 
-      base ++ branches
+      # A branch off a branch, which the scheme allows and erlang/otp has three
+      # of (OTP-18.2.4.0.1 and friends).
+      sub_branches =
+        case branches do
+          [] -> []
+          [first | _] -> ["#{first}.1"]
+        end
+
+      base ++ branches ++ sub_branches
     end
   end
 
@@ -130,15 +138,32 @@ defmodule Varsel.Cases.Derivation.OtpRoundTripPropertyTest do
   # borrowed from the code under test.
   defp segments(version), do: version |> String.split(".") |> Enum.map(&String.to_integer/1)
 
+  # Branching is recursive: `18.2.4.0.1` hangs off `18.2.4.0`, which hangs off
+  # `18.2.4`. A patch orders against its whole ancestry and against everything
+  # at or below it, and against nothing on the main track above it.
+  defp trunk?(segments), do: length(segments) <= 3
+
+  defp ancestry(segments) do
+    if trunk?(segments) do
+      []
+    else
+      parent = Enum.drop(segments, -1)
+      [parent | ancestry(parent)]
+    end
+  end
+
+  defp prefix?(a, b), do: length(a) < length(b) and Enum.take(b, length(a)) == a
+
   defp comparable?(a, b) do
     sa = segments(a)
     sb = segments(b)
 
     cond do
-      length(sa) <= 3 and length(sb) <= 3 -> true
-      length(sa) > 3 and length(sb) > 3 -> Enum.take(sa, 3) == Enum.take(sb, 3)
-      length(sa) > 3 -> Enum.take(sb, 3) <= Enum.take(sa, 3)
-      true -> Enum.take(sa, 3) <= Enum.take(sb, 3)
+      trunk?(sa) and trunk?(sb) -> true
+      prefix?(sa, sb) or prefix?(sb, sa) -> true
+      not trunk?(sa) and not trunk?(sb) -> Enum.drop(sa, -1) == Enum.drop(sb, -1)
+      not trunk?(sa) -> Enum.any?(ancestry(sa), &(sb <= &1))
+      true -> Enum.any?(ancestry(sb), &(sa <= &1))
     end
   end
 
@@ -180,7 +205,16 @@ defmodule Varsel.Cases.Derivation.OtpRoundTripPropertyTest do
         Enum.any?(for a <- fixed, b <- fixed, a != b, do: OTPVersion.compare(a, b) == :nc)
       end)
 
+    deep =
+      Enum.count(samples, fn %{versions: versions} ->
+        Enum.any?(versions, &(length(String.split(&1, ".")) > 4))
+      end)
+
     assert branchy > 100, "only #{branchy}/400 scenarios carried branch versions"
+
+    assert deep > 100,
+           "only #{deep}/400 scenarios carried a branch off a branch — the recursive " <>
+             "base rule is not being exercised"
 
     assert incomparable > 15,
            "only #{incomparable}/400 scenarios had fixes the scheme does not order — " <>

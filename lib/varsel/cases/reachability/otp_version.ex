@@ -21,19 +21,24 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
 
   ## Ordering
 
-  Versions of three parts or fewer are totally ordered. A version with more
-  parts is a *branch* off the base its first three parts name, and the scheme
-  puts it in order only against that base, versions below the base, and other
-  branches off the same base:
+  `<Major>.<Minor>.<Patch>` names a release on the main track, and those are
+  totally ordered. A fourth part or beyond hangs a maintenance patch off the
+  version its earlier parts name, and branching is recursive: `18.2.4.0.1`
+  hangs off `18.2.4.0`, which hangs off `18.2.4`.
 
-  > Versions of the form `6.0.2.<X>` can be compared with normal versions
-  > smaller than or equal to `6.0.2`, and other versions on the form
-  > `6.0.2.<X>`. […] `6.0.3` will most likely not include all changes in
-  > `6.0.2.1` (note that these versions have no order).
+  A patch contains the version it hangs off, so it orders against that version
+  and everything at or below it, and against other patches of the same version.
+  Against a main-track release *above* the version it hangs off, `compare/2`
+  returns `:nc`.
 
-  So `27.3.4.15` and `28.0` are **incomparable**, and `compare/2` says so with
-  `:nc`. Callers that need one line — sorting a timeline, cutting it into
-  ranges — use `total_compare/2`. Callers deciding whether one version implies
+  A patch may be merged forward, at a point the version number does not record.
+  In erlang/otp, `17.5.6.1` is an ancestor of `18.1` but not of `18.0`,
+  `17.5.6.10` reaches nothing before `21.2`, and `22.3.4.12.1` was never merged
+  forward at all. Versions of identical shape differ, so only the commit graph
+  answers that question.
+
+  Callers that need one line, such as sorting a timeline or cutting it into
+  ranges, use `total_compare/2`. Callers deciding whether one version implies
   another must respect `:nc`.
   """
 
@@ -82,9 +87,41 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   other" rather than as false.
   """
   @spec compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt | :nc
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def compare(left, right) do
-    if comparable?(left, right), do: total_compare(left, right), else: :nc
+    a = segments_of(left)
+    b = segments_of(right)
+
+    cond do
+      trunk?(a) and trunk?(b) -> total_compare(left, right)
+      prefix?(a, b) -> :lt
+      prefix?(b, a) -> :gt
+      # Two patches of the same maintenance version, so only their last part
+      # differs and it counts up.
+      not trunk?(a) and not trunk?(b) and base(a) == base(b) -> total_compare(left, right)
+      # A maintenance patch contains the version it hangs off, and so everything
+      # at or below it. Above it, only history can say.
+      not trunk?(a) and trunk?(b) and under_ancestry?(b, a) -> :gt
+      not trunk?(b) and trunk?(a) and under_ancestry?(a, b) -> :lt
+      true -> :nc
+    end
   end
+
+  defp trunk?(segments), do: length(segments) <= @normal_parts
+
+  # Whether `version` is at or below some version `branch` descends from. The
+  # ancestry is the whole chain, not just the immediate base: `17.0.0.1.1`
+  # descends from `17.0.0.1` and so outranks its sibling `17.0.0.0`.
+  defp under_ancestry?(version, branch) do
+    Enum.any?(ancestry(branch), &(version <= &1))
+  end
+
+  defp ancestry(segments) when length(segments) > @normal_parts do
+    parent = base(segments)
+    [parent | ancestry(parent)]
+  end
+
+  defp ancestry(_segments), do: []
 
   @doc """
   Whether the scheme orders every pair of versions. OTP's does not: a branch
@@ -99,18 +136,7 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   """
   @spec comparable?(String.t() | t(), String.t() | t()) :: boolean()
   def comparable?(left, right) do
-    a = segments_of(left)
-    b = segments_of(right)
-
-    cond do
-      # Both normal: the scheme gives three-part versions a total order.
-      length(a) <= @normal_parts and length(b) <= @normal_parts -> true
-      # Both branches: ordered only along the same base.
-      length(a) > @normal_parts and length(b) > @normal_parts -> base(a) == base(b)
-      # One branch, one normal: the normal one must be at or below the base.
-      length(a) > @normal_parts -> base(b) <= base(a)
-      true -> base(a) <= base(b)
-    end
+    compare(left, right) != :nc
   end
 
   @doc """
@@ -145,7 +171,16 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
 
   ## ------------------------------------------------------------ internals
 
-  defp base(segments), do: Enum.take(segments, @normal_parts)
+  # Branching is recursive: `18.2.4.0.1` branches from `18.2.4.0`, which itself
+  # branches from `18.2.4`. A branch's base is therefore all but its last part,
+  # never a truncation to the normal three.
+  defp base(segments) when length(segments) > @normal_parts do
+    Enum.drop(segments, -1)
+  end
+
+  defp base(segments), do: segments
+
+  defp prefix?(a, b), do: length(a) < length(b) and Enum.take(b, length(a)) == a
 
   defp segments_of(%__MODULE__{segments: segments}), do: segments
 
