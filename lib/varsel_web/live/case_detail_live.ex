@@ -50,17 +50,18 @@ defmodule VarselWeb.CaseDetailLive do
     :derivation_state,
     :derivation_cached_at,
     :derived_references,
-    # :avatar_url wherever a user is drawn as an avatar disc.
-    assignments: [user: [:avatar_url]],
+    # :avatar_url wherever a user is drawn as an avatar disc, :display_name
+    # wherever one is named.
+    assignments: [user: [:avatar_url, :display_name]],
     invites: [],
     references: [],
     credits: [],
     weaknesses: [weakness: [:cwe_id, :name]],
     impacts: [attack_pattern: [:capec_id, :name]],
-    proposals: [author: [:avatar_url], resolved_by: []],
+    proposals: [author: [:avatar_url, :display_name], resolved_by: [:display_name]],
     affected_packages: [:derivation_state, channels: [:purl], version_events: []],
-    comments: [:author],
-    vulnerability_reports: [reporter: [:avatar_url]]
+    comments: [author: [:display_name]],
+    vulnerability_reports: [reporter: [:avatar_url, :display_name]]
   ]
 
   # Modal child-form registry: UI type -> resource + labels. Every resource
@@ -807,7 +808,10 @@ defmodule VarselWeb.CaseDetailLive do
         |> to_form()
       end
 
-    users = if Accounts.can_list_users?(actor), do: Accounts.list_users!(actor: actor), else: []
+    users =
+      if Accounts.can_list_users?(actor),
+        do: Accounts.list_users!(actor: actor, load: [:display_name]),
+        else: []
 
     assign(socket,
       case_record: case_record,

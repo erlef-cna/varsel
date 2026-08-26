@@ -15,6 +15,9 @@ defmodule VarselWeb.UserComponents do
   A deleted account leaves its comments, proposals and reports behind with
   nothing attached, so `nil` is an ordinary case here rather than an error: it
   says the account is gone, which is not the same as a name being withheld.
+
+  Callers must load `:display_name`, which falls back to a provider handle for
+  the accounts whose provider reported no name.
   """
   attr :user, :any, required: true
   attr :class, :any, default: nil
@@ -26,8 +29,8 @@ defmodule VarselWeb.UserComponents do
   end
 
   defp name_of(nil), do: "Deleted user"
-  defp name_of(%{name: name}) when is_binary(name) and name != "", do: name
-  defp name_of(_user), do: "(hidden)"
+
+  defp name_of(user), do: known_name(user, "(hidden)")
 
   @doc """
   Renders a user as their picture followed by their name — the usual way one
@@ -103,16 +106,21 @@ defmodule VarselWeb.UserComponents do
   defp avatar_variant_class(:a), do: "bg-primary text-primary-content"
   defp avatar_variant_class(:b), do: "bg-secondary text-secondary-content"
 
+  defp initials(user), do: user |> known_name("?") |> to_initials()
+
   # `display_name` first: it is what the account menu shows, and it falls back
   # to a provider handle for the users who never set a name of their own.
-  defp initials(user) do
-    case Enum.find([:display_name, :name], &present?(Map.get(user, &1))) do
-      nil -> "?"
-      key -> user |> Map.fetch!(key) |> to_initials()
-    end
+  # `name` covers the callers that render a user they did not load it on.
+  defp known_name(user, default) do
+    Enum.find_value([:display_name, :name], default, fn key ->
+      case Map.get(user, key) do
+        "" -> nil
+        nil -> nil
+        %Ash.NotLoaded{} -> nil
+        value when is_binary(value) -> value
+      end
+    end)
   end
-
-  defp present?(value), do: is_binary(value) and value != ""
 
   defp to_initials(name) do
     name
