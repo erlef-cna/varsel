@@ -91,7 +91,7 @@ defmodule Varsel.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:cvss, "~> 0.1"},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:dns_cluster, "~> 0.2.0"},
+      {:dns_cluster, "~> 0.3.0"},
       {:ecto_psql_extras, "~> 0.6", only: [:dev, :test]},
       {:ecto_sql, "~> 3.13"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
