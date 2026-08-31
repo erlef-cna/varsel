@@ -88,7 +88,7 @@ defmodule VarselWeb.McpTest do
                    propose_internal_notes
                    propose_otp_affected_package propose_version_event propose_delete
                    withdraw_case_proposal list_case_comments
-                   create_case_comment grant_case_access) do
+                   grant_case_access) do
       assert body =~ tool
     end
   end
