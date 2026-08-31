@@ -79,13 +79,13 @@ defmodule VarselWeb.MarkdownInput do
         <span class="ml-auto pb-1.5 text-base-content/40">markdown</span>
       </div>
 
-      <div class={@mode == :preview && "hidden"}>
+      <div data-autogrow-frame class={@mode == :preview && "hidden"}>
         <.input
           field={@field}
           type="textarea"
           rows={@rows}
           placeholder={@placeholder}
-          class="w-full textarea font-mono text-sm"
+          class="w-full textarea font-mono text-sm max-h-[80vh]"
           phx-hook="AutoGrow"
         />
       </div>
