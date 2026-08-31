@@ -691,10 +691,12 @@ defmodule VarselWeb.CveView do
       )
 
     ~H"""
-    <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+    <span class="min-w-0 grow basis-auto break-words">
       <.reference_body url={@url} tags={@tags} name={@name} />
     </span>
-    <.reference_tag :for={tag <- @pill_tags} tag={tag} />
+    <span :if={@pill_tags != []} class="flex shrink-0 items-center gap-1">
+      <.reference_tag :for={tag <- @pill_tags} tag={tag} />
+    </span>
     """
   end
 
@@ -711,7 +713,7 @@ defmodule VarselWeb.CveView do
       title={@shape.kind != :link && @url}
       target="_blank"
       rel="noopener"
-      class={["truncate", "broken-link" in @tags && "text-base-content/40"]}
+      class={["broken-link" in @tags && "text-base-content/40"]}
     >
       <%= case @shape do %>
         <% %{kind: :commit, owner_repo: owner_repo, sha: sha} -> %>

@@ -1165,7 +1165,7 @@ defmodule VarselWeb.CaseDetailLive do
               has_footer?={@display_case.derived_references != []}
             >
               <:row :let={reference}>
-                <span class="flex min-w-0 items-center gap-2 text-sm">
+                <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                   <CveView.reference url={reference.url} tags={reference.tags} pills={:all} />
                 </span>
               </:row>
@@ -2044,11 +2044,11 @@ defmodule VarselWeb.CaseDetailLive do
         <li
           :for={row <- @rows}
           id={"#{@id}-row-#{row.id}"}
-          class="flex items-center justify-between gap-2 py-1 border-b border-base-200"
+          class="flex items-start justify-between gap-2 py-1 border-b border-base-200"
           data-drag-id={@sortable && row.id}
         >
           <div class={[
-            "flex items-center gap-2",
+            "flex min-w-0 flex-1 items-start gap-2",
             row.id in @marks.deleted && "line-through opacity-60"
           ]}>
             <span
@@ -2059,8 +2059,8 @@ defmodule VarselWeb.CaseDetailLive do
             >
               ⠿
             </span>
-            <.row_bullet :if={not @sortable} />
-            <div>{render_slot(@row, row)}</div>
+            <.row_bullet :if={not @sortable} class="mt-[0.45rem]" />
+            <div class="min-w-0 flex-1">{render_slot(@row, row)}</div>
             <.proposal_marks row_id={row.id} marks={@marks} />
           </div>
           <div
@@ -2102,9 +2102,14 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
+  attr :class, :any, default: nil
+
   defp row_bullet(assigns) do
     ~H"""
-    <span aria-hidden="true" class="h-[5px] w-[5px] flex-shrink-0 rounded-[1px] bg-base-content/35"></span>
+    <span
+      aria-hidden="true"
+      class={["h-[5px] w-[5px] flex-shrink-0 rounded-[1px] bg-base-content/35", @class]}
+    ></span>
     """
   end
 
@@ -2119,9 +2124,11 @@ defmodule VarselWeb.CaseDetailLive do
       <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
         added on publish
       </p>
-      <div :for={ref <- @refs} class="flex items-center gap-2 py-0.5 text-sm opacity-70">
-        <.row_bullet />
-        <CveView.reference url={ref.url} tags={ref.tags} pills={:all} />
+      <div :for={ref <- @refs} class="flex items-start gap-2 py-0.5 text-sm opacity-70">
+        <.row_bullet class="mt-[0.45rem]" />
+        <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <CveView.reference url={ref.url} tags={ref.tags} pills={:all} />
+        </span>
       </div>
     </div>
     """
