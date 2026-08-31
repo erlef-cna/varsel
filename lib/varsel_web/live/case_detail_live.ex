@@ -967,6 +967,12 @@ defmodule VarselWeb.CaseDetailLive do
   defp marks(nil), do: %{phantom: MapSet.new(), deleted: MapSet.new()}
   defp marks(projection), do: %{phantom: projection.phantom_ids, deleted: projection.deleted_ids}
 
+  # The public page serves `:published` records only, so a link for any other
+  # state would land on a 404.
+  defp public_cve_id(%{cve_id: cve_id, cve_record: %{state: :published}}) when is_binary(cve_id), do: cve_id
+
+  defp public_cve_id(_case_record), do: nil
+
   @doc "DaisyUI badge class for a case state."
   def state_badge_class(:draft), do: "badge-warning"
   def state_badge_class(:review), do: "badge-info"
@@ -1052,7 +1058,17 @@ defmodule VarselWeb.CaseDetailLive do
       <div class={@preview_open? && "opacity-45"}>
         <.page_header>
           <:eyebrow>
-            Case <span :if={@case_record.cve_id} class="font-mono">· {@case_record.cve_id}</span>
+            Case
+            <span :if={@case_record.cve_id} class="font-mono">
+              ·
+              <.link
+                :if={public_cve_id(@case_record)}
+                href={~p"/cves/#{public_cve_id(@case_record) <> ".html"}"}
+                title="View the published CVE page"
+                class="link link-hover"
+              >{@case_record.cve_id}</.link>
+              <span :if={is_nil(public_cve_id(@case_record))}>{@case_record.cve_id}</span>
+            </span>
             <.copy_button
               :if={@case_record.cve_id}
               value={@case_record.cve_id}
