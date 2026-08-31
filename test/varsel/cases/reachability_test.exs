@@ -401,9 +401,10 @@ defmodule Varsel.Cases.ReachabilityTest do
 
     test "with include_prereleases: false a conflicting prerelease is called out, not dropped" do
       # The releases are all safe, but a prerelease is affected — surfaced.
+      # OTP versions omit a trailing zero, so the release is `1.0`, not `1.0.0`.
       result =
         deduce(
-          [{"1.0.0-rc1", true}, {"1.0.0", false}, {"1.0.1", false}],
+          [{"1.0-rc1", true}, {"1.0", false}, {"1.0.1", false}],
           comparator: :otp,
           include_prereleases: false
         )
@@ -411,7 +412,7 @@ defmodule Varsel.Cases.ReachabilityTest do
       assert result.ranges == []
       assert [call_out] = result.call_outs
       assert call_out.reason == :prerelease_conflict
-      assert call_out.version == "1.0.0-rc1"
+      assert call_out.version == "1.0-rc1"
       assert call_out.dag_label == :affected
     end
   end

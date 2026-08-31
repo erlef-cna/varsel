@@ -99,6 +99,27 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
       assert OTPVersion.compare("22.3.4.12.1", "22.3.4.13") == :nc
     end
 
+    # A branch descends from every earlier patch on the line it hangs off, not
+    # just from its immediate base, so it outranks all of them. Confirmed against
+    # erlang/otp's commit graph:
+    #   git merge-base --is-ancestor OTP-22.3.4.11 OTP-22.3.4.12.1
+    test "a branch orders above the earlier patches of the line it hangs off" do
+      assert OTPVersion.compare("22.3.4.1", "22.3.4.12.1") == :lt
+      assert OTPVersion.compare("22.3.4.11", "22.3.4.12.1") == :lt
+      assert OTPVersion.compare("22.3.4.12.1", "22.3.4.11") == :gt
+    end
+
+    # The scheme omits a trailing zero past the first two components, so `27.3.0`
+    # is spelled `27.3` and is not a version. `:varsel_versions` decides this.
+    test "rejects trailing zeros the scheme does not write" do
+      refute OTPVersion.release?("27.3.0")
+      refute OTPVersion.release?("27.3.4.0")
+      refute OTPVersion.release?("27.3.4.1.0")
+
+      assert OTPVersion.release?("27.0")
+      assert OTPVersion.release?("27.3.0.1")
+    end
+
     # https://www.erlang.org/doc/system/versions.html
     test "the version scheme's own branching examples" do
       assert OTPVersion.compare("6.0.2", "6.0.2.1") == :lt

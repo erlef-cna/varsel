@@ -21,60 +21,52 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
 
   ## Ordering
 
-  `<Major>.<Minor>.<Patch>` names a release on the main track, and those are
-  totally ordered. A fourth part or beyond hangs a maintenance patch off the
-  version its earlier parts name, and branching is recursive: `18.2.4.0.1`
-  hangs off `18.2.4.0`, which hangs off `18.2.4`.
+  The order is the version scheme's own, and `compare/2` delegates it to
+  `:varsel_versions`, OTP's implementation. It is partial: a version orders
+  against its ancestors and descendants, and `:nc` against everything else.
 
-  A patch contains the version it hangs off, so it orders against that version
-  and everything at or below it, and against other patches of the same version.
-  Against a main-track release *above* the version it hangs off, `compare/2`
-  returns `:nc`.
+  Pre-releases and the `OTP-` prefix are this module's own, since the OTP
+  implementation takes neither.
 
   A patch may be merged forward, at a point the version number does not record.
-  In erlang/otp, `17.5.6.1` is an ancestor of `18.1` but not of `18.0`,
-  `17.5.6.10` reaches nothing before `21.2`, and `22.3.4.12.1` was never merged
-  forward at all. Versions of identical shape differ, so only the commit graph
-  answers that question.
+  In erlang/otp, `22.3.4.12.1` is contained in `24.0` and every later release,
+  but in nothing in 23.x. Only the commit graph answers that, so `:nc` means the
+  scheme does not order the two, never that no ancestry exists.
 
   Callers that need one line, such as sorting a timeline or cutting it into
   ranges, use `total_compare/2`. Callers deciding whether one version implies
   another must respect `:nc`.
   """
 
+  # TODO: Switch to `:versions` from runtime_tools and delete `src/varsel_versions.erl`
+  # once an OTP release ships erlang/otp PR #11556.
+
   @enforce_keys [:segments, :prerelease?, :raw]
   defstruct [:segments, :prerelease?, :raw]
 
   @type t :: %__MODULE__{
-          segments: [integer()],
+          segments: [non_neg_integer()],
           prerelease?: boolean(),
           raw: String.t()
         }
 
-  # `<Major>.<Minor>[.<Patch>...]`, optionally a release candidate. Two parts is
-  # the minimum the version scheme allows, since less significant parts are
-  # omitted only when they are 0, and `-rc<N>` is its only suffix. Anchored, so
-  # a tag carrying anything else is not a version: the R series, `nightly`, a
-  # date, a semver tag in an OTP repo.
+  # `<Major>.<Minor>[.<Patch>...]`, optionally a release candidate. `-rc<N>` is
+  # the only suffix the scheme allows. Anchored, so a tag carrying anything else
+  # is not a version: the R series, `nightly`, a date, a semver tag in an OTP
+  # repo. The numeric part is only shaped here; `:varsel_versions.list_check/1`
+  # is what accepts or rejects it.
   @release ~r/\A(\d+(?:\.\d+)+)(?:-rc(\d+))?\z/
-
-  # `<Major>.<Minor>.<Patch>`.
-  @normal_parts 3
 
   @doc "Parses an OTP version string. `:error` for non-release tags."
   @spec parse(String.t()) :: {:ok, t()} | :error
   def parse(version) when is_binary(version) do
-    case Regex.run(@release, strip_prefix(version)) do
-      [_, numeric] -> {:ok, build(numeric, false, version)}
-      [_, numeric, _rc] -> {:ok, build(numeric, true, version)}
-      nil -> :error
+    with [_, numeric | rc] <- Regex.run(@release, strip_prefix(version)),
+         segments = Enum.map(String.split(numeric, "."), &String.to_integer/1),
+         true <- :varsel_versions.list_check(segments) do
+      {:ok, %__MODULE__{segments: segments, prerelease?: rc != [], raw: version}}
+    else
+      _ -> :error
     end
-  end
-
-  defp build(numeric, prerelease?, version) do
-    segments = numeric |> String.split(".") |> Enum.map(&String.to_integer/1)
-
-    %__MODULE__{segments: segments, prerelease?: prerelease?, raw: version}
   end
 
   @doc """
@@ -86,39 +78,33 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   other" rather than as false.
   """
   @spec compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt | :nc
-  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def compare(left, right) do
-    a = segments_of(left)
-    b = segments_of(right)
-
-    cond do
-      trunk?(a) and trunk?(b) -> total_compare(left, right)
-      prefix?(a, b) -> :lt
-      prefix?(b, a) -> :gt
-      not trunk?(a) and not trunk?(b) and base(a) == base(b) -> total_compare(left, right)
-      not trunk?(a) and trunk?(b) and under_ancestry?(b, a) -> :gt
-      not trunk?(b) and trunk?(a) and under_ancestry?(a, b) -> :lt
-      true -> :nc
+    case {parse_any(left), parse_any(right)} do
+      {{:ok, a}, {:ok, b}} -> compare_parsed(a, b)
+      # A non-release bounds no range, so the only requirement is that it never
+      # displaces one that does: it sorts above every release, as in `sort_key/1`.
+      _ -> total_compare(left, right)
     end
   end
 
-  defp trunk?(segments), do: length(segments) <= @normal_parts
-
-  # Whether `version` is at or below some version `branch` descends from. The
-  # ancestry is the whole chain, not just the immediate base: `17.0.0.1.1`
-  # descends from `17.0.0.1` and so outranks its sibling `17.0.0.0`.
-  # A pre-release of a version the patch hangs off is below it either way, so
-  # segment order settles this.
-  defp under_ancestry?(version, branch) do
-    Enum.any?(ancestry(branch), &(version <= &1))
+  # The scheme orders the numeric parts; a pre-release sits just below the
+  # release it leads to, which only matters once those parts are equal.
+  defp compare_parsed(%{segments: same} = a, %{segments: same} = b) do
+    case {a.prerelease?, b.prerelease?} do
+      {x, x} -> :eq
+      {true, false} -> :lt
+      {false, true} -> :gt
+    end
   end
 
-  defp ancestry(segments) when length(segments) > @normal_parts do
-    parent = base(segments)
-    [parent | ancestry(parent)]
+  defp compare_parsed(a, b) do
+    case :varsel_versions.list_compare(a.segments, b.segments) do
+      :same -> :eq
+      :ancestor -> :lt
+      :descendant -> :gt
+      :undefined -> :nc
+    end
   end
-
-  defp ancestry(_segments), do: []
 
   @doc """
   Whether the scheme orders every pair of versions. OTP's does not: a branch
@@ -168,34 +154,15 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
 
   ## ------------------------------------------------------------ internals
 
-  # Branching is recursive: `18.2.4.0.1` branches from `18.2.4.0`, which itself
-  # branches from `18.2.4`. A branch's base is therefore all but its last part,
-  # never a truncation to the normal three.
-  defp base(segments) when length(segments) > @normal_parts do
-    Enum.drop(segments, -1)
-  end
-
-  defp base(segments), do: segments
-
-  defp prefix?(a, b), do: length(a) < length(b) and Enum.take(b, length(a)) == a
-
-  defp segments_of(%__MODULE__{segments: segments}), do: segments
-
-  defp segments_of(version) when is_binary(version) do
-    case parse(version) do
-      {:ok, v} -> v.segments
-      :error -> []
-    end
-  end
+  defp parse_any(%__MODULE__{} = version), do: {:ok, version}
+  defp parse_any(version) when is_binary(version), do: parse(version)
 
   # `{rank, segments, release_rank}`: rank 0 for a release, 1 for anything that
   # is not one, so a non-release sorts last and never bounds a real range. A
   # release ranks above its pre-releases.
-  defp sort_key(%__MODULE__{} = v), do: {0, v.segments, if(v.prerelease?, do: 0, else: 1)}
-
-  defp sort_key(version) when is_binary(version) do
-    case parse(version) do
-      {:ok, v} -> sort_key(v)
+  defp sort_key(version) do
+    case parse_any(version) do
+      {:ok, v} -> {0, v.segments, if(v.prerelease?, do: 0, else: 1)}
       :error -> {1, [], 0}
     end
   end
