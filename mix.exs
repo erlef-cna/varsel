@@ -70,7 +70,7 @@ defmodule Varsel.MixProject do
       {:absinthe_phoenix, "~> 2.0"},
       {:ash, "~> 3.0"},
       {:ash_admin, "~> 1.0", runtime: Mix.env() in [:dev, :test]},
-      {:ash_ai, github: "ash-project/ash_ai", ref: "043461cc2e56dec2ba1dcd9d6b9d17e02e8e3d05"},
+      {:ash_ai, "~> 1.0"},
       # override: ash_ai pins ash_authentication ~> 4.8 but only touches it in
       # dev-time generators; the OAuth2 server package needs 5.0.
       {:ash_authentication, "~> 5.0-rc", override: true},
