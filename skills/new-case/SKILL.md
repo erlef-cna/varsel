@@ -365,9 +365,9 @@ affected packages, references, weaknesses, impacts, credits, and everything else
   candidates with a paragraph each.
 - No abstraction-level commentary, no restating the description or the report, no listing options
   nobody would have chosen.
-- If a justification genuinely needs more room, it is a finding rather than a reasoning. Put it in
-  a `create_case_comment` and leave the reasoning at its one-sentence conclusion. Do not spill it
-  into `internal_notes`, which is held to the same brevity.
+- If a justification genuinely needs more room, say it to the user directly and leave the
+  reasoning at its one-sentence conclusion. Do not spill it into `internal_notes`, which is held
+  to the same brevity.
 
 ### Choosing the affected-package tool
 
@@ -724,8 +724,8 @@ vendor advisory first, then patch-tagged, then the rest.
 `target_id`.
 
 **`internal_notes` is set with `propose_internal_notes`, and should be a handful of lines at most.**
-Keep them to the boundary SHAs, the sibling you reused, and what the user verified, and use
-`create_case_comment` for anything longer that comes up later.
+Keep them to the boundary SHAs, the sibling you reused, and what the user verified. Anything longer
+that comes up later goes to the user directly.
 
 **`render_case_preview` and `validate_case` return the preview or the verdict alone**, not the case
 body, so checking one costs only what it reports.

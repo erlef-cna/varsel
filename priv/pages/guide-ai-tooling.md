@@ -14,13 +14,13 @@ for supporters and Points of Contact alike.
 Varsel exposes a [Model Context Protocol](https://modelcontextprotocol.io)
 server at `/mcp`. It carries the same data and case operations your role
 allows in the UI: reading cases and records, searching the CWE and CAPEC
-catalogs, proposing field changes, commenting, giving people access to a case
-by their GitHub or Hex.pm handle, refreshing derivations, and running the
-validators.
+catalogs, proposing field changes, reading case comments, giving people access
+to a case by their GitHub or Hex.pm handle, refreshing derivations, and running
+the validators.
 
 By design it carries **no** tools to accept or decline proposals, assign
-roles, or publish. An agent working over MCP states facts as proposals; a
-human reviews and accepts them in the UI.
+roles, publish, or post a comment. An agent working over MCP states facts as
+proposals; a human reviews and accepts them in the UI.
 
 See [API Access](/api-access) for how to connect a client and authenticate.
 MCP clients handle the OAuth flow themselves, so pointing one at the URL and

@@ -108,7 +108,6 @@ defmodule Varsel.Cases do
 
     tool :withdraw_case_proposal, Proposal, :withdraw
     tool :list_case_comments, Comment, :list_for_case
-    tool :create_case_comment, Comment, :post
 
     tool :grant_case_access, Case, :grant_access do
       select [:id]
