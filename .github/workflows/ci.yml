@@ -53,7 +53,7 @@ jobs:
         # Credo must not fail the build; findings are reported to GitHub instead.
         run: mix credo --strict --all --format sarif > credo.sarif || true
       - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: credo.sarif
           category: credo
@@ -170,7 +170,7 @@ jobs:
         # Report findings to GitHub rather than failing the build.
         run: zizmor --format sarif . > zizmor.sarif || true
       - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: zizmor.sarif
           category: zizmor
@@ -193,7 +193,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           elixir: true
-      - uses: erlef/mix-dependency-submission@c4a36104ac7614b1b66d0da6e8a1c7d6d07bc52b # v1.3.2
+      - uses: erlef/mix-dependency-submission@764980370c6cdddd16b9c00141a628203dee1b7b # v1.3.3
 
   dependency-review:
     name: Dependency Review
