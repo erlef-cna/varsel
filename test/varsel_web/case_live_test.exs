@@ -2391,6 +2391,47 @@ defmodule VarselWeb.CaseLiveTest do
     end
   end
 
+  describe "the public CVE page link" do
+    test "a published record links to its public page", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      cve_id = "CVE-#{year}-55557"
+      cve_record = Fixtures.published_cve_record(cve_id, "Published title")
+      case_record = Fixtures.open_case(poc, %{title: "Amendment"})
+
+      Varsel.Repo.query!(
+        "UPDATE cases SET cve_record_id = $1 WHERE id = $2",
+        [Ecto.UUID.dump!(cve_record.id), Ecto.UUID.dump!(case_record.id)]
+      )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert has_element?(lv, ~s(p.page-header-eyebrow a[href="/cves/#{cve_id}.html"]), cve_id)
+    end
+
+    test "a reserved record offers no link, since the public page would 404", %{
+      conn: conn,
+      poc: poc
+    } do
+      year = Date.utc_today().year
+      cve_record = Fixtures.reserved_cve_record("CVE-#{year}-55558")
+      case_record = Fixtures.open_case(poc, %{title: "Not yet published"})
+      Cases.assign_case_cve_id!(case_record, %{cve_record_id: cve_record.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert lv |> element("p.page-header-eyebrow") |> render() =~ "CVE-#{year}-55558"
+      refute has_element?(lv, ~s(p.page-header-eyebrow a))
+    end
+
+    test "a case with no CVE ID offers no link", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      refute has_element?(lv, ~s(p.page-header-eyebrow a))
+    end
+  end
+
   describe "preview slide-over" do
     test "validation renders per-check rows with blocker deep links, not an alert box", %{
       conn: conn,
