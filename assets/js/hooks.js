@@ -63,10 +63,28 @@ export const CssVars = {
 // `style` attribute, which the strict Content-Security-Policy forbids — see
 // `CssVars`. Growing needs the element collapsed first, since `scrollHeight`
 // never reports less than the current height.
+//
+// That collapse shortens the document, and a page scrolled past the new
+// maximum is clamped to it — the position is not restored when the height
+// comes back, so on a form taller than the viewport every keystroke walks the
+// page upward. Flooring the wrapper at its current height keeps the document
+// the same length across the measurement, leaving nothing to clamp.
+//
+// Growth stops at the field's CSS `max-height`, past which the textarea
+// scrolls its own content: a field taller than the window can never bring the
+// caret and the surrounding form on screen together, so growing further only
+// moves the page under the writer.
 export const AutoGrow = {
   grow() {
+    const frame = this.el.closest("[data-autogrow-frame]")
+    if (frame) frame.style.minHeight = `${frame.offsetHeight}px`
+
     this.el.style.height = "auto"
-    this.el.style.height = `${this.el.scrollHeight}px`
+    const cap = parseFloat(getComputedStyle(this.el).maxHeight)
+    const fit = this.el.scrollHeight
+    this.el.style.height = `${Number.isFinite(cap) ? Math.min(fit, cap) : fit}px`
+
+    if (frame) frame.style.minHeight = ""
   },
   collapse() {
     this.el.style.height = ""
