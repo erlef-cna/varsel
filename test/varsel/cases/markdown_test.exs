@@ -28,7 +28,33 @@ defmodule Varsel.Cases.MarkdownTest do
     display = Markdown.to_display_html("```brainfuck\n+++\n```")
 
     assert display =~ ~s(<code class="language-plaintext")
-    refute display =~ "<span"
+    refute display =~ ~s(<span class="l-)
+  end
+
+  test "display HTML puts a copy button on code blocks, published HTML does not" do
+    markdown = "```elixir\ndef f, do: 1\n```"
+
+    display = Markdown.to_display_html(markdown)
+    assert display =~ ~s(<div class="codebox">)
+    assert display =~ ~s(class="copy-button codebox-copy")
+
+    published = Markdown.to_html(markdown)
+    refute published =~ "codebox"
+    refute published =~ "<button"
+  end
+
+  test "a code block gets one copy button however many the markdown asks for" do
+    markdown = """
+    <button class="copy-button codebox-copy">mine</button>
+
+    ```elixir
+    def f, do: 1
+    ```
+    """
+
+    display = Markdown.to_display_html(markdown)
+
+    assert ~r/<button/ |> Regex.scan(display) |> length() == 1
   end
 
   test "plain text strips inline formatting and keeps paragraph breaks" do

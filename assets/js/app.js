@@ -47,6 +47,34 @@ window.addEventListener("varsel:clipcopy", (event) => {
   navigator.clipboard.writeText(event.detail.text).catch(failed)
 })
 
+// Copy button on a code block (`CoreComponents.code_copy_button/1`).
+window.addEventListener("varsel:clipcode", (event) => copyCodeBlock(event.target))
+
+function copyCodeBlock(button) {
+  const code = button.closest(".codebox")?.querySelector("pre")
+  if (!code) return
+
+  // Lumis wraps each line in a block-level element *and* keeps the newline
+  // that ends it, so `innerText` would count every break twice.
+  button.dispatchEvent(
+    new CustomEvent("varsel:clipcopy", {bubbles: true, detail: {text: code.textContent}})
+  )
+}
+
+// The same button on controller-rendered pages, where no LiveView is running
+// to interpret its `phx-click`. Those carry `data-clipcode` instead, and the
+// confirmation `JS.transition` would have applied is done by hand.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-clipcode]")
+  if (!button) return
+
+  clearTimeout(button.copiedTimer)
+  button.classList.add("is-copied")
+  button.copiedTimer = setTimeout(() => button.classList.remove("is-copied"), 1500)
+
+  copyCodeBlock(button)
+})
+
 // Plain-JS ToC scroll-spy for controller-rendered (dead) pages — the public
 // CVE detail page and the docs page template — where no LiveView hook runs.
 // Marks the entry whose section sits nearest above the viewport top with

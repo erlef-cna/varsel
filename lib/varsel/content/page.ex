@@ -14,16 +14,32 @@ defmodule Varsel.Content.Page do
   list of `%{level, id, text}`, empty when the page has no `##`/`###` headings.
   """
 
+  alias VarselWeb.CoreComponents
+
   @enforce_keys [:id, :title, :body]
   defstruct [:id, :title, :body, :description, toc: []]
 
   # Matches `<h2 id="slug">Heading text<a ... class="anchor"></a></h2>` (and h3).
   @heading_regex ~r{<h([23])[^>]*\bid="([^"]+)"[^>]*>(.*?)</h\1>}s
 
+  # Comrak renders a fenced block as `<pre><code …>…</code></pre>`.
+  @code_block_regex ~r{<pre>(.*?</code>)</pre>}s
+
   def build(filename, attrs, body) do
     id = filename |> Path.basename() |> Path.rootname()
+    body = add_copy_buttons(body)
 
     struct!(__MODULE__, [id: id, body: body, toc: extract_toc(body)] ++ Map.to_list(attrs))
+  end
+
+  # These pages are served by a controller, with no LiveView to interpret the
+  # button's `phx-click`.
+  defp add_copy_buttons(body) do
+    button = CoreComponents.code_copy_button_html(live?: false)
+
+    Regex.replace(@code_block_regex, body, fn _full, inner ->
+      ~s(<div class="codebox"><pre>) <> inner <> "</pre>" <> button <> "</div>"
+    end)
   end
 
   defp extract_toc(body) do

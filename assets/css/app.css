@@ -281,6 +281,41 @@
   display: inline-block;
 }
 
+/* ------------------------------------------------------------- Code boxes */
+/* The button is revealed by hover, so it stays visible where there is none.
+   A markdown code block keeps one dark surface in both themes, so the button
+   takes its colors from the block it sits on and not from the page, which
+   would leave it near-invisible on a dark block in the light theme. */
+.codebox {
+  position: relative;
+}
+
+.codebox-copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem;
+  border-radius: 0.375rem;
+  color: var(--tw-prose-pre-code, var(--color-base-content));
+  background-color: var(--tw-prose-pre-bg, var(--color-base-100));
+  border: 1px solid color-mix(in oklch, currentColor 25%, transparent);
+  opacity: 0;
+  transition: opacity 150ms ease-in-out;
+}
+
+.codebox:hover .codebox-copy,
+.codebox-copy:focus-visible,
+.codebox-copy.is-copied,
+.codebox-copy.is-copy-failed {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .codebox-copy {
+    opacity: 1;
+  }
+}
+
 .eef-hero-glow {
   position: relative;
   isolation: isolate;

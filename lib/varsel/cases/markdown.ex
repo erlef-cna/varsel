@@ -9,6 +9,8 @@ defmodule Varsel.Cases.Markdown do
   value. Both derive from the same MDEx document, so they always agree.
   """
 
+  alias VarselWeb.CoreComponents
+
   @languages Application.compile_env!(:varsel, :lumis_languages)
 
   # `unsafe: true` lets authors embed literal HTML in their markdown; the
@@ -45,10 +47,17 @@ defmodule Varsel.Cases.Markdown do
   """
   @spec to_display_html(String.t()) :: String.t()
   def to_display_html(markdown) when is_binary(markdown) do
+    # The sanitizer drops `button`, so each block reserves its place with a
+    # token and the button is spliced in afterwards. The token is random per
+    # render, which is what keeps author markdown from naming one.
+    placeholder =
+      "varsel-copy-" <> Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
+
     markdown
     |> MDEx.parse_document!(@options)
-    |> MDEx.traverse_and_update(&highlight_code_block/1)
-    |> MDEx.to_html!()
+    |> MDEx.traverse_and_update(&highlight_code_block(&1, placeholder))
+    |> MDEx.to_html!(@options)
+    |> String.replace(placeholder, CoreComponents.code_copy_button_html())
     |> String.trim()
   end
 
@@ -57,16 +66,19 @@ defmodule Varsel.Cases.Markdown do
   # classes Lumis emits. A block Lumis cannot highlight renders as the plain
   # code block. The literal keeps the newline that closes the fence's last
   # line, which Lumis would render as one more, empty line.
-  defp highlight_code_block(%MDEx.CodeBlock{info: info, literal: literal} = block) do
+  defp highlight_code_block(%MDEx.CodeBlock{info: info, literal: literal} = block, placeholder) do
     source = String.trim_trailing(literal, "\n")
 
     case Lumis.highlight(source, formatter: {:html_linked, language: fence_language(info)}) do
-      {:ok, html} -> %MDEx.HtmlBlock{literal: html}
-      {:error, _reason} -> block
+      {:ok, html} ->
+        %MDEx.HtmlBlock{literal: ~s(<div class="codebox">) <> html <> placeholder <> "</div>"}
+
+      {:error, _reason} ->
+        block
     end
   end
 
-  defp highlight_code_block(node), do: node
+  defp highlight_code_block(node, _placeholder), do: node
 
   # Plain text is a name Lumis answers without loading anything.
   defp fence_language(info) do
