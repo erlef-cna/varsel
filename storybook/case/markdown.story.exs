@@ -44,6 +44,7 @@ defmodule VarselWeb.Storybook.Case.Markdown do
           3. Observe the crash in the log
 
           ```elixir
+          {:ok, socket} = :gen_tcp.connect(~c"localhost", 5672, [])
           :gen_tcp.send(socket, <<0xFF, 0xFF, 0xFF, 0xFF>>)
           ```
           """

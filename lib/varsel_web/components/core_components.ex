@@ -36,6 +36,7 @@ defmodule VarselWeb.CoreComponents do
   alias AshPhoenix.LiveView, as: AshLiveView
   alias Phoenix.HTML.Form
   alias Phoenix.HTML.FormField
+  alias Phoenix.HTML.Safe
   alias Phoenix.LiveView.JS
 
   @doc """
@@ -629,12 +630,55 @@ defmodule VarselWeb.CoreComponents do
 
   def code_block(assigns) do
     ~H"""
-    {Phoenix.HTML.raw(
-      Lumis.highlight!(@source,
-        formatter: {:html_linked, language: @language, pre_class: code_block_class(@class)}
-      )
-    )}
+    <div class="codebox">
+      {Phoenix.HTML.raw(
+        Lumis.highlight!(@source,
+          formatter: {:html_linked, language: @language, pre_class: code_block_class(@class)}
+        )
+      )}
+      <.code_copy_button />
+    </div>
     """
+  end
+
+  @doc """
+  The copy button that sits on a `codebox`.
+
+  Set `live?` false on a page served by a controller, where nothing interprets
+  a `phx-click`.
+  """
+  attr :live?, :boolean, default: true
+
+  def code_copy_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      title="Copy code"
+      aria-label="Copy code"
+      phx-click={@live? && JS.dispatch("varsel:clipcode") |> JS.transition("is-copied", time: 1500)}
+      data-clipcode={not @live?}
+      class="copy-button codebox-copy"
+    >
+      <.icon name="hero-clipboard-document" class="copy-idle size-4" />
+      <.icon name="hero-clipboard-document-check" class="copy-done size-4 text-success" />
+      <.icon name="hero-exclamation-circle" class="copy-failed size-4 text-error" />
+    </button>
+    """
+  end
+
+  @doc """
+  Renders a component to an HTML string, for callers that build HTML rather
+  than HEEx.
+
+      component_to_html(&code_copy_button/1, live?: false)
+  """
+  @spec component_to_html((map() -> Phoenix.LiveView.Rendered.t()), keyword()) :: String.t()
+  def component_to_html(component, assigns \\ []) do
+    assigns
+    |> Map.new()
+    |> component.()
+    |> Safe.to_iodata()
+    |> IO.iodata_to_binary()
   end
 
   defp code_block_class(class) do

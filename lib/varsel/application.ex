@@ -9,11 +9,11 @@ defmodule Varsel.Application do
 
   use Application
 
-  alias Varsel.Cases.Markdown
+  alias Varsel.Markdown.CodeBlock
 
   @impl Application
   def start(_type, _args) do
-    Lumis.Languages.async_load(Markdown.languages())
+    Lumis.Languages.async_load(CodeBlock.languages())
 
     children = [
       {AshAuthentication.Oauth2Server.Supervisor, [otp_app: :varsel]},

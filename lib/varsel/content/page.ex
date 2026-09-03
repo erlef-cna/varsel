@@ -4,51 +4,81 @@
 
 defmodule Varsel.Content.Page do
   @moduledoc """
-  A static content page built by `Varsel.Content` (nimble_publisher).
-
-  Comrak renders each heading with an id on the tag and a clickable anchor
-  permalink (`<h2 id="slug">Text<a class="anchor" href="#slug"></a></h2>`) via
-  the `header_id_prefix` extension configured on the `Content` module. At build
-  time we read those anchor ids back into a table of contents (`toc`) — the
-  Phoenix equivalent of the Jekyll theme's `page_with_toc` layout. `toc` is a
-  list of `%{level, id, text}`, empty when the page has no `##`/`###` headings.
+  A static content page: the markdown under `priv/pages` compiled to the HTML
+  the docs template renders, plus the table of contents beside it.
   """
+
+  alias Varsel.Markdown.CodeBlock
+  alias Varsel.Markdown.TableOfContents
 
   @enforce_keys [:id, :title, :body]
   defstruct [:id, :title, :body, :description, toc: []]
 
-  # Matches `<h2 id="slug">Heading text<a ... class="anchor"></a></h2>` (and h3).
-  @heading_regex ~r{<h([23])[^>]*\bid="([^"]+)"[^>]*>(.*?)</h\1>}s
+  @type t :: %__MODULE__{
+          id: String.t(),
+          title: String.t(),
+          body: String.t(),
+          description: String.t() | nil,
+          toc: [TableOfContents.entry()]
+        }
 
-  def build(filename, attrs, body) do
-    id = filename |> Path.basename() |> Path.rootname()
+  # `header_id_prefix` gives every heading an id and a permalink anchor, which
+  # the table of contents addresses. `block_directive` enables the `:::steps`
+  # fences the process pages use. These pages are repo content, so
+  # `unsafe: true` carries no sanitize pass.
+  @options [
+    extension: [
+      table: true,
+      autolink: true,
+      strikethrough: true,
+      block_directive: true,
+      header_id_prefix: ""
+    ],
+    render: [hardbreaks: false, unsafe: true]
+  ]
 
-    struct!(__MODULE__, [id: id, body: body, toc: extract_toc(body)] ++ Map.to_list(attrs))
+  @doc """
+  Compiles one page's markdown source into a `t:t/0`.
+
+  The attributes are a literal Elixir map above a `---` line, as
+  `%{title: "…", description: "…"}`.
+  """
+  @spec build(String.t(), String.t()) :: t()
+  def build(path, source) do
+    {attrs, markdown} = split_attributes(path, source)
+
+    document =
+      markdown
+      |> MDEx.parse_document!(@options)
+      # Served by a controller, with no LiveView to interpret a `phx-click`.
+      |> MDEx.traverse_and_update(&CodeBlock.highlight(&1, :dead))
+
+    struct!(
+      __MODULE__,
+      [
+        id: path |> Path.basename() |> Path.rootname(),
+        body: MDEx.to_html!(document, @options),
+        toc: TableOfContents.build(document)
+      ] ++ Map.to_list(attrs)
+    )
   end
 
-  defp extract_toc(body) do
-    @heading_regex
-    |> Regex.scan(body)
-    |> Enum.map(fn [_full, level, slug, inner] ->
-      %{level: String.to_integer(level), id: slug, text: strip_tags(inner)}
-    end)
+  # Read as a term, so a page cannot run code at compile time.
+  defp split_attributes(path, source) do
+    with [attributes, markdown] <- String.split(source, ~r/\n-{3,}\n/, parts: 2),
+         {:ok, quoted} <- Code.string_to_quoted(attributes),
+         {:ok, attrs} <- literal_map(quoted) do
+      {attrs, markdown}
+    else
+      _other -> raise "#{path}: expected a literal attribute map above a --- line"
+    end
   end
 
-  defp strip_tags(html) do
-    html
-    |> String.replace(~r/<[^>]*>/, "")
-    |> unescape_entities()
-    |> String.trim()
+  defp literal_map({:%{}, _meta, pairs}) do
+    if Enum.all?(pairs, fn {key, value} -> is_atom(key) and is_binary(value) end),
+      do: {:ok, Map.new(pairs)},
+      else: :error
   end
 
-  # Comrak escapes heading text (e.g. `&amp;`); decode the handful that occur
-  # so the table of contents reads cleanly.
-  defp unescape_entities(text) do
-    text
-    |> String.replace("&amp;", "&")
-    |> String.replace("&lt;", "<")
-    |> String.replace("&gt;", ">")
-    |> String.replace("&quot;", "\"")
-    |> String.replace("&#39;", "'")
-  end
+  defp literal_map(_quoted), do: :error
 end

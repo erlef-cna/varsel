@@ -567,7 +567,7 @@ defmodule VarselWeb.CveView do
   end
 
   @doc """
-  Renders a markdown string to HTML (same engine nimble_publisher uses).
+  Renders a markdown string to HTML.
 
   `unsafe: true` passes literal HTML through Comrak; `sanitize` then strips
   scripts and dangerous attributes so the result is safe for `raw/1`.

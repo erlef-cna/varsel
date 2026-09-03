@@ -9,7 +9,8 @@ defmodule Varsel.Cases.Markdown do
   value. Both derive from the same MDEx document, so they always agree.
   """
 
-  @languages Application.compile_env!(:varsel, :lumis_languages)
+  alias Varsel.Markdown.CodeBlock
+  alias Varsel.Markdown.Plaintext
 
   # `unsafe: true` lets authors embed literal HTML in their markdown; the
   # `sanitize` pass (ammonia, MDEx's conservative default allow-list) then
@@ -20,10 +21,6 @@ defmodule Varsel.Cases.Markdown do
     render: [hardbreaks: false, unsafe: true],
     sanitize: MDEx.Document.default_sanitize_options()
   ]
-
-  @doc "The languages code blocks are highlighted in."
-  @spec languages() :: [String.t()]
-  def languages, do: @languages
 
   @doc "Renders markdown to HTML (the supportingMedia text/html value)."
   @spec to_html(String.t()) :: String.t()
@@ -45,92 +42,28 @@ defmodule Varsel.Cases.Markdown do
   """
   @spec to_display_html(String.t()) :: String.t()
   def to_display_html(markdown) when is_binary(markdown) do
+    # The sanitizer drops `button`, so each block reserves its place with a
+    # token and the button is spliced in afterwards. The token is random per
+    # render, which is what keeps author markdown from naming one.
+    placeholder =
+      "varsel-copy-" <> Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
+
+    # The highlighted markup goes through the same sanitize pass as the rest
+    # of the document; MDEx's default allow-list admits the `pre`/`code`/`span`
+    # classes Lumis emits.
     markdown
     |> MDEx.parse_document!(@options)
-    |> MDEx.traverse_and_update(&highlight_code_block/1)
-    |> MDEx.to_html!()
+    |> MDEx.traverse_and_update(&CodeBlock.highlight(&1, {:deferred, placeholder}))
+    |> MDEx.to_html!(@options)
+    |> String.replace(placeholder, CodeBlock.deferred_button())
     |> String.trim()
-  end
-
-  # The highlighted markup goes through the same sanitize pass as the rest of
-  # the document; MDEx's default allow-list admits the `pre`/`code`/`span`
-  # classes Lumis emits. A block Lumis cannot highlight renders as the plain
-  # code block. The literal keeps the newline that closes the fence's last
-  # line, which Lumis would render as one more, empty line.
-  defp highlight_code_block(%MDEx.CodeBlock{info: info, literal: literal} = block) do
-    source = String.trim_trailing(literal, "\n")
-
-    case Lumis.highlight(source, formatter: {:html_linked, language: fence_language(info)}) do
-      {:ok, html} -> %MDEx.HtmlBlock{literal: html}
-      {:error, _reason} -> block
-    end
-  end
-
-  defp highlight_code_block(node), do: node
-
-  # Plain text is a name Lumis answers without loading anything.
-  defp fence_language(info) do
-    case String.split(info, ~r/\s+/, parts: 2, trim: true) do
-      [language | _] when language in @languages -> language
-      _other -> "text"
-    end
   end
 
   @doc "Renders markdown to plain text (the descriptions[].value)."
   @spec to_plaintext(String.t()) :: String.t()
   def to_plaintext(markdown) when is_binary(markdown) do
-    document = MDEx.parse_document!(markdown, @options)
-
-    document.nodes
-    |> Enum.map(&block_text/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.join("\n\n")
-    |> String.trim()
+    markdown
+    |> MDEx.parse_document!(@options)
+    |> Plaintext.render()
   end
-
-  defp block_text(%MDEx.List{nodes: items}) do
-    Enum.map_join(items, "\n", fn item -> "* " <> block_text(item) end)
-  end
-
-  defp block_text(%MDEx.ListItem{nodes: nodes}) do
-    nodes
-    |> Enum.map(&block_text/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.join("\n")
-  end
-
-  defp block_text(%MDEx.CodeBlock{literal: literal}), do: String.trim_trailing(literal)
-
-  defp block_text(%MDEx.BlockQuote{nodes: nodes}) do
-    nodes
-    |> Enum.map(&block_text/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.join("\n\n")
-  end
-
-  defp block_text(%{nodes: nodes}) do
-    nodes
-    |> Enum.map_join(&inline_text/1)
-    |> String.trim()
-  end
-
-  defp block_text(_node), do: ""
-
-  defp inline_text(%MDEx.Text{literal: literal}), do: literal
-  defp inline_text(%MDEx.Code{literal: literal}), do: literal
-  defp inline_text(%MDEx.SoftBreak{}), do: " "
-  defp inline_text(%MDEx.LineBreak{}), do: "\n"
-
-  # A link whose text equals its URL (autolink) stays bare; otherwise the
-  # target is appended in parentheses so no information is lost.
-  defp inline_text(%MDEx.Link{url: url, nodes: nodes}) do
-    case Enum.map_join(nodes, &inline_text/1) do
-      "" -> url
-      ^url -> url
-      text -> "#{text} (#{url})"
-    end
-  end
-
-  defp inline_text(%{nodes: nodes}), do: Enum.map_join(nodes, &inline_text/1)
-  defp inline_text(_node), do: ""
 end
