@@ -3,20 +3,32 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Varsel.Content do
-  @moduledoc false
+  @moduledoc """
+  The static content pages under `priv/pages`, compiled into the module.
 
-  use NimblePublisher,
-    build: Varsel.Content.Page,
-    from: Application.app_dir(:varsel, "priv/pages/*.md"),
-    as: :pages,
-    # header_id_prefix makes Comrak emit a clickable `<a class="anchor" id="…">`
-    # permalink inside every heading (Page.build reads those ids back into the
-    # table of contents). block_directive enables `:::name … :::` fences that
-    # render `<div class="name">…</div>` — used for `:::steps` step cards on the
-    # process pages without affecting plain lists.
-    comrak_options: [extension: [header_id_prefix: "", block_directive: true]]
+  A page is listed here by filename. That list is one of the places a new page
+  has to be registered; the others are the `router.ex` page list,
+  `static_pages` in `sitemap_controller.ex`, the nav and footer in
+  `layouts.ex`, and the rendering list in `site_pages_test.exs`.
+  """
 
-  @pages_by_id Map.new(@pages, &{&1.id, &1})
+  use Varsel.Content.Compiler
 
-  def get_page!(id), do: Map.fetch!(@pages_by_id, id)
+  page "api-access.md"
+  page "common-weaknesses.md"
+  page "contact.md"
+  page "coordinator-process.md"
+  page "cve-criteria.md"
+  page "data-licensing.md"
+  page "guide.md"
+  page "guide-affected-versions.md"
+  page "guide-ai-tooling.md"
+  page "guide-filing-a-case.md"
+  page "guide-record-conventions.md"
+  page "guide-review-and-publication.md"
+  page "maintainer-process.md"
+  page "privacy-policy.md"
+  page "scope.md"
+  page "security-policy.md"
+  page "terms-and-conditions.md"
 end

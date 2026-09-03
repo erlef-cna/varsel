@@ -667,14 +667,16 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
-  `code_copy_button/1` rendered to an HTML string, for callers that build HTML
-  rather than HEEx.
+  Renders a component to an HTML string, for callers that build HTML rather
+  than HEEx.
+
+      component_to_html(&code_copy_button/1, live?: false)
   """
-  @spec code_copy_button_html(keyword()) :: String.t()
-  def code_copy_button_html(assigns \\ []) do
+  @spec component_to_html((map() -> Phoenix.LiveView.Rendered.t()), keyword()) :: String.t()
+  def component_to_html(component, assigns \\ []) do
     assigns
     |> Map.new()
-    |> code_copy_button()
+    |> component.()
     |> Safe.to_iodata()
     |> IO.iodata_to_binary()
   end

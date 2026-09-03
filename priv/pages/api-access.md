@@ -13,7 +13,7 @@ published data alone is also available without authentication as plain JSON
 under [`/cves/index.json`](/cves/index.json) and
 [`/osv/all.json`](/osv/all.json).
 
-```sh
+```bash
 curl -X POST %BASE_URL%/gql \
   -H "content-type: application/json" \
   -H "authorization: Bearer <token>" \

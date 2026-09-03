@@ -109,7 +109,6 @@ defmodule Varsel.MixProject do
       {:lazy_html, ">= 0.1.0", only: :test},
       {:lumis, "~> 0.7.0"},
       {:mdex, "~> 0.13"},
-      {:nimble_publisher, "~> 2.0"},
       {:oban, "~> 2.0"},
       {:oban_web, "~> 2.0", only: [:dev, :test]},
       {:phoenix, "~> 1.8.5"},
