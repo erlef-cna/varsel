@@ -398,7 +398,9 @@ claims:
 - **Secrets at rest:** OAuth client secrets, GitHub tokens, and the
   `report`/case data are protected by DB access control; a Cloak/AES-GCM
   vault (`CLOAK_KEY`) is configured for `ash_cloak`-encrypted fields
-  (`runtime.exs`).
+  (`runtime.exs`). `HEX_SIGNING_KEY` is the private key that signs Varsel's
+  own requests to hex.pm and is held by the environment only
+  (`service_token.ex`).
 
 **What the app does to its host (side-effect inventory):**
 
@@ -1158,6 +1160,13 @@ means the **CNA operator/deployer**, and — for the last item only — anyone
    key-discovery endpoint today, so a key change there is a coordinated
    config change here. hex.pm must also be pointed at the same URL this
    deployment serves, since the token's audience is checked against it.
+7b. **Keep `HEX_SIGNING_KEY` to this deployment, and pin only its public
+   half at hex.pm.** hex.pm answers any request signed with that key with
+   the primary email address of the named account, hidden or not, so whoever
+   holds the key can ask for any hex.pm user's address. Unset means the
+   lookup fails closed. Rotation is manual on both sides, as for 7a:
+   `mix generate_hex_service_key` makes a pair, and the public half goes
+   into hex.pm's pinned set under a new `kid` before the old one leaves it.
 8. **API consumers: escape the markdown and HTML fields before rendering
    them.** The JSON API serves stored author content as written; Varsel
    sanitizes at its own render sinks, not at rest (§9).

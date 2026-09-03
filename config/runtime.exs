@@ -97,6 +97,12 @@ if config_env() != :test do
   # verification never waits on hex.pm and rotation is a deliberate change.
   config :varsel, :hex_intake, jwks: System.get_env("HEX_INTAKE_JWKS")
 
+  # The private half of the key pair hex.pm pins for Varsel's own requests.
+  # Development keeps the key from config/dev.exs when the variable is unset.
+  if hex_signing_key = System.get_env("HEX_SIGNING_KEY") do
+    config :varsel, :hex_signing_key, hex_signing_key
+  end
+
   case {length(mitre_missing), config_env()} do
     {0, _env} ->
       config :varsel,

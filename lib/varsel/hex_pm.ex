@@ -4,7 +4,7 @@
 
 defmodule Varsel.HexPm do
   @moduledoc """
-  Thin client for hex.pm, via `hex_core`.
+  Thin client for hex.pm.
 
   Talks to the same instance sign-in does: hex.pm is self-hostable, and asking
   one host who a user is while asking another whether that user exists would
@@ -16,8 +16,19 @@ defmodule Varsel.HexPm do
   `<base_url>/repo` with its key supplied through the `:hex_core` config.
 
   Extra `hex_core` configuration (a stub HTTP adapter in tests) is merged in
-  via `config :varsel, :hex_core, %{http_adapter: {MyAdapter, %{}}}`.
+  via `config :varsel, :hex_core, %{http_adapter: {MyAdapter, %{}}}`. The
+  contact lookup goes through `Req` instead, since hex.pm serves it as plain
+  JSON behind a service token. Its request options (a `Req.Test` plug in
+  tests) come from `config :varsel, :hex_api`.
   """
+
+  alias Varsel.HexPm.ServiceToken
+
+  @typedoc """
+  Who a hex.pm account belongs to. `email` is `nil` when the account has no
+  verified address.
+  """
+  @type contact :: %{username: String.t(), name: String.t(), email: String.t() | nil}
 
   @staging_repo_public_key """
   -----BEGIN PUBLIC KEY-----
@@ -88,6 +99,40 @@ defmodule Varsel.HexPm do
     end
   end
 
+  @doc """
+  Asks hex.pm who an account belongs to.
+
+  `name` is a username or an email address. hex.pm answers about a person's
+  own account only. An organization, service or deactivated account is
+  `:not_found`, and so is a name it does not know.
+  """
+  @spec contact(String.t()) :: {:ok, contact()} | :not_found | {:error, term()}
+  def contact(name) when is_binary(name) do
+    audience = base_url()
+    path = "/api/users/#{URI.encode(name, &URI.char_unreserved?/1)}/contact"
+
+    with {:ok, token} <- ServiceToken.sign(audience),
+         {:ok, response} <- Req.get(contact_req(audience), url: path, auth: {:bearer, token}) do
+      case response do
+        %Req.Response{status: 200, body: %{"username" => username, "name" => display_name} = body} ->
+          {:ok, %{username: username, name: display_name, email: body["email"]}}
+
+        %Req.Response{status: 404} ->
+          :not_found
+
+        %Req.Response{} = response ->
+          {:error, response}
+      end
+    end
+  end
+
+  defp contact_req(base_url) do
+    Req.new(
+      [base_url: base_url, retry: false, headers: [{"accept", "application/json"}]] ++
+        Application.get_env(:varsel, :hex_api, [])
+    )
+  end
+
   defp config do
     :hex_core.default_config()
     |> Map.merge(instance_config())
@@ -97,17 +142,15 @@ defmodule Varsel.HexPm do
   # The OAuth strategy's `base_url` is the site root and it appends `/api`,
   # which is also how hex.pm's own default is shaped.
   defp instance_config do
+    base_url = base_url()
+    Map.put(repo_config(base_url), :api_url, base_url <> "/api")
+  end
+
+  defp base_url do
     :varsel
     |> Application.get_env(:hex, [])
-    |> Keyword.get(:base_url)
-    |> case do
-      base_url when is_binary(base_url) ->
-        base_url = String.trim_trailing(base_url, "/")
-        Map.put(repo_config(base_url), :api_url, base_url <> "/api")
-
-      _unset ->
-        %{}
-    end
+    |> Keyword.get(:base_url, "https://hex.pm")
+    |> String.trim_trailing("/")
   end
 
   defp repo_config("https://hex.pm"), do: %{}
