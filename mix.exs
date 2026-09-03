@@ -107,7 +107,7 @@ defmodule Varsel.MixProject do
       {:igniter, "~> 0.6", only: [:dev, :test]},
       {:jason, "~> 1.2"},
       {:lazy_html, ">= 0.1.0", only: :test},
-      {:lumis, "~> 0.7.0"},
+      {:lumis, "~> 0.8.0"},
       {:mdex, "~> 0.13"},
       {:oban, "~> 2.0"},
       {:oban_web, "~> 2.0", only: [:dev, :test]},
