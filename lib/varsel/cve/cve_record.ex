@@ -25,6 +25,7 @@ defmodule Varsel.CVE.CveRecord do
     withheld --> published : import (published elsewhere)
     withheld --> rejected : reject
     draft --> publishing : request_publish (user)
+    draft --> reserved : release (user / case close)
     draft --> rejected : reject
     publishing --> published : publish (Oban)
     published --> pending_update : update (user)
@@ -43,8 +44,9 @@ defmodule Varsel.CVE.CveRecord do
   | `rejected` | Terminal — rejected at MITRE; the ID is burned and never reused |
 
   At MITRE `reserved`, `withheld` and `draft` are all simply `RESERVED`; the
-  distinction is purely local. `draft` is one-way — an assigned CVE is never
-  returned to the open pool; it can only be published or rejected.
+  distinction is purely local. A `draft` returns to the open pool only through
+  `release`: by hand when no case holds it, or when its case closes without
+  rejecting it.
 
   `withheld` marks an ID spoken for outside this system — the primary case being
   the migration period, where the old management system still hands out IDs from
@@ -70,6 +72,9 @@ defmodule Varsel.CVE.CveRecord do
 
   - `:assign` (update) — Transitions a `:reserved` record to `:draft`, taking it out of
     the open pool.
+
+  - `:release` (update) — Transitions a `:draft` record back to `:reserved`. Refused
+    while a case holds the ID; closing a case releases its own drafted ID.
 
   - `:withhold` (update) — Transitions a `:reserved` record to `:withheld`, holding the ID
     for use outside this system so nothing here assigns it. Requires a non-blank
@@ -308,6 +313,7 @@ defmodule Varsel.CVE.CveRecord do
 
     transitions do
       transition :assign, from: [:reserved, :withheld], to: :draft
+      transition :release, from: :draft, to: :reserved
       transition :withhold, from: :reserved, to: :withheld
       transition :request_publish, from: :draft, to: :publishing
       transition :publish, from: :publishing, to: :published
@@ -663,6 +669,18 @@ defmodule Varsel.CVE.CveRecord do
       change transition_state(:draft)
     end
 
+    update :release do
+      description """
+      Returns a drafted CVE ID to the open pool. Refused while a case holds
+      the ID: closing the case is what lets go of it.
+      """
+
+      accept []
+      require_atomic? false
+
+      change transition_state(:reserved)
+    end
+
     update :withhold do
       description """
       Withholds a reserved CVE ID for use outside this system — the migration period,
@@ -933,6 +951,12 @@ defmodule Varsel.CVE.CveRecord do
              :sync_reserved_from_mitre
            ]) do
       authorize_if actor_attribute_equals(:role, :poc)
+    end
+
+    # An ID a case holds returns to the pool through that case's close.
+    policy action(:release) do
+      forbid_unless actor_attribute_equals(:role, :poc)
+      authorize_if expr(is_nil(case.id))
     end
 
     policy action(:assign) do

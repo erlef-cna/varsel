@@ -319,8 +319,7 @@ defmodule VarselWeb.CaseDetailLive do
   def handle_event("close_case", params, socket) do
     args = %{
       closed_reason: params["closed_reason"],
-      reject_cve_id: params["cve_decision"] == "reject",
-      acknowledge_parked_cve_id: params["cve_decision"] == "park"
+      reject_cve_id: params["cve_decision"] == "reject"
     }
 
     socket =
@@ -2661,8 +2660,8 @@ defmodule VarselWeb.CaseDetailLive do
               Reject (burn) the CVE ID at MITRE
             </label>
             <label class="flex items-center gap-2">
-              <input type="radio" name="cve_decision" value="park" class="radio radio-sm" />
-              Keep the ID parked at MITRE
+              <input type="radio" name="cve_decision" value="release" class="radio radio-sm" />
+              Return the ID to the pool
             </label>
           </div>
           <button

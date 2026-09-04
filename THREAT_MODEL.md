@@ -719,12 +719,17 @@ none of the authorization properties, by construction rather than by defect.
    and the case link commit or roll back as one transaction, and a write from
    a stale copy of the case fails (§4) without consuming the reservation — a
    reserved ID cannot be orphaned out of the pool by a lost race.
+   The reverse holds too: closing a case returns its drafted ID to the pool
+   unless the POC rejects it, and a POC returns a drafted ID by hand only
+   when no case holds it.
    - *Violation symptom:* a reserved ID is attached to a published or closed
-     case, a second ID replaces one already assigned, or a failed assignment
-     leaves a reservation outside the pool.
+     case, a second ID replaces one already assigned, a failed assignment
+     leaves a reservation outside the pool, or an open case loses its ID to
+     the pool.
    - *Severity:* `medium` (identifier waste and a misleading record, not a
      disclosure).
-   - (`case.ex`, `cve_id_assignable.ex`, `assign_cve_record.ex`)
+   - (`case.ex`, `cve_id_assignable.ex`, `assign_cve_record.ex`,
+     `cve_record.ex`, `handle_cve_record_on_close.ex`)
 
 4. **Field-level PII redaction on `User`.**
    A non-POC who reaches a `User` row through a permitted relationship sees

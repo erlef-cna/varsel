@@ -90,5 +90,6 @@ A case is editable while it is in draft or review; approval freezes it.
   again; the second publish reaches MITRE as an update. Fixes and
   improvements both qualify.
 - **Not becoming a CVE after all?** A Point of Contact closes the case with
-  a reason. An already-assigned CVE ID does not vanish silently; rejecting
-  or parking it is [their call](/guide/review-and-publication).
+  a reason. An already-assigned CVE ID goes back to the pool, or the Point
+  of Contact rejects it at MITRE. That is
+  [their call](/guide/review-and-publication).
