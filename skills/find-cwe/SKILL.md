@@ -46,7 +46,7 @@ Check the name, description, and consequences against the vulnerability. If it d
 
 ## Output
 
-Report the chosen CWE (id + name) and why it fits. Then, in the `/new-cve` flow, land it on the case (payload is the **id only** — no name):
+Report the chosen CWE (id + name) and why it fits. Then, in the `/new-case` flow, land it on the case (payload is the **id only** — no name):
 
 ```
 mcp__varsel__propose_weakness(input: {
