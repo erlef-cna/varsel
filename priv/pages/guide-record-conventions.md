@@ -38,7 +38,8 @@ Style rules, applied to every prose field:
 - Cut hedges, intensifiers, and background a security reader already has.
 
 Varsel renders both the plain-text and the HTML form of each prose field from
-the markdown, so write markdown once and check both in the preview.
+the markdown, so write markdown once and check both on the case's **CVE**
+tab.
 
 ## CVSS
 
@@ -141,9 +142,10 @@ ruled-out alternatives, dead ends. It is never published.
 ## Verifying Before Review
 
 Before sending a case to review, refresh the
-[derivation](/guide/affected-versions), open the preview, and clear
-everything it flags: publish blockers are hard stops, and the built-in
-validation (CVE schema, cvelint, and the hex.pm package check) must pass.
-Then cross-check the record against the vendor advisory one last time:
+[derivation](/guide/affected-versions), open the case's **Publication** tab,
+and clear everything it flags: publish blockers are hard stops, and the
+built-in validation (CVE schema, cvelint, and the hex.pm package check) must
+pass. Then cross-check the rendered record on the **CVE** tab against the
+vendor advisory one last time:
 version ranges, credits including pending ones, and any `TODO` the advisory
 has since resolved.

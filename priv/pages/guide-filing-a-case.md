@@ -68,10 +68,11 @@ path from there to a published CVE.
 
 5. **Verify**
 
-   Open the preview and clear everything it flags: publish blockers are
-   hard stops, and the built-in validation (CVE schema, cvelint, hex.pm
-   package check) must pass. Then cross-check the record against the
-   advisory one last time: ranges, credits, resolved `TODO`s.
+   Open the case's **Publication** tab and clear everything it flags:
+   publish blockers are hard stops, and the built-in validation (CVE schema,
+   cvelint, hex.pm package check) must pass. Then cross-check the rendered
+   record on the **CVE** tab against the advisory one last time: ranges,
+   credits, resolved `TODO`s.
 
 6. **Take a CVE ID and hand it to review**
 

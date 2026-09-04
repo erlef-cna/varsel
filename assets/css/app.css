@@ -349,7 +349,7 @@
 }
 
 /* The page header's rows name the page in turn — eyebrow, title, subtitle,
-   meta — with the actions beside them, settled against the band's foot. On a
+   meta — with the actions at the band's foot, beside the meta row. On a
    narrow screen the areas collapse into one column and the actions come last.
    Rows are `auto` so an absent slot takes no space. */
 .page-header {
@@ -381,13 +381,11 @@
   margin-top: 0.75rem;
 }
 
-/* Beside the naming rows, but sharing the width with them: a long row of
-   actions wraps rather than sizing its own column to a single line. */
 @media (width >= 40rem) {
   .page-header {
     grid-template-areas:
-      "eyebrow  actions"
-      "title    actions"
+      "eyebrow  eyebrow"
+      "title    title"
       "subtitle actions"
       "meta     actions";
     grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
@@ -400,7 +398,7 @@
 }
 
 /* Past the page's own measure there is room to spare, so the actions take
-   what they need on one line and the naming rows keep the rest. */
+   what they need on one line and the meta keeps the rest. */
 @media (width >= 72rem) {
   .page-header {
     grid-template-columns: minmax(0, 1fr) auto;

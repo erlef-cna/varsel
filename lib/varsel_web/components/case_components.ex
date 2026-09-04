@@ -4,15 +4,18 @@
 
 defmodule VarselWeb.CaseComponents do
   @moduledoc """
-  Components of the case workspace: the lifecycle stepper, the section rail
-  with readiness markers, the unified activity feed, and rendered case
-  markdown.
+  Components of the case pages: the header every tab shares, the lifecycle
+  stepper, the section rail with readiness markers, the unified activity
+  feed, and rendered case markdown.
   """
 
   use Phoenix.Component
 
   import Phoenix.HTML, only: [raw: 1]
-  import VarselWeb.CoreComponents, only: [code_block: 1, mono_chip: 1]
+
+  import VarselWeb.CoreComponents,
+    only: [code_block: 1, copy_button: 1, mono_chip: 1, page_header: 1, scope_tab: 1]
+
   import VarselWeb.UserComponents, only: [avatar_disc: 1, user_name: 1]
 
   alias Phoenix.LiveView.JS
@@ -20,6 +23,67 @@ defmodule VarselWeb.CaseComponents do
   alias Varsel.Cases.WordDiff
 
   @lifecycle [draft: "Draft", review: "Review", approved: "Approved", published: "Published"]
+
+  @doc """
+  Renders the band every case tab shares: the CVE ID, the title, the
+  lifecycle stepper, the actions, and the tabs that lead to the other pages
+  of the case.
+  """
+  attr :case_record, :map,
+    required: true,
+    doc: "needs `:cve_id`, `:title`, `:inserted_at` and `:state`"
+
+  attr :public_href, :string,
+    default: nil,
+    doc: "the public CVE page, once the record is published"
+
+  attr :tabs, :list,
+    required: true,
+    doc: "maps of `:id`, `:label` and `:navigate`, in display order"
+
+  attr :active, :atom, required: true, doc: "the `:id` of the tab this page is"
+
+  slot :actions, doc: "the lifecycle actions and anything else the tab offers"
+
+  def case_header(assigns) do
+    ~H"""
+    <.page_header>
+      <:eyebrow>
+        Case
+        <span :if={@case_record.cve_id} class="font-mono">
+          ·
+          <.link
+            :if={@public_href}
+            href={@public_href}
+            title="View the published CVE page"
+            class="link link-hover"
+          >{@case_record.cve_id}</.link>
+          <span :if={is_nil(@public_href)}>{@case_record.cve_id}</span>
+        </span>
+        <.copy_button
+          :if={@case_record.cve_id}
+          value={@case_record.cve_id}
+          label={"Copy #{@case_record.cve_id}"}
+          class="align-text-bottom"
+        />
+        <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
+        <span class="text-base-content/50">
+          · draft opened {Calendar.strftime(@case_record.inserted_at, "%b %-d, %Y")}
+        </span>
+      </:eyebrow>
+      <:title>{@case_record.title || "Untitled case"}</:title>
+      <:meta>
+        <.lifecycle_stepper state={@case_record.state} />
+        <div class="flex items-center gap-4 text-sm mt-3">
+          <.link :for={tab <- @tabs} navigate={tab.navigate}>
+            <.scope_tab active?={tab.id == @active} label={tab.label} />
+          </.link>
+        </div>
+      </:meta>
+      <:actions :if={@actions != []}>{render_slot(@actions)}</:actions>
+    </.page_header>
+    """
+  end
 
   @doc """
   Renders the case lifecycle as a stepper: done steps ✓, the current step
