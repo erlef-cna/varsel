@@ -235,6 +235,7 @@ defmodule Varsel.Cases do
       define :list_case_invites, action: :read
       define :invite_to_case, action: :invite
       define :withdraw_case_invite, action: :withdraw
+      define :send_case_invite_email, action: :send_email
       define :list_case_invites_for_identity, action: :for_identity, args: [:strategy, :username]
     end
 

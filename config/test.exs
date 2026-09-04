@@ -67,6 +67,10 @@ config :varsel,
     repo_verify_origin: false
   },
   github_api: [plug: {Req.Test, Varsel.Accounts.GitHub}],
+  hex_api: [plug: {Req.Test, Varsel.HexPm}],
+  # hexpm's dev fixture key, which its test config pins under this kid.
+  hex_signing_key:
+    ~s({"crv":"P-256","d":"2jjObl1K0ZWiDxXdm5TXO2jDrnbNNuCeguEfO3SePkk","kid":"varsel-test","kty":"EC","x":"E34oPnnGyf9799k058t0zBpEo6cMDYDaFmmEEt2ePLw","y":"ajZ6c2ekFLfW1H-YBYlJKcKXpnfyu88FF2_PoewQCCU"}),
   cwe_catalog: [plug: {Req.Test, Varsel.CWE.Weakness}],
   capec_catalog: [plug: {Req.Test, Varsel.CAPEC.AttackPattern}],
   otp_versions_table: [plug: {Req.Test, Varsel.Cases.Derivation.OtpVersionsTable}],

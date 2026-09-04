@@ -8,16 +8,28 @@ defmodule Varsel.Accounts.ClaimCaseInvitesTest do
   alias Varsel.Accounts.GitHub
   alias Varsel.Cases
   alias Varsel.Fixtures
+  alias Varsel.HexPm
 
   setup do
-    Application.put_env(:varsel, :hex_stub_users, ["alice"])
-    on_exit(fn -> Application.delete_env(:varsel, :hex_stub_users) end)
+    Req.Test.stub(HexPm, fn conn ->
+      case conn.path_info do
+        ["api", "users", "alice", "contact"] ->
+          Req.Test.json(conn, %{
+            "username" => "alice",
+            "name" => "alice",
+            "email" => "alice@example.com"
+          })
+
+        _unknown ->
+          Plug.Conn.send_resp(conn, 404, "{}")
+      end
+    end)
 
     Req.Test.stub(GitHub, fn conn ->
       login = conn.request_path |> Path.basename() |> URI.decode() |> String.downcase()
 
       if login in ["newcomer", "octocat"] do
-        Req.Test.json(conn, %{"login" => login})
+        Req.Test.json(conn, %{"login" => login, "email" => "#{login}@example.com"})
       else
         Plug.Conn.send_resp(conn, 404, "{}")
       end

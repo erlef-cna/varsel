@@ -189,6 +189,7 @@ jobs:
           MITRE_CVE_API_KEY: ${{ secrets.MITRE_CVE_API_KEY }}
           OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
           OAUTH_HEX_CLIENT_SECRET: ${{ secrets.OAUTH_HEX_CLIENT_SECRET }}
+          HEX_SIGNING_KEY: ${{ secrets.HEX_SIGNING_KEY }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           TOKEN_SIGNING_SECRET: ${{ secrets.TOKEN_SIGNING_SECRET }}
@@ -205,6 +206,7 @@ jobs:
           add MITRE_CVE_API_KEY "${MITRE_CVE_API_KEY}"
           add GITHUB_CLIENT_SECRET "${OAUTH_GITHUB_CLIENT_SECRET}"
           add HEX_CLIENT_SECRET "${OAUTH_HEX_CLIENT_SECRET}"
+          add HEX_SIGNING_KEY "${HEX_SIGNING_KEY}"
           add SMTP_USER "${SMTP_USER}"
           add SMTP_PASSWORD "${SMTP_PASSWORD}"
           if [ "${#pairs[@]}" -gt 0 ]; then

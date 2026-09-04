@@ -398,7 +398,9 @@ claims:
 - **Secrets at rest:** OAuth client secrets, GitHub tokens, and the
   `report`/case data are protected by DB access control; a Cloak/AES-GCM
   vault (`CLOAK_KEY`) is configured for `ash_cloak`-encrypted fields
-  (`runtime.exs`).
+  (`runtime.exs`). `HEX_SIGNING_KEY` is the private key that signs Varsel's
+  own requests to hex.pm and is held by the environment only
+  (`service_token.ex`).
 
 **What the app does to its host (side-effect inventory):**
 
@@ -411,7 +413,10 @@ claims:
 - **Spawns a subprocess** — yes: the `cvelint` binary, run directly with a
   fixed argument list and fed the CVE JSON on its stdin (`cvelint.ex`).
 - **Sends email** — yes, to any user's `notification_email` via SMTP, gated by
-  that user's own per-kind and delivery-mode preferences. (`emails.ex`)
+  that user's own per-kind and delivery-mode preferences, and one invite email
+  per case invite to a person with no account, at the address GitHub or hex.pm
+  reports for the handle or, when the provider lists none, the address the
+  inviter supplies. (`emails.ex`, `resolve_contact.ex`)
 - **Writes to disk** — no. `cvelint` reads from stdin, and `exgit` and the
   catalog unzip are **in-memory** (`cvelint.ex`, `weakness.ex`, `git_repo.ex`).
 
@@ -461,6 +466,7 @@ from controlling only its size.
 | `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The resulting notification emails are content-free (link only), so the payload never leaves the authenticated console. |
 | `submit_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free notification emails as a web report. |
 | `submit_from_hex` | `reporter` / `maintainers` (`name`, `username`, `email`) | data | **Yes — same** | `report_participants` rows. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact. A `username` later matches a hex sign-in and grants that account the participant row (§8) |
+| `Case.grant_access` / `CaseInvite.invite` | `email` | data | **Yes — POC / assigned supporter only** | One outbound invite email to that address, accepted only when the handle's provider lists no address for the account and refused when it lists a different one. One email per address per case (`resolve_contact.ex`) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
 | `VersionEvent` | `commit_sha` | data | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
@@ -545,6 +551,7 @@ a trusted integration partner.
 | Sitemap XML | Crawlers | **Yes** — same as the feeds: an XML tree, encoded (`Saxy`). The host is the configured `Endpoint.url()`, not the request's (`sitemap_controller.ex`) | — |
 | `avatar_url` on a user | Browser `img` | Public field, deliberately. With a linked GitHub account it is that account's picture; otherwise a Gravatar URL keyed on the MD5 of `notification_email`, which lets anyone who can read the row test a guess at that address (§9) (`user.ex`) | — |
 | Notification emails (immediate + digest) | Plain-text mail | Yes — `text_body`, fixed headers, and **content-free**: each carries only the event kind and a link to the authenticated console, never case or report content, since email offers no encryption we can rely on end to end (`emails.ex`) | — |
+| Case invite email | Plain-text mail to a person with no account | Yes — same shape: the provider handle the invite names and a sign-in link, no case content and no inviter (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
 
 Every markdown/HTML render sink sanitizes (ammonia allow-list) before `raw/1`,
@@ -875,8 +882,12 @@ none of the authorization properties, by construction rather than by defect.
    Writing them is confined to the sending system's own actor and to POCs. A
    reporter who could name maintainers would be writing the record that later
    grants case access.
+   A case invite's `email` is the same kind of data and is a POC-only field:
+   an assigned supporter reads the invite and its email status, never the
+   address (`case_invite.ex`).
    - *Violation symptom:* a non-POC reads a `report_participants` row by any
-     route, or a caller attaches participants through `:submit`.
+     route, reads a `case_invites.email` value, or a caller attaches
+     participants through `:submit`.
    - *Severity:* `moderate` (third-party PII disclosure).
    - (`report_participant.ex`, `vulnerability_report.ex`)
 
@@ -1158,6 +1169,13 @@ means the **CNA operator/deployer**, and — for the last item only — anyone
    key-discovery endpoint today, so a key change there is a coordinated
    config change here. hex.pm must also be pointed at the same URL this
    deployment serves, since the token's audience is checked against it.
+7b. **Keep `HEX_SIGNING_KEY` to this deployment, and pin only its public
+   half at hex.pm.** hex.pm answers any request signed with that key with
+   the primary email address of the named account, hidden or not, so whoever
+   holds the key can ask for any hex.pm user's address. Unset means the
+   lookup fails closed. Rotation is manual on both sides, as for 7a:
+   `mix generate_hex_service_key` makes a pair, and the public half goes
+   into hex.pm's pinned set under a new `kid` before the old one leaves it.
 8. **API consumers: escape the markdown and HTML fields before rendering
    them.** The JSON API serves stored author content as written; Varsel
    sanitizes at its own render sinks, not at rest (§9).
