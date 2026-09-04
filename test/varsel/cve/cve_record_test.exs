@@ -8,6 +8,7 @@ defmodule Varsel.CVE.CveRecordTest do
   import ExUnit.CaptureLog
 
   alias Ash.Error.Changes.StaleRecord
+  alias Ash.Error.Forbidden
   alias Ash.Error.Invalid
   alias Varsel.CVE.CveRecord
   alias Varsel.CVE.MitreCveApi
@@ -666,6 +667,46 @@ defmodule Varsel.CVE.CveRecordTest do
 
       assert Exception.message(error) =~ "CVE record is not valid"
       assert Ash.get!(CveRecord, record.id, authorize?: false).state == :published
+    end
+  end
+
+  describe "release" do
+    setup do
+      %{poc: Fixtures.register_user("release_poc", :poc)}
+    end
+
+    test "returns a draft with no case to the pool", %{poc: poc} do
+      record = draft_record()
+
+      released = Varsel.CVE.release_cve_record!(record, %{}, actor: poc)
+
+      assert released.state == :reserved
+      assert [%{id: id}] = Varsel.CVE.available_cve_records!(@year, actor: poc)
+      assert id == record.id
+    end
+
+    test "is refused while a case holds the ID", %{poc: poc} do
+      record = reserved_record()
+      case_record = Fixtures.open_case(poc)
+      Varsel.Cases.assign_case_cve_id!(case_record, %{cve_record_id: record.id}, actor: poc)
+      record = Ash.reload!(record, authorize?: false)
+
+      refute Varsel.CVE.can_release_cve_record?(poc, record)
+      assert {:error, %Forbidden{}} = Varsel.CVE.release_cve_record(record, %{}, actor: poc)
+      assert Ash.reload!(record, authorize?: false).state == :draft
+    end
+
+    test "only a draft returns to the pool", %{poc: poc} do
+      assert {:error, _} = Varsel.CVE.release_cve_record(reserved_record(), %{}, actor: poc)
+      assert {:error, _} = Varsel.CVE.release_cve_record(published_record(), %{}, actor: poc)
+    end
+
+    test "a supporter may not release" do
+      Fixtures.register_user("release_first_poc", :poc)
+      supporter = Fixtures.register_user("release_supporter", :supporter)
+
+      assert {:error, %Forbidden{}} =
+               Varsel.CVE.release_cve_record(draft_record(), %{}, actor: supporter)
     end
   end
 

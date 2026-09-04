@@ -290,6 +290,22 @@ defmodule VarselWeb.CveListLive do
     {:noreply, socket}
   end
 
+  def handle_event("return_to_pool", %{"id" => record_id}, socket) do
+    actor = socket.assigns.current_user
+    record = Enum.find(socket.assigns.cve_records.results, &(&1.id == record_id))
+
+    socket =
+      case CVE.release_cve_record(record, %{}, actor: actor) do
+        {:ok, released} ->
+          put_flash(socket, :info, "Returned #{released.cve_id} to the pool.")
+
+        {:error, error} ->
+          put_flash(socket, :error, "Could not return to the pool: #{errors_to_string(error)}")
+      end
+
+    {:noreply, socket}
+  end
+
   def handle_event("adopt", %{"id" => record_id}, socket) do
     actor = socket.assigns.current_user
 
@@ -489,6 +505,14 @@ defmodule VarselWeb.CveListLive do
     match?(nil, Map.get(record, :case)) and record.state in @adoptable_states
   end
 
+  # The `:release` policy is the authority. Asked in two halves so the table
+  # does not run a query per row: the strict checks decide without a query,
+  # and the row itself answers the filter check on its case.
+  defp releasable?(actor, record) do
+    match?(nil, Map.get(record, :case)) and
+      CVE.can_release_cve_record?(actor, record, %{}, run_queries?: false)
+  end
+
   # P3's search feedback reads as a sentence ("14 match “ssh”"), so the
   # verb agrees with the count rather than pluralizing a noun.
   defp match_summary(count, query) do
@@ -663,6 +687,16 @@ defmodule VarselWeb.CveListLive do
                       >
                         Edit
                       </.link>
+                      <button
+                        :if={releasable?(@current_user, record)}
+                        type="button"
+                        class="text-xs font-semibold text-base-content/60"
+                        title="Return to pool"
+                        phx-click="return_to_pool"
+                        phx-value-id={record.id}
+                      >
+                        Release
+                      </button>
                       <button
                         :if={
                           CVE.can_reject_cve_record?(@current_user, record) and

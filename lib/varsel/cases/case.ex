@@ -343,17 +343,15 @@ defmodule Varsel.Cases.Case do
     update :close do
       description """
       Terminally closes a case that will not (or no longer) result in a
-      published CVE. If a CVE ID is already assigned, the caller must either
-      reject the ID at MITRE (reject_cve_id: true) or explicitly acknowledge
-      parking it (acknowledge_parked_cve_id: true) — an assigned ID cannot
-      silently return to the pool.
+      published CVE. A drafted CVE ID returns to the pool, unless the caller
+      rejects it at MITRE (reject_cve_id: true). A published record stays
+      linked to the case.
       """
 
       accept [:closed_reason]
       require_atomic? false
 
       argument :reject_cve_id, :boolean, default: false
-      argument :acknowledge_parked_cve_id, :boolean, default: false
 
       change transition_state(:closed)
       change Varsel.Cases.Case.Changes.HandleCveRecordOnClose

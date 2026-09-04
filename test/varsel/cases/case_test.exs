@@ -461,18 +461,30 @@ defmodule Varsel.Cases.CaseTest do
       assert case_record.closed_reason == "not a vulnerability"
     end
 
-    test "requires an explicit decision when a CVE ID is assigned", %{poc: poc} do
+    test "closing returns a drafted CVE ID to the pool", %{poc: poc} do
       year = Date.utc_today().year
-      Fixtures.reserved_cve_record("CVE-#{year}-11120")
+      record = Fixtures.reserved_cve_record("CVE-#{year}-11120")
 
       case_record = Fixtures.open_case(poc)
       case_record = Cases.assign_case_cve_id!(case_record, %{}, actor: poc)
+      assert case_record.cve_record_id == record.id
 
-      assert {:error, error} = Cases.close_case(case_record, %{}, actor: poc)
-      assert Exception.message(error) =~ "reject_cve_id"
+      closed = Cases.close_case!(case_record, %{}, actor: poc)
 
-      case_record = Cases.close_case!(case_record, %{acknowledge_parked_cve_id: true}, actor: poc)
-      assert case_record.state == :closed
+      assert closed.state == :closed
+      assert closed.cve_record_id == nil
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :reserved
+    end
+
+    test "closing keeps a published record linked", %{poc: poc} do
+      year = Date.utc_today().year
+      record = Fixtures.published_cve_record("CVE-#{year}-11122", "Legacy record")
+      case_record = Cases.adopt_cve_record!(%{cve_record_id: record.id}, actor: poc)
+
+      closed = Cases.close_case!(case_record, %{}, actor: poc)
+
+      assert closed.cve_record_id == record.id
+      assert Ash.get!(CveRecord, record.id, authorize?: false).state == :published
     end
 
     test "reject_cve_id burns the ID at MITRE", %{poc: poc} do

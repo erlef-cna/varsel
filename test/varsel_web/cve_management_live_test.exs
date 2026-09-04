@@ -364,6 +364,42 @@ defmodule VarselWeb.VarselLiveTest do
     refute html =~ ~s(id="withheld-panel")
   end
 
+  test "a draft row with no open case can return to the pool", %{conn: conn} do
+    poc = register("poc", :poc)
+
+    record =
+      "CVE-#{@year}-1015"
+      |> reserved_record()
+      |> Ash.update!(%{}, action: :assign, authorize?: false)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    lv
+    |> element(
+      ~s{button[phx-click="return_to_pool"][phx-value-id="#{record.id}"][title="Return to pool"]},
+      "Release"
+    )
+    |> render_click()
+
+    assert Ash.get!(CveRecord, record.id, authorize?: false).state == :reserved
+
+    html = render(lv)
+    assert html =~ "Returned CVE-#{@year}-1015 to the pool."
+    refute has_element?(lv, ~s{button[phx-click="return_to_pool"]})
+  end
+
+  test "a draft row held by a case cannot return to the pool", %{conn: conn} do
+    poc = register("poc", :poc)
+    record = reserved_record("CVE-#{@year}-1016")
+    case_record = Varsel.Cases.open_case!(%{title: "Holds the ID"}, actor: poc)
+    Varsel.Cases.assign_case_cve_id!(case_record, %{cve_record_id: record.id}, actor: poc)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cves")
+
+    assert has_element?(lv, "tbody td", "Draft")
+    refute has_element?(lv, ~s{button[phx-click="return_to_pool"]})
+  end
+
   test "a draft row is rejectable inline from the records table", %{conn: conn} do
     poc = register("poc", :poc)
 

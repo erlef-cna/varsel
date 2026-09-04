@@ -135,6 +135,7 @@ defmodule Varsel.CVE do
       define :list_all_cve_records, action: :list_all
       define :get_cve_record, action: :read, get_by: [:id]
       define :assign_cve_record, action: :assign
+      define :release_cve_record, action: :release
       define :withhold_cve_record, action: :withhold
       define :request_publish_cve_record, action: :request_publish
       define :update_cve_record, action: :update
