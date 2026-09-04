@@ -236,6 +236,11 @@ defmodule Varsel.Cases.Case do
       identity for, an invite waiting for them when it is not. Which one the
       caller gets back is the only difference they see — they asked to give a
       person access, not to look up who exists.
+
+      An invite emails the person once per case, at the public address on
+      their GitHub profile or the primary address hex.pm holds. Without the
+      hex.pm lookup, the public address on the hex.pm profile stands in. The
+      email names the case only by a sign-in link.
       """
 
       accept []
@@ -243,6 +248,24 @@ defmodule Varsel.Cases.Case do
 
       argument :strategy, Varsel.Cases.CaseInvite.Strategy, allow_nil?: false
       argument :username, :string, allow_nil?: false
+
+      argument :email, :string do
+        description """
+        The address to email when the provider lists none for the account.
+        Refused when the provider lists a different one. Give only an address
+        you found at a trusted source for this person.
+        """
+      end
+
+      argument :skip_email, :boolean do
+        default false
+
+        description """
+        Send no invite email. Accepted only when the provider lists no
+        address for the account. Use it when no trusted address for the
+        person can be found.
+        """
+      end
 
       change Varsel.Cases.Case.Changes.GrantAccess
     end

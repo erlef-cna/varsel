@@ -124,12 +124,6 @@ config :varsel, VarselWeb.Endpoint,
     ]
   ]
 
-# hexpm's dev fixture key (test/fixtures/varsel_private.pem in its repository),
-# which its dev config pins under this kid.
-config :varsel,
-       :hex_signing_key,
-       ~s({"crv":"P-256","d":"2jjObl1K0ZWiDxXdm5TXO2jDrnbNNuCeguEfO3SePkk","kid":"varsel-dev","kty":"EC","x":"E34oPnnGyf9799k058t0zBpEo6cMDYDaFmmEEt2ePLw","y":"ajZ6c2ekFLfW1H-YBYlJKcKXpnfyu88FF2_PoewQCCU"})
-
 config :varsel,
   token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F",
   oauth2_issuer_url: "http://localhost:4000",

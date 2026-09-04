@@ -16,9 +16,11 @@ defmodule Varsel.Notifications.Emails do
   import Swoosh.Email
 
   alias Varsel.Accounts.User
+  alias Varsel.Cases.CaseInvite
   alias Varsel.Mailer
   alias Varsel.Notifications.Kind
   alias Varsel.Notifications.Notification
+  alias VarselWeb.SignInPath
 
   @doc """
   Builds the one-event notification email for `user`.
@@ -80,6 +82,45 @@ defmodule Varsel.Notifications.Emails do
 
     :ok
   end
+
+  @doc """
+  Builds the email that tells someone a case invite names their provider
+  account.
+  """
+  @spec invite_email(CaseInvite.t()) :: Swoosh.Email.t()
+  def invite_email(invite) do
+    new()
+    |> to(to_string(invite.email))
+    |> from(from_address())
+    |> subject("EEF CNA: you are invited to a case")
+    |> text_body(invite_body(invite))
+  end
+
+  @doc "Delivers the invite email for `invite` to its stored address."
+  @spec deliver_invite(CaseInvite.t()) :: :ok
+  def deliver_invite(invite) do
+    {:ok, _metadata} =
+      invite
+      |> invite_email()
+      |> Mailer.deliver()
+
+    :ok
+  end
+
+  defp invite_body(invite) do
+    """
+    A coordinator at the EEF CNA invited you to work on a vulnerability case.
+
+    The invite names your #{provider_name(invite.strategy)} account "#{invite.username}". Sign in with that account to open the case:
+
+    #{VarselWeb.Endpoint.url() <> SignInPath.for(~p"/cases/#{invite.case_id}")}
+
+    This email holds no details about the case. You read them after you sign in.
+    """
+  end
+
+  defp provider_name(:github), do: "GitHub"
+  defp provider_name(:hex), do: "hex.pm"
 
   defp immediate_body(notification) do
     """

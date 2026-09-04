@@ -9,19 +9,49 @@ defmodule Varsel.Accounts.ProviderLookupTest do
   alias Varsel.HexPm
 
   describe "GitHub.user/1" do
-    test "returns the login as GitHub spells it" do
+    test "returns the login as GitHub spells it, with the public address" do
       Req.Test.stub(GitHub, fn conn ->
         assert conn.request_path == "/users/AliCe"
-        Req.Test.json(conn, %{"login" => "alice"})
+        Req.Test.json(conn, %{"login" => "alice", "email" => "alice@example.com"})
       end)
 
-      assert GitHub.user("AliCe") == {:ok, "alice"}
+      assert GitHub.user("AliCe") == {:ok, %{login: "alice", email: "alice@example.com"}}
+    end
+
+    test "a profile without a public address has a nil email" do
+      Req.Test.stub(GitHub, &Req.Test.json(&1, %{"login" => "alice", "email" => nil}))
+
+      assert GitHub.user("alice") == {:ok, %{login: "alice", email: nil}}
     end
 
     test "a missing account is not an error" do
       Req.Test.stub(GitHub, &Plug.Conn.send_resp(&1, 404, "{}"))
 
       assert GitHub.user("nobody") == :not_found
+    end
+
+    test "authenticates with the login app's client credentials when they are set" do
+      Application.put_env(:varsel, :github, client_id: "app-id", client_secret: "app-secret")
+      on_exit(fn -> Application.delete_env(:varsel, :github) end)
+
+      Req.Test.stub(GitHub, fn conn ->
+        assert Plug.Conn.get_req_header(conn, "authorization") == [
+                 "Basic #{Base.encode64("app-id:app-secret")}"
+               ]
+
+        Req.Test.json(conn, %{"login" => "alice", "email" => "alice@example.com"})
+      end)
+
+      assert {:ok, %{email: "alice@example.com"}} = GitHub.user("alice")
+    end
+
+    test "asks anonymously when the login app is not configured" do
+      Req.Test.stub(GitHub, fn conn ->
+        assert Plug.Conn.get_req_header(conn, "authorization") == []
+        Req.Test.json(conn, %{"login" => "alice", "email" => nil})
+      end)
+
+      assert {:ok, %{email: nil}} = GitHub.user("alice")
     end
   end
 
@@ -31,8 +61,8 @@ defmodule Varsel.Accounts.ProviderLookupTest do
       on_exit(fn -> Application.delete_env(:varsel, :hex_stub_users) end)
     end
 
-    test "returns the username as hex.pm spells it" do
-      assert HexPm.user("AliCe") == {:ok, "alice"}
+    test "returns the username as hex.pm spells it, without a hidden address" do
+      assert HexPm.user("AliCe") == {:ok, %{username: "alice", email: nil}}
     end
 
     test "a missing account is not an error" do

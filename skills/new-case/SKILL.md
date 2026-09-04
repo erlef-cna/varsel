@@ -312,9 +312,18 @@ As soon as you have the `case_id`, give the people who own this vulnerability ac
 with `grant_case_access(id: <case-id>, input: {strategy, username})`, one call per person. It is
 not a proposal: the server checks the handle at its provider, assigns the person when they already
 have an account here, and otherwise leaves an invite that becomes access on their first sign-in.
-This notifies the person in-app and by email, per their own notification settings, but the email
-carries no case details, only a link, so the advisory thread is still where they hear about the
-case.
+
+**An invite needs an email address.** The server takes it from the provider: the address hex.pm
+holds for the account, or the public address on the GitHub profile. The call fails with
+`lists no address for this account` when the provider has none. Then:
+
+1. Research the person's address at trusted sources only: the author email on their commits in
+   the affected repository, or a profile the person links from their provider profile. **Do not
+   assume that the same username on another service is the same person.**
+2. Found one: repeat the call with `input: {strategy, username, email}`. The address must be
+   the person's own.
+3. Found none: repeat the call with `input: {strategy, username, skip_email: true}` and tell
+   the user that this person was invited without an email.
 
 Grant access to all of:
 

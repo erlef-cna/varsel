@@ -35,7 +35,13 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
     case owner(strategy, username) do
       nil ->
         Cases.invite_to_case(
-          %{case_id: case_id, strategy: strategy, username: username},
+          %{
+            case_id: case_id,
+            strategy: strategy,
+            username: username,
+            email: Changeset.get_argument(changeset, :email),
+            skip_email: Changeset.get_argument(changeset, :skip_email)
+          },
           opts
         )
 

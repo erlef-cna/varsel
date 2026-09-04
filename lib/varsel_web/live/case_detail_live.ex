@@ -28,6 +28,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Case.Calculations.Preview.Diff
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseImpact
+  alias Varsel.Cases.CaseInvite.EmailStatus
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.ChildParams
@@ -141,6 +142,7 @@ defmodule VarselWeb.CaseDetailLive do
         child_form: nil,
         cve_picker: nil,
         people_picker?: false,
+        grant_form: nil,
         preview: nil,
         validation: nil,
         preview_open?: false,
@@ -530,7 +532,7 @@ defmodule VarselWeb.CaseDetailLive do
   ## ------------------------------------------------------------- assignments
 
   def handle_event("open_people_picker", _params, socket) do
-    {:noreply, assign(socket, :people_picker?, true)}
+    {:noreply, socket |> assign(:people_picker?, true) |> assign(:grant_form, grant_form(socket))}
   end
 
   def handle_event("cancel_people_picker", _params, socket) do
@@ -555,19 +557,20 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, socket}
   end
 
-  def handle_event("grant_by_handle", %{"strategy" => strategy, "username" => username}, socket) do
-    %{case_record: case_record, current_user: actor} = socket.assigns
-    strategy = String.to_existing_atom(strategy)
+  def handle_event("validate_grant", %{"grant" => params}, socket) do
+    {:noreply, assign(socket, :grant_form, AshPhoenix.Form.validate(socket.assigns.grant_form, params))}
+  end
 
+  def handle_event("grant_by_handle", %{"grant" => params}, socket) do
     socket =
-      case Cases.grant_case_access(case_record, strategy, username, actor: actor) do
+      case AshPhoenix.Form.submit(socket.assigns.grant_form, params: params) do
         {:ok, _case_record} ->
           socket
           |> assign(:people_picker?, false)
-          |> put_flash(:info, "#{username} added.")
+          |> put_flash(:info, "#{params["username"]} added.")
 
-        {:error, error} ->
-          put_flash(socket, :error, errors_to_string(error))
+        {:error, form} ->
+          assign(socket, :grant_form, form)
       end
 
     {:noreply, socket}
@@ -1323,6 +1326,7 @@ defmodule VarselWeb.CaseDetailLive do
       <.people_picker_modal
         :if={@people_picker?}
         assignable_users={assignable_users(@users, @case_record)}
+        grant_form={@grant_form}
       />
 
       <.cve_picker_modal
@@ -2489,9 +2493,13 @@ defmodule VarselWeb.CaseDetailLive do
           :for={invite <- @case_record.invites}
           class="flex items-center justify-between gap-2 text-base-content/60"
         >
-          <span class="flex min-w-0 items-center gap-2">
+          <span class="flex min-w-0 flex-wrap items-center gap-2">
             <span class="font-mono text-xs">{invite_handle(invite)}</span>
             <span class="badge badge-ghost badge-sm">invited</span>
+            <span class={["badge badge-sm", invite_status_class(invite.email_status)]}>
+              {EmailStatus.label(invite.email_status)}
+            </span>
+            <span :if={invite_email(invite)} class="truncate text-xs">{invite_email(invite)}</span>
           </span>
           <button
             :if={Cases.can_withdraw_case_invite?(@current_user, invite)}
@@ -2518,6 +2526,15 @@ defmodule VarselWeb.CaseDetailLive do
   defp invite_handle(%{strategy: :github, username: username}), do: "github/#{username}"
   defp invite_handle(%{strategy: :hex, username: username}), do: "hex/#{username}"
 
+  defp invite_status_class(:sent), do: "badge-success badge-outline"
+  defp invite_status_class(:pending), do: "badge-info badge-outline"
+  defp invite_status_class(:duplicate), do: "badge-ghost"
+  defp invite_status_class(:skipped), do: "badge-warning badge-outline"
+
+  # The address is a POC-only field; everyone else gets a forbidden marker.
+  defp invite_email(%{email: %Ash.CiString{} = email}), do: to_string(email)
+  defp invite_email(_invite), do: nil
+
   defp assignable_users(users, case_record) do
     Enum.reject(users, fn user ->
       Enum.any?(case_record.assignments, &(&1.user_id == user.id))
@@ -2525,6 +2542,7 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   attr :assignable_users, :list, required: true
+  attr :grant_form, Phoenix.HTML.Form, required: true
 
   defp people_picker_modal(assigns) do
     ~H"""
@@ -2547,12 +2565,54 @@ defmodule VarselWeb.CaseDetailLive do
           </div>
         </form>
 
-        <p class="text-sm text-base-content/60">
-          Someone named by their handle joins the case as soon as they sign in here.
-        </p>
-
-        <.handle_form strategy={:github} label="By GitHub username" placeholder="octocat" />
-        <.handle_form strategy={:hex} label="By hex.pm username" placeholder="alice" />
+        <.form
+          for={@grant_form}
+          id="grant-access-form"
+          phx-change="validate_grant"
+          phx-submit="grant_by_handle"
+          class="rounded-lg border border-base-300 p-3"
+        >
+          <p class="text-sm font-semibold">Someone by their handle</p>
+          <p class="mb-2 text-xs text-base-content/60">
+            They join the case as soon as they sign in here. One email with a
+            sign-in link goes to the address hex.pm holds for them, or the
+            public address on their GitHub profile.
+          </p>
+          <div class="grid grid-cols-[auto_1fr] items-start gap-2">
+            <.input
+              field={@grant_form[:strategy]}
+              type="select"
+              options={[{"GitHub", "github"}, {"hex.pm", "hex"}]}
+              class="select select-bordered select-sm"
+            >
+              <:label>Provider</:label>
+            </.input>
+            <.input
+              field={@grant_form[:username]}
+              type="text"
+              required
+              placeholder="octocat"
+              class="input input-bordered input-sm w-full font-mono"
+            >
+              <:label>Username</:label>
+            </.input>
+          </div>
+          <.input
+            field={@grant_form[:email]}
+            type="email"
+            class="input input-bordered input-sm w-full"
+          >
+            <:label>Email</:label>
+            <:description>Only when the account lists no address.</:description>
+          </.input>
+          <.input field={@grant_form[:skip_email]} type="checkbox" class="checkbox checkbox-xs">
+            <:label>Send no email</:label>
+            <:description>Only when the account lists no address and none can be found.</:description>
+          </.input>
+          <div class="flex justify-end">
+            <button type="submit" class="btn btn-eef-quiet btn-sm">Add</button>
+          </div>
+        </.form>
       </div>
 
       <:actions>
@@ -2564,27 +2624,10 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
-  attr :strategy, :atom, required: true
-  attr :label, :string, required: true
-  attr :placeholder, :string, required: true
-
-  defp handle_form(assigns) do
-    ~H"""
-    <form phx-submit="grant_by_handle" class="rounded-lg border border-base-300 p-3">
-      <input type="hidden" name="strategy" value={@strategy} />
-      <p class="text-sm font-semibold">{@label}</p>
-      <div class="mt-2 flex items-center gap-2">
-        <input
-          type="text"
-          name="username"
-          required
-          placeholder={@placeholder}
-          class="input input-bordered input-sm flex-1 font-mono"
-        />
-        <button type="submit" class="btn btn-eef-quiet btn-sm">Add</button>
-      </div>
-    </form>
-    """
+  defp grant_form(socket) do
+    socket.assigns.case_record
+    |> AshPhoenix.Form.for_update(:grant_access, as: "grant", actor: socket.assigns.current_user)
+    |> to_form()
   end
 
   # The mock's two avatar color variants, applied by assignment order (only

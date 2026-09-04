@@ -129,7 +129,9 @@ defmodule VarselWeb.McpTest do
   end
 
   test "grant_case_access replies with the case's membership, not its body", %{conn: conn} do
-    Req.Test.stub(GitHub, fn conn -> Req.Test.json(conn, %{"login" => "octocat"}) end)
+    Req.Test.stub(GitHub, fn conn ->
+      Req.Test.json(conn, %{"login" => "octocat", "email" => "octocat@example.com"})
+    end)
 
     poc = register_user("poc", :poc)
     {_api_key, plaintext} = create_api_key(poc)

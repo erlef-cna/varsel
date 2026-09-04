@@ -98,10 +98,7 @@ if config_env() != :test do
   config :varsel, :hex_intake, jwks: System.get_env("HEX_INTAKE_JWKS")
 
   # The private half of the key pair hex.pm pins for Varsel's own requests.
-  # Development keeps the key from config/dev.exs when the variable is unset.
-  if hex_signing_key = System.get_env("HEX_SIGNING_KEY") do
-    config :varsel, :hex_signing_key, hex_signing_key
-  end
+  config :varsel, :hex_signing_key, System.get_env("HEX_SIGNING_KEY")
 
   case {length(mitre_missing), config_env()} do
     {0, _env} ->

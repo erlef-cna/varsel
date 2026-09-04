@@ -90,12 +90,22 @@ defmodule Varsel.HexPm do
     end
   end
 
-  @doc "Whether a hex.pm account with this username exists, and its canonical spelling."
-  @spec user(String.t()) :: {:ok, String.t()} | :not_found
+  @typedoc """
+  A hex.pm account as its public profile shows it: the username as hex.pm
+  spells it, and the email address the account made public, `nil` when it
+  shows none.
+  """
+  @type user :: %{username: String.t(), email: String.t() | nil}
+
+  @doc "Whether a hex.pm account with this username exists, with its canonical spelling and public address."
+  @spec user(String.t()) :: {:ok, user()} | :not_found
   def user(username) when is_binary(username) do
     case :hex_api_user.get(config(), username) do
-      {:ok, {200, _headers, %{"username" => canonical}}} -> {:ok, canonical}
-      {:ok, {404, _headers, _body}} -> :not_found
+      {:ok, {200, _headers, %{"username" => canonical} = body}} ->
+        {:ok, %{username: canonical, email: body["email"]}}
+
+      {:ok, {404, _headers, _body}} ->
+        :not_found
     end
   end
 

@@ -57,6 +57,14 @@ case. Accordingly:
 - **Email addresses are never part of that.** The address hex.pm gave us is
   visible only to points of contact, and is never shown to anyone else on the
   case.
+- **An invite tells you once, by email.** When a coordinator invites you onto
+  a case by your hex.pm username, we ask hex.pm for the primary address of
+  that account and send one email with a sign-in link. That address is sent
+  even when you hide it on your public hex.pm profile. For a GitHub username
+  we use the public address on the profile. When the provider lists no
+  address, the coordinator may enter one they found for you. The invite holds
+  that address, visible to points of contact only, and drops it when you sign
+  in or the invite is withdrawn.
 - **It is deleted as soon as the report is resolved.** When a report becomes a
   case, is rejected, or is withdrawn, the contact details we were given are
   erased. What remains is the case and the people who joined it.

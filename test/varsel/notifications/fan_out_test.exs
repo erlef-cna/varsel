@@ -188,7 +188,7 @@ defmodule Varsel.Notifications.FanOutTest do
     test "the invite-claim path notifies the claimer" do
       Req.Test.stub(Varsel.Accounts.GitHub, fn conn ->
         login = conn.request_path |> Path.basename() |> URI.decode() |> String.downcase()
-        Req.Test.json(conn, %{"login" => login})
+        Req.Test.json(conn, %{"login" => login, "email" => "#{login}@example.com"})
       end)
 
       poc = Fixtures.register_user("fanout_invite_poc", :poc)

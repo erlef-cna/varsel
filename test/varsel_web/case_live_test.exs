@@ -11,6 +11,7 @@ defmodule VarselWeb.CaseLiveTest do
   alias Varsel.Cases
   alias Varsel.Cases.Derivation.Emit
   alias Varsel.Fixtures
+  alias Varsel.HexPm
   alias Varsel.Notifications
 
   defp log_in(conn, user) do
@@ -1687,13 +1688,30 @@ defmodule VarselWeb.CaseLiveTest do
 
   describe "adding someone to a case" do
     setup do
-      Application.put_env(:varsel, :hex_stub_users, ["alice"])
-      on_exit(fn -> Application.delete_env(:varsel, :hex_stub_users) end)
+      Req.Test.stub(HexPm, fn conn ->
+        case conn.path_info do
+          ["api", "users", "alice", "contact"] ->
+            Req.Test.json(conn, %{
+              "username" => "alice",
+              "name" => "alice",
+              "email" => "alice@example.com"
+            })
+
+          _unknown ->
+            Plug.Conn.send_resp(conn, 404, "{}")
+        end
+      end)
 
       Req.Test.stub(Varsel.Accounts.GitHub, fn conn ->
         case conn.request_path |> Path.basename() |> URI.decode() |> String.downcase() do
-          "octocat" -> Req.Test.json(conn, %{"login" => "octocat"})
-          _unknown -> Plug.Conn.send_resp(conn, 404, "{}")
+          "octocat" ->
+            Req.Test.json(conn, %{"login" => "octocat", "email" => "octocat@example.com"})
+
+          "hermit" ->
+            Req.Test.json(conn, %{"login" => "hermit", "email" => nil})
+
+          _unknown ->
+            Plug.Conn.send_resp(conn, 404, "{}")
         end
       end)
 
@@ -1704,6 +1722,10 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/cases/#{case_record.id}")
       render_click(lv, "open_people_picker")
       lv
+    end
+
+    defp grant(lv, params) do
+      lv |> form("#grant-access-form", grant: params) |> render_submit()
     end
 
     test "a POC picks from the user list", %{conn: conn, poc: poc, supporter: supporter} do
@@ -1728,8 +1750,7 @@ defmodule VarselWeb.CaseLiveTest do
       modal = lv |> element("#people-picker-modal") |> render()
 
       refute modal =~ "Pick a user…"
-      assert modal =~ "By GitHub username"
-      assert modal =~ "By hex.pm username"
+      assert modal =~ "Someone by their handle"
     end
 
     test "a GitHub handle with an account here is assigned outright", %{conn: conn, poc: poc} do
@@ -1737,9 +1758,7 @@ defmodule VarselWeb.CaseLiveTest do
       case_record = Fixtures.open_case(poc)
       lv = open_picker(conn, poc, case_record)
 
-      lv
-      |> element("#people-picker-modal form[phx-submit='grant_by_handle']", "By GitHub username")
-      |> render_submit(%{"strategy" => "github", "username" => "octocat"})
+      grant(lv, %{"strategy" => "github", "username" => "octocat"})
 
       assert case_record |> assignments(poc) |> Enum.any?(&(&1.user_id == invitee.id))
     end
@@ -1748,9 +1767,7 @@ defmodule VarselWeb.CaseLiveTest do
       case_record = Fixtures.open_case(poc)
       lv = open_picker(conn, poc, case_record)
 
-      lv
-      |> element("#people-picker-modal form[phx-submit='grant_by_handle']", "By GitHub username")
-      |> render_submit(%{"strategy" => "github", "username" => "octocat"})
+      grant(lv, %{"strategy" => "github", "username" => "octocat"})
 
       assert render(lv) =~ "github/octocat"
       assert [invite] = Cases.list_case_invites!(actor: poc)
@@ -1761,26 +1778,82 @@ defmodule VarselWeb.CaseLiveTest do
       case_record = Fixtures.open_case(poc)
       lv = open_picker(conn, poc, case_record)
 
-      lv
-      |> element("#people-picker-modal form[phx-submit='grant_by_handle']", "By hex.pm username")
-      |> render_submit(%{"strategy" => "hex", "username" => "alice"})
+      grant(lv, %{"strategy" => "hex", "username" => "alice"})
 
       assert render(lv) =~ "hex/alice"
     end
 
-    test "an unknown handle is reported, and nothing is added", %{conn: conn, poc: poc} do
+    test "the invite shows its email status, and the address to a POC", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
       lv = open_picker(conn, poc, case_record)
 
-      html =
-        lv
-        |> element(
-          "#people-picker-modal form[phx-submit='grant_by_handle']",
-          "By GitHub username"
-        )
-        |> render_submit(%{"strategy" => "github", "username" => "ghost"})
+      grant(lv, %{"strategy" => "github", "username" => "octocat"})
+
+      html = render(lv)
+      assert html =~ "email queued"
+      assert html =~ "octocat@example.com"
+    end
+
+    test "a supporter sees the status but not the address", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      Cases.invite_to_case!(
+        %{case_id: case_record.id, strategy: :github, username: "octocat"},
+        actor: poc
+      )
+
+      {:ok, _lv, html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "email queued"
+      refute html =~ "octocat@example.com"
+    end
+
+    test "a missing address is reported on the email field, and the inviter can give one", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      html = grant(lv, %{"strategy" => "github", "username" => "hermit"})
+
+      assert lv |> element("#grant-access-form") |> render() =~ "GitHub lists no address"
+      assert html =~ "GitHub lists no address"
+      assert Cases.list_case_invites!(actor: poc) == []
+
+      grant(lv, %{"strategy" => "github", "username" => "hermit", "email" => "hermit@example.org"})
+
+      assert render(lv) =~ "hermit@example.org"
+    end
+
+    test "the inviter can skip the email when the account lists no address", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      grant(lv, %{"strategy" => "github", "username" => "hermit", "skip_email" => "true"})
+
+      assert render(lv) =~ "no email, skipped"
+    end
+
+    test "an unknown handle is reported on the username field, and nothing is added", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      html = grant(lv, %{"strategy" => "github", "username" => "ghost"})
 
       assert html =~ "is not a GitHub account"
+      assert lv |> element("#grant-access-form") |> render() =~ "is not a GitHub account"
       assert Cases.list_case_invites!(actor: poc) == []
     end
 

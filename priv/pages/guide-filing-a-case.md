@@ -53,11 +53,18 @@ path from there to a published CVE.
    GitHub or Hex.pm handle. Someone without an account gets an invite that
    becomes access on their first sign-in. Assigning someone notifies them
    in-app and by email, per their [notification
-   settings](/settings/notifications). Notification emails never carry case
-   details, only a link, so the advisory thread is still where they hear what
-   changed. The same holds for comments and proposals: keep anything
-   time-sensitive on the advisory thread and use case comments for what
-   should stay on record with the case.
+   settings](/settings/notifications). An invited person gets one email with
+   a sign-in link, at the primary address Hex.pm holds for them or the
+   public address on their GitHub profile. When the provider lists no
+   address, enter one you found at a trusted source, such as the author
+   email on their commits in the affected repository. When you find no
+   trusted address, tick *Send no email* and reach the person another way.
+   The people panel shows what became of each invite email.
+   Notification emails never carry case details, only a link, so the
+   advisory thread is still where they hear what changed. The same holds for
+   comments and proposals: keep anything time-sensitive on the advisory
+   thread and use case comments for what should stay on record with the
+   case.
 
 5. **Verify**
 
