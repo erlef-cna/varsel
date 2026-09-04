@@ -7,6 +7,7 @@ defmodule Varsel.Cases.DerivationFreshnessTest do
 
   alias Varsel.Cases
   alias Varsel.Cases.DerivationFreshness
+  alias Varsel.Cases.Projection
   alias Varsel.Fixtures
   alias Varsel.Test.StubGitBackend
 
@@ -102,6 +103,31 @@ defmodule Varsel.Cases.DerivationFreshnessTest do
     )
 
     assert DerivationFreshness.stale?(reload(case_record, poc))
+  end
+
+  test "a proposed fact leaves a refreshed package fresh", %{poc: poc} do
+    {case_record, package} = package_with_intro(poc, fixed: true)
+    {:ok, _} = Cases.refresh_case_derivation(case_record, actor: poc)
+
+    Cases.propose_version_event!(
+      %{case_id: case_record.id, target_id: package.id, event: :fixed, version: "3.0.0"},
+      actor: poc
+    )
+
+    [projected] =
+      case_record.id
+      |> Cases.get_case!(
+        load: [:proposals, affected_packages: [:channels, :version_events]],
+        actor: poc
+      )
+      |> Projection.project()
+      |> Map.fetch!(:case)
+      |> Map.fetch!(:affected_packages)
+
+    assert [%{updated_at: %DateTime{}}, %{updated_at: %DateTime{}}, %{updated_at: nil}] =
+             projected.version_events
+
+    refute DerivationFreshness.stale?(projected)
   end
 
   test "missing_versions? is true when a fresh derivation yields nothing", %{poc: poc} do
