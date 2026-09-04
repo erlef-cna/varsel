@@ -69,6 +69,7 @@ defmodule Varsel.Cases.DerivationFreshness do
   defp newest_fact(package) do
     [package | package.channels ++ package.version_events]
     |> Enum.map(& &1.updated_at)
+    |> Enum.reject(&is_nil/1)
     |> Enum.max(DateTime)
   end
 end
