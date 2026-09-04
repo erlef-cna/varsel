@@ -55,7 +55,7 @@ Check the name and description against the actual attack technique. To confirm t
 
 ## Output
 
-Report the chosen CAPEC(s) (id + name) and why each fits. Then, in the `/new-cve` flow, land each on the case as its own proposal (payload is the **id only** — no name):
+Report the chosen CAPEC(s) (id + name) and why each fits. Then, in the `/new-case` flow, land each on the case as its own proposal (payload is the **id only** — no name):
 
 ```
 mcp__varsel__propose_impact(input: {

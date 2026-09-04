@@ -100,4 +100,4 @@ Return exactly:
 - The commit message and date (one line)
 - Confidence: **high** / **medium** / **low**
 
-Nothing else. Whoever is running `/new-cve` submits this SHA as the `introduced_commit` (preset) or introducing `version_event` on the case; Varsel derives the version range and it gets eyeballed there via `render_case_preview` — you do not reconcile the range yourself.
+Nothing else. Whoever is running `/new-case` submits this SHA as the `introduced_commit` (preset) or introducing `version_event` on the case; Varsel derives the version range and it gets eyeballed there via `render_case_preview` — you do not reconcile the range yourself.

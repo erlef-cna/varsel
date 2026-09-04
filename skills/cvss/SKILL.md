@@ -92,7 +92,7 @@ Present:
 - The vector string.
 - A short rationale table (metric → chosen value → reason).
 
-Then, in the `/new-cve` flow, land it on the case as a proposal (Varsel computes the score/severity from the vector):
+Then, in the `/new-case` flow, land it on the case as a proposal (Varsel computes the score/severity from the vector):
 
 ```
 create_case_proposal(input: {
