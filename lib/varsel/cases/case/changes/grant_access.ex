@@ -4,8 +4,9 @@
 
 defmodule Varsel.Cases.Case.Changes.GrantAccess do
   @moduledoc """
-  Behind `Varsel.Cases.Case`'s `:grant_access`: assigns the handle's owner when
-  we already hold an identity for it, and invites them when we do not.
+  Behind `Varsel.Cases.Case`'s `:grant_access`. Assigns the owner of the handle
+  when we hold an identity for it. Invites the handle when we do not. Leaves a
+  person who is on the case as they are.
   """
 
   use Ash.Resource.Change
@@ -13,6 +14,7 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
   alias Ash.Changeset
   alias Varsel.Accounts.UserIdentity
   alias Varsel.Cases
+  alias Varsel.Cases.CaseInvite
 
   require Ash.Query
 
@@ -33,21 +35,34 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
     opts = Ash.Context.to_opts(context)
 
     case owner(strategy, username) do
-      nil ->
-        Cases.invite_to_case(
-          %{
-            case_id: case_id,
-            strategy: strategy,
-            username: username,
-            email: Changeset.get_argument(changeset, :email),
-            skip_email: Changeset.get_argument(changeset, :skip_email)
-          },
-          opts
-        )
-
-      user_id ->
-        Cases.assign_case_user(%{case_id: case_id, user_id: user_id}, opts)
+      nil -> invite(changeset, case_id, strategy, username, opts)
+      user_id -> Cases.assign_case_user(%{case_id: case_id, user_id: user_id}, opts)
     end
+  end
+
+  # The invite action confirms the handle at its provider before it writes the
+  # row, so a repeat must stop before the action.
+  defp invite(changeset, case_id, strategy, username, opts) do
+    if invited?(case_id, strategy, username, opts) do
+      {:ok, :invited}
+    else
+      Cases.invite_to_case(
+        %{
+          case_id: case_id,
+          strategy: strategy,
+          username: username,
+          email: Changeset.get_argument(changeset, :email),
+          skip_email: Changeset.get_argument(changeset, :skip_email)
+        },
+        opts
+      )
+    end
+  end
+
+  defp invited?(case_id, strategy, username, opts) do
+    CaseInvite
+    |> Ash.Query.filter(case_id == ^case_id and strategy == ^strategy and username == ^username)
+    |> Ash.exists?(opts)
   end
 
   # The answer is never reported back: the caller sees an assignment or an

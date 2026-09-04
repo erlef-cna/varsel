@@ -15,10 +15,7 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimCaseInvites do
 
   alias Ash.Changeset
   alias Varsel.Cases
-  alias Varsel.Cases.CaseAssignment
   alias Varsel.Service
-
-  require Ash.Query
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, _context) do
@@ -46,22 +43,12 @@ defmodule Varsel.Accounts.UserIdentity.Changes.ClaimCaseInvites do
   end
 
   defp claim_invite(invite, identity) do
-    if !assigned?(invite, identity) do
-      Cases.assign_case_user!(
-        %{case_id: invite.case_id, user_id: identity.user_id, note: invite.note},
-        actor: Service.identity_claim()
-      )
-    end
+    Cases.assign_case_user!(
+      %{case_id: invite.case_id, user_id: identity.user_id, note: invite.note},
+      actor: Service.identity_claim()
+    )
 
     Cases.withdraw_case_invite!(invite, actor: Service.identity_claim())
-  end
-
-  # Checked rather than rescued: a unique violation would abort the transaction
-  # the sign-in runs in.
-  defp assigned?(invite, identity) do
-    CaseAssignment
-    |> Ash.Query.filter(case_id == ^invite.case_id and user_id == ^identity.user_id)
-    |> Ash.exists?(actor: Service.identity_claim())
   end
 
   defp strategy_atom("github"), do: :github

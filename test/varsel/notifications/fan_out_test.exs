@@ -174,6 +174,19 @@ defmodule Varsel.Notifications.FanOutTest do
       assert [] = notifications_for(poc)
     end
 
+    test "a repeat assignment raises no second event" do
+      poc = Fixtures.register_user("fanout_reassign_poc", :poc)
+      assignee = Fixtures.register_user("fanout_reassignee", :supporter)
+
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: assignee.id}, actor: poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: assignee.id}, actor: poc)
+
+      drain()
+
+      assert [%Notification{kind: :case_assigned}] = notifications_for(assignee)
+    end
+
     test "self-assignment (Case.open assigning its own opener) raises no event" do
       poc = Fixtures.register_user("fanout_self_assign_poc", :poc)
 

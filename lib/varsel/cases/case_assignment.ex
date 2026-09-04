@@ -51,9 +51,13 @@ defmodule Varsel.Cases.CaseAssignment do
     defaults [:read]
 
     create :assign do
-      description "POC grants a user access to a case."
+      description "Grants a user access to a case. A user who has access keeps the assignment they have."
       primary? true
       accept [:case_id, :user_id, :note]
+      upsert? true
+      upsert_identity :unique_case_user
+      upsert_condition expr(false)
+      return_skipped_upsert? true
     end
 
     destroy :unassign do

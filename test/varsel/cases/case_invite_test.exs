@@ -418,6 +418,29 @@ defmodule Varsel.Cases.CaseInviteTest do
       assert invite.email_status == :pending
     end
 
+    test "granting a handle that is assigned changes nothing", %{poc: poc, case: case_record} do
+      known = Fixtures.register_user("octocat")
+
+      assert {:ok, _} = Cases.grant_case_access(case_record, :github, "octocat", actor: poc)
+      assert {:ok, _} = Cases.grant_case_access(case_record, :github, "OCTOCAT", actor: poc)
+
+      assert [%{user_id: user_id}] =
+               Cases.list_case_assignments!(
+                 query: [filter: [case_id: case_record.id, user_id: known.id]],
+                 actor: poc
+               )
+
+      assert user_id == known.id
+    end
+
+    test "granting a handle that is invited changes nothing", %{poc: poc, case: case_record} do
+      assert {:ok, _} = Cases.grant_case_access(case_record, :github, "octocat", actor: poc)
+      assert {:ok, _} = Cases.grant_case_access(case_record, :github, "OCTOCAT", actor: poc)
+
+      assert [invite] = Cases.list_case_invites!(actor: poc)
+      assert to_string(invite.username) == "octocat"
+    end
+
     test "passes the inviter's address and the skip through to the invite", %{
       poc: poc,
       case: case_record
