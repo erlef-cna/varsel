@@ -59,6 +59,16 @@ defmodule Varsel.Notifications.Notifier do
     :ok
   end
 
+  # A repeat assignment keeps the row that exists and tells the assignee
+  # nothing new.
+  def notify(%Notification{
+        resource: CaseAssignment,
+        action: %{name: :assign},
+        data: %{__metadata__: %{upsert_skipped: true}}
+      }) do
+    :ok
+  end
+
   def notify(%Notification{resource: CaseAssignment, action: %{name: :assign}, data: assignment, actor: actor}) do
     emit(:case_assigned, actor, case_id: assignment.case_id, recipient_id: assignment.user_id)
   end
