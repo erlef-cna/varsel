@@ -36,9 +36,9 @@ repository. The CPE applicability ranges come out of the same derivation.
 Derivation runs when you press **Derive the case**, never on its own. The
 result goes stale the moment a boundary fact, a channel, or the package
 changes, and a stale or empty derivation renders as *no affected
-versions*. The case flags stale packages and the preview refuses to publish
-over them; derive again after changing facts, and before trusting any
-preview.
+versions*. The case flags stale packages and the **Publication** tab refuses
+to publish over them; derive again after changing facts, and before trusting
+the rendered record on the **CVE** tab.
 
 If the derived ranges disagree with the advisory, a boundary commit is
 wrong. Investigate before trusting either side.

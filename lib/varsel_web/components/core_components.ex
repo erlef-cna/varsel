@@ -133,9 +133,10 @@ defmodule VarselWeb.CoreComponents do
   what the page *has* — the scopes it can be seen through, where it stands in
   a lifecycle — and sits under the subtitle.
 
-  Each row names the page in turn, with the actions beside them from `sm` up,
-  settled against the foot of the band. Below that everything stacks in one
-  column and the actions come last.
+  The eyebrow and title span the band. From `sm` up the actions sit beside
+  the subtitle and meta rows, settled against the foot of the band, so a
+  wide set of actions never narrows the title. Below that everything stacks
+  in one column and the actions come last.
   """
   slot :eyebrow, required: true, doc: ~s(context line above the title, e.g. "CNA Console")
   slot :title, required: true, doc: "heading content — plain text or rich"
