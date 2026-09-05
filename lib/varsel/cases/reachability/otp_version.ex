@@ -13,7 +13,7 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   see the [version scheme](https://www.erlang.org/doc/system/versions.html).
   Release candidates (`29.0-rc1`), the R series (`R16B03-1`) and topic tags
   (`R16B03_yielding_binary_to_term`) are non-release tags: `parse/1` returns
-  `:error`, so they neither bound a derived range nor order against a release.
+  `:error`, and the comparison functions raise.
 
   ## Ordering
 
@@ -65,19 +65,13 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
 
   A caller reducing a set of boundaries must treat `:nc` as "neither implies the
   other" rather than as false.
+
+  Raises `ArgumentError` for a non-release; callers filter with `release?/1`
+  first.
   """
   @spec compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt | :nc
   def compare(left, right) do
-    case {parse_any(left), parse_any(right)} do
-      {{:ok, a}, {:ok, b}} -> compare_parsed(a, b)
-      # A non-release bounds no range, so the only requirement is that it never
-      # displaces one that does: it sorts above every release, as in `sort_key/1`.
-      _ -> total_compare(left, right)
-    end
-  end
-
-  defp compare_parsed(a, b) do
-    case :varsel_versions.list_compare(a.segments, b.segments) do
+    case :varsel_versions.list_compare(segments!(left), segments!(right)) do
       :same -> :eq
       :ancestor -> :lt
       :descendant -> :gt
@@ -105,15 +99,18 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   Compares on one line, ordering incomparable versions by their segments so a
   timeline can be sorted. `sort/3` and range-cutting want this; a caller
   deciding implication wants `compare/2`.
+
+  Raises `ArgumentError` for a non-release; callers filter with `release?/1`
+  first.
   """
   @spec total_compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt
   def total_compare(left, right) do
-    ka = sort_key(left)
-    kb = sort_key(right)
+    a = segments!(left)
+    b = segments!(right)
 
     cond do
-      ka < kb -> :lt
-      ka > kb -> :gt
+      a < b -> :lt
+      a > b -> :gt
       true -> :eq
     end
   end
@@ -128,15 +125,12 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
 
   ## ------------------------------------------------------------ internals
 
-  defp parse_any(%__MODULE__{} = version), do: {:ok, version}
-  defp parse_any(version) when is_binary(version), do: parse(version)
+  defp segments!(%__MODULE__{segments: segments}), do: segments
 
-  # `{rank, segments}`: rank 0 for a release, 1 for a non-release tag, so a
-  # non-release sorts last and never bounds a real range.
-  defp sort_key(version) do
-    case parse_any(version) do
-      {:ok, v} -> {0, v.segments}
-      :error -> {1, []}
+  defp segments!(version) when is_binary(version) do
+    case parse(version) do
+      {:ok, %__MODULE__{segments: segments}} -> segments
+      :error -> raise ArgumentError, "not an OTP version: #{inspect(version)}"
     end
   end
 

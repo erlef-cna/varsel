@@ -608,6 +608,57 @@ defmodule Varsel.Cases.DerivationTest do
     assert issue =~ "R1A"
   end
 
+  test "an OTP release candidate bounds nothing, as a tag or as an explicit version", %{
+    poc: poc,
+    case: case_record
+  } do
+    otp_repo = "https://github.com/erlang/otp"
+
+    StubGitBackend.stub_tags(%{
+      {otp_repo, @otp_root_commit} => ["OTP-27.0-rc1", "OTP-27.0", "OTP-27.1"],
+      {otp_repo, @fix_sha} => ["OTP-27.1"]
+    })
+
+    package =
+      Fixtures.add_affected_package(poc, case_record, %{
+        vendor: "Erlang",
+        product: "OTP",
+        repo_url: otp_repo
+      })
+
+    release_channel =
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: "sid",
+          namespace: "erlang.org",
+          name: "otp",
+          version_type: :otp
+        },
+        actor: poc
+      )
+
+    for attrs <- [
+          %{event: :introduced, commit_sha: @otp_root_commit, version: "27.0-rc1"},
+          %{event: :fixed, commit_sha: @fix_sha}
+        ] do
+      Cases.add_version_event!(
+        Map.merge(%{case_id: case_record.id, affected_package_id: package.id}, attrs),
+        actor: poc
+      )
+    end
+
+    package = Ash.load!(package, [:channels, :version_events], authorize?: false)
+    assert {:ok, derivation} = Derivation.derive(package)
+
+    assert [%{"version" => "27.0", "lessThan" => "27.1", "status" => "affected"}] =
+             derivation["channels"][release_channel.id]["versions"]
+
+    assert [issue] = derivation["issues"]
+    assert issue =~ "27.0-rc1"
+  end
+
   test "pkg:otp channels of non-OTP repos derive semver ranges from the repo tags", %{
     poc: poc,
     case: case_record

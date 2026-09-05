@@ -158,14 +158,6 @@ defmodule Varsel.Cases.Reachability.OTPVersionTest do
       assert Enum.sort_by(tags, & &1, &(OTPVersion.compare(&1, &2) != :gt)) ==
                ~w(OTP-17.0 OTP-26.2.5 OTP-27.0 28.3.1 29.0)
     end
-
-    # Neither bounds a range, so the only requirement is that they never displace
-    # one that does.
-    test "a non-release sorts above every release" do
-      assert OTPVersion.compare("nightly", "29.0") == :gt
-      assert OTPVersion.compare("OTP_R13B03", "17.0") == :gt
-      assert OTPVersion.compare("29.0-rc1", "29.0") == :gt
-    end
   end
 
   describe "release?/1 and prerelease?/1" do

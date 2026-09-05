@@ -122,7 +122,14 @@ defmodule Varsel.Cases.Reachability do
           {:ok, result()} | {:error, term()}
   def derive(repo_url, intros, fixes, opts) do
     with {:ok, all_tags} <- GitBackend.all_tags(repo_url) do
-      {explicit, opts} = Keyword.pop(opts, :explicit_versions, [])
+      kind = Keyword.fetch!(opts, :comparator)
+
+      {explicit, unusable_explicit} =
+        opts
+        |> Keyword.get(:explicit_versions, [])
+        |> Enum.split_with(fn {_event, version} -> VersionComparator.release?(kind, version) end)
+
+      opts = Keyword.delete(opts, :explicit_versions)
 
       intro_tags = union_containing(repo_url, intros)
       {fix_tags, pending} = fix_containment(repo_url, fixes)
@@ -135,8 +142,6 @@ defmodule Varsel.Cases.Reachability do
         if intros != [] and MapSet.size(intro_tags) == 0 and explicit_intros(explicit) == [],
           do: intros,
           else: []
-
-      kind = Keyword.fetch!(opts, :comparator)
 
       # Only tags that name a version take part. A repository may tag anything
       # — `nightly`, `latest`, a branch snapshot — and those neither bound a
@@ -162,20 +167,18 @@ defmodule Varsel.Cases.Reachability do
          result
          | pending_fixes: pending,
            unreleased_intros: unreleased_intros,
-           issues: result.issues ++ unusable_explicit_issues(kind, explicit)
+           issues: result.issues ++ unusable_explicit_issues(unusable_explicit)
        }}
     end
   end
 
   defp explicit_intros(explicit), do: for({:introduced, version} <- explicit, do: version)
 
-  # An explicit version the scheme cannot order never joins the universe, so it
-  # bounds nothing. Saying so beats letting the boundary vanish: OTP no longer
-  # orders R-series tags, and a POC who enters one would otherwise see a range
-  # that quietly ignores what they asserted.
-  defp unusable_explicit_issues(kind, explicit) do
-    for {event, version} <- explicit,
-        not VersionComparator.release?(kind, version),
+  # An explicit version the scheme cannot order bounds nothing. Saying so beats
+  # letting the boundary vanish: a POC who enters an R-series tag would
+  # otherwise see a range that quietly ignores what they asserted.
+  defp unusable_explicit_issues(unusable_explicit) do
+    for {event, version} <- unusable_explicit,
         do: "#{version} is not a version we can order, so it does not bound the #{event} boundary"
   end
 
