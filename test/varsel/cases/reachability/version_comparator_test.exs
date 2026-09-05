@@ -25,7 +25,7 @@ defmodule Varsel.Cases.Reachability.VersionComparatorTest do
       refute VC.release?(:otp, "OTP_R13B03")
       refute VC.release?(:otp, "OTP_R16B03_yielding_binary_to_term")
       assert {:ok, _} = VC.parse(:otp, "OTP-27.3.4.3")
-      assert VC.prerelease?(:otp, "29.0-rc1")
+      assert VC.parse(:otp, "29.0-rc1") == :error
     end
   end
 

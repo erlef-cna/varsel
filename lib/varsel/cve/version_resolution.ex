@@ -351,8 +351,7 @@ defmodule Varsel.CVE.VersionResolution do
   end
 
   # An OTP version carries at least two parts, so a bare major (`29`, how the
-  # release is spoken and written) becomes `29.0`. The `OTP-` prefix and an
-  # `-rc<N>` suffix hold no dot of their own, so neither hides one.
+  # release is spoken and written) becomes `29.0`.
   defp pad(value, :otp) do
     if String.contains?(value, "."), do: value, else: value <> ".0"
   end

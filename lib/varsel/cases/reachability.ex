@@ -238,9 +238,9 @@ defmodule Varsel.Cases.Reachability do
     * `:fixed` (default none) — the fix-carrying tag names; their runs come back
       as `fixed_ranges`. A name in both sets counts as affected.
     * `:include_prereleases` (default `true`) — whether pre-release tags may bound
-      ranges. `false` for OTP (it does not report them); excluded pre-releases are
-      still checked and surface as `:prerelease_conflict` call-outs when their
-      status disagrees with the surrounding releases.
+      ranges. Excluded pre-releases are still checked and surface as
+      `:prerelease_conflict` call-outs when their status disagrees with the
+      surrounding releases.
   """
   @spec deduce([String.t()], MapSet.t(String.t()), keyword()) :: result()
   def deduce(all_tags, affected, opts) do
@@ -423,7 +423,7 @@ defmodule Varsel.Cases.Reachability do
 
   ## ---------------------------------------------------------------- prereleases
 
-  # When pre-releases are excluded (OTP), flag the surprising case: an excluded
+  # When pre-releases are excluded, flag the surprising case: an excluded
   # pre-release that is *affected* while its own release is *safe* — i.e. the fix
   # reached the release but not the pre-release, so anyone on that pre-release is
   # still exposed but we are not reporting it. The reverse (a pre-release safe
