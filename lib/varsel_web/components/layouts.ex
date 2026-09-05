@@ -398,12 +398,10 @@ defmodule VarselWeb.Layouts do
               ~p"/data-licensing"
             }>CC-BY 4.0</.link>.
           </span>
-          <%!-- TODO: Re-enable once the privacy policy and terms are approved.
           <span class="flex items-center gap-x-4">
             <.link href={~p"/privacy-policy"}>Privacy Policy</.link>
             <.link href={~p"/terms-and-conditions"}>Terms &amp; Conditions</.link>
           </span>
-          --%>
         </div>
       </div>
     </footer>
