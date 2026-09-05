@@ -29,6 +29,9 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/varsel"
 import topbar from "../vendor/topbar"
 import {AutoGrow, CssVars, DragSort, SectionRail} from "./hooks"
+import {install as installPriorityNav} from "./priority_nav"
+
+installPriorityNav()
 
 // Clipboard copies for `CoreComponents.copy_button/1`. The click already
 // showed its own confirmation, so this only takes it back on failure.

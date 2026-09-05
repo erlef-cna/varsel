@@ -171,28 +171,28 @@ defmodule VarselWeb.Layouts do
   def site_nav(assigns) do
     ~H"""
     <header class="eef-band border-b border-white/10 sticky top-0 z-40">
-      <nav class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl flex items-center gap-4 h-16">
+      <nav class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl flex items-center gap-3 sm:gap-4 h-16">
+        <span id="site-nav-gauge" class="priority-nav-gauge" phx-update="ignore"></span>
         <.link
           href={~p"/"}
           class="eef-band-plain flex items-center gap-3 shrink-0 text-white hover:opacity-80 transition-opacity"
         >
           <.eef_logo class="h-7" id="eef-logo-nav" />
-          <span class="italic font-black text-white text-lg border-l border-white/20 pl-3 hidden sm:block">
+          <span class="italic font-black text-white text-lg border-l border-white/20 pl-3">
             CNA
           </span>
         </.link>
 
-        <%!-- Desktop menu --%>
-        <ul class="hidden md:flex items-center gap-1 ml-2 text-sm text-white">
-          <li>
+        <ul class="priority-nav flex-1 min-w-0 flex items-center gap-1 text-sm text-white">
+          <li class="shrink-0">
             <.nav_link href={~p"/cves"} current_path={@current_path}>CVEs</.nav_link>
           </li>
-          <li>
+          <li class="shrink-0">
             <.nav_link href={~p"/common-weaknesses"} current_path={@current_path}>
               Weaknesses
             </.nav_link>
           </li>
-          <li class="group relative">
+          <li class="shrink-0 group relative">
             <button class="px-3 py-2 rounded hover:bg-white/10 transition-colors flex items-center gap-1">
               Documentation <.icon name="hero-chevron-down-micro" class="size-3.5" />
             </button>
@@ -209,25 +209,25 @@ defmodule VarselWeb.Layouts do
               </ul>
             </div>
           </li>
-          <li :if={Varsel.Cases.can_list_cases?(@current_user)}>
+          <li :if={Varsel.Cases.can_list_cases?(@current_user)} class="shrink-0">
             <.nav_link href={~p"/cases"} current_path={@current_path}>Cases</.nav_link>
           </li>
-          <li :if={Varsel.CVE.can_list_vulnerability_reports?(@current_user)}>
+          <li :if={Varsel.CVE.can_list_vulnerability_reports?(@current_user)} class="shrink-0">
             <.nav_link href={~p"/reports"} current_path={@current_path}>Reports</.nav_link>
           </li>
-          <li :if={Varsel.Accounts.can_list_users?(@current_user)}>
+          <li :if={Varsel.Accounts.can_list_users?(@current_user)} class="shrink-0">
             <.nav_link href={~p"/users"} current_path={@current_path}>Users</.nav_link>
           </li>
         </ul>
 
-        <div class="ml-auto flex items-center gap-2">
+        <div class="shrink-0 flex items-center gap-2">
           <%= if @socket && @current_user do %>
             {live_render(@socket, VarselWeb.NotificationBellLive,
               id: "notification-bell",
               sticky: false
             )}
           <% end %>
-          <.theme_toggle />
+          <div class="hidden sm:block"><.theme_toggle /></div>
           <div :if={@current_user} class="dropdown dropdown-end">
             <div
               tabindex="0"
@@ -260,21 +260,40 @@ defmodule VarselWeb.Layouts do
             <.icon name="hero-arrow-right-end-on-rectangle" class="size-5" />
           </.link>
 
-          <%!-- Mobile menu --%>
-          <div class="dropdown dropdown-end md:hidden">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-sm text-white hover:bg-white/10">
+          <%!-- One entry per header item, in header order: app.css hides them by index. --%>
+          <div class="dropdown dropdown-end priority-nav-more">
+            <div
+              tabindex="0"
+              role="button"
+              aria-label="More navigation"
+              class="btn btn-ghost btn-sm text-white hover:bg-white/10"
+            >
               <.icon name="hero-bars-3" class="size-5" />
             </div>
             <ul
               tabindex="0"
-              class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-60 p-2 z-50"
+              class="priority-nav-more-menu dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-60 p-2 z-50"
             >
-              <li><.link navigate={~p"/cves"}>CVEs</.link></li>
-              <li><.link navigate={~p"/common-weaknesses"}>Weaknesses</.link></li>
-              <li class="menu-title mt-1">Documentation</li>
-              <li :for={{label, path} <- doc_links()}><.link href={path}>{label}</.link></li>
+              <li><.more_link href={~p"/cves"} current_path={@current_path}>CVEs</.more_link></li>
+              <li>
+                <.more_link href={~p"/common-weaknesses"} current_path={@current_path}>
+                  Weaknesses
+                </.more_link>
+              </li>
+              <li>
+                <h2 class="menu-title">Documentation</h2>
+                <ul>
+                  <li :for={{label, path} <- doc_links()}><.link href={path}>{label}</.link></li>
+                </ul>
+              </li>
               <li :if={Varsel.Cases.can_list_cases?(@current_user)}>
-                <.link navigate={~p"/cases"}>Cases</.link>
+                <.more_link href={~p"/cases"} current_path={@current_path}>Cases</.more_link>
+              </li>
+              <li :if={Varsel.CVE.can_list_vulnerability_reports?(@current_user)}>
+                <.more_link href={~p"/reports"} current_path={@current_path}>Reports</.more_link>
+              </li>
+              <li :if={Varsel.Accounts.can_list_users?(@current_user)}>
+                <.more_link href={~p"/users"} current_path={@current_path}>Users</.more_link>
               </li>
             </ul>
           </div>
@@ -328,6 +347,18 @@ defmodule VarselWeb.Layouts do
         nav_active?(@current_path, @href) && "bg-white/10 font-semibold"
       ]}
     >
+      {render_slot(@inner_block)}
+    </.link>
+    """
+  end
+
+  attr :href, :string, required: true
+  attr :current_path, :string, default: nil
+  slot :inner_block, required: true
+
+  defp more_link(assigns) do
+    ~H"""
+    <.link navigate={@href} class={nav_active?(@current_path, @href) && "menu-active"}>
       {render_slot(@inner_block)}
     </.link>
     """

@@ -260,6 +260,78 @@
   color: inherit;
 }
 
+/* Priority+ site nav. assets/js/priority_nav.js writes the gauge's classes.
+   A nav with more than 10 items needs one more rule pair. */
+.priority-nav-gauge {
+  display: none;
+}
+
+.priority-nav-gauge:not(.nav-ready) ~ .priority-nav {
+  overflow-x: clip;
+}
+
+.priority-nav-more {
+  display: none;
+}
+
+.priority-nav-gauge.nav-overflow ~ * .priority-nav-more {
+  display: inline-block;
+}
+
+.priority-nav-gauge.nav-visible-0 ~ .priority-nav > li {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-1 ~ .priority-nav > li:nth-child(n + 2),
+.priority-nav-gauge.nav-visible-1 ~ * .priority-nav-more-menu > li:nth-child(-n + 1) {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-2 ~ .priority-nav > li:nth-child(n + 3),
+.priority-nav-gauge.nav-visible-2 ~ * .priority-nav-more-menu > li:nth-child(-n + 2) {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-3 ~ .priority-nav > li:nth-child(n + 4),
+.priority-nav-gauge.nav-visible-3 ~ * .priority-nav-more-menu > li:nth-child(-n + 3) {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-4 ~ .priority-nav > li:nth-child(n + 5),
+.priority-nav-gauge.nav-visible-4 ~ * .priority-nav-more-menu > li:nth-child(-n + 4) {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-5 ~ .priority-nav > li:nth-child(n + 6),
+.priority-nav-gauge.nav-visible-5 ~ * .priority-nav-more-menu > li:nth-child(-n + 5) {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-6 ~ .priority-nav > li:nth-child(n + 7),
+.priority-nav-gauge.nav-visible-6 ~ * .priority-nav-more-menu > li:nth-child(-n + 6) {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-7 ~ .priority-nav > li:nth-child(n + 8),
+.priority-nav-gauge.nav-visible-7 ~ * .priority-nav-more-menu > li:nth-child(-n + 7) {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-8 ~ .priority-nav > li:nth-child(n + 9),
+.priority-nav-gauge.nav-visible-8 ~ * .priority-nav-more-menu > li:nth-child(-n + 8) {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-9 ~ .priority-nav > li:nth-child(n + 10),
+.priority-nav-gauge.nav-visible-9 ~ * .priority-nav-more-menu > li:nth-child(-n + 9) {
+  display: none;
+}
+
+.priority-nav-gauge.nav-visible-10 ~ .priority-nav > li:nth-child(n + 11),
+.priority-nav-gauge.nav-visible-10 ~ * .priority-nav-more-menu > li:nth-child(-n + 10) {
+  display: none;
+}
+
 /* A copy button shows one of its three icons. The write is async, so a failure
    arrives after the click already set is-copied and has to overrule it. */
 .copy-button .copy-done,

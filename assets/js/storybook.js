@@ -10,6 +10,9 @@
 import "phoenix_html"
 import {hooks as colocatedHooks} from "phoenix-colocated/varsel"
 import * as Hooks from "./hooks"
+import {install as installPriorityNav} from "./priority_nav"
+
+installPriorityNav()
 
 ;(function () {
   window.storybook = {Hooks: {...colocatedHooks, ...Hooks}}
