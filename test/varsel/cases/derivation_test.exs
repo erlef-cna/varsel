@@ -353,35 +353,33 @@ defmodule Varsel.Cases.DerivationTest do
     package = Ash.load!(package, [:channels, :version_events], authorize?: false)
     assert {:ok, derivation} = Derivation.derive(package)
 
-    # ssh's own versions, resolved through otp_versions.table, as bounded ranges.
+    # ssh's own versions, resolved through otp_versions.table. Two fixes on lines
+    # the version scheme does not order become one open entry with a transition
+    # each, not two ranges asserting a span between them.
     assert derivation["channels"][otp_channel.id]["versions"] == [
              %{
                "version" => "5.0",
-               "lessThan" => "5.1.4.9",
+               "lessThan" => "*",
                "status" => "affected",
-               "versionType" => "otp"
-             },
-             %{
-               "version" => "5.2",
-               "lessThan" => "5.2.3.4",
-               "status" => "affected",
-               "versionType" => "otp"
+               "versionType" => "otp",
+               "changes" => [
+                 %{"at" => "5.1.4.9", "status" => "unaffected"},
+                 %{"at" => "5.2.3.4", "status" => "unaffected"}
+               ]
              }
            ]
 
-    # The sid release channel carries the OTP release versions (bare, bounded).
+    # The sid release channel carries the OTP release versions (bare).
     assert derivation["channels"][release_channel.id]["versions"] == [
              %{
                "version" => "26.0",
-               "lessThan" => "26.2.5.13",
+               "lessThan" => "*",
                "status" => "affected",
-               "versionType" => "otp"
-             },
-             %{
-               "version" => "27.0",
-               "lessThan" => "27.3.4.1",
-               "status" => "affected",
-               "versionType" => "otp"
+               "versionType" => "otp",
+               "changes" => [
+                 %{"at" => "26.2.5.13", "status" => "unaffected"},
+                 %{"at" => "27.3.4.1", "status" => "unaffected"}
+               ]
              }
            ]
 
@@ -466,7 +464,9 @@ defmodule Varsel.Cases.DerivationTest do
       assert {:ok, derivation} = Derivation.derive(package)
 
       # A single affected range from the POC's explicit boundary, not the
-      # two-range "0 - <first release>: unknown" + "affected" split.
+      # two-range "0 - <first release>: unknown" + "affected" split. One fix
+      # needs no transition — `lessThan` says the same span without claiming
+      # the versions above it.
       assert derivation["channels"][release_channel.id]["versions"] == [
                %{
                  "version" => explicit_version,
@@ -477,6 +477,8 @@ defmodule Varsel.Cases.DerivationTest do
              ]
 
       # Since creation means the application's whole history too.
+      # The explicit "0" places the boundary, so the attribute stands and the
+      # pre-import era is not claimed unknown.
       assert derivation["channels"][app_channel.id] == %{
                "versions" => [
                  %{
@@ -486,11 +488,77 @@ defmodule Varsel.Cases.DerivationTest do
                    "versionType" => "otp"
                  }
                ],
+               "default_status" => "unaffected",
                "pending" => [],
                "unreleased_intros" => [],
                "issues" => []
              }
     end
+  end
+
+  test "an unknown default publishes no sentinel row and drops the CPE lower bound", %{
+    poc: poc,
+    case: case_record
+  } do
+    otp_repo = "https://github.com/erlang/otp"
+
+    package =
+      Fixtures.add_affected_package(poc, case_record, %{
+        vendor: "Erlang",
+        product: "OTP",
+        repo_url: otp_repo,
+        default_status: :unknown
+      })
+
+    release_channel =
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: "sid",
+          namespace: "erlang.org",
+          name: "otp",
+          version_type: :otp
+        },
+        actor: poc
+      )
+
+    StubGitBackend.stub_tags(%{
+      {otp_repo, @otp_root_commit} => ["OTP_R13B03", "OTP-26.0", "OTP-26.2.5.15"],
+      {otp_repo, @fix_sha} => ["OTP-26.2.5.15"]
+    })
+
+    for attrs <- [
+          %{event: :introduced, commit_sha: @otp_root_commit},
+          %{event: :fixed, commit_sha: @fix_sha}
+        ] do
+      Cases.add_version_event!(
+        Map.merge(%{case_id: case_record.id, affected_package_id: package.id}, attrs),
+        actor: poc
+      )
+    end
+
+    package = Ash.load!(package, [:channels, :version_events], authorize?: false)
+    assert {:ok, derivation} = Derivation.derive(package)
+
+    channel = derivation["channels"][release_channel.id]
+
+    assert channel["default_status"] == "unknown"
+
+    # No sentinel row: the unlisted era is said by the default, not by a range.
+    refute Enum.any?(channel["versions"], &(&1["status"] == "unknown"))
+
+    # One fix needs no transition, so this falls to the flat form — where the
+    # fix-carrying span has to be stated as an explicit unaffected range.
+    assert [
+             %{"version" => "26.0", "lessThan" => "26.2.5.15", "status" => "affected"},
+             %{"version" => "26.2.5.15", "lessThan" => "*", "status" => "unaffected"}
+           ] = channel["versions"]
+
+    # CPE cannot say unknown, so the possibly-affected pre-import span folds
+    # into the lowest match as a dropped lower bound.
+    assert [%{"versionStartIncluding" => nil, "versionEndExcluding" => "26.2.5.15"}] =
+             derivation["cpe_matches"]
   end
 
   test "an explicit R-series boundary is reported as unusable rather than dropped", %{
@@ -538,6 +606,57 @@ defmodule Varsel.Cases.DerivationTest do
 
     assert [issue] = derivation["issues"]
     assert issue =~ "R1A"
+  end
+
+  test "an OTP release candidate bounds nothing, as a tag or as an explicit version", %{
+    poc: poc,
+    case: case_record
+  } do
+    otp_repo = "https://github.com/erlang/otp"
+
+    StubGitBackend.stub_tags(%{
+      {otp_repo, @otp_root_commit} => ["OTP-27.0-rc1", "OTP-27.0", "OTP-27.1"],
+      {otp_repo, @fix_sha} => ["OTP-27.1"]
+    })
+
+    package =
+      Fixtures.add_affected_package(poc, case_record, %{
+        vendor: "Erlang",
+        product: "OTP",
+        repo_url: otp_repo
+      })
+
+    release_channel =
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: "sid",
+          namespace: "erlang.org",
+          name: "otp",
+          version_type: :otp
+        },
+        actor: poc
+      )
+
+    for attrs <- [
+          %{event: :introduced, commit_sha: @otp_root_commit, version: "27.0-rc1"},
+          %{event: :fixed, commit_sha: @fix_sha}
+        ] do
+      Cases.add_version_event!(
+        Map.merge(%{case_id: case_record.id, affected_package_id: package.id}, attrs),
+        actor: poc
+      )
+    end
+
+    package = Ash.load!(package, [:channels, :version_events], authorize?: false)
+    assert {:ok, derivation} = Derivation.derive(package)
+
+    assert [%{"version" => "27.0", "lessThan" => "27.1", "status" => "affected"}] =
+             derivation["channels"][release_channel.id]["versions"]
+
+    assert [issue] = derivation["issues"]
+    assert issue =~ "27.0-rc1"
   end
 
   test "pkg:otp channels of non-OTP repos derive semver ranges from the repo tags", %{

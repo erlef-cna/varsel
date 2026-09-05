@@ -48,6 +48,7 @@ defmodule Varsel.Cases.Proposable do
     :allow_unreleased_fix,
     :allow_unreleased_intro,
     :include_prereleases,
+    :default_status,
     :position
   ]
 

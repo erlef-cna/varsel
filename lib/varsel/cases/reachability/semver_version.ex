@@ -4,12 +4,12 @@
 
 defmodule Varsel.Cases.Reachability.SemverVersion do
   @moduledoc """
-  Parses and orders semver release versions — hex and the wider ecosystem — in
+  Parses and orders semver release versions, for hex and the wider ecosystem, in
   the shape of `Varsel.Cases.Reachability.OTPVersion`.
 
   Ordering and pre-release precedence are delegated to Elixir's `Version`; a
-  leading `v` is stripped first. A tag that is not valid semver (e.g. `nightly`,
-  `v1.19-latest`) is not a release version — `parse/1` returns `:error`.
+  leading `v` is stripped first. A tag that is not valid semver (`nightly`,
+  `v1.19-latest`) is not a release version, and `parse/1` returns `:error`.
   """
 
   @enforce_keys [:version, :raw]
@@ -32,10 +32,14 @@ defmodule Varsel.Cases.Reachability.SemverVersion do
   @doc """
   Compares two semver versions (strings or parsed structs), delegating to
   `Version.compare/2` for correct semver precedence (incl. pre-release
-  identifiers). Both must be valid releases — callers filter non-releases first.
+  identifiers). Both must be valid releases; callers filter non-releases first.
   """
   @spec compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt
   def compare(left, right), do: Version.compare(to_version(left), to_version(right))
+
+  @doc "Whether the scheme orders every pair of versions. Semver does."
+  @spec total_order?() :: boolean()
+  def total_order?, do: true
 
   @doc "Whether `version` is valid semver (a real release)."
   @spec release?(String.t()) :: boolean()
@@ -54,5 +58,12 @@ defmodule Varsel.Cases.Reachability.SemverVersion do
 
   defp to_version(%__MODULE__{version: v}), do: v
 
-  defp to_version(string) when is_binary(string), do: Version.parse!(String.replace_prefix(string, "v", ""))
+  # Callers filter with `release?/1` first, so an unparseable string here is a
+  # broken invariant.
+  defp to_version(string) when is_binary(string) do
+    case parse(string) do
+      {:ok, %__MODULE__{version: version}} -> version
+      :error -> raise Version.InvalidVersionError, string
+    end
+  end
 end

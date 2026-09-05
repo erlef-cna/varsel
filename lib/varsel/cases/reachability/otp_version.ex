@@ -7,60 +7,110 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   Parses and orders Erlang/OTP release versions, in the shape of Elixir's
   `Version`.
 
-  Versions are the numeric releases, `17.0` and up: `27.3.4.3`, `29.0-rc1`.
+  Versions are the numeric releases, `17.0` and up: `27.0`, `27.3.4.3`.
   `OTP-`/`OTP_` prefixes are stripped first, so `OTP-27.0` and `27.0` parse
-  identically. A version has at least two dot-separated parts, and `-rc<N>` is
-  its only suffix; see the [version scheme](https://www.erlang.org/doc/system/versions.html).
+  identically. A version has at least two dot-separated parts and no suffix;
+  see the [version scheme](https://www.erlang.org/doc/system/versions.html).
+  Release candidates (`29.0-rc1`), the R series (`R16B03-1`) and topic tags
+  (`R16B03_yielding_binary_to_term`) are non-release tags: `parse/1` returns
+  `:error`, and the comparison functions raise.
 
-  The legacy R series (`R6B-0` … `R16B03-1`) is **not** a version here.
-  `parse/1` returns `:error` for it, as it does for topic/feature tags such as
-  `R16B03_yielding_binary_to_term`, so an R tag neither bounds a derived range
-  nor orders against a numeric one.
+  ## Ordering
 
-  Pre-releases order below the release of the same number (`29.0-rc1` < `29.0`).
+  The order is the version scheme's own, and `compare/2` delegates it to
+  `:varsel_versions`, OTP's implementation. It is partial: a version orders
+  against its ancestors and descendants, and `:nc` against everything else.
+
+  A patch may be merged forward, at a point the version number does not record.
+  In erlang/otp, `22.3.4.12.1` is contained in `24.0` and every later release,
+  but in nothing in 23.x. Only the commit graph answers that, so `:nc` means the
+  scheme does not order the two, never that no ancestry exists.
+
+  Callers that need one line, such as sorting a timeline or cutting it into
+  ranges, use `total_compare/2`. Callers deciding whether one version implies
+  another must respect `:nc`.
   """
 
-  @enforce_keys [:segments, :prerelease?, :raw]
-  defstruct [:segments, :prerelease?, :raw]
+  # TODO: Switch to `:versions` from runtime_tools and delete `src/varsel_versions.erl`
+  # once an OTP release ships erlang/otp PR #11556.
+
+  @enforce_keys [:segments, :raw]
+  defstruct [:segments, :raw]
 
   @type t :: %__MODULE__{
-          segments: [integer()],
-          prerelease?: boolean(),
+          segments: [non_neg_integer()],
           raw: String.t()
         }
 
-  # `<Major>.<Minor>[.<Patch>...]`, optionally a release candidate. Two parts is
-  # the minimum the version scheme allows, since less significant parts are
-  # omitted only when they are 0, and `-rc<N>` is its only suffix. Anchored, so
-  # a tag carrying anything else is not a version: the R series, `nightly`, a
-  # date, a semver tag in an OTP repo.
-  @release ~r/\A(\d+(?:\.\d+)+)(?:-rc(\d+))?\z/
+  # `<Major>.<Minor>[.<Patch>...]`, anchored. The numeric part is only shaped
+  # here; `:varsel_versions.list_check/1` is what accepts or rejects it.
+  @release ~r/\A\d+(?:\.\d+)+\z/
 
   @doc "Parses an OTP version string. `:error` for non-release tags."
   @spec parse(String.t()) :: {:ok, t()} | :error
   def parse(version) when is_binary(version) do
-    case Regex.run(@release, strip_prefix(version)) do
-      [_, numeric] -> {:ok, build(numeric, false, version)}
-      [_, numeric, _rc] -> {:ok, build(numeric, true, version)}
-      nil -> :error
+    with [numeric] <- Regex.run(@release, strip_prefix(version)),
+         segments = Enum.map(String.split(numeric, "."), &String.to_integer/1),
+         true <- :varsel_versions.list_check(segments) do
+      {:ok, %__MODULE__{segments: segments, raw: version}}
+    else
+      _ -> :error
     end
   end
 
-  defp build(numeric, prerelease?, version) do
-    segments = numeric |> String.split(".") |> Enum.map(&String.to_integer/1)
+  @doc """
+  Compares two OTP versions (strings or structs), per the version scheme's
+  partial order: `:lt` | `:eq` | `:gt`, or `:nc` when the two lie on branches
+  that never meet.
 
-    %__MODULE__{segments: segments, prerelease?: prerelease?, raw: version}
+  A caller reducing a set of boundaries must treat `:nc` as "neither implies the
+  other" rather than as false.
+
+  Raises `ArgumentError` for a non-release; callers filter with `release?/1`
+  first.
+  """
+  @spec compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt | :nc
+  def compare(left, right) do
+    case :varsel_versions.list_compare(segments!(left), segments!(right)) do
+      :same -> :eq
+      :ancestor -> :lt
+      :descendant -> :gt
+      :undefined -> :nc
+    end
   end
 
-  @doc "Compares two OTP versions (strings or structs): `:lt` | `:eq` | `:gt`."
-  @spec compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt
-  def compare(left, right) do
-    ka = sort_key(left)
-    kb = sort_key(right)
+  @doc """
+  Whether the scheme orders every pair of versions. OTP's does not: a branch
+  version and a release above its base have no order between them.
+  """
+  @spec total_order?() :: boolean()
+  def total_order?, do: false
+
+  @doc """
+  Whether the version scheme orders these two at all. False for versions on
+  branches that never meet (`27.3.4.15` and `28.0`).
+  """
+  @spec comparable?(String.t() | t(), String.t() | t()) :: boolean()
+  def comparable?(left, right) do
+    compare(left, right) != :nc
+  end
+
+  @doc """
+  Compares on one line, ordering incomparable versions by their segments so a
+  timeline can be sorted. `sort/3` and range-cutting want this; a caller
+  deciding implication wants `compare/2`.
+
+  Raises `ArgumentError` for a non-release; callers filter with `release?/1`
+  first.
+  """
+  @spec total_compare(String.t() | t(), String.t() | t()) :: :lt | :eq | :gt
+  def total_compare(left, right) do
+    a = segments!(left)
+    b = segments!(right)
 
     cond do
-      ka < kb -> :lt
-      ka > kb -> :gt
+      a < b -> :lt
+      a > b -> :gt
       true -> :eq
     end
   end
@@ -69,26 +119,18 @@ defmodule Varsel.Cases.Reachability.OTPVersion do
   @spec release?(String.t()) :: boolean()
   def release?(version), do: match?({:ok, _}, parse(version))
 
-  @doc "Whether `version` is a pre-release (a `-suffix` release candidate)."
+  @doc "Whether `version` is a pre-release. The scheme has none."
   @spec prerelease?(String.t()) :: boolean()
-  def prerelease?(version) do
-    case parse(version) do
-      {:ok, v} -> v.prerelease?
-      :error -> false
-    end
-  end
+  def prerelease?(_version), do: false
 
   ## ------------------------------------------------------------ internals
 
-  # `{rank, segments, release_rank}`: rank 0 for a release, 1 for anything that
-  # is not one, so a non-release sorts last and never bounds a real range. A
-  # release ranks above its pre-releases.
-  defp sort_key(%__MODULE__{} = v), do: {0, v.segments, if(v.prerelease?, do: 0, else: 1)}
+  defp segments!(%__MODULE__{segments: segments}), do: segments
 
-  defp sort_key(version) when is_binary(version) do
+  defp segments!(version) when is_binary(version) do
     case parse(version) do
-      {:ok, v} -> sort_key(v)
-      :error -> {1, [], 0}
+      {:ok, %__MODULE__{segments: segments}} -> segments
+      :error -> raise ArgumentError, "not an OTP version: #{inspect(version)}"
     end
   end
 

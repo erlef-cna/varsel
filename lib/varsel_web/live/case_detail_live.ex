@@ -1524,6 +1524,7 @@ defmodule VarselWeb.CaseDetailLive do
           fallback={channel.domain || channel.name}
           subpath={channel.subpath}
           versions={derived.versions}
+          default_status={derived.default_status}
           timeline={derived.timeline}
           timeline_id={"channel-timeline-#{channel.id}"}
           muted={channel.id in @marks.deleted}

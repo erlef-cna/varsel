@@ -127,6 +127,7 @@ defmodule Varsel.MixProject do
       {:saxy, "~> 1.6"},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false, warn_if_outdated: true},
       {:sourceror, "~> 1.8", only: [:dev, :test]},
+      {:stream_data, "~> 1.0"},
       {:styler, "~> 1.0", only: [:dev, :test], runtime: false},
       {:swoosh, "~> 1.16"},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},

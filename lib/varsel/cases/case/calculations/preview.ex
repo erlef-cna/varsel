@@ -91,7 +91,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       |> put_problem_types(case_record.weaknesses)
       |> put_impacts(case_record.impacts)
       |> put_credits(case_record.credits)
-      |> Map.put("references", references(case_record))
+      |> Map.put("references", references(case_record, affected))
       |> put_non_empty("affected", affected)
       |> put_cpe_applicability(case_record, derivations)
 
@@ -303,11 +303,11 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
 
   # Stored references (ordered) with the derived self-links spliced in after
   # the leading vendor advisory and derived fix-commit links appended last —
-  # the published convention: advisory, cna.erlef.org, osv.dev, stored
-  # patches/extras, fix commits. Stored rows win over derived on URL conflict.
-  # With no stored `vendor-advisory`, our own page becomes the advisory of
-  # record and is tagged `third-party-advisory`.
-  defp references(case_record) do
+  # the published convention: advisory, cna.erlef.org, osv.dev, version scheme,
+  # stored patches/extras, fix commits. Stored rows win over derived on URL
+  # conflict. With no stored `vendor-advisory`, our own page becomes the
+  # advisory of record and is tagged `third-party-advisory`.
+  defp references(case_record, affected) do
     stored =
       case_record.references
       |> Enum.sort_by(& &1.position)
@@ -315,10 +315,30 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
 
     {advisory, rest} = Enum.split(stored, 1)
 
-    Enum.uniq_by(
-      advisory ++ self_links(case_record.cve_id, stored) ++ rest ++ patch_links(case_record),
-      & &1["url"]
-    )
+    derived =
+      self_links(case_record.cve_id, stored) ++ version_scheme_links(affected)
+
+    Enum.uniq_by(advisory ++ derived ++ rest ++ patch_links(case_record), & &1["url"])
+  end
+
+  # A record naming OTP versions cites the scheme that orders them: they are
+  # only partially ordered, so a reader comparing `27.3.4.15` against `28.0`
+  # numerically would get the wrong answer about their own release.
+  defp version_scheme_links(affected) do
+    if Enum.any?(affected, &otp_versioned?/1) do
+      [
+        %{
+          "tags" => ["x_version-scheme"],
+          "url" => "https://www.erlang.org/doc/system/versions.html#order-of-versions"
+        }
+      ]
+    else
+      []
+    end
+  end
+
+  defp otp_versioned?(entry) do
+    entry |> Map.get("versions", []) |> Enum.any?(&(&1["versionType"] == "otp"))
   end
 
   defp render_reference(url, []), do: %{"url" => url}

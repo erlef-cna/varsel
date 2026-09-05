@@ -103,7 +103,7 @@ gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
 ```
 
 - [ ] **Stale TODOs.** Every `TODO` in the record is still a `TODO` in the advisory's `patched_versions`. If the advisory now has a real fix version, propose the fix commit and re-derive.
-- [ ] **Version ranges match.** Each derived affected range matches the advisory's `vulnerable_version_range`. A mismatch means a wrong boundary SHA on the case — investigate before trusting either side.
+- [ ] **Version ranges match.** Each derived affected range matches the advisory's `vulnerable_version_range`. A mismatch means a wrong boundary SHA on the case — investigate before trusting either side. An OTP package fixed on several maintenance lines states one span open from the introducing release with a fix per line, rather than one range per line; check each fix against the advisory, not the span.
 - [ ] **Credits coverage.** Every advisory credit appears, carrying every role that applies: a GHSA holds one role per person, the CVE record may hold several. Do not skip `pending` credits.
 
 ### Source
@@ -121,7 +121,7 @@ gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
 - [ ] First: vendor advisory `["vendor-advisory"]` (GHSA → `["vendor-advisory", "related"]`).
 - [ ] Second: `https://cna.erlef.org/cves/CVE-<num>.html` `["related"]` (add `"third-party-advisory"` if no vendor advisory).
 - [ ] Third: `https://osv.dev/vulnerability/EEF-CVE-<num>` `["related"]`.
-- [ ] OTP: `https://www.erlang.org/doc/system/versions.html#order-of-versions` `["x_version-scheme"]` present.
+- [ ] OTP: `https://www.erlang.org/doc/system/versions.html#order-of-versions` `["x_version-scheme"]` present — derived from any OTP-versioned entry, so its absence means no entry is OTP-versioned.
 - [ ] At least one `"patch"`-tagged reference, unless the vulnerability is unpatched.
 
 ### CVSS

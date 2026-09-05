@@ -152,8 +152,19 @@ defmodule Varsel.CVE.OsvConverter do
   defp version_info?(item, version_type) do
     versions = item["versions"] || []
 
-    Enum.any?(versions, &(&1["versionType"] == version_type)) or
-      (item["defaultStatus"] == "affected" and versions == [])
+    Enum.any?(versions, &affected_of_type?(&1, version_type)) or
+      (item["defaultStatus"] == "affected" and
+         (versions == [] or Enum.any?(versions, &(&1["versionType"] == version_type))))
+  end
+
+  # Under an `unaffected` or `unknown` default, ranges come from the affected
+  # rows alone: an explicit unaffected row restates a fix an affected row's
+  # upper bound already carries, and an unknown row has no OSV representation.
+  # Injecting the schema-required `introduced` event into either would claim an
+  # affected span the record never made.
+  defp affected_of_type?(version_entry, version_type) do
+    version_entry["versionType"] == version_type and
+      Map.get(version_entry, "status", "affected") == "affected"
   end
 
   ## Summary / details
@@ -231,16 +242,33 @@ defmodule Varsel.CVE.OsvConverter do
   end
 
   defp semver_ranges(item) do
-    semver_versions =
-      item |> Map.get("versions", []) |> Enum.filter(&(&1["versionType"] == "semver"))
-
-    if semver_versions == [] and item["defaultStatus"] == "affected" do
-      # All versions affected
-      [%{"type" => "SEMVER", "events" => [%{"introduced" => "0"}]}]
+    if item["defaultStatus"] == "affected" do
+      [%{"type" => "SEMVER", "events" => default_affected_events(item, "semver", :semver)}]
     else
-      # Each version entry becomes its own range with its own event set
-      Enum.map(semver_versions, &semver_range/1)
+      item
+      |> Map.get("versions", [])
+      |> Enum.filter(&affected_of_type?(&1, "semver"))
+      |> Enum.map(&semver_range/1)
     end
+  end
+
+  # An `affected` default says every version is affected unless a row says
+  # otherwise, which the schema states as its own "unfixed vulnerability" shape:
+  # a range opening at `0`, carrying a `fixed` event per span the record calls
+  # safe.
+  defp default_affected_events(item, version_type, type) do
+    rows = for row <- Map.get(item, "versions", []), row["versionType"] == version_type, do: row
+
+    spans =
+      for row <- rows,
+          row["status"] == "unaffected",
+          version = row["version"],
+          is_binary(version) and version != "*",
+          do: %{"fixed" => clean_version(version, type)}
+
+    transitions = Enum.flat_map(rows, &change_events(&1, type))
+
+    sort_events(Enum.uniq([%{"introduced" => "0"} | spans ++ transitions]))
   end
 
   defp semver_range(version_entry) do
@@ -274,14 +302,13 @@ defmodule Varsel.CVE.OsvConverter do
     |> Enum.map(fn item ->
       repo = item["repo"]
 
-      git_versions =
-        item |> Map.get("versions", []) |> Enum.filter(&(&1["versionType"] == "git"))
-
       events =
-        if git_versions == [] and item["defaultStatus"] == "affected" do
-          [%{"introduced" => "0"}]
+        if item["defaultStatus"] == "affected" do
+          default_affected_events(item, "git", :git)
         else
-          git_versions
+          item
+          |> Map.get("versions", [])
+          |> Enum.filter(&affected_of_type?(&1, "git"))
           |> Enum.flat_map(&convert_version_events(&1, :git))
           |> Enum.uniq()
           |> finalize_events()
@@ -329,7 +356,8 @@ defmodule Varsel.CVE.OsvConverter do
   defp change_event(%{"status" => "unaffected", "at" => at}, type) when is_binary(at),
     do: [%{"fixed" => clean_version(at, type)}]
 
-  defp change_event(%{"status" => "affected", "at" => at}, :git) when is_binary(at), do: [%{"introduced" => at}]
+  defp change_event(%{"status" => "affected", "at" => at}, type) when is_binary(at),
+    do: [%{"introduced" => clean_version(at, type)}]
 
   defp change_event(_change, _type), do: []
 

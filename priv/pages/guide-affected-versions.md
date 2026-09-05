@@ -31,6 +31,14 @@ channel's vocabulary: semver for a Hex package, OTP release and
 per-application versions for OTP, plain commit SHAs for the source
 repository. The CPE applicability ranges come out of the same derivation.
 
+Most channels state each affected span as a bounded range, `from X before Y`.
+OTP releases do not, because the version scheme only partially orders them: a
+maintenance release like `27.3.4.15` and a `28.0` each carry changes the other
+lacks, so no range can span the two. An OTP package with fixes on several
+maintenance lines is published instead as one entry open from the introducing
+release, carrying a transition per fix. A reader's version picks up the fixes
+on its own line and no others.
+
 ## Deriving
 
 Derivation runs when you press **Derive the case**, never on its own. The
@@ -53,10 +61,26 @@ wrong. Investigate before trusting either side.
   outside every release), allow unreleased fixes on the package.
 - **Vulnerable since the beginning of OTP's git history**: tick the OTP
   preset's since-creation checkbox. It stands for the erlang/otp root commit,
-  and the record reports everything below the first affected release as
-  unknown. When the flaw is older than the import too, give that boundary the
-  version `0`: the range then starts at `0`, on the release channel and on the
+  and selects *unknown* for versions outside the derived ranges (below). When
+  the flaw is older than the import too, give that boundary the version `0`:
+  the range then starts at `0`, on the release channel and on the
   application's.
+- **Unsure whether releases older than the introducing commit are safe?** Set
+  the package's *versions outside the derived ranges* to **unknown** — for a
+  repository whose history starts at a squashed import, or when nobody audited
+  that far back. The record then claims nothing about them
+  (`defaultStatus: unknown`) and instead lists the releases carrying the fix
+  explicitly as unaffected, since "never contained the introducing commit" is
+  the proof it just declined to make. The CPE range drops its lower bound,
+  treating the older era as possibly affected. The default, **unaffected**, asserts
+  every release outside the derived ranges is known safe. The OTP preset
+  selects unknown for a root-commit intro; it is an ordinary setting from there
+  on.
+- **Everything is affected except what carries the fix?** Set the same setting
+  to **affected**. The record then lists the releases carrying the fix and
+  calls every other version vulnerable, which suits a product whose releases
+  cannot be enumerated, or a flaw as old as the code. The CPE ranges cover the
+  gaps between the fixed spans.
 - **No usable repository**: it is gone, or its tags are unreliable or
   incomplete. Enter explicit version boundaries instead of commits.
 - **Prereleases** count as releases unless the project opts out, as OTP

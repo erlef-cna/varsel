@@ -34,7 +34,27 @@ defmodule Varsel.Cases.AffectedPackage.Changes.FromPreset do
 
     changeset
     |> stamp_constants(preset)
+    |> stamp_default_status()
     |> ManageChildren.manage_deferred(&children(&1, preset))
+  end
+
+  # erlang/otp's history starts at a squashed import, so nothing below the root
+  # commit is derivable.
+  defp stamp_default_status(changeset) do
+    introduced = Ash.Changeset.get_argument(changeset, :introduced_commit)
+
+    if not stated?(changeset, :default_status) and is_binary(introduced) and
+         Preset.otp_root_commit?(introduced) do
+      Ash.Changeset.force_change_attribute(changeset, :default_status, :unknown)
+    else
+      changeset
+    end
+  end
+
+  # An attribute carrying a `default` is already populated by the time a change
+  # runs, so `get_attribute` cannot tell a stated value from a defaulted one.
+  defp stated?(%{params: params}, field) do
+    Map.has_key?(params, field) or Map.has_key?(params, to_string(field))
   end
 
   defp children(changeset, preset) do

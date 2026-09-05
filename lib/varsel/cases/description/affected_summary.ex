@@ -7,9 +7,8 @@ defmodule Varsel.Cases.Description.AffectedSummary do
   Builds the "This issue affects …" sentence appended to every published
   description, from the record's own `affected[]`.
 
-  The sentence restates the versions block in prose. Deriving it rather than
-  asking an author to type it is the point: the two can then never disagree, and
-  a version change rewrites the sentence for free.
+  The sentence restates the versions block in prose, derived from it, so the
+  two can never disagree and a version change rewrites the sentence for free.
 
   ## Shapes
 
@@ -18,6 +17,11 @@ defmodule Varsel.Cases.Description.AffectedSummary do
       This issue affects bandit: before 1.11.0.
       This issue affects earmark: from 1.4.1 onward.
       This issue affects hex_core: from 0.1.0 before 0.12.1; hex: from 2.3.0 before 2.3.2.
+
+  A range fixed on several release lines carries its fixes as `changes[]` rather
+  than one upper bound, and the sentence names every one:
+
+      This issue affects OTP: from 27.0 before 27.3.4.15, 28.5.0.4, and 29.0.4.
 
   Erlang/OTP names the release and the application together, since a reader
   knows one or the other but the advisory concerns both:
@@ -94,7 +98,7 @@ defmodule Varsel.Cases.Description.AffectedSummary do
   defp entries(affected, status) do
     described =
       for entry <- affected,
-          ranges = status_ranges(entry, status),
+          ranges = status_ranges(entry, status) ++ default_spans(entry, status),
           ranges != [],
           do: %{name: product_name(entry), purl: entry["packageURL"], ranges: ranges}
 
@@ -131,11 +135,46 @@ defmodule Varsel.Cases.Description.AffectedSummary do
         do: range
   end
 
+  # An entry whose `defaultStatus` is `unknown` leaves the span below its lowest
+  # affected range unlisted, and the sentence still owes the reader that claim.
+  defp default_spans(%{"defaultStatus" => "unknown"} = entry, "unknown") do
+    entry["versions"]
+    |> List.wrap()
+    |> Enum.find(fn version ->
+      version["status"] == "affected" and presence(version["version"]) not in [nil, "0"]
+    end)
+    |> case do
+      nil -> []
+      version -> [%{lower: nil, uppers: [version["version"]], type: version["versionType"]}]
+    end
+  end
+
+  # An `affected` default lists the fix-carrying spans and calls everything else
+  # vulnerable, so the affected sentence is their complement.
+  defp default_spans(%{"defaultStatus" => "affected"} = entry, "affected") do
+    fixed =
+      for version <- List.wrap(entry["versions"]),
+          version["status"] == "unaffected",
+          bound = presence(version["version"]),
+          bound != nil,
+          do: {bound, version["versionType"]}
+
+    case fixed do
+      [] ->
+        [%{lower: nil, uppers: [], type: nil}]
+
+      [{_bound, type} | _] = bounds ->
+        [%{lower: nil, uppers: Enum.map(bounds, &elem(&1, 0)), type: type}]
+    end
+  end
+
+  defp default_spans(_entry, _status), do: []
+
   defp range(version) do
     lower = presence(version["version"])
     upper = version["lessThan"] |> presence() |> reject_star()
     inclusive = version["lessThanOrEqual"] |> presence() |> reject_star()
-    uppers = List.wrap(upper || inclusive)
+    uppers = List.wrap(upper || inclusive) ++ fix_transitions(version)
 
     if lower == nil and uppers == [] do
       nil
@@ -143,6 +182,20 @@ defmodule Varsel.Cases.Description.AffectedSummary do
       %{lower: zero_to_nil(lower), uppers: uppers, type: version["versionType"]}
     end
   end
+
+  # An open range carrying `changes[]` states its fixes as transitions rather
+  # than as an upper bound, one per release line — the shape a partially ordered
+  # scheme needs, since no single bound can span two lines that never meet.
+  # Every one of them ends an affected span, so the sentence names them all;
+  # reading only `lessThan` would say "onward" of a fixed vulnerability.
+  defp fix_transitions(%{"lessThan" => "*"} = version) do
+    for change <- List.wrap(version["changes"]),
+        change["status"] == "unaffected",
+        at = presence(change["at"]),
+        do: at
+  end
+
+  defp fix_transitions(_version), do: []
 
   defp zero_to_nil("0"), do: nil
   defp zero_to_nil(lower), do: lower
@@ -254,9 +307,6 @@ defmodule Varsel.Cases.Description.AffectedSummary do
   defp version(raw, decorate) do
     raw |> decorate.() |> String.replace(~r/\s/, "\u00A0")
   end
-
-  # A version containing whitespace would otherwise wrap mid-version. The
-  # escape keeps the codepoint visible in source rather than an invisible byte.
 
   ## -------------------------------------------------------------- product
 

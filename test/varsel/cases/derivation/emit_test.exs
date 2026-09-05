@@ -5,6 +5,7 @@
 defmodule Varsel.Cases.Derivation.EmitTest do
   use ExUnit.Case, async: true
 
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Derivation.Emit
   alias Varsel.Cases.Derivation.OtpVersionsTable
   alias Varsel.Cases.PackageChannel
@@ -170,14 +171,83 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     setup do
       Req.Test.stub(OtpVersionsTable, fn conn ->
         Plug.Conn.send_resp(conn, 200, """
-        OTP-27.3.4.3 : ssh-5.2.3.4 stdlib-6.2.2.1 :
-        OTP-27.0 : ssh-5.2 stdlib-6.0 :
+        OTP-27.3.4.3 : ssh-5.2.3.4 stdlib-6.2.2.1 tftp-1.2.1 :
+        OTP-27.0 : ssh-5.2 stdlib-6.0 tftp-1.2 :
         OTP-26.2.5.15 : ssh-5.1.4.12 stdlib-5.2.3.4 :
         OTP-26.0 : ssh-5.0 stdlib-5.0 :
         """)
       end)
 
       on_exit(&OtpVersionsTable.reset/0)
+    end
+
+    # `tftp` split out of `inets` and first ships in OTP-27.0, so a span opening
+    # before it existed opens at its first version.
+    test "a lower bound before the app existed falls forward to its first version" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "tftp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      assert %{"versions" => [entry], "issues" => []} =
+               Emit.channel(channel, [range("OTP-26.0", "OTP-27.3.4.3")], [])
+
+      assert entry["version"] == "1.2"
+      assert entry["lessThan"] == "1.2.1"
+    end
+
+    # The release carries no `tftp`, so it states nothing about it. Falling
+    # forward here would name a version as the fix that never carried one.
+    test "an upper bound in a release without the app is an issue, not a later version" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "tftp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      assert Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], []) == %{
+               "versions" => [],
+               "issues" => ["cannot resolve tftp's version for a range"]
+             }
+    end
+
+    test "a fix transition in a release without the app is an issue too" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "tftp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      boundaries = %{introduced: "26.0", fixed: ["26.2.5.15", "27.3.4.3"], open?: true}
+
+      assert Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], boundaries: boundaries) ==
+               %{"versions" => [], "issues" => ["cannot resolve tftp's version for a range"]}
+    end
+
+    test "translates each fix transition to the app's own version" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "ssh",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      boundaries = %{introduced: "26.0", fixed: ["26.2.5.15", "27.3.4.3"], open?: true}
+
+      assert %{"versions" => [entry], "issues" => []} =
+               Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], boundaries: boundaries)
+
+      assert entry["version"] == "5.0"
+      assert entry["lessThan"] == "*"
+
+      assert entry["changes"] == [
+               %{"at" => "5.1.4.12", "status" => "unaffected"},
+               %{"at" => "5.2.3.4", "status" => "unaffected"}
+             ]
     end
 
     test "translates each OTP release bound to the app's own version" do
@@ -273,6 +343,34 @@ defmodule Varsel.Cases.Derivation.EmitTest do
              }
     end
 
+    # A consumer walking the commit graph reaches only the commits descending
+    # from an intro it was given, so an intro left out takes its whole branch
+    # with it.
+    test "a change backported to several branches states every introducing commit" do
+      second_intro = String.duplicate("d", 40)
+      opts = [intro_shas: [@intro, second_intro], fix_shas: [@fix1]]
+
+      assert %{"versions" => versions, "issues" => []} = Emit.channel(repo_channel(), [], opts)
+
+      assert Enum.map(versions, & &1["version"]) == [@intro, second_intro]
+      assert Enum.map(versions, & &1["lessThan"]) == [@fix1, @fix1]
+    end
+
+    test "each introducing commit carries the whole fix chain" do
+      second_intro = String.duplicate("d", 40)
+      opts = [intro_shas: [@intro, second_intro], fix_shas: [@fix1, @fix2]]
+
+      assert %{"versions" => [first, second]} = Emit.channel(repo_channel(), [], opts)
+
+      assert first["version"] == @intro
+      assert second["version"] == second_intro
+
+      for entry <- [first, second] do
+        assert entry["lessThan"] == "*"
+        assert Enum.map(entry["changes"], & &1["at"]) == [@fix1, @fix2]
+      end
+    end
+
     test "multiple fixes render a changes[] chain (SHAs aren't orderable)" do
       opts = [intro_shas: [@intro], fix_shas: [@fix1, @fix2]]
 
@@ -336,164 +434,249 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
 
     # NVD writes OTP's lowest affected line as a bare {versionEndExcluding: ...}
-    # (see CVE-2022-37026); R-series tags are never used as range bounds.
-    test "a root-commit intro drops the lowest range's lower bound" do
+    # (see CVE-2022-37026).
+    test "an unknown default drops the lowest range's lower bound" do
       ranges = [range("OTP-26.0", "OTP-26.2.5.15"), range("OTP-27.0", "OTP-27.3.4.3")]
 
-      assert Emit.cpe_matches(ranges, otp_root_intro?: true) == [
+      assert Emit.cpe_matches(ranges, default_status: :unknown) == [
                %{"versionStartIncluding" => nil, "versionEndExcluding" => "26.2.5.15"},
                %{"versionStartIncluding" => "27.0", "versionEndExcluding" => "27.3.4.3"}
              ]
     end
 
-    test "a non-root intro keeps every lower bound" do
+    test "an unaffected default keeps every lower bound" do
       ranges = [range("OTP-26.0", "OTP-26.2.5.15")]
 
-      assert Emit.cpe_matches(ranges, otp_root_intro?: false) == [
+      assert Emit.cpe_matches(ranges, default_status: :unaffected) == [
                %{"versionStartIncluding" => "26.0", "versionEndExcluding" => "26.2.5.15"}
              ]
     end
   end
 
-  describe "OTP root-commit sentinel (otp_root_intro?: true)" do
-    @root "84adefa331c4159d432d22840663c38f155cd4c1"
-
-    setup do
-      Req.Test.stub(OtpVersionsTable, fn conn ->
-        Plug.Conn.send_resp(conn, 200, """
-        OTP-26.2.5.15 : ssh-5.2.11.9 stdlib-5.2.3.1 :
-        OTP-26.0 : ssh-5.0 stdlib-5.0 :
-        OTP-17.0 : ssh-3.0.1 stdlib-2.0 :
-        """)
-      end)
-
-      on_exit(&OtpVersionsTable.reset/0)
-    end
-
-    test "otp_root_commit?/1 recognises the root import commit" do
-      assert Emit.otp_root_commit?(@root)
-      refute Emit.otp_root_commit?(String.duplicate("a", 40))
-    end
-
-    # A root-commit intro is contained by every tag, and R tags are not versions,
-    # so the first range opens at the oldest numeric release, 17.0.
-    test "prepends an unknown range to an OTP app channel, bounded by the app's version at the first affected release" do
-      channel = %PackageChannel{
-        purl_type: "otp",
-        name: "stdlib",
-        version_type: :otp,
-        tag_suffixes: []
-      }
-
-      assert %{"versions" => [sentinel, released]} =
-               Emit.channel(channel, [range("OTP-17.0", "OTP-26.2.5.15")], otp_root_intro?: true)
-
-      assert sentinel == %{
-               "version" => "0",
-               "lessThan" => "2.0",
-               "status" => "unknown",
-               "versionType" => "otp"
-             }
-
-      assert released["version"] == "2.0"
-    end
-
-    test "prepends an unknown range bounded by the first affected release to the OTP release channel" do
-      channel = %PackageChannel{
+  describe "OTP status-change form" do
+    defp otp_channel do
+      %PackageChannel{
         purl_type: "sid",
         namespace: "erlang.org",
         name: "otp",
         version_type: :otp,
         tag_suffixes: []
       }
+    end
 
-      assert %{"versions" => [sentinel, released]} =
-               Emit.channel(channel, [range("OTP-17.0", "OTP-26.2.5.15")], otp_root_intro?: true)
+    test "several fixes become one open entry with a transition each" do
+      boundaries = %{introduced: "27.0", fixed: ["27.3.4.15", "28.5.0.4"], open?: true}
 
-      assert sentinel == %{
-               "version" => "0",
-               "lessThan" => "17.0",
-               "status" => "unknown",
-               "versionType" => "otp"
+      assert %{"versions" => [entry]} =
+               Emit.channel(otp_channel(), [], boundaries: boundaries)
+
+      assert entry == %{
+               "version" => "27.0",
+               "lessThan" => "*",
+               "status" => "affected",
+               "versionType" => "otp",
+               "changes" => [
+                 %{"at" => "27.3.4.15", "status" => "unaffected"},
+                 %{"at" => "28.5.0.4", "status" => "unaffected"}
+               ]
              }
+    end
 
-      assert released == %{
-               "version" => "17.0",
+    # `lessThan` says the same span. The open form would additionally claim every
+    # version above the bound, and a fix on a maintenance branch cannot close a
+    # line that does not exist yet.
+    test "a single fix stays a bounded range" do
+      boundaries = %{introduced: "26.0", fixed: ["26.2.5.15"], open?: true}
+      ranges = [range("OTP-26.0", "OTP-26.2.5.15")]
+
+      assert %{"versions" => [entry]} =
+               Emit.channel(otp_channel(), ranges, boundaries: boundaries)
+
+      assert entry == %{
+               "version" => "26.0",
                "lessThan" => "26.2.5.15",
                "status" => "affected",
                "versionType" => "otp"
              }
     end
 
-    # A fix and re-introduction splits the timeline, so the second range starts
-    # well above the sentinel's bound.
-    test "the sentinel never overlaps the first affected range" do
-      channel = %PackageChannel{
-        purl_type: "sid",
-        namespace: "erlang.org",
-        name: "otp",
-        version_type: :otp,
-        tag_suffixes: []
-      }
+    # An open entry claims everything above its lower bound, so it may only be
+    # used when the fixes actually account for that.
+    test "boundaries that would overclaim stay bounded ranges" do
+      boundaries = %{introduced: "27.0", fixed: ["27.3.4.15", "28.5.0.4"], open?: false}
+      ranges = [range("OTP-27.0", "OTP-27.3.4.15")]
 
-      ranges = [range("OTP-17.0", "OTP-18.0"), range("OTP-26.0", "OTP-26.2.5.15")]
+      assert %{"versions" => [entry]} =
+               Emit.channel(otp_channel(), ranges, boundaries: boundaries)
 
-      assert %{"versions" => [sentinel | affected]} =
-               Emit.channel(channel, ranges, otp_root_intro?: true)
-
-      assert sentinel["lessThan"] == "17.0"
-      assert Enum.map(affected, & &1["version"]) == ["17.0", "26.0"]
+      refute Map.has_key?(entry, "changes")
+      assert entry["lessThan"] == "27.3.4.15"
     end
+  end
 
-    # `otp_root_intro?` holds whenever the root commit has no explicit version,
-    # including when no release carries the vulnerability at all.
-    test "no sentinel when no range places the root commit" do
-      channel = %PackageChannel{
-        purl_type: "sid",
-        namespace: "erlang.org",
-        name: "otp",
-        version_type: :otp,
-        tag_suffixes: []
-      }
-
-      assert %{"versions" => versions} = Emit.channel(channel, [], otp_root_intro?: true)
-
-      assert versions == []
-    end
-
-    # erlang/otp's history starts at the root commit, so "0 → <root sha>" would
-    # claim a span of commits that does not exist.
-    test "a git channel carries no sentinel even when the intro is the root commit" do
-      channel = %PackageChannel{purl_type: "github", namespace: "erlang", name: "otp"}
-      opts = [otp_root_intro?: true, intro_shas: [@root], fix_shas: ["fix"]]
-
-      assert %{"versions" => versions} = Emit.channel(channel, [], opts)
-
-      refute Enum.any?(versions, &(&1["status"] == "unknown"))
-    end
-
-    test "no sentinel when the intro is not the root commit" do
-      channel = %PackageChannel{
-        purl_type: "otp",
-        name: "ssh",
-        version_type: :otp,
-        tag_suffixes: []
-      }
-
-      assert %{"versions" => versions} =
-               Emit.channel(channel, [range("OTP-26.0", "OTP-26.2.5.15")], otp_root_intro?: false)
-
-      refute Enum.any?(versions, &(&1["status"] == "unknown"))
-    end
-
-    # A semver channel never sees the root commit; the flag is OTP-only.
-    test "no sentinel on a semver channel" do
+  describe "an unknown default status" do
+    # Containment alone — "this release never held the introducing commit" — is
+    # the proof an unknown default declines to make, so the releases whose
+    # safety rests on the patch are stated explicitly.
+    test "appends the fix-carrying spans as unaffected ranges on a flat scheme" do
       channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
 
-      assert %{"versions" => versions} =
-               Emit.channel(channel, [range("v1.0.0", "v1.5.3")], otp_root_intro?: true)
+      opts = [
+        default_status: :unknown,
+        fixed_ranges: [%{from: "v1.5.3", until: :unbounded}]
+      ]
 
-      refute Enum.any?(versions, &(&1["status"] == "unknown"))
+      assert %{"versions" => [affected, unaffected]} =
+               Emit.channel(channel, [range("v1.0.0", "v1.5.3")], opts)
+
+      assert affected == %{
+               "version" => "1.0.0",
+               "lessThan" => "1.5.3",
+               "status" => "affected",
+               "versionType" => "semver"
+             }
+
+      assert unaffected == %{
+               "version" => "1.5.3",
+               "lessThan" => "*",
+               "status" => "unaffected",
+               "versionType" => "semver"
+             }
+    end
+
+    test "an unaffected default publishes the affected ranges alone" do
+      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
+
+      opts = [
+        default_status: :unaffected,
+        fixed_ranges: [%{from: "v1.5.3", until: :unbounded}]
+      ]
+
+      assert %{"versions" => [affected]} =
+               Emit.channel(channel, [range("v1.0.0", "v1.5.3")], opts)
+
+      assert affected["status"] == "affected"
+    end
+
+    # A transition carries its own status, so the status-change form already
+    # states every fix-carrying span and adding ranges would say it twice.
+    test "the status-change form states its fixes through transitions alone" do
+      channel = %PackageChannel{
+        purl_type: "sid",
+        namespace: "erlang.org",
+        name: "otp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      opts = [
+        default_status: :unknown,
+        boundaries: %{introduced: "17.0", fixed: ["27.3.4.15", "28.5.0.4"], open?: true},
+        fixed_ranges: [%{from: "OTP-27.3.4.15", until: :unbounded}]
+      ]
+
+      assert %{"versions" => [entry]} =
+               Emit.channel(channel, [range("OTP-17.0", "OTP-27.3.4.15")], opts)
+
+      assert entry["status"] == "affected"
+      assert Enum.map(entry["changes"], & &1["at"]) == ["27.3.4.15", "28.5.0.4"]
+    end
+  end
+
+  describe "an affected default status" do
+    test "publishes the fix-carrying spans and nothing else" do
+      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
+
+      opts = [
+        default_status: :affected,
+        fixed_ranges: [%{from: "v1.5.3", until: :unbounded}]
+      ]
+
+      assert %{"versions" => [entry], "issues" => []} =
+               Emit.channel(channel, [range("v1.0.0", "v1.5.3")], opts)
+
+      assert entry == %{
+               "version" => "1.5.3",
+               "lessThan" => "*",
+               "status" => "unaffected",
+               "versionType" => "semver"
+             }
+    end
+
+    # Everything below the introducing release is affected too, so the entry has
+    # no lower bound to find.
+    test "the status-change form opens at the zero bound" do
+      channel = %PackageChannel{
+        purl_type: "sid",
+        namespace: "erlang.org",
+        name: "otp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      opts = [
+        default_status: :affected,
+        boundaries: %{introduced: "27.0", fixed: ["27.3.4.15", "28.5.0.4"], open?: true},
+        fixed_ranges: [%{from: "OTP-27.3.4.15", until: :unbounded}]
+      ]
+
+      assert %{"versions" => [entry]} =
+               Emit.channel(channel, [range("OTP-27.0", "OTP-27.3.4.15")], opts)
+
+      assert entry["version"] == "0"
+      assert entry["lessThan"] == "*"
+      assert entry["status"] == "affected"
+      assert Enum.map(entry["changes"], & &1["at"]) == ["27.3.4.15", "28.5.0.4"]
+    end
+  end
+
+  describe "cpe_matches/2 under an affected default" do
+    # CPE has one status, so everything not proven safe is matched.
+    test "matches the gap below the only fix" do
+      opts = [default_status: :affected, fixed_ranges: [%{from: "v1.5.3", until: :unbounded}]]
+
+      assert Emit.cpe_matches([], opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => "1.5.3"}
+             ]
+    end
+
+    test "matches each gap between fix-carrying spans" do
+      opts = [
+        default_status: :affected,
+        fixed_ranges: [%{from: "v1.2.0", until: "v2.0.0"}, %{from: "v3.0.0", until: :unbounded}]
+      ]
+
+      assert Emit.cpe_matches([], opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => "1.2.0"},
+               %{"versionStartIncluding" => "2.0.0", "versionEndExcluding" => "3.0.0"}
+             ]
+    end
+
+    # A bounded last span leaves everything above it affected again.
+    test "matches above a bounded last span" do
+      opts = [default_status: :affected, fixed_ranges: [%{from: "v1.2.0", until: "v2.0.0"}]]
+
+      assert Emit.cpe_matches([], opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => "1.2.0"},
+               %{"versionStartIncluding" => "2.0.0", "versionEndExcluding" => nil}
+             ]
+    end
+
+    test "matches everything when no fix is known" do
+      opts = [default_status: :affected, fixed_ranges: []]
+
+      assert Emit.cpe_matches([], opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => nil}
+             ]
+    end
+  end
+
+  describe "the erlang/otp root commit" do
+    @root "84adefa331c4159d432d22840663c38f155cd4c1"
+
+    test "otp_root_commit?/1 recognises the root import commit" do
+      assert Preset.otp_root_commit?(@root)
+      refute Preset.otp_root_commit?(String.duplicate("a", 40))
     end
   end
 end

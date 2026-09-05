@@ -98,6 +98,51 @@ defmodule Varsel.Cases.ReachabilityTest do
     end
   end
 
+  describe "a bugfix backported to several branches introduces the flaw on each" do
+    # The releases between a branch point and the backport never carried the
+    # change, so they are not affected: 28.0 predates the backport that put the
+    # flaw on the 28 line.
+    test "each line's affected span starts where the backport landed" do
+      result =
+        deduce(
+          [
+            {"27.0", false},
+            {"27.3.4.9", false},
+            {"27.3.4.10", true},
+            {"27.3.4.14", true},
+            {"27.3.4.15", false},
+            {"28.0", false},
+            {"28.1", true},
+            {"28.5.0.3", true},
+            {"28.5.0.4", false}
+          ],
+          comparator: :otp,
+          include_prereleases: false
+        )
+
+      assert versions(result) == [{"27.3.4.10", "27.3.4.15"}, {"28.1", "28.5.0.4"}]
+    end
+
+    # An open entry from the first intro would claim 28.0, which the flaw never
+    # reached, so the boundaries cannot be published in the status-change form.
+    test "boundaries are not publishable open when a line predates the backport" do
+      result =
+        deduce(
+          [
+            {"27.3.4.10", true},
+            {"27.3.4.15", false},
+            {"28.0", false},
+            {"28.1", true},
+            {"28.5", true}
+          ],
+          comparator: :otp,
+          include_prereleases: false
+        )
+
+      refute result.boundaries.open?
+    end
+  end
+
   describe "OTP R-series tags" do
     # R tags are not versions, so they drop out with `nightly` and the topic
     # tags rather than bounding a range below the numeric ones.
@@ -273,6 +318,44 @@ defmodule Varsel.Cases.ReachabilityTest do
     end
   end
 
+  describe "fixed_ranges (fix-carrying spans)" do
+    test "a fixed run becomes one range, versions never containing the intro do not" do
+      # 0.9.x predates the intro: safe, but not by carrying the fix.
+      result =
+        Reachability.deduce(
+          ["0.9.0", "1.0.0", "1.0.1", "1.0.2", "1.0.3"],
+          MapSet.new(["1.0.0", "1.0.1"]),
+          comparator: :semver,
+          fixed: MapSet.new(["1.0.2", "1.0.3"])
+        )
+
+      assert versions(result) == [{"1.0.0", "1.0.2"}]
+      assert Enum.map(result.fixed_ranges, &{&1.from, &1.until}) == [{"1.0.2", :unbounded}]
+    end
+
+    test "a re-introduction bounds the fixed span and wins over the fixed label" do
+      result =
+        Reachability.deduce(
+          ["1.0.0", "1.1.0", "1.2.0", "2.0.0", "2.1.0"],
+          MapSet.new(["1.0.0", "2.0.0"]),
+          comparator: :semver,
+          fixed: MapSet.new(["1.1.0", "1.2.0", "2.0.0", "2.1.0"])
+        )
+
+      assert versions(result) == [{"1.0.0", "1.1.0"}, {"2.0.0", "2.1.0"}]
+
+      assert Enum.map(result.fixed_ranges, &{&1.from, &1.until}) == [
+               {"1.1.0", "2.0.0"},
+               {"2.1.0", :unbounded}
+             ]
+    end
+
+    test "without the fixed set there are no fixed ranges" do
+      result = deduce([{"1.0.0", true}, {"1.0.1", false}], comparator: :semver)
+      assert result.fixed_ranges == []
+    end
+  end
+
   describe "edge cases" do
     test "an affected span that is never fixed is open-ended" do
       result =
@@ -321,7 +404,7 @@ defmodule Varsel.Cases.ReachabilityTest do
       result =
         deduce(
           [{"1.0.0-rc1", true}, {"1.0.0", false}, {"1.0.1", false}],
-          comparator: :otp,
+          comparator: :semver,
           include_prereleases: false
         )
 
@@ -330,6 +413,18 @@ defmodule Varsel.Cases.ReachabilityTest do
       assert call_out.reason == :prerelease_conflict
       assert call_out.version == "1.0.0-rc1"
       assert call_out.dag_label == :affected
+    end
+
+    test "an OTP release candidate is a non-release tag" do
+      result =
+        deduce(
+          [{"27.0-rc1", true}, {"27.0", false}, {"27.0.1", false}],
+          comparator: :otp,
+          include_prereleases: false
+        )
+
+      assert result.ranges == []
+      assert result.call_outs == []
     end
   end
 end

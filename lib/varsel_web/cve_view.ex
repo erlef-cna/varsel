@@ -367,8 +367,8 @@ defmodule VarselWeb.CveView do
   defp display(_range, value), do: value
 
   @doc """
-  The bare package name for an affected entry — `bandit`, `erlang/otp`, no
-  `pkg:type/` prefix — for spots that need a short name rather than the full
+  The bare package name for an affected entry (`bandit`, `erlang/otp`, no
+  `pkg:type/` prefix), for spots that need a short name over the full
   purl chip label (the checker's placeholder and verdict copy: `bandit
   version, e.g. …`, `✗ cowlib 2.11.0 is affected`). Falls back to
   `vendor/product` when there's no parseable purl.
@@ -386,11 +386,9 @@ defmodule VarselWeb.CveView do
 
   @doc """
   Whether an affected entry's package is an OTP application (`pkg:otp/*`
-  purl type) — drives the checker's release-vs-application-version
-  vocabulary choice (rev 3): even when a record's ranges are `semver`-typed
-  (an OTP app version with no release mapping), an `pkg:otp/*` package
-  still speaks the application-version fallback vocabulary rather than a
-  bare hex-style verdict.
+  purl type). This drives the checker's vocabulary: a `pkg:otp/*` package
+  speaks in application versions even when its ranges are `semver`-typed, an
+  OTP app version with no release mapping.
   """
   @spec otp_package?(map()) :: boolean()
   def otp_package?(%{"packageURL" => package_url}) do
@@ -614,9 +612,9 @@ defmodule VarselWeb.CveView do
   @doc """
   Sorts references advisory-tagged (`vendor-advisory` or `third-party-advisory`)
   first, then patch-tagged, then everything else, preserving original
-  relative order within each tier (stable sort) — the References card is
-  one flat list, not grouped by tag, even at 11+ rows (rev 3: the grouping
-  IS the sort order; no headers).
+  relative order within each tier (stable sort). The References card is one
+  flat list at any length: the sort order is the grouping, and there are no
+  headers.
   """
   @spec sort_references([map()]) :: [map()]
   def sort_references(references) when is_list(references) do
@@ -670,8 +668,8 @@ defmodule VarselWeb.CveView do
 
   Those identifier forms carry the full URL as a `title`, since their text
   deliberately hides it; a plain link already reads as its own URL. A
-  `broken-link` tag renders the row faint — not struck through, which would
-  read as retracted — while keeping it listed and clickable.
+  `broken-link` tag renders the row faint, keeping it listed and clickable.
+  Struck through it would read as retracted.
 
   `pills` picks how many tags are drawn — `:first` (the default) is the
   published card's flat one-pill-per-row look, `:all` suits an editor that
@@ -760,12 +758,12 @@ defmodule VarselWeb.CveView do
 
   @doc """
   Derives the branch-label prefix for a range line (`"1.5 series"`,
-  `"maint-27"`) from its FIX boundary version — the leading two dotted
-  numeric components. `versionType == "otp"` (tag matching `OTP-NN.M...` or
+  `"maint-27"`) from the leading two dotted numeric components of its FIX
+  boundary version. `versionType == "otp"` (tag matching `OTP-NN.M...` or
   bare `NN.M...`) uses the `maint-<major>` shape; everything else (semver
   and semver-like git tags) uses `"<major>.<minor> series"`. Returns nil
-  when no numeric components can be found — callers omit the label rather
-  than render a broken prefix (and always omit it for a single-range entry).
+  when no numeric components can be found, and callers then omit the label.
+  They always omit it for a single-range entry.
   """
   @spec branch_label(String.t() | nil, String.t() | nil) :: String.t() | nil
   def branch_label(nil, _type), do: nil
@@ -792,13 +790,13 @@ defmodule VarselWeb.CveView do
 
   "Fixed in" means the first safe version of the range's own line, so
   candidates are ranked by PARSED version via
-  `VarselWeb.CveView.AffectedChecker`'s orderable comparison — never by
+  `VarselWeb.CveView.AffectedChecker`'s orderable comparison, never by
   `changes[]` array order, which real-world records don't guarantee is
   sorted (see CVE-2098-0002's OTP range, whose changes arrive
   `28.0.3, 27.3.4.3, 26.2.5.15`; the fix is 26.2.5.15, the smallest). A
-  boundary that fails to parse under the entry's `versionType` (e.g. a git
-  sha — shas don't order) falls back to array order among the unparseable
-  ones, since there's no comparison to rank them by.
+  boundary that fails to parse under the entry's `versionType`, such as a
+  commit sha, falls back to array order among the unparseable ones, since
+  there is no comparison to rank them by.
   """
   @spec fix_boundary(map()) :: String.t() | nil
   def fix_boundary(%{"lessThan" => less_than, "changes" => [_ | _] = changes} = version) when less_than == "*" do
@@ -866,13 +864,12 @@ defmodule VarselWeb.CveView do
 
   @doc """
   Whether a range's introduction lies wholly within the branch its fix
-  belongs to (R5): the range's lower bound must share the fix's leading
-  numeric component(s) — major only for OTP release lines, `{major,minor}`
-  for semver-shaped versions. When the range predates the branch (its lower
-  bound sits on an earlier line than the fix), the branch label is NOT a
-  legitimate leading prefix for the whole range — callers move it into the
-  fix note as a parenthetical instead. Bare/unparseable bounds count as "not
-  within" (no leading label rather than a guessed one).
+  belongs to: the range's lower bound must share the fix's leading numeric
+  component(s), major only for OTP release lines and `{major, minor}` for
+  semver-shaped versions. A range whose lower bound sits on an earlier line
+  than its fix spans more than that branch, so the branch label is not a
+  legitimate leading prefix for it; callers move the label into the fix note
+  as a parenthetical. Bare or unparseable bounds count as "not within".
   """
   @spec range_within_branch?(String.t(), String.t(), String.t()) :: boolean()
   def range_within_branch?(lower_version, fix_version, "otp") do
@@ -894,42 +891,21 @@ defmodule VarselWeb.CveView do
   end
 
   @doc """
-  Normalizes a raw `versions[]` list into deduped, canonical affected
-  ranges — the SINGLE pipeline both the rendered range lines
-  (`VarselWeb.CveHTML.affected_ranges/1`) and the checker's matcher
-  (`checker_packages/1` → `AffectedChecker.match/2`) draw from, so a
-  real-world record's multiple representations of the same range (a `purl`
-  duplicate of a `semver` range, both alongside an unrelated `git` range)
-  never double-render and never let the matcher pick a representation with
-  the wrong comparison semantics.
+  Normalizes a raw `versions[]` list into deduped affected ranges: the single
+  pipeline both the rendered range lines (`VarselWeb.CveHTML.affected_ranges/1`)
+  and the checker's matcher (`checker_packages/1` to `AffectedChecker.match/2`)
+  draw from, so a record stating one range twice never double-renders.
 
-  Per-entry, in order:
+  Each entry keeps its bounds as `*_raw` for `title` attributes. A purl-typed
+  `changes[].at` (`pkg:otp/ssh@5.3.3`) is reduced to its bare version, since a
+  chained fix arrives purl-prefixed just like the bounds. Entries sharing
+  `{versionType, version, fix_boundary}` collapse to the first.
 
-    * R1 — a `purl`-typed boundary (`pkg:hex/ash@3.5.39`) is rewritten to
-      its bare version (everything after the last `@`) and reclassified as
-      `"semver"` — including `pkg:otp/*` purls, whose bare numbers are the
-      OTP APPLICATION's own version scheme (`3.0.1`, `5.3.3`, …), never OTP
-      release tags, so they compare as plain semver, never as `"otp"`. The
-      original purl-prefixed strings are kept alongside as `*_raw` for
-      `title` attributes. Non-purl entries pass through unchanged (their
-      `*_raw` mirrors the bare value, so callers don't need to branch).
-    * R2 — entries are grouped by `{normalized_type_family, lower, fix}`
-      (`type_family` collapses `semver`/`purl→semver` together but keeps
-      `git`/`otp`/other types apart, since a git range is never a duplicate
-      of a numeric one even if some renderer coincidentally strung together
-      the same digits). Within a group, the representation that needed no
-      R1 stripping is preferred (a plain `semver`/`otp` entry over its
-      `purl` duplicate); ties keep the first.
-
-  Only `status == "affected"` entries participate — this mirrors
-  `affected_ranges/1`'s existing filter and is what the checker needs too.
+  Every row survives, whatever its status: under the CVE resolution algorithm an
+  `unaffected` or `unknown` row is a real answer for the versions it covers.
   """
   @spec normalize_versions([map()]) :: [map()]
   def normalize_versions(versions) when is_list(versions) do
-    # EVERY row survives, whatever its status. Under the CVE resolution
-    # algorithm an `unaffected` or `unknown` row is a real answer for the
-    # versions it covers — dropping them would leave those versions answered by
-    # a later row or by `defaultStatus`, which is a different claim entirely.
     versions
     |> Enum.map(&normalize_entry/1)
     |> Enum.filter(& &1)
@@ -951,8 +927,8 @@ defmodule VarselWeb.CveView do
   # Enum.filter via Map.get's default (which only applies to absent keys).
   defp normalize_changes(nil), do: []
 
-  # R1 applies to changes[].at too — a purl-typed range's chained fixes
-  # (pkg:otp/ssh@5.3.3) arrive purl-prefixed just like the top-level bounds.
+  # A purl-typed range's chained fixes (`pkg:otp/ssh@5.3.3`) arrive
+  # purl-prefixed just like its top-level bounds.
   defp normalize_changes(changes) do
     Enum.map(changes, fn change ->
       change
@@ -971,27 +947,15 @@ defmodule VarselWeb.CveView do
 
   defp purl_bare_version(other), do: other
 
-  # R2: group by {type family, normalized lower, normalized fix}. `git`
-  # keeps its own type as the family key (never merges with numeric
-  # ranges); everything else that normalizes to "semver"/"otp" via R1
-  # shares a family with its plain counterpart. Preferring the entry with
-  # no `*_raw` divergence from its normalized form means a plain semver/otp
-  # entry wins over its purl-derived duplicate.
+  # A git range is never a duplicate of a numeric one, even where a renderer
+  # coincidentally strung together the same digits, so the type is part of the
+  # key.
   defp dedup_normalized(entries) do
-    entries
-    |> Enum.group_by(&dedup_key/1)
-    |> Map.values()
-    |> Enum.map(&Enum.min_by(&1, fn e -> if needed_normalization?(e), do: 1, else: 0 end))
-    |> Enum.sort_by(fn e -> Enum.find_index(entries, &(&1 == e)) end)
+    Enum.uniq_by(entries, &dedup_key/1)
   end
 
   defp dedup_key(entry) do
     {entry["versionType"], entry["version"], fix_boundary(entry)}
-  end
-
-  defp needed_normalization?(entry) do
-    entry["version_raw"] != entry["version"] or
-      entry["lessThan_raw"] != entry["lessThan"]
   end
 
   @doc """
@@ -1001,7 +965,7 @@ defmodule VarselWeb.CveView do
   `pkg:hex/plug` only `plug` is the package, and
   `pkg:otp/ssh?repository_url=https:%2F%2Fgithub.com%2Ferlang%2Fotp&vcs_url=…`
   runs past 100 characters to say "ssh". This names the ecosystem and the
-  package instead — `Hex / plug`, `Erlang / ssh`, `GitHub / erlang/otp` — and
+  package instead (`Hex / plug`, `Erlang / ssh`, `GitHub / erlang/otp`), and
   keeps the full purl in a `title` for anyone who needs it.
 
   The ecosystem is what a reader knows the package by, not the purl's type: an
@@ -1173,9 +1137,9 @@ defmodule VarselWeb.CveView do
   def short_sha(version), do: version
 
   @doc """
-  Truncates a commit sha to its short 7-char form — the site's convention
-  for References-row and git-range-line sha display (rev 3, R4), distinct
-  from `short_sha/1`'s 10-char form used elsewhere for git version links.
+  Truncates a commit sha to its short 7-char form, the site's convention for
+  References-row and git-range-line sha display. `short_sha/1`'s 10-char form
+  is what git version links use.
   """
   @spec short_sha7(String.t()) :: String.t()
   def short_sha7(sha) when is_binary(sha), do: String.slice(sha, 0, 7)

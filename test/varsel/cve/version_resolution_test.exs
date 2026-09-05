@@ -146,45 +146,49 @@ defmodule Varsel.CVE.VersionResolutionTest do
     end
   end
 
-  # TEMPORARY — drop the `@tag :skip`s below, and the describe above them, once
-  # the published records stop using `changes[]` to mean "a fix per release
-  # line".
-  # These tests state the algorithm the spec defines and this module implements;
-  # only the temporary gate in `comparable_entries/1` keeps them from passing.
-  describe "changes[] resolution is temporarily disabled (bad legacy data)" do
-    test "an entry carrying changes[] makes its product unaskable" do
-      versions = [
-        %{
-          "version" => "26.0",
-          "lessThan" => "*",
-          "status" => "affected",
-          "versionType" => "otp",
-          "changes" => [
-            %{"at" => "27.3.4", "status" => "unaffected"},
-            %{"at" => "28.7.6", "status" => "unaffected"}
-          ]
-        }
-      ]
+  describe "changes[] across OTP maintenance branches" do
+    # CVE-2026-54890's release channel: one open entry from 27.0 with a fix per
+    # maintenance line. The version scheme does not order 27.3.4.15 against 28.0,
+    # so the 27 fix cannot close the vulnerability on 28.
+    @versions [
+      %{
+        "version" => "27.0",
+        "lessThan" => "*",
+        "status" => "affected",
+        "versionType" => "otp",
+        "changes" => [
+          %{"at" => "27.3.4.15", "status" => "unaffected"},
+          %{"at" => "28.5.0.4", "status" => "unaffected"},
+          %{"at" => "29.0.4", "status" => "unaffected"}
+        ]
+      }
+    ]
 
-      refute VR.resolvable?(versions)
-      assert resolve(versions, "28.0.0") == {:error, :unsupported}
+    test "each line is closed by its own fix" do
+      assert resolve(@versions, "27.3.4.14") == {:ok, :affected}
+      assert resolve(@versions, "27.3.4.15") == {:ok, :unaffected}
+      assert resolve(@versions, "28.5.0.3") == {:ok, :affected}
+      assert resolve(@versions, "28.5.0.4") == {:ok, :unaffected}
+      assert resolve(@versions, "29.0.3") == {:ok, :affected}
+      assert resolve(@versions, "29.0.4") == {:ok, :unaffected}
     end
 
-    # Why it is disabled: applied per spec, 27.3.4 is the last transition at or
-    # below 28.0.0, so 28.0.0 would answer "unaffected" — but OTP 28.0.0 is
-    # affected until its own line's 28.7.6. Declining beats answering wrongly.
-    test "the shape that would produce a false negative" do
-      versions = [
-        %{
-          "version" => "26.0",
-          "lessThan" => "*",
-          "status" => "affected",
-          "versionType" => "otp",
-          "changes" => [%{"at" => "27.3.4", "status" => "unaffected"}]
-        }
-      ]
+    # The bug this whole shape exists to avoid: a total order would place
+    # 27.3.4.15 below 28.0 and answer "unaffected" for a release that is
+    # affected until its own line's 28.5.0.4.
+    test "a fix on one branch does not close another" do
+      assert resolve(@versions, "28.0") == {:ok, :affected}
+      assert resolve(@versions, "28.0.1") == {:ok, :affected}
+      assert resolve(@versions, "28.4") == {:ok, :affected}
+    end
 
-      refute match?({:ok, :unaffected}, resolve(versions, "28.0.0"))
+    test "a later release on a fixed line stays fixed" do
+      assert resolve(@versions, "29.1") == {:ok, :unaffected}
+      assert resolve(@versions, "29.0.5") == {:ok, :unaffected}
+    end
+
+    test "a release below the entry falls through to the default" do
+      assert resolve(@versions, "26.0") == {:ok, :unaffected}
     end
   end
 
@@ -203,30 +207,25 @@ defmodule Varsel.CVE.VersionResolutionTest do
       }
     ]
 
-    @tag :skip
     test "before the first transition the entry's own status holds" do
       assert resolve(@versions, "1.0.0") == {:ok, :affected}
     end
 
-    @tag :skip
     test "at and after a transition its status takes over" do
       assert resolve(@versions, "1.7.22") == {:ok, :unaffected}
       assert resolve(@versions, "1.7.99") == {:ok, :unaffected}
     end
 
-    @tag :skip
     test "a later transition can move the version back to affected" do
       assert resolve(@versions, "1.8.0") == {:ok, :affected}
       assert resolve(@versions, "1.8.5") == {:ok, :affected}
     end
 
-    @tag :skip
     test "the final transition wins above it" do
       assert resolve(@versions, "1.8.6") == {:ok, :unaffected}
       assert resolve(@versions, "99.0.0") == {:ok, :unaffected}
     end
 
-    @tag :skip
     test "an unknown transition is reported as unknown" do
       versions = [
         %{
@@ -242,8 +241,10 @@ defmodule Varsel.CVE.VersionResolutionTest do
     end
 
     # The schema applies changes in array order, not sorted order.
-    @tag :skip
-    test "changes apply in array order — a lower transition listed last still wins" do
+    # "for change in entry.changes, sorted in increasing order" — array order is
+    # not the record's to choose, so a transition listed last but ordered first
+    # is still applied first.
+    test "changes apply in sorted order, not array order" do
       versions = [
         %{
           "version" => "1.0.0",
@@ -257,10 +258,10 @@ defmodule Varsel.CVE.VersionResolutionTest do
         }
       ]
 
-      assert resolve(versions, "3.0.0") == {:ok, :affected}
+      assert resolve(versions, "3.0.0") == {:ok, :unaffected}
+      assert resolve(versions, "1.6.0") == {:ok, :affected}
     end
 
-    @tag :skip
     test "a bounded range's changes still stop at its upper bound" do
       versions = [
         %{
@@ -407,7 +408,6 @@ defmodule Varsel.CVE.VersionResolutionTest do
       assert resolve(@versions, "2024-06-15") == {:ok, :unaffected}
     end
 
-    @tag :skip
     test "changes[] transitions work on dates" do
       versions = [
         %{

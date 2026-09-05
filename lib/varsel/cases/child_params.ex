@@ -14,7 +14,7 @@ defmodule Varsel.Cases.ChildParams do
   child type, hence the type argument threaded through.
   """
 
-  alias Varsel.Cases.Derivation.Emit
+  alias Varsel.Cases.AffectedPackage.Preset
 
   # Comma/newline separated text inputs that become {:array, :string} attributes.
   @list_params %{
@@ -107,9 +107,9 @@ defmodule Varsel.Cases.ChildParams do
 
     cond do
       flag == "true" ->
-        Map.put(params, "introduced_commit", Emit.otp_root_commit())
+        Map.put(params, "introduced_commit", Preset.otp_root_commit())
 
-      params["introduced_commit"] == Emit.otp_root_commit() ->
+      params["introduced_commit"] == Preset.otp_root_commit() ->
         Map.put(params, "introduced_commit", "")
 
       true ->

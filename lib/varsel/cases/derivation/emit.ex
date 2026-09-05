@@ -28,13 +28,14 @@ defmodule Varsel.Cases.Derivation.Emit do
   `1.2.3-special` lists `["-", "special"]`; an empty list emits the version
   alone.
 
-  Ranges are published as **separate bounded ranges** — one `versions[]` object
-  per range (`{version, lessThan, status, versionType}`), never a `changes[]`
-  chain: the flat-timeline engine already linearises every version, so each
-  affected span is a single half-open interval. An unbounded range (affected,
-  never fixed) renders `lessThan: "*"`. The git type is the exception: SHAs have
-  no order, so several fixes render as a `changes[]` chain off the introducing
-  commit.
+  A totally ordered scheme publishes one `versions[]` object per range
+  (`{version, lessThan, status, versionType}`), with an unbounded range
+  rendering `lessThan: "*"`. A scheme whose versions only order partially
+  cannot: a bounded range asserts an order between its bounds that OTP's
+  maintenance patches do not have (see `Varsel.Cases.Reachability.OTPVersion`).
+  Those publish one open entry carrying a `changes[]` transition per fix, which
+  the schema resolves by applying every transition at or below the version
+  asked about. Commit SHAs have no order at all and take the same shape.
   """
 
   alias Varsel.Cases.Derivation.OtpVersionsTable
@@ -46,50 +47,31 @@ defmodule Varsel.Cases.Derivation.Emit do
   @type range :: Reachability.range()
 
   # The suffix standing for the undecorated version. A form's comma separated
-  # list cannot carry an empty entry — Ash trims it away — so the bare flavor is
-  # stored as this marker instead.
+  # list cannot carry an empty entry, since Ash trims it away, so the bare
+  # flavor is stored as this marker instead.
   @bare_tag "-"
-
-  # The root (parent-less) commit of erlang/otp: the squashed import its history
-  # starts at, so a vulnerability introduced here predates every version the tag
-  # set can express.
-  @otp_root_commit "84adefa331c4159d432d22840663c38f155cd4c1"
-
-  @doc "The erlang/otp root commit, the start of derivable history."
-  @spec otp_root_commit() :: String.t()
-  def otp_root_commit, do: @otp_root_commit
-
-  @doc "Whether `sha` is the erlang/otp root commit, the start of derivable history."
-  @spec otp_root_commit?(String.t()) :: boolean()
-  def otp_root_commit?(sha), do: sha == @otp_root_commit
 
   @doc """
   The `versions[]` block for a repo-derived channel: `%{"versions" => [...],
   "issues" => [...]}`. `pending` is added by the caller (it is package-level).
 
   `opts` carries the boundary facts the git version type needs
-  (`:intro_shas` / `:fix_shas`) and whether the introducing commit is the OTP
-  root with no explicit version to place it (`:otp_root_intro?`).
+  (`:intro_shas` / `:fix_shas`), the derived `:boundaries`, and the package's
+  effective `:default_status`.
   """
   @spec channel(PackageChannel.t(), [range()], keyword()) :: %{
           required(String.t()) => [map()]
         }
   def channel(channel, ranges, opts) do
-    version_type = version_type(channel)
+    emit(version_type(channel), channel, ranges, opts)
+  end
 
-    result =
-      case version_type do
-        :git ->
-          git(Keyword.get(opts, :intro_shas, []), Keyword.get(opts, :fix_shas, []))
+  defp emit(:git, _channel, _ranges, opts) do
+    git(Keyword.get(opts, :intro_shas, []), Keyword.get(opts, :fix_shas, []))
+  end
 
-        :otp ->
-          otp_versions(channel, ranges)
-
-        other ->
-          %{"versions" => decorated_ranges(channel, ranges, to_string(other)), "issues" => []}
-      end
-
-    prepend_root_sentinel(result, sentinel_for(channel, version_type, ranges, opts))
+  defp emit(version_type, channel, ranges, opts) do
+    versions(channel, version_type, ranges, opts)
   end
 
   @doc """
@@ -105,36 +87,67 @@ defmodule Varsel.Cases.Derivation.Emit do
   cpeApplicability matches from the neutral ranges: each `[from, until)` is one
   non-overlapping `%{versionStartIncluding, versionEndExcluding}` (bare versions).
 
-  A range reaching back to the start of derivable history (`otp_root_intro?`)
-  drops its lower bound instead of naming the release there, matching how NVD
-  writes OTP's lowest affected line (`{versionEndExcluding: "23.3.4.15"}`, no
-  start). CPE has no way to say "unknown", so the span the `versions[]` sentinel
-  marks `unknown` is simply left unbounded below here — CPE version comparison is
-  consumer-defined, so naming the lowest release as a bound would be a stronger
-  claim than we can derive.
+  CPE has only one status, so a match means "possibly affected" and an unmatched
+  version reads as safe. Everything the record does not call unaffected is
+  therefore matched, which is the worst reading of what it says:
+
+    * `unaffected` default: the affected ranges.
+    * `unknown` default: the same, with the lowest match dropping its lower
+      bound so the unclaimed pre-introduction span falls inside it. This is how
+      NVD writes OTP's lowest affected line (`{versionEndExcluding:
+      "23.3.4.15"}`, no start).
+    * `affected` default: the gaps between the fix-carrying spans, since those
+      spans are the only versions the record calls safe.
   """
   @spec cpe_matches([range()], keyword()) :: [map()]
   def cpe_matches(ranges, opts \\ []) do
-    # Reachability emits ranges in ascending release order, so the first is the
-    # lowest.
-    drop_lower_bound? = Keyword.get(opts, :otp_root_intro?, false)
+    case Keyword.get(opts, :default_status, :unaffected) do
+      :affected -> opts |> Keyword.get(:fixed_ranges, []) |> gaps_between()
+      :unknown -> affected_matches(ranges, true)
+      _unaffected -> affected_matches(ranges, false)
+    end
+  end
 
+  defp affected_matches(ranges, drop_lowest_bound?) do
+    # Reachability emits ranges in ascending release order, so the first is the
+    # lowest, and the only one an unclaimed span borders.
     for {range, index} <- Enum.with_index(ranges) do
-      # cpe has no "*" sentinel — an open range simply has no upper bound (nil,
-      # which the preview drops).
+      # cpe has no "*" sentinel: an open range simply has no upper bound.
       upper = if range.until == :unbounded, do: nil, else: bare(range.until)
-      lower = if drop_lower_bound? and index == 0, do: nil, else: bare(range.from)
+      lower = if drop_lowest_bound? and index == 0, do: nil, else: bare(range.from)
 
       %{"versionStartIncluding" => lower, "versionEndExcluding" => upper}
     end
   end
 
+  defp gaps_between(fixed_ranges) do
+    {gaps, last_end} =
+      Enum.reduce(fixed_ranges, {[], nil}, fn range, {matches, previous_end} ->
+        match = %{
+          "versionStartIncluding" => previous_end,
+          "versionEndExcluding" => bare(range.from)
+        }
+
+        {[match | matches], upper_of(range)}
+      end)
+
+    Enum.reverse(trailing_gap(last_end, fixed_ranges) ++ gaps)
+  end
+
+  # Nothing listed as safe, so every version is possibly affected.
+  defp trailing_gap(_last_end, []), do: [%{"versionStartIncluding" => nil, "versionEndExcluding" => nil}]
+
+  # A fix carried to the newest release leaves nothing above it.
+  defp trailing_gap(nil, _fixed_ranges), do: []
+
+  defp trailing_gap(last_end, _fixed_ranges), do: [%{"versionStartIncluding" => last_end, "versionEndExcluding" => nil}]
+
+  defp upper_of(%{until: :unbounded}), do: nil
+  defp upper_of(%{until: until}), do: bare(until)
+
   ## ------------------------------------------------------------ decoration
 
-  # Every non-git range passes through the channel's tag decoration: one range
-  # per flavor, each bound prefixed and suffixed. No suffixes means the bare
-  # version, which is what most channels publish.
-  defp decorated_ranges(channel, ranges, version_type) do
+  defp decorated_ranges(channel, ranges, version_type, status) do
     prefix = channel.tag_prefix || ""
     suffixes = if channel.tag_suffixes in [nil, []], do: [@bare_tag], else: channel.tag_suffixes
 
@@ -142,7 +155,8 @@ defmodule Varsel.Cases.Derivation.Emit do
       version_object(
         decorate(prefix, bare(range.from), suffix),
         decorated_bound(prefix, range.until, suffix),
-        version_type
+        version_type,
+        status
       )
     end
   end
@@ -153,129 +167,190 @@ defmodule Varsel.Cases.Derivation.Emit do
   defp decorated_bound(_prefix, :unbounded, _suffix), do: "*"
   defp decorated_bound(prefix, until, suffix), do: decorate(prefix, bare(until), suffix)
 
-  ## ------------------------------------------------------------ otp
+  ## ------------------------------------------------------------ versions
 
-  # A pkg:otp channel names one application, whose own versions differ from the
-  # release's; any other otp-versioned channel publishes the release versions.
-  defp otp_versions(%{purl_type: "otp", name: app} = channel, ranges) when is_binary(app) do
-    otp_app_versions(channel, app, ranges)
+  defp versions(channel, version_type, ranges, opts) do
+    statused = statused_ranges(ranges, opts)
+
+    if VersionComparator.total_order?(version_type) do
+      flat_versions(channel, version_type, statused)
+    else
+      status_change_versions(channel, version_type, statused, opts)
+    end
   end
 
-  defp otp_versions(channel, ranges) do
-    %{"versions" => decorated_ranges(channel, ranges, "otp"), "issues" => []}
+  defp status_change_versions(channel, version_type, statused, opts) do
+    boundaries =
+      opts
+      |> Keyword.get(:boundaries)
+      |> open_from_zero(Keyword.get(opts, :default_status, :unaffected))
+
+    case status_change_entry(channel, version_type, boundaries) do
+      nil -> flat_versions(channel, version_type, statused)
+      entry -> %{"versions" => [entry], "issues" => []}
+    end
   end
 
-  # Translate each OTP release range into the application's own versions, halting
-  # on the first release whose app version can't be resolved (reported as issue).
-  defp otp_app_versions(channel, app, ranges) do
-    Enum.reduce_while(ranges, %{"versions" => [], "issues" => []}, fn range, acc ->
-      with {:ok, from} <- app_lower_bound(bare(range.from), app),
-           {:ok, until} <- app_upper_bound(range.until, app) do
-        versions =
-          acc["versions"] ++ decorated_ranges(channel, [%{from: from, until: until}], "otp")
+  # Under an `affected` default the entry has no lower bound to find: everything
+  # below the introducing release is vulnerable too.
+  defp open_from_zero(%{} = boundaries, :affected), do: %{boundaries | introduced: VersionComparator.zero()}
 
-        {:cont, %{acc | "versions" => versions}}
-      else
-        :error ->
-          {:halt, %{"versions" => [], "issues" => ["cannot resolve #{app}'s version for a range"]}}
+  defp open_from_zero(boundaries, _default_status), do: boundaries
+
+  # An `unknown` default leaves every unlisted version unclaimed, so the releases
+  # whose safety rests on the patch have to be stated. Containment alone, "this
+  # release never held the introducing commit", is the proof such a record
+  # declines to make.
+  defp statused_ranges(ranges, opts) do
+    fixed = Keyword.get(opts, :fixed_ranges, [])
+
+    case Keyword.get(opts, :default_status, :unaffected) do
+      :unknown -> [{ranges, "affected"}, {fixed, "unaffected"}]
+      :affected -> [{fixed, "unaffected"}]
+      _unaffected -> [{ranges, "affected"}]
+    end
+  end
+
+  # A `pkg:otp` channel publishing OTP versions names one application, whose own
+  # versions differ from the release's; every other channel already speaks its
+  # package's vocabulary.
+  #
+  # The two ends resolve differently. A lower bound falls forward to the first
+  # release that ships the application, since a flaw introduced before the
+  # application existed still reaches it once it does: `tftp` split out of
+  # `inets` long after some flaws were introduced. An upper bound is exact, as a
+  # fix in a release that does not ship the application says nothing about that
+  # application, and a later version would invent a fix it never had.
+  defp lower_bound(%{purl_type: "otp", name: app}, :otp, version) when is_binary(app) do
+    if version == VersionComparator.zero(),
+      do: {:ok, version},
+      else: OtpVersionsTable.first_shipped_version(version, app)
+  end
+
+  defp lower_bound(_channel, _version_type, version), do: {:ok, version}
+
+  defp upper_bound(_channel, _version_type, :unbounded), do: {:ok, :unbounded}
+
+  defp upper_bound(%{purl_type: "otp", name: app}, :otp, version) when is_binary(app) do
+    OtpVersionsTable.app_version(version, app)
+  end
+
+  defp upper_bound(_channel, _version_type, version), do: {:ok, version}
+
+  defp translation_issue(%{purl_type: "otp", name: app}, :otp) when is_binary(app) do
+    "cannot resolve #{app}'s version for a range"
+  end
+
+  defp translation_issue(_channel, _version_type), do: nil
+
+  defp flat_versions(channel, version_type, statused_ranges) do
+    type = to_string(version_type)
+
+    statused_ranges
+    |> Enum.flat_map(fn {ranges, status} -> Enum.map(ranges, &{&1, status}) end)
+    |> map_all(fn {range, status} ->
+      with {:ok, translated} <- translate_range(channel, version_type, range) do
+        {:ok, decorated_ranges(channel, [translated], type, status)}
       end
     end)
+    |> case do
+      {:ok, decorated} -> %{"versions" => Enum.concat(decorated), "issues" => []}
+      :error -> %{"versions" => [], "issues" => [translation_issue(channel, version_type)]}
+    end
   end
 
-  # A range from the start of history starts the application's there too.
-  defp app_lower_bound(from, app) do
-    if from == VersionComparator.zero(),
-      do: {:ok, from},
-      else: OtpVersionsTable.first_shipped_version(from, app)
+  defp translate_range(channel, version_type, %{from: from, until: until}) do
+    with {:ok, from} <- lower_bound(channel, version_type, bare(from)),
+         {:ok, until} <- upper_bound(channel, version_type, bare(until)) do
+      {:ok, %{from: from, until: until}}
+    end
   end
 
-  defp app_upper_bound(:unbounded, _app), do: {:ok, :unbounded}
-  defp app_upper_bound(until, app), do: OtpVersionsTable.app_version(bare(until), app)
+  defp map_all(items, fun) do
+    items
+    |> Enum.reduce_while([], fn item, acc ->
+      case fun.(item) do
+        {:ok, result} -> {:cont, [result | acc]}
+        :error -> {:halt, :error}
+      end
+    end)
+    |> case do
+      :error -> :error
+      acc -> {:ok, Enum.reverse(acc)}
+    end
+  end
+
+  defp status_change_entry(_channel, _version_type, nil), do: nil
+  defp status_change_entry(_channel, _version_type, %{introduced: nil}), do: nil
+  defp status_change_entry(_channel, _version_type, %{fixed: []}), do: nil
+  defp status_change_entry(_channel, _version_type, %{open?: false}), do: nil
+
+  # One fix needs no transition: `lessThan` states the same span, and states it
+  # better. An open entry claims every version above the bound, including ones
+  # not released yet, and a single fix on a branch can never close a line that
+  # does not exist yet, so the open form would report tomorrow's release
+  # affected. The bounded form claims only what was derived.
+  defp status_change_entry(_channel, _version_type, %{fixed: [_only_one]}), do: nil
+
+  defp status_change_entry(channel, version_type, boundaries) do
+    %{introduced: introduced, fixed: fixed} = boundaries
+    prefix = channel.tag_prefix || ""
+
+    with {:ok, from} <- lower_bound(channel, version_type, bare(introduced)),
+         {:ok, changes} <- map_all(fixed, &upper_bound(channel, version_type, bare(&1))) do
+      %{
+        "version" => prefix <> from,
+        "lessThan" => "*",
+        "status" => "affected",
+        "versionType" => to_string(version_type),
+        "changes" => Enum.map(changes, &%{"at" => prefix <> &1, "status" => "unaffected"})
+      }
+    else
+      :error -> nil
+    end
+  end
 
   ## ------------------------------------------------------------ git
 
-  # The git-SHA range. Commit SHAs are opaque (not linearly orderable), so a
-  # single fix renders a bounded range and several a `changes[]` chain off the
-  # introducing commit. Unreleased fixes still bound a git channel: the commit
-  # exists whether or not a release contains it.
+  # The git-SHA ranges. Commit SHAs have no linear order, so a single fix renders
+  # a bounded range and several a `changes[]` chain off the introducing commit.
+  # Unreleased fixes still bound a git channel: the commit exists whether or not
+  # a release contains it.
+  #
+  # A change backported to several branches introduces the flaw once per branch,
+  # and a consumer walking the commit graph reaches only the commits descending
+  # from the intro it was given. Each therefore states its own entry, or the
+  # commits below the ones left out read as safe.
   defp git([], _fix_shas), do: %{"versions" => [], "issues" => ["the introduced boundary has no commit SHA"]}
 
-  defp git([intro | _], []), do: %{"versions" => [version_object(intro, "*", "git")], "issues" => []}
+  defp git(intro_shas, fix_shas) do
+    %{"versions" => Enum.map(intro_shas, &git_entry(&1, fix_shas)), "issues" => []}
+  end
 
-  defp git([intro | _], [fix]), do: %{"versions" => [version_object(intro, fix, "git")], "issues" => []}
+  defp git_entry(intro, []), do: version_object(intro, "*", "git", "affected")
+  defp git_entry(intro, [fix]), do: version_object(intro, fix, "git", "affected")
 
-  defp git([intro | _], fixes) do
-    chain = %{
+  defp git_entry(intro, fixes) do
+    %{
       "version" => intro,
       "lessThan" => "*",
       "status" => "affected",
       "versionType" => "git",
       "changes" => Enum.map(fixes, &%{"at" => &1, "status" => "unaffected"})
     }
-
-    %{"versions" => [chain], "issues" => []}
-  end
-
-  ## ------------------------------------------------------------ root sentinel
-
-  # The `unknown` range below the first affected release, prepended when the vuln
-  # was introduced at the OTP root commit: erlang/otp's history starts at that
-  # squashed import, so anything earlier is underivable rather than unaffected.
-  #
-  # The bound must not overlap the first range. CVE Record Format 5.1 resolves a
-  # version from the FIRST entry covering it, and the sentinel is prepended, so
-  # any overlap answers `unknown` for a version the ranges call affected.
-  #
-  # Only otp-versioned channels get one: a git channel is versioned in commit
-  # SHAs and no commit precedes the root commit, and semver channels of other
-  # products never see it.
-  defp sentinel_for(channel, :otp, ranges, opts) do
-    if Keyword.get(opts, :otp_root_intro?, false), do: otp_sentinel(channel, ranges)
-  end
-
-  defp sentinel_for(_channel, _version_type, _ranges, _opts), do: nil
-
-  defp otp_sentinel(_channel, []), do: nil
-
-  defp otp_sentinel(%{purl_type: "otp", name: app}, [%{from: from} | _]) when is_binary(app) do
-    # `app_lower_bound/2`, not `OtpVersionsTable.app_version/2`: the two disagree
-    # for an app younger than the release (an app split out of another one), and
-    # only this one lands where `otp_app_versions/3` opens the range.
-    case app_lower_bound(bare(from), app) do
-      {:ok, version} -> unknown_range(version, "otp")
-      :error -> nil
-    end
-  end
-
-  defp otp_sentinel(_channel, [%{from: from} | _]), do: unknown_range(bare(from), "otp")
-
-  defp unknown_range(upper, version_type) do
-    %{
-      "version" => VersionComparator.zero(),
-      "lessThan" => upper,
-      "status" => "unknown",
-      "versionType" => version_type
-    }
-  end
-
-  defp prepend_root_sentinel(result, nil), do: result
-
-  defp prepend_root_sentinel(%{"versions" => versions} = result, sentinel) do
-    %{result | "versions" => [sentinel | versions]}
   end
 
   ## ------------------------------------------------------------ shared
 
-  defp version_object(from, until, version_type) do
+  defp version_object(from, until, version_type, status) do
     %{
       "version" => from,
       "lessThan" => until,
-      "status" => "affected",
+      "status" => status,
       "versionType" => version_type
     }
   end
 
-  # Strip the tag prefix to the bare version.
   defp bare(:unbounded), do: :unbounded
   defp bare("OTP-" <> rest), do: rest
   defp bare("OTP_" <> rest), do: rest

@@ -326,6 +326,61 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     assert %{"tags" => ["related", "third-party-advisory"]} = self_reference(result)
   end
 
+  describe "the OTP version-scheme reference" do
+    @version_scheme "https://www.erlang.org/doc/system/versions.html#order-of-versions"
+
+    test "is absent from a record naming no OTP versions", %{poc: poc, case: case_record} do
+      result = render!(case_record, poc)
+
+      refute Enum.any?(cna(result)["references"], &(&1["url"] == @version_scheme))
+    end
+
+    # OTP versions are only partially ordered, so a reader comparing them
+    # numerically would get the wrong answer about their own release.
+    test "is derived from an OTP-versioned channel", %{poc: poc, case: case_record} do
+      otp_repo = "https://github.com/erlang/otp"
+
+      StubGitBackend.stub_tags(%{
+        {otp_repo, @intro_sha} => ["OTP-27.0", "OTP-27.3.4.3"],
+        {otp_repo, @fix_sha} => ["OTP-27.3.4.3"]
+      })
+
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{
+          vendor: "Erlang",
+          product: "OTP",
+          repo_url: otp_repo
+        })
+
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: "sid",
+          namespace: "erlang.org",
+          name: "otp",
+          version_type: :otp
+        },
+        actor: poc
+      )
+
+      for attrs <- [
+            %{event: :introduced, commit_sha: @intro_sha},
+            %{event: :fixed, commit_sha: @fix_sha}
+          ] do
+        Cases.add_version_event!(
+          Map.merge(%{case_id: case_record.id, affected_package_id: package.id}, attrs),
+          actor: poc
+        )
+      end
+
+      result = render!(case_record, poc)
+
+      assert %{"tags" => ["x_version-scheme"]} =
+               Enum.find(cna(result)["references"], &(&1["url"] == @version_scheme))
+    end
+  end
+
   defp self_reference(result) do
     Enum.find(
       cna(result)["references"],

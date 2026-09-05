@@ -37,6 +37,10 @@ defmodule VarselWeb.AffectedComponents do
 
   A channel versioned in commit SHAs has no picture to draw (a commit graph is
   not a line), so it carries ranges alone.
+
+  The ranges close with what the record claims about every version they leave
+  out, when that is not the `unaffected` an author already reads into a list of
+  affected spans. `unknown` and `affected` are not assumable and print.
   """
   attr :id, :string, default: nil
   attr :purl, :string, default: nil, doc: "the channel's composed Package URL"
@@ -47,6 +51,10 @@ defmodule VarselWeb.AffectedComponents do
     default: [],
     doc: ~s(the channel's derived CVE `versions[]`, as `derivation_cache` holds them)
 
+  attr :default_status, :string,
+    default: nil,
+    doc: "what the record claims about versions the ranges do not list"
+
   attr :timeline, :map, default: nil, doc: "%{label:, nodes:, spans:} from Derivation.Display"
   attr :timeline_id, :string, default: nil
   attr :muted, :boolean, default: false, doc: "dim the block, e.g. a row a proposal would remove"
@@ -56,7 +64,7 @@ defmodule VarselWeb.AffectedComponents do
   slot :problem, doc: "what is wrong with this channel specifically"
 
   def channel_block(assigns) do
-    assigns = assign(assigns, :ranges, ranges(assigns.versions))
+    assigns = assign(assigns, :ranges, ranges(assigns.versions, assigns.default_status))
 
     ~H"""
     <div id={@id} class={["border-l-2 border-base-300 pl-3", @muted && "opacity-50"]}>
@@ -77,9 +85,26 @@ defmodule VarselWeb.AffectedComponents do
         </span>
       </div>
 
-      <.affected_range_list :if={@ranges != []} ranges={@ranges} class="affected-range mt-1 text-xs" />
+      <.affected_range_list
+        :if={@ranges != []}
+        ranges={@ranges}
+        default_status={stated_default(@default_status)}
+        class="affected-range mt-1 text-xs"
+      />
 
-      <p :if={@ranges == [] and @problem == []} class="mt-1 text-xs text-base-content/50">
+      <%!-- A record whose ranges list what is FIXED says nothing by listing
+            nothing: everything is affected. --%>
+      <p
+        :if={@ranges == [] and @default_status == "affected"}
+        class="mt-1 text-xs text-error"
+      >
+        every version affected
+      </p>
+
+      <p
+        :if={@ranges == [] and @default_status != "affected" and @problem == []}
+        class="mt-1 text-xs text-base-content/50"
+      >
         no derived range
       </p>
 
@@ -96,8 +121,16 @@ defmodule VarselWeb.AffectedComponents do
     """
   end
 
-  defp ranges([]), do: []
-  defp ranges(versions), do: CveHTML.affected_ranges(%{"versions" => versions})
+  # `unaffected` is what a list of affected ranges already says, so only a
+  # default a reader would not assume is worth a line of its own.
+  defp stated_default("unaffected"), do: nil
+  defp stated_default(default_status), do: default_status
+
+  defp ranges([], _default_status), do: []
+
+  defp ranges(versions, default_status) do
+    CveHTML.affected_ranges(%{"versions" => versions, "defaultStatus" => default_status})
+  end
 
   @doc """
   One vulnerability boundary fact: where the flaw entered the product or left
