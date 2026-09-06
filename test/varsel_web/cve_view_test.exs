@@ -358,6 +358,9 @@ defmodule VarselWeb.CveViewTest do
         )
 
       assert html =~ "Upstream notes"
+      # The host stays visible behind the name, so a reader knows where the
+      # link leads before following it.
+      assert html =~ "(osv.dev)"
       # The href still points at the URL; only the link text is overridden, so
       # the osv.dev · <id> face it would otherwise have worn is gone.
       assert html =~ ~s(href="https://osv.dev/vulnerability/EEF-CVE-2026-9012")
