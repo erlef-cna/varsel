@@ -23,6 +23,7 @@ defmodule Varsel.Cases.Proposal.Build do
 
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.AffectedPackage.ProgramFile
+  alias Varsel.Cases.CaseCredit.Handle
   alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposable
   alias Varsel.Types.CVSS
@@ -160,6 +161,10 @@ defmodule Varsel.Cases.Proposal.Build do
 
   defp comparable(%ProgramFile{} = file) do
     %{"path" => file.path, "modules" => file.modules, "routines" => file.routines}
+  end
+
+  defp comparable(%Handle{} = handle) do
+    %{"strategy" => to_string(handle.strategy), "username" => to_string(handle.username)}
   end
 
   defp comparable(nil), do: ""

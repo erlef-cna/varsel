@@ -11,6 +11,7 @@ defmodule VarselWeb.AccountSettingsLive do
   """
   use VarselWeb, :live_view
 
+  import AshPhoenix.LiveView, only: [keep_live: 4]
   import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
   alias AshAuthentication.TokenResource.Actions, as: TokenActions
@@ -18,12 +19,16 @@ defmodule VarselWeb.AccountSettingsLive do
   alias Varsel.Accounts.Token
   alias VarselWeb.UserAgent
 
+  @account_loads [:avatar_url, :display_name, :credit_display_name, :identity_emails, :identities]
+
   @impl Phoenix.LiveView
+  def mount(_params, _session, %{assigns: %{current_user: nil}}), do: raise(VarselWeb.UnauthorizedError)
+
   def mount(_params, session, socket) do
     {:ok,
      socket
      |> assign(page_title: "Account", current_session_jti: session["current_session_jti"])
-     |> assign_account()
+     |> keep_live(:account, &load_account/1, subscribe: ["user:all"], after_fetch: &fetched/2)
      |> assign_sessions()}
   end
 
@@ -57,15 +62,29 @@ defmodule VarselWeb.AccountSettingsLive do
              actor: actor
            ) do
         {:ok, _user} ->
-          socket
-          |> assign_account()
-          |> put_flash(:info, "Notification email set to #{email}.")
+          put_flash(socket, :info, "Notification email set to #{email}.")
 
         {:error, _error} ->
           put_flash(socket, :error, "Could not set the notification email.")
       end
 
     {:noreply, socket}
+  end
+
+  @impl Phoenix.LiveView
+  def handle_event("validate_credit", %{"credit" => params}, socket) do
+    {:noreply, assign(socket, :credit_form, AshPhoenix.Form.validate(socket.assigns.credit_form, params))}
+  end
+
+  @impl Phoenix.LiveView
+  def handle_event("save_credit", %{"credit" => params}, socket) do
+    case AshPhoenix.Form.submit(socket.assigns.credit_form, params: params) do
+      {:ok, _user} ->
+        {:noreply, put_flash(socket, :info, "Credit saved.")}
+
+      {:error, form} ->
+        {:noreply, assign(socket, :credit_form, form)}
+    end
   end
 
   @impl Phoenix.LiveView
@@ -76,9 +95,7 @@ defmodule VarselWeb.AccountSettingsLive do
     socket =
       case Accounts.unlink_provider(identity, actor: actor) do
         :ok ->
-          socket
-          |> assign_account()
-          |> put_flash(:info, "Unlinked #{provider_label(identity.strategy)}.")
+          put_flash(socket, :info, "Unlinked #{provider_label(identity.strategy)}.")
 
         {:error, _error} ->
           put_flash(socket, :error, "Could not unlink that provider.")
@@ -158,20 +175,21 @@ defmodule VarselWeb.AccountSettingsLive do
     assign(socket, sessions: sessions)
   end
 
-  defp assign_account(%{assigns: %{current_user: nil}}), do: raise(VarselWeb.UnauthorizedError)
-
-  # The addresses to choose between are exactly what this user's providers
-  # reported, deduplicated — the same address from two providers is one choice.
-  defp assign_account(socket) do
+  defp load_account(socket) do
     actor = socket.assigns.current_user
 
-    account =
-      Ash.load!(actor, [:avatar_url, :display_name, :identity_emails, :identities], actor: actor)
+    Accounts.get_user_by_id!(actor.id, actor: actor, load: @account_loads)
+  end
 
+  defp fetched(account, socket) do
+    actor = socket.assigns.current_user
     linked = Map.new(account.identities, &{to_string(&1.strategy), &1})
 
     assign(socket,
-      account: account,
+      credit_form:
+        account
+        |> AshPhoenix.Form.for_update(:set_credit, as: "credit", actor: actor)
+        |> to_form(),
       candidate_emails: candidate_emails(account),
       providers:
         Enum.map(oauth_strategies(), fn strategy ->
@@ -259,6 +277,30 @@ defmodule VarselWeb.AccountSettingsLive do
               </p>
             </div>
           </div>
+        </.panel>
+
+        <.panel>
+          <:title>Credit</:title>
+          <p class="text-sm text-base-content/60 mb-3">
+            How a case credits you: the name goes on the published record, with
+            the organization after it. Left empty, the name is <span class="font-medium">{@account.display_name}</span>. Whoever edits
+            a case can still spell a credit differently there.
+          </p>
+          <.form
+            for={@credit_form}
+            id="credit-form"
+            phx-change="validate_credit"
+            phx-submit="save_credit"
+            class="grid sm:grid-cols-[1fr_1fr_auto] items-end gap-x-3"
+          >
+            <.input field={@credit_form[:credit_name]} type="text" placeholder={@account.display_name}>
+              <:label>Name</:label>
+            </.input>
+            <.input field={@credit_form[:credit_organization]} type="text">
+              <:label>Organization</:label>
+            </.input>
+            <button type="submit" class="btn btn-eef btn-sm mb-2">Save</button>
+          </.form>
         </.panel>
 
         <.panel>

@@ -43,6 +43,7 @@ defmodule Varsel.Cases.ChildParams do
       |> parse_classification_id(type)
       |> parse_qualifiers(type)
       |> parse_program_files(type)
+      |> parse_credit_handles(type)
 
     Enum.reduce(Map.get(@list_params, type, []), params, fn key, params ->
       case params[key] do
@@ -97,6 +98,23 @@ defmodule Varsel.Cases.ChildParams do
   end
 
   defp parse_program_files(params, _type), do: params
+
+  # The credit form carries one username input per provider; a blank one
+  # names no handle.
+  defp parse_credit_handles(params, "credit") do
+    handles =
+      for strategy <- ["github", "hex"],
+          username = params["#{strategy}_username"],
+          is_binary(username) and String.trim(username) != "" do
+        %{"strategy" => strategy, "username" => String.trim(username)}
+      end
+
+    params
+    |> Map.drop(["github_username", "hex_username"])
+    |> Map.put("handles", handles)
+  end
+
+  defp parse_credit_handles(params, _type), do: params
 
   # The since-creation checkbox stands in for the erlang/otp root commit and
   # reaches the changeset (and any proposal payload) as that commit, never as

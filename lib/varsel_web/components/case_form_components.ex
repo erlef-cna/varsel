@@ -429,11 +429,54 @@ defmodule VarselWeb.CaseFormComponents do
       <.input field={@form[:credit_type]} type="select" options={enum_options(CaseCredit.CreditType)}>
         <:label>Credit type</:label>
       </.input>
+      <div class="grid sm:grid-cols-2 gap-x-4">
+        <.input
+          id={"#{@form.id}_github_username"}
+          name={"#{@form.name}[github_username]"}
+          value={handle_username(@form, :github)}
+          type="text"
+          placeholder="octocat"
+          class="w-full input font-mono"
+        >
+          <:label>GitHub username (optional)</:label>
+        </.input>
+        <.input
+          id={"#{@form.id}_hex_username"}
+          name={"#{@form.name}[hex_username]"}
+          value={handle_username(@form, :hex)}
+          type="text"
+          placeholder="alice"
+          class="w-full input font-mono"
+        >
+          <:label>hex.pm username (optional)</:label>
+        </.input>
+      </div>
+      <p :for={message <- translate_errors(@form.errors, :handles)} class="text-error text-sm mb-2">
+        {message}
+      </p>
       <%!-- No position field: new credits append; the list is drag-sortable. --%>
       <.propose_form_fields propose?={@propose?} />
       {render_slot(@actions)}
     </.form>
     """
+  end
+
+  # The typed value once the form has been validated, the stored handle before.
+  defp handle_username(form, strategy) do
+    key = "#{strategy}_username"
+
+    case form.params do
+      %{^key => value} ->
+        value
+
+      _untouched ->
+        (form.data || %{})
+        |> Map.get(:handles)
+        |> List.wrap()
+        |> Enum.find_value(fn handle ->
+          handle.strategy == strategy && to_string(handle.username)
+        end)
+    end
   end
 
   @doc """

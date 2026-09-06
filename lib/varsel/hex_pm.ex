@@ -92,17 +92,17 @@ defmodule Varsel.HexPm do
 
   @typedoc """
   A hex.pm account as its public profile shows it: the username as hex.pm
-  spells it, and the email address the account made public, `nil` when it
-  shows none.
+  spells it, the full name, and the email address the account made public,
+  the last two `nil` when it shows none.
   """
-  @type user :: %{username: String.t(), email: String.t() | nil}
+  @type user :: %{username: String.t(), name: String.t() | nil, email: String.t() | nil}
 
-  @doc "Whether a hex.pm account with this username exists, with its canonical spelling and public address."
+  @doc "Whether a hex.pm account with this username exists, with its canonical spelling, name and public address."
   @spec user(String.t()) :: {:ok, user()} | :not_found
   def user(username) when is_binary(username) do
     case :hex_api_user.get(config(), username) do
       {:ok, {200, _headers, %{"username" => canonical} = body}} ->
-        {:ok, %{username: canonical, email: body["email"]}}
+        {:ok, %{username: canonical, name: blank_to_nil(body["full_name"]), email: body["email"]}}
 
       {:ok, {404, _headers, _body}} ->
         :not_found
@@ -135,6 +135,15 @@ defmodule Varsel.HexPm do
       end
     end
   end
+
+  defp blank_to_nil(name) when is_binary(name) do
+    case String.trim(name) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_to_nil(_name), do: nil
 
   defp contact_req(base_url) do
     Req.new(

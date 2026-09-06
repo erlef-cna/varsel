@@ -13,10 +13,11 @@ defmodule Varsel.Cases.CaseInvite.Changes.ResolveContact do
 
   use Ash.Resource.Change
 
+  import Varsel.Accounts.HandleLookup, only: [provider_name: 1]
+
   alias Ash.Changeset
-  alias Varsel.Accounts.GitHub
+  alias Varsel.Accounts.HandleLookup
   alias Varsel.Cases.CaseInvite
-  alias Varsel.HexPm
 
   require Ash.Query
 
@@ -46,26 +47,10 @@ defmodule Varsel.Cases.CaseInvite.Changes.ResolveContact do
   defp present(""), do: {:error, :username, "is required"}
   defp present(_username), do: :ok
 
-  defp lookup(:github, username) do
-    case GitHub.user(username) do
-      {:ok, %{login: canonical, email: email}} -> {:ok, canonical, email}
-      :not_found -> {:error, :username, "is not a GitHub account"}
-    end
-  end
-
-  defp lookup(:hex, username) do
-    case HexPm.contact(username) do
+  defp lookup(strategy, username) do
+    case HandleLookup.confirm(strategy, username) do
       {:ok, %{username: canonical, email: email}} -> {:ok, canonical, email}
-      :not_found -> {:error, :username, "is not a hex.pm account"}
-      {:error, :not_configured} -> lookup_hex_profile(username)
-      {:error, _reason} -> {:error, :username, "could not be looked up at hex.pm"}
-    end
-  end
-
-  defp lookup_hex_profile(username) do
-    case HexPm.user(username) do
-      {:ok, %{username: canonical, email: email}} -> {:ok, canonical, email}
-      :not_found -> {:error, :username, "is not a hex.pm account"}
+      {:error, message} -> {:error, :username, message}
     end
   end
 
@@ -93,9 +78,6 @@ defmodule Varsel.Cases.CaseInvite.Changes.ResolveContact do
       {:error, :email, "does not match the address #{provider_name(strategy)} lists for this account"}
     end
   end
-
-  defp provider_name(:github), do: "GitHub"
-  defp provider_name(:hex), do: "hex.pm"
 
   defp deduplicate(changeset, email, :pending, context) do
     case_id = Changeset.get_attribute(changeset, :case_id)

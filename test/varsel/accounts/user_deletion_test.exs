@@ -90,6 +90,32 @@ defmodule Varsel.Accounts.UserDeletionTest do
       assert kept.author_id == nil
     end
 
+    test "credits keep their name, organization and handles and lose their account" do
+      poc = register_user("poc", :poc)
+      member = register_user("member")
+      case_record = open_case(poc)
+
+      credit =
+        Cases.add_case_credit!(
+          %{
+            case_id: case_record.id,
+            user_id: member.id,
+            name: "Member Name",
+            organization: "EEF",
+            credit_type: :finder
+          },
+          actor: poc
+        )
+
+      Accounts.delete_user!(member, actor: member)
+
+      kept = Ash.get!(Cases.CaseCredit, credit.id, authorize?: false)
+      assert kept.user_id == nil
+      assert kept.name == "Member Name"
+      assert kept.organization == "EEF"
+      assert Enum.map(kept.handles, &{&1.strategy, to_string(&1.username)}) == [github: "member"]
+    end
+
     test "reports keep their contents and lose their reporter" do
       reporter = register_user("reporter")
 

@@ -27,11 +27,24 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
 
   actions do
     create :propose_credit do
-      description "Proposes adding a credit (contributor) to the case."
+      description """
+      Proposes adding a credit (contributor) to the case.
+
+      Give the person's provider handles when known: an accepted credit is
+      linked to the account holding one, takes the name and organization that
+      account asked to be credited as where the proposal leaves them blank,
+      and a handle is confirmed at its provider on acceptance.
+      """
+
       accept [:case_id, :reasoning]
       argument :name, :string, allow_nil?: false
       argument :credit_type, Varsel.Cases.CaseCredit.CreditType, allow_nil?: false
       argument :organization, :string
+
+      argument :handles, {:array, Varsel.Cases.CaseCredit.Handle} do
+        description "The provider accounts the person goes by, as {strategy, username}."
+      end
+
       change {PackProposal, target: :credit, operation: :insert}
     end
 

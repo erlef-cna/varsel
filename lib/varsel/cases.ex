@@ -293,6 +293,9 @@ defmodule Varsel.Cases do
       define :add_case_credit, action: :add
       define :edit_case_credit, action: :edit
       define :remove_case_credit, action: :remove
+      define :refresh_case_credit, action: :refresh
+      define :claim_case_credit, action: :claim
+      define :list_case_credits_for_identity, action: :for_identity, args: [:strategy, :username]
       define :apply_case_credit_proposal, action: :apply_proposal
       define :apply_case_credit_proposal_insert, action: :apply_proposal_insert
       define :apply_case_credit_proposal_delete, action: :apply_proposal_delete

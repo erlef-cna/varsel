@@ -14,22 +14,31 @@ defmodule Varsel.Accounts.GitHub do
   """
 
   @typedoc """
-  A GitHub account: its login as GitHub spells it, and the public email
-  address on its profile, `nil` when the profile shows none.
+  A GitHub account: its login as GitHub spells it, and the name and public
+  email address on its profile, each `nil` when the profile shows none.
   """
-  @type user :: %{login: String.t(), email: String.t() | nil}
+  @type user :: %{login: String.t(), name: String.t() | nil, email: String.t() | nil}
 
-  @doc "Whether a GitHub account with this login exists, with its canonical spelling and public address."
+  @doc "Whether a GitHub account with this login exists, with its canonical spelling, name and public address."
   @spec user(String.t()) :: {:ok, user()} | :not_found
   def user(login) when is_binary(login) do
     case Req.get!(build_req(), url: "/users/#{URI.encode(login)}") do
       %Req.Response{status: 200, body: %{"login" => canonical} = body} ->
-        {:ok, %{login: canonical, email: body["email"]}}
+        {:ok, %{login: canonical, name: blank_to_nil(body["name"]), email: body["email"]}}
 
       %Req.Response{status: 404} ->
         :not_found
     end
   end
+
+  defp blank_to_nil(name) when is_binary(name) do
+    case String.trim(name) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_to_nil(_name), do: nil
 
   defp build_req do
     Req.new(

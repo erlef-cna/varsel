@@ -654,6 +654,13 @@ Fall back to the handle alone only if the real name is genuinely unknown. Look n
 Check precedent before inventing a variant. Use `search_cves` or `list_all_cves` to see how a
 person has been credited before.
 
+**Pass `handles`** with every provider account you know for the person:
+`[{"strategy": "github", "username": "<login>"}]` from the credit's `user.login` on the GHSA,
+plus `{"strategy": "hex", "username": ...}` when you know their hex.pm username. Varsel checks a
+handle at its provider on acceptance, links the credit to the account holding it (now or when the
+person signs in later), and fills the `organization` from what that account asked to be credited
+as when you leave it blank. The `name` you give stands, so still look it up.
+
 ---
 
 ## Varsel mechanics worth knowing

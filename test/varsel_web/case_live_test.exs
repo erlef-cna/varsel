@@ -8,6 +8,7 @@ defmodule VarselWeb.CaseLiveTest do
   import Phoenix.LiveViewTest
 
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
+  alias Varsel.Accounts.GitHub
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Fixtures
@@ -1348,10 +1349,10 @@ defmodule VarselWeb.CaseLiveTest do
 
       for name <- ["Alice Finder", "Bob Fixer"] do
         lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
-        refute render(lv) =~ ~s(name="child[position]")
+        refute render(lv) =~ ~s(name="credit[position]")
 
         lv
-        |> form("#child-form", %{"child" => %{"name" => name, "credit_type" => "finder"}})
+        |> form("#credit-handle-form", %{"credit" => %{"name" => name, "credit_type" => "finder"}})
         |> render_submit()
       end
 
@@ -1376,6 +1377,181 @@ defmodule VarselWeb.CaseLiveTest do
       {bob_at, _} = :binary.match(html, "Bob Fixer")
       {alice_at, _} = :binary.match(html, "Alice Finder")
       assert bob_at < alice_at
+    end
+
+    test "the credit picker credits an account as it asked to be", %{conn: conn, poc: poc} do
+      member = Fixtures.register_user("credited_member")
+
+      Varsel.Accounts.set_user_credit!(
+        member,
+        %{credit_name: "Mem Ber", credit_organization: "EEF"},
+        actor: member
+      )
+
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+      lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
+
+      lv
+      |> form("#credit-user-form", %{"user_id" => member.id, "credit_type" => "analyst"})
+      |> render_submit()
+
+      [credit] = Ash.load!(case_record, [:credits], authorize?: false).credits
+      assert credit.user_id == member.id
+
+      html = render(lv)
+      assert html =~ "Mem Ber / EEF"
+      assert html =~ "github/credited_member"
+      assert has_element?(lv, ~s{button[phx-click=refresh_credit][phx-value-id="#{credit.id}"]})
+    end
+
+    # The account list is the User read policy's answer: a supporter sees
+    # themselves and nobody else.
+    test "a supporter's credit picker lists only the accounts they may see", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/edit")
+      lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
+
+      assert has_element?(lv, ~s{#credit-user-form option[value="#{supporter.id}"]})
+      refute has_element?(lv, ~s{#credit-user-form option[value="#{poc.id}"]})
+      assert has_element?(lv, "#credit-handle-form")
+    end
+
+    test "a proposed credit carries its handles", %{conn: conn, poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/propose")
+      lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{
+          "name" => "Octo Cat",
+          "credit_type" => "finder",
+          "github_username" => "octocat"
+        }
+      })
+      |> render_submit()
+
+      assert [proposal] = Cases.list_open_case_proposals!(case_record.id, actor: poc)
+      assert proposal.operation == :insert
+
+      assert proposal.proposed_value["value"]["handles"] == [
+               %{"strategy" => "github", "username" => "octocat"}
+             ]
+
+      assert render(lv) =~ "github/octocat"
+
+      # Accepting it links the account that holds the handle.
+      octocat = Fixtures.register_user("octocat")
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      assert [%{user_id: user_id, name: "Octo Cat"}] =
+               Cases.list_case_credits!(actor: poc, query: [filter: [case_id: case_record.id]])
+
+      assert user_id == octocat.id
+    end
+
+    test "the credit picker confirms a handle at its provider", %{conn: conn, poc: poc} do
+      Req.Test.stub(GitHub, fn conn ->
+        case conn.request_path |> Path.basename() |> String.downcase() do
+          "octocat" -> Req.Test.json(conn, %{"login" => "octocat", "name" => "The Octocat"})
+          _unknown -> Plug.Conn.send_resp(conn, 404, "{}")
+        end
+      end)
+
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+      lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
+
+      unknown = %{"strategy" => "github", "username" => "nobody", "credit_type" => "finder"}
+      html = lv |> form("#credit-handle-form", %{"credit" => unknown}) |> render_submit()
+      assert html =~ "nobody is not a GitHub account"
+
+      known = %{"strategy" => "github", "username" => "OctoCat", "credit_type" => "finder"}
+      lv |> form("#credit-handle-form", %{"credit" => known}) |> render_submit()
+
+      html = render(lv)
+      assert html =~ "The Octocat"
+      assert html =~ "github/octocat"
+    end
+
+    test "refreshing a credit re-copies the account's preference", %{conn: conn, poc: poc} do
+      member = Fixtures.register_user("refreshed_member")
+      case_record = Fixtures.open_case(poc)
+
+      credit =
+        Cases.add_case_credit!(
+          %{
+            case_id: case_record.id,
+            user_id: member.id,
+            name: "Old Spelling",
+            credit_type: :finder
+          },
+          actor: poc
+        )
+
+      Varsel.Accounts.set_user_credit!(
+        member,
+        %{credit_name: "Mem Ber", credit_organization: "EEF"},
+        actor: member
+      )
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+      assert html =~ "Old Spelling"
+
+      lv
+      |> element(~s{button[phx-click=refresh_credit][phx-value-id="#{credit.id}"]})
+      |> render_click()
+
+      assert render(lv) =~ "Mem Ber / EEF"
+    end
+
+    test "editing a credit shows its handles and keeps them without a lookup", %{
+      conn: conn,
+      poc: poc
+    } do
+      Req.Test.stub(GitHub, fn conn -> Plug.Conn.send_resp(conn, 404, "{}") end)
+
+      member = Fixtures.register_user("handled_member")
+      case_record = Fixtures.open_case(poc)
+
+      credit =
+        Cases.add_case_credit!(
+          %{case_id: case_record.id, user_id: member.id, credit_type: :finder},
+          actor: poc
+        )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+
+      lv
+      |> element(~s{button[phx-click=edit_child][phx-value-type=credit][phx-value-id="#{credit.id}"]})
+      |> render_click()
+
+      assert has_element?(
+               lv,
+               ~s{#child-form input[name="child[github_username]"][value="handled_member"]}
+             )
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{"name" => "Han Dled", "github_username" => "handled_member"}
+      })
+      |> render_submit()
+
+      edited = Ash.get!(Cases.CaseCredit, credit.id, authorize?: false)
+      assert edited.name == "Han Dled"
+      assert Enum.map(edited.handles, &to_string(&1.username)) == ["handled_member"]
+      assert render(lv) =~ "Han Dled"
     end
 
     test "posts a comment", %{conn: conn, poc: poc} do
@@ -1702,7 +1878,7 @@ defmodule VarselWeb.CaseLiveTest do
         end
       end)
 
-      Req.Test.stub(Varsel.Accounts.GitHub, fn conn ->
+      Req.Test.stub(GitHub, fn conn ->
         case conn.request_path |> Path.basename() |> URI.decode() |> String.downcase() do
           "octocat" ->
             Req.Test.json(conn, %{"login" => "octocat", "email" => "octocat@example.com"})

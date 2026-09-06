@@ -9,6 +9,11 @@ defmodule Varsel.Cases.CaseCredit do
   Renders as `{lang: "en", type, value}` where value is the person's real name
   followed by ` / <organization>` when an organization is set (EEF convention,
   e.g. "Jonatan Männchen / EEF").
+
+  A credit names the person by their provider handles, and links to their
+  account when one holds a handle, at creation or when they later sign in.
+  The account contributes the name and organization the person asked to be
+  credited as (`Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser`).
   """
 
   use Ash.Resource,
@@ -20,7 +25,9 @@ defmodule Varsel.Cases.CaseCredit do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
+  alias Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser
   alias Varsel.Cases.CaseCredit.CreditType
+  alias Varsel.Cases.CaseCredit.Handle
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Proposable
@@ -53,9 +60,16 @@ defmodule Varsel.Cases.CaseCredit do
     defaults [:read]
 
     create :add do
-      description "Adds a credit to a case."
+      description """
+      Adds a credit to a case. The name may be left out when a handle or
+      `user_id` names an account: the credit then takes the name the account
+      asked to be credited as.
+      """
+
       primary? true
       accept [:case_id, :user_id | Proposable.fields(__MODULE__)]
+      allow_nil_input [:name]
+      change {ResolveCreditedUser, mode: :fill}
     end
 
     update :edit do
@@ -63,6 +77,44 @@ defmodule Varsel.Cases.CaseCredit do
       primary? true
       accept [:user_id | Proposable.fields(__MODULE__)]
       require_atomic? false
+      change {ResolveCreditedUser, mode: :fill}
+    end
+
+    update :refresh do
+      description """
+      Copies the credited account's current name and organization again, or,
+      for a credit with no account, the name its provider now lists for the
+      handle.
+      """
+
+      accept []
+      require_atomic? false
+      change {ResolveCreditedUser, mode: :overwrite}
+    end
+
+    update :claim do
+      description "Internal: links a credit to the account that signed in with one of its handles."
+      public? false
+      accept [:user_id]
+      require_atomic? false
+    end
+
+    read :for_identity do
+      description "Internal: unlinked credits naming a provider handle, for the sign-in claim."
+      public? false
+
+      argument :strategy, :string, allow_nil?: false
+      argument :username, :string, allow_nil?: false
+
+      filter expr(
+               is_nil(user_id) and
+                 fragment(
+                   "EXISTS (SELECT 1 FROM unnest(?) AS h WHERE h->>'strategy' = ? AND lower(h->>'username') = lower(?))",
+                   handles,
+                   ^arg(:strategy),
+                   ^arg(:username)
+                 )
+             )
     end
 
     destroy :remove do
@@ -81,6 +133,7 @@ defmodule Varsel.Cases.CaseCredit do
       argument :value, :term
       argument :proposal_id, :uuid, allow_nil?: false
       change ApplyProposedField
+      change {ResolveCreditedUser, mode: :fill}
     end
 
     create :apply_proposal_insert do
@@ -88,6 +141,7 @@ defmodule Varsel.Cases.CaseCredit do
       accept [:case_id | Proposable.fields(__MODULE__)]
 
       argument :proposal_id, :uuid, allow_nil?: false
+      change {ResolveCreditedUser, mode: :fill}
     end
 
     destroy :apply_proposal_delete do
@@ -100,7 +154,14 @@ defmodule Varsel.Cases.CaseCredit do
   end
 
   policies do
+    # Linking an account changes nothing the record publishes, so a sign-in
+    # claims a credit whatever state its case is in.
+    bypass action(:claim) do
+      authorize_if actor_attribute_equals(:system, :identity_claim)
+    end
+
     policy action_type(:read) do
+      authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
@@ -155,6 +216,13 @@ defmodule Varsel.Cases.CaseCredit do
       description "Order within credits[]."
       allow_nil? false
       default 0
+      public? true
+    end
+
+    attribute :handles, {:array, Handle} do
+      description "The provider accounts the person goes by, one per provider."
+      allow_nil? false
+      default []
       public? true
     end
 
