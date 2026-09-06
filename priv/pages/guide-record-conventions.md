@@ -144,6 +144,25 @@ All three fields are optional, and **omitting them is the default**:
 A workaround is advice users act on, so test it before publishing it: run the
 exploit with the mitigation applied and confirm it no longer succeeds.
 
+## Technical Analysis, Proof of Concept, Impact
+
+Three markdown sections carry the depth a GHSA puts under Details, PoC and
+Impact. All are optional.
+
+- **Technical analysis** (`x_technicalAnalysis` on the record) explains how
+  the vulnerability works. A multi-step chain gets bold sub-headings. The
+  description still has to stand on its own; write it as if this section
+  did not exist.
+- **Proof of concept** (`x_proofOfConcept`) is the attack path in numbered
+  steps, the minimum that reproduces the issue, not a complete exploit.
+  Publish only one you have seen in the report or run yourself.
+- **Impact** is written per CAPEC entry, as that entry's description: one or
+  two sentences on what an attacker gains and who is affected in practice.
+  No version ranges, no CVSS score, never "no fix available". An entry
+  without one shows the CAPEC catalog name.
+
+The OSV record carries all three under their own headings.
+
 ## Internal Notes
 
 The internal notes field holds whatever helps the next human or agent working

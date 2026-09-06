@@ -83,6 +83,8 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       |> put_prose("workarounds", case_record.workarounds_md)
       |> put_prose("configurations", case_record.configurations_md)
       |> put_prose("solutions", case_record.solutions_md)
+      |> put_prose("x_technicalAnalysis", case_record.technical_analysis_md)
+      |> put_prose("x_proofOfConcept", case_record.proof_of_concept_md)
       |> Map.put("source", %{
         "discovery" => case_record.discovery |> to_string() |> String.upcase()
       })
@@ -167,20 +169,19 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   # text back verbatim. Timeline entries stay plain-text only: the schema
   # gives timeline[] no supportingMedia.
   defp put_prose(cna, _key, nil), do: cna
+  defp put_prose(cna, key, markdown), do: Map.put(cna, key, [prose(markdown)])
 
-  defp put_prose(cna, key, markdown) do
+  defp prose(markdown) do
     markdown = String.trim(markdown)
 
-    Map.put(cna, key, [
-      %{
-        "lang" => "en",
-        "value" => Markdown.to_plaintext(markdown),
-        "supportingMedia" => [
-          %{"base64" => false, "type" => "text/html", "value" => Markdown.to_html(markdown)},
-          %{"base64" => false, "type" => "text/markdown", "value" => markdown}
-        ]
-      }
-    ])
+    %{
+      "lang" => "en",
+      "value" => Markdown.to_plaintext(markdown),
+      "supportingMedia" => [
+        %{"base64" => false, "type" => "text/html", "value" => Markdown.to_html(markdown)},
+        %{"base64" => false, "type" => "text/markdown", "value" => markdown}
+      ]
+    }
   end
 
   # The description alone among the prose fields gains a derived tail: the
@@ -266,12 +267,13 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       |> Enum.map(fn case_impact ->
         capec = "CAPEC-#{case_impact.capec_id}"
 
-        %{
-          "capecId" => capec,
-          "descriptions" => [
-            %{"lang" => "en", "value" => "#{capec} #{case_impact.attack_pattern.name}"}
-          ]
-        }
+        description =
+          case case_impact.description_md do
+            nil -> %{"lang" => "en", "value" => "#{capec} #{case_impact.attack_pattern.name}"}
+            markdown -> prose(markdown)
+          end
+
+        %{"capecId" => capec, "descriptions" => [description]}
       end)
 
     Map.put(cna, "impacts", rendered)

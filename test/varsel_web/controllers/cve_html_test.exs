@@ -168,6 +168,34 @@ defmodule VarselWeb.CveHtmlTest do
       end
     end
 
+    test "the technical analysis and proof of concept cards follow the description", %{
+      conn: conn
+    } do
+      seed_catalogs()
+
+      @cve_json
+      |> put_in(["containers", "cna", "x_technicalAnalysis"], [
+        %{"lang" => "en", "value" => "Hooks run before the policy check."}
+      ])
+      |> put_in(["containers", "cna", "x_proofOfConcept"], [
+        %{"lang" => "en", "value" => "1. Call a forbidden action with a before_action hook."}
+      ])
+      |> publish()
+
+      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
+
+      assert body =~ "Hooks run before the policy check."
+      assert body =~ "Call a forbidden action with a before_action hook."
+
+      positions =
+        Enum.map(
+          ~w(description technical-analysis proof-of-concept weaknesses),
+          &card_position(body, &1)
+        )
+
+      assert positions == Enum.sort(positions)
+    end
+
     test "the CWE chip carries the catalog name, links to the local weakness catalog, and MITRE",
          %{
            conn: conn

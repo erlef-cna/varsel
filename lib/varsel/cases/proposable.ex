@@ -10,8 +10,8 @@ defmodule Varsel.Cases.Proposable do
   `fields/1` is the proposable payload of a resource: the accept-list of its
   `:add` / `:apply_proposal_insert` actions and the allowed payload keys of an
   `:insert` proposal. `set_fields/1` is the subset targetable by a `:set`
-  proposal (empty for pure join rows like weaknesses/impacts, which are only
-  ever inserted or deleted).
+  proposal (empty for pure join rows like weaknesses, which are only ever
+  inserted or deleted).
 
   Deliberately explicit lists — never resource introspection — so
   state-machine, bookkeeping, and system fields are excluded by construction.
@@ -30,6 +30,8 @@ defmodule Varsel.Cases.Proposable do
     :workarounds_md,
     :configurations_md,
     :solutions_md,
+    :technical_analysis_md,
+    :proof_of_concept_md,
     :discovery,
     :cvss_v4,
     :date_public,
@@ -76,7 +78,7 @@ defmodule Varsel.Cases.Proposable do
 
   @weakness_fields [:cwe_id, :position]
 
-  @impact_fields [:capec_id, :position]
+  @impact_fields [:capec_id, :description_md, :position]
 
   @doc "Proposable payload fields of a resource (insert payload / edit accept-list)."
   @spec fields(module()) :: [atom()]
@@ -92,7 +94,6 @@ defmodule Varsel.Cases.Proposable do
   @doc "Fields a :set proposal may target. Join rows are insert/delete-only."
   @spec set_fields(module()) :: [atom()]
   def set_fields(CaseWeakness), do: []
-  def set_fields(CaseImpact), do: []
   def set_fields(resource), do: fields(resource)
 
   @doc """

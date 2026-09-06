@@ -36,6 +36,33 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
       assert proposal.proposed_value == %{"value" => "disable ssh"}
     end
 
+    test "propose_technical_analysis and propose_proof_of_concept target their fields", %{
+      poc: poc,
+      case: case_record
+    } do
+      analysis =
+        Cases.propose_technical_analysis!(
+          %{case_id: case_record.id, value: "The token is never revoked."},
+          actor: poc
+        )
+
+      poc_proposal =
+        Cases.propose_proof_of_concept!(
+          %{case_id: case_record.id, value: "1. Log out.\n2. Replay the cookie."},
+          actor: poc
+        )
+
+      assert analysis.field_name == "technical_analysis_md"
+      assert poc_proposal.field_name == "proof_of_concept_md"
+
+      Cases.accept_case_proposal!(analysis, %{}, actor: poc)
+      Cases.accept_case_proposal!(poc_proposal, %{}, actor: poc)
+
+      reloaded = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      assert reloaded.technical_analysis_md == "The token is never revoked."
+      assert reloaded.proof_of_concept_md == "1. Log out.\n2. Replay the cookie."
+    end
+
     test "propose_internal_notes applies to the case on accept", %{poc: poc, case: case_record} do
       proposal =
         Cases.propose_internal_notes!(
@@ -164,6 +191,51 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
 
       assert proposal.target == :impact
       assert proposal.proposed_value == %{"value" => %{"capec_id" => 66}}
+    end
+
+    test "propose_impact carries the description into the created row", %{
+      poc: poc,
+      case: case_record
+    } do
+      Fixtures.seed_attack_pattern(66, "SQL Injection")
+
+      proposal =
+        Cases.propose_impact!(
+          %{case_id: case_record.id, capec_id: 66, description_md: "Reads **any** table."},
+          actor: poc
+        )
+
+      assert proposal.proposed_value == %{
+               "value" => %{"capec_id" => 66, "description_md" => "Reads **any** table."}
+             }
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      assert [%{capec_id: 66, description_md: "Reads **any** table."}] =
+               Cases.list_case_impacts!(query: [filter: [case_id: case_record.id]], actor: poc)
+    end
+
+    test "propose_impact_description sets the field of an existing impact on accept", %{
+      poc: poc,
+      case: case_record
+    } do
+      Fixtures.seed_attack_pattern(66, "SQL Injection")
+      impact = Cases.add_case_impact!(%{case_id: case_record.id, capec_id: 66}, actor: poc)
+
+      proposal =
+        Cases.propose_impact_description!(
+          %{case_id: case_record.id, target_id: impact.id, value: "Reads **any** table."},
+          actor: poc
+        )
+
+      assert proposal.target == :impact
+      assert proposal.operation == :set
+      assert proposal.field_name == "description_md"
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      assert Ash.get!(Cases.CaseImpact, impact.id, authorize?: false).description_md ==
+               "Reads **any** table."
     end
 
     test "propose_reference omits the nil tags argument", %{poc: poc, case: case_record} do

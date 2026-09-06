@@ -67,6 +67,8 @@ defmodule Varsel.Cases.Case do
     :workarounds_md,
     :configurations_md,
     :solutions_md,
+    :technical_analysis_md,
+    :proof_of_concept_md,
     :discovery,
     :cvss_v4,
     :date_public,
@@ -539,6 +541,18 @@ defmodule Varsel.Cases.Case do
 
     attribute :solutions_md, :string do
       description "Markdown solution description; omitted when nil."
+      constraints max_length: 50_000
+      public? true
+    end
+
+    attribute :technical_analysis_md, :string do
+      description "Markdown technical analysis of the vulnerability (containers.cna.x_technicalAnalysis); omitted when nil."
+      constraints max_length: 50_000
+      public? true
+    end
+
+    attribute :proof_of_concept_md, :string do
+      description "Markdown proof of concept (containers.cna.x_proofOfConcept); omitted when nil."
       constraints max_length: 50_000
       public? true
     end

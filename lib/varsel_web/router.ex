@@ -170,6 +170,7 @@ defmodule VarselWeb.Router do
       live "/cases/:id/propose", CaseDetailLive, :propose
       live "/cases/:id/cve", CaseRecordLive, :cve
       live "/cases/:id/osv", CaseRecordLive, :osv
+      live "/cases/:id/advisory", CaseRecordLive, :advisory
       live "/cases/:id/publication", CaseRecordLive, :publication
 
       live "/users", UserManagementLive, :index
@@ -296,6 +297,8 @@ defmodule VarselWeb.Router do
         :propose_workarounds,
         :propose_configurations,
         :propose_solutions,
+        :propose_technical_analysis,
+        :propose_proof_of_concept,
         :propose_internal_notes,
         :propose_discovery,
         :propose_cvss,
@@ -304,6 +307,7 @@ defmodule VarselWeb.Router do
         :propose_cna_override,
         :propose_weakness,
         :propose_impact,
+        :propose_impact_description,
         :propose_reference,
         :propose_credit,
         :propose_affected_package,

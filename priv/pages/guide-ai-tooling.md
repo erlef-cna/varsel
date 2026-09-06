@@ -50,7 +50,6 @@ first (`/mcp` inside Claude Code shows the connection state).
 | `find-capec` | Pick the CAPEC attack pattern, consistent with the CWE. |
 | `find-intro-commit` | Git archaeology for the introducing commit SHA. |
 | `verify` | Render the preview, run the validators, and walk the [convention checklist](/guide/record-conventions). |
-| `summarize-cve` | A human-readable technical write-up of a case or published CVE. |
 
 Each is invocable directly (for example `/verify`), and `new-case` is the one
 to reach for when filing.

@@ -537,6 +537,13 @@ defmodule VarselWeb.CaseFormComponents do
       <datalist id="capec-options">
         <option :for={{id, name} <- @catalog_options.capec} value={"CAPEC-#{id} #{name}"}></option>
       </datalist>
+      <.live_component
+        module={VarselWeb.MarkdownInput}
+        id="impact-description-md"
+        field={@form[:description_md]}
+        label="Impact description (optional)"
+        rows={4}
+      />
       <.propose_form_fields propose?={@propose?} />
       {render_slot(@actions)}
     </.form>

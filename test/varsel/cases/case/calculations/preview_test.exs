@@ -160,6 +160,73 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
   # The CNA container from a Result, for the per-field assertions below.
   defp cna(%Result{cve_record: cve_record}), do: cve_record["containers"]["cna"]
 
+  test "renders the technical analysis, proof of concept and authored impact prose", %{
+    poc: poc,
+    case: case_record
+  } do
+    Cases.edit_case!(
+      case_record,
+      %{
+        technical_analysis_md: "The token is never revoked.",
+        proof_of_concept_md: "1. Log out.\n2. Replay the old cookie."
+      },
+      actor: poc
+    )
+
+    [impact] = Cases.list_case_impacts!(query: [filter: [case_id: case_record.id]], actor: poc)
+
+    Cases.edit_case_impact!(impact, %{description_md: "A session **outlives** logout."}, actor: poc)
+
+    cna = cna(render!(case_record, poc))
+
+    assert cna["x_technicalAnalysis"] == [
+             %{
+               "lang" => "en",
+               "value" => "The token is never revoked.",
+               "supportingMedia" => [
+                 %{
+                   "base64" => false,
+                   "type" => "text/html",
+                   "value" => "<p>The token is never revoked.</p>"
+                 },
+                 %{
+                   "base64" => false,
+                   "type" => "text/markdown",
+                   "value" => "The token is never revoked."
+                 }
+               ]
+             }
+           ]
+
+    assert [%{"lang" => "en", "supportingMedia" => [html, markdown]}] = cna["x_proofOfConcept"]
+    assert html["value"] == "<ol>\n<li>Log out.</li>\n<li>Replay the old cookie.</li>\n</ol>"
+    assert markdown["value"] == "1. Log out.\n2. Replay the old cookie."
+
+    assert cna["impacts"] == [
+             %{
+               "capecId" => "CAPEC-593",
+               "descriptions" => [
+                 %{
+                   "lang" => "en",
+                   "value" => "A session outlives logout.",
+                   "supportingMedia" => [
+                     %{
+                       "base64" => false,
+                       "type" => "text/html",
+                       "value" => "<p>A session <strong>outlives</strong> logout.</p>"
+                     },
+                     %{
+                       "base64" => false,
+                       "type" => "text/markdown",
+                       "value" => "A session **outlives** logout."
+                     }
+                   ]
+                 }
+               ]
+             }
+           ]
+  end
+
   test "renders the affected entries exactly as published", %{poc: poc, case: case_record} do
     result = render!(case_record, poc)
 

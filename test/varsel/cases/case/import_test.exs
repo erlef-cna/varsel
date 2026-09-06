@@ -111,7 +111,9 @@ defmodule Varsel.Cases.Case.ImportTest do
             "descriptions" => prose("A **bad** bug."),
             "workarounds" => prose("Turn it off."),
             "configurations" => prose("Only with `foo: true`."),
-            "solutions" => prose("Upgrade.")
+            "solutions" => prose("Upgrade."),
+            "x_technicalAnalysis" => prose("The token is never revoked."),
+            "x_proofOfConcept" => prose("1. Log out.")
           })
         )
 
@@ -119,6 +121,8 @@ defmodule Varsel.Cases.Case.ImportTest do
       assert params.workarounds_md == "Turn it off."
       assert params.configurations_md == "Only with `foo: true`."
       assert params.solutions_md == "Upgrade."
+      assert params.technical_analysis_md == "The token is never revoked."
+      assert params.proof_of_concept_md == "1. Log out."
     end
 
     test "falls back to the HTML when there is no markdown source" do
@@ -242,6 +246,31 @@ defmodule Varsel.Cases.Case.ImportTest do
 
       assert [%{cwe_id: 200, position: 0}, %{cwe_id: 79, position: 1}] = children.weaknesses
       assert [%{capec_id: 116, position: 0}, %{capec_id: 63, position: 1}] = children.impacts
+    end
+
+    test "keeps an authored impact description and drops the bare CAPEC label" do
+      children =
+        Import.child_params(
+          record(%{
+            "impacts" => [
+              %{
+                "capecId" => "CAPEC-116",
+                "descriptions" => [%{"lang" => "en", "value" => "CAPEC-116 Excavation"}]
+              },
+              %{
+                "capecId" => "CAPEC-63",
+                "descriptions" => prose("Runs script as the **victim**.")
+              }
+            ]
+          })
+        )
+
+      assert [
+               %{capec_id: 116, position: 0},
+               %{capec_id: 63, position: 1, description_md: "Runs script as the **victim**."}
+             ] = children.impacts
+
+      refute Map.has_key?(hd(children.impacts), :description_md)
     end
 
     test "skips a non-numeric CWE (e.g. NVD-CWE-noinfo)" do

@@ -72,6 +72,20 @@ SPDX-License-Identifier: Apache-2.0
         <div class="prose max-w-none text-sm">{description}</div>
       </.panel>
 
+      <.panel :if={present["technical-analysis"]} id="technical-analysis">
+        <:title>Technical analysis</:title>
+        <div class="prose max-w-none text-sm">
+          {prose(@cna["x_technicalAnalysis"])}
+        </div>
+      </.panel>
+
+      <.panel :if={present["proof-of-concept"]} id="proof-of-concept">
+        <:title>Proof of concept</:title>
+        <div class="prose max-w-none text-sm">
+          {prose(@cna["x_proofOfConcept"])}
+        </div>
+      </.panel>
+
       <.panel :if={present["weaknesses"]} id="weaknesses">
         <:title>Weaknesses &amp; attack patterns</:title>
         <div :if={weaknesses != []}>

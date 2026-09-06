@@ -53,6 +53,7 @@ defmodule VarselWeb.CaseLifecycle do
       %{id: :workspace, label: "Workspace", navigate: ~p"/cases/#{case_id}"},
       %{id: :cve, label: "CVE", navigate: ~p"/cases/#{case_id}/cve"},
       %{id: :osv, label: "OSV", navigate: ~p"/cases/#{case_id}/osv"},
+      %{id: :advisory, label: "Advisory", navigate: ~p"/cases/#{case_id}/advisory"},
       %{id: :publication, label: "Publication", navigate: ~p"/cases/#{case_id}/publication"}
     ]
   end
