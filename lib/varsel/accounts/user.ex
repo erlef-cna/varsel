@@ -57,14 +57,18 @@ defmodule Varsel.Accounts.User do
       authorize_if always()
     end
 
-    # Whoever can read the row may see the display name, and whether the
+    # Whoever can read the row may see the display name, the credit the
+    # person asked for (it is public attribution once used), and whether the
     # account still exists in its own right or has been merged away.
     field_policy [
       :name,
       :github_username,
       :hex_username,
       :display_name,
-      :avatar_url
+      :avatar_url,
+      :credit_name,
+      :credit_organization,
+      :credit_display_name
     ] do
       authorize_if always()
     end
@@ -259,6 +263,11 @@ defmodule Varsel.Accounts.User do
       accept [:role]
     end
 
+    update :set_credit do
+      description "Sets the name and organization the user asks to be credited as."
+      accept [:credit_name, :credit_organization]
+    end
+
     destroy :destroy do
       description "Deletes an account, keeping what it wrote."
       primary? true
@@ -325,6 +334,9 @@ defmodule Varsel.Accounts.User do
 
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:system, :release_console)
+      # The credit resolution reads the account a handle names for the credit
+      # it asked for (`Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser`).
+      authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
       # Users are also visible when loaded through a row the actor can read
@@ -362,6 +374,12 @@ defmodule Varsel.Accounts.User do
     # Notification preferences are self-only, POCs included: nobody else
     # decides what mail a user wants.
     policy action(:update_notification_settings) do
+      authorize_if expr(id == ^actor(:id))
+    end
+
+    # How a person wants to be credited is theirs to say. A credit on a case
+    # is the case's, and whoever edits the case may still spell it differently.
+    policy action(:set_credit) do
       authorize_if expr(id == ^actor(:id))
     end
 
@@ -421,6 +439,18 @@ defmodule Varsel.Accounts.User do
       allow_nil? true
     end
 
+    attribute :credit_name, :string do
+      description "The name the user asks to be credited as; the display name when unset."
+      public? true
+      allow_nil? true
+    end
+
+    attribute :credit_organization, :string do
+      description "The affiliation the user asks to be credited with."
+      public? true
+      allow_nil? true
+    end
+
     attribute :notification_email_mode, EmailMode do
       description "Whether requested notification emails go out immediately or as a daily digest."
       allow_nil? false
@@ -463,6 +493,10 @@ defmodule Varsel.Accounts.User do
     calculate :display_name,
               :string,
               expr(coalesce([name, hex_username, github_username, "user"])) do
+      public? true
+    end
+
+    calculate :credit_display_name, :string, expr(coalesce([credit_name, display_name])) do
       public? true
     end
 

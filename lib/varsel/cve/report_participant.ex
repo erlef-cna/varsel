@@ -62,7 +62,8 @@ defmodule Varsel.CVE.ReportParticipant do
     end
 
     read :for_identity do
-      description "Unclaimed participants naming a provider handle."
+      description "Internal: unclaimed participants naming a provider handle, for the sign-in claim."
+      public? false
 
       argument :strategy, Strategy, allow_nil?: false
       argument :username, :ci_string, allow_nil?: false

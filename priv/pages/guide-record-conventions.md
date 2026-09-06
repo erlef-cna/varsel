@@ -107,6 +107,14 @@ Two more rules:
 - Check how a person was credited on earlier records before inventing a new
   spelling.
 
+A credit also names the person by their GitHub and hex.pm usernames. Give
+them: a handle is checked at its provider, and when an account here holds
+it, or the person signs in with it later, the credit links to that account.
+A linked account supplies the name and organization the person asked to be
+credited as (set on their account page) wherever the credit leaves them
+blank, and a refresh button on the credit copies them again. A name you give
+stands.
+
 ## References
 
 References are ordered: the vendor advisory comes first (a GHSA is tagged

@@ -20,10 +20,12 @@ defmodule Varsel.Accounts.UserIdentity do
     domain: Varsel.Accounts,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
+    notifiers: [Ash.Notifier.PubSub],
     extensions: [AshAuthentication.UserIdentity, AshPaperTrail.Resource]
 
   alias Ash.Type.CiString
   alias Varsel.Accounts.User
+  alias Varsel.Accounts.UserIdentity.Changes.ClaimCaseCredits
   alias Varsel.Accounts.UserIdentity.Changes.ClaimCaseInvites
   alias Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants
   alias Varsel.Accounts.UserIdentity.Changes.ReconcileUserNotificationEmail
@@ -105,6 +107,7 @@ defmodule Varsel.Accounts.UserIdentity do
       change Varsel.Accounts.UserIdentity.Changes.ApplyProviderFields
       change ReconcileUserNotificationEmail
       change ClaimCaseInvites
+      change ClaimCaseCredits
       change ClaimReportParticipants
     end
 
@@ -141,6 +144,16 @@ defmodule Varsel.Accounts.UserIdentity do
       forbid_if expr(users_only_strategy?)
       authorize_if expr(user_id == ^actor(:id))
     end
+  end
+
+  pub_sub do
+    module VarselWeb.Endpoint
+    prefix "user"
+
+    # An identity is part of its account, so the pages showing the account
+    # (`user:all`, see `Varsel.Accounts.User`) reload when one comes or goes.
+    publish_all :create, ["all"]
+    publish_all :destroy, ["all"]
   end
 
   attributes do

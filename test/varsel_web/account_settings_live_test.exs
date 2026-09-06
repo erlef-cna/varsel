@@ -143,6 +143,7 @@ defmodule VarselWeb.AccountSettingsLiveTest do
 
       assert html =~ "Unlinked Hex.pm"
       assert Enum.map(identities(user), &to_string(&1.strategy)) == ["github"]
+      refute has_element?(lv, ~s{button[phx-value-identity_id="#{hex.id}"]})
     end
 
     test "refuses the only provider left, which would lock the account out" do
@@ -301,6 +302,33 @@ defmodule VarselWeb.AccountSettingsLiveTest do
       {:ok, _lv, html} = conn |> log_in(user) |> live(~p"/settings/account")
 
       refute html =~ theirs
+    end
+  end
+
+  describe "credit" do
+    test "saves how the user wants to be credited", %{conn: conn} do
+      user = register_user("alice")
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      lv
+      |> form("#credit-form", %{
+        "credit" => %{"credit_name" => "Alice Example", "credit_organization" => "EEF"}
+      })
+      |> render_submit()
+
+      assert render(lv) =~ "Credit saved."
+
+      saved = Ash.get!(User, user.id, authorize?: false)
+      assert saved.credit_name == "Alice Example"
+      assert saved.credit_organization == "EEF"
+
+      # The form shows what was saved, without a reload.
+      assert lv |> element(~s{#credit-form input[name="credit[credit_name]"]}) |> render() =~
+               "Alice Example"
+
+      assert lv |> element(~s{#credit-form input[name="credit[credit_organization]"]}) |> render() =~
+               "EEF"
     end
   end
 end

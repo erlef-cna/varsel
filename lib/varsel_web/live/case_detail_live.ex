@@ -19,8 +19,9 @@ defmodule VarselWeb.CaseDetailLive do
 
   import VarselWeb.CaseComponents
   import VarselWeb.CaseFormComponents
-  import VarselWeb.UserComponents, only: [user_badge: 1, user_name: 1]
+  import VarselWeb.UserComponents, only: [avatar_disc: 1, user_badge: 1, user_name: 1]
 
+  alias Phoenix.HTML.Form
   alias Varsel.Accounts
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
@@ -54,7 +55,7 @@ defmodule VarselWeb.CaseDetailLive do
     assignments: [user: [:avatar_url, :display_name]],
     invites: [],
     references: [],
-    credits: [],
+    credits: [user: [:avatar_url, :display_name]],
     weaknesses: [weakness: [:cwe_id, :name]],
     impacts: [attack_pattern: [:capec_id, :name]],
     proposals: [author: [:avatar_url, :display_name], resolved_by: [:display_name]],
@@ -137,6 +138,7 @@ defmodule VarselWeb.CaseDetailLive do
         mode: :view,
         refreshing: false,
         child_form: nil,
+        credit_picker: nil,
         people_picker?: false,
         grant_form: nil,
         users: nil,
@@ -227,6 +229,12 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   ## -------------------------------------------------------------- child rows
+
+  # A proposal carries a name, so proposing keeps the plain credit form;
+  # editing adds the credit by the person instead, by account or by handle.
+  def handle_event("new_child", %{"type" => "credit"}, %{assigns: %{mode: :edit}} = socket) do
+    {:noreply, assign(socket, :credit_picker, %{form: credit_picker_form(socket)})}
+  end
 
   def handle_event("new_child", %{"type" => type} = params, socket) do
     %{resource: resource, title: title} = config = Map.fetch!(@children, type)
@@ -363,6 +371,66 @@ defmodule VarselWeb.CaseDetailLive do
 
   def handle_event("reorder_credits", %{"ids" => ids}, socket) do
     reorder_rows(socket, socket.assigns.case_record.credits, &Cases.edit_case_credit/3, ids)
+  end
+
+  ## ----------------------------------------------------------------- credits
+
+  def handle_event("cancel_credit_picker", _params, socket) do
+    {:noreply, assign(socket, :credit_picker, nil)}
+  end
+
+  def handle_event("credit_user", %{"user_id" => user_id, "credit_type" => credit_type}, socket) do
+    params =
+      %{"user_id" => user_id, "credit_type" => credit_type}
+      |> Map.put("case_id", socket.assigns.case_record.id)
+      |> put_append_position("credit", socket.assigns.display_case)
+
+    socket =
+      case Cases.add_case_credit(params, actor: socket.assigns.current_user) do
+        {:ok, credit} ->
+          socket
+          |> assign(:credit_picker, nil)
+          |> put_flash(:info, "#{credit.name} credited.")
+
+        {:error, error} ->
+          put_flash(socket, :error, errors_to_string(error))
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("validate_credit", %{"credit" => params}, socket) do
+    form =
+      AshPhoenix.Form.validate(
+        socket.assigns.credit_picker.form,
+        credit_by_handle_params(params, socket)
+      )
+
+    {:noreply, assign(socket, :credit_picker, %{socket.assigns.credit_picker | form: form})}
+  end
+
+  def handle_event("credit_by_handle", %{"credit" => params}, socket) do
+    case AshPhoenix.Form.submit(socket.assigns.credit_picker.form,
+           params: credit_by_handle_params(params, socket)
+         ) do
+      {:ok, credit} ->
+        {:noreply, socket |> assign(:credit_picker, nil) |> put_flash(:info, "#{credit.name} credited.")}
+
+      {:error, form} ->
+        {:noreply, assign(socket, :credit_picker, %{socket.assigns.credit_picker | form: form})}
+    end
+  end
+
+  def handle_event("refresh_credit", %{"id" => id}, socket) do
+    credit = Enum.find(socket.assigns.case_record.credits, &(&1.id == id))
+
+    socket =
+      case Cases.refresh_case_credit(credit, actor: socket.assigns.current_user) do
+        {:ok, credit} -> put_flash(socket, :info, "Credit refreshed: #{credit.name}.")
+        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
+      end
+
+    {:noreply, socket}
   end
 
   ## ------------------------------------------------------------- assignments
@@ -915,9 +983,28 @@ defmodule VarselWeb.CaseDetailLive do
             can_resolve={can_edit?(@case_record, @current_user)}
           >
             <:row :let={credit}>
-              {credit.name}{if credit.organization, do: " / #{credit.organization}"}
-              <span class="badge badge-ghost badge-xs ml-1">
-                {credit.credit_type |> to_string() |> String.replace("_", " ")}
+              <span class="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                <.avatar_disc :if={credit_user(credit)} user={credit_user(credit)} />
+                <span>{credit.name}{if credit.organization, do: " / #{credit.organization}"}</span>
+                <span class="badge badge-ghost badge-xs">
+                  {credit.credit_type |> to_string() |> String.replace("_", " ")}
+                </span>
+                <.mono_chip :for={handle <- credit.handles} size={:small}>
+                  {handle.strategy}/{handle.username}
+                </.mono_chip>
+                <button
+                  :if={
+                    @mode == :edit and (credit.user_id != nil or credit.handles != []) and
+                      Cases.can_refresh_case_credit?(@current_user, credit)
+                  }
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Copy the name from the account or the provider profile again"
+                  phx-click="refresh_credit"
+                  phx-value-id={credit.id}
+                >
+                  <.icon name="hero-arrow-path" class="size-3.5" />
+                </button>
               </span>
             </:row>
           </.rows_section>
@@ -1039,6 +1126,12 @@ defmodule VarselWeb.CaseDetailLive do
         :if={@people_picker?}
         assignable_users={assignable_users(@users, @case_record)}
         grant_form={@grant_form}
+      />
+
+      <.credit_picker_modal
+        :if={@credit_picker}
+        users={@users}
+        credit_form={@credit_picker.form}
       />
 
       <CaseLifecycle.cve_picker_modal
@@ -1967,7 +2060,7 @@ defmodule VarselWeb.CaseDetailLive do
   end
 
   attr :assignable_users, :list, required: true
-  attr :grant_form, Phoenix.HTML.Form, required: true
+  attr :grant_form, Form, required: true
 
   defp people_picker_modal(assigns) do
     ~H"""
@@ -2054,6 +2147,140 @@ defmodule VarselWeb.CaseDetailLive do
     |> AshPhoenix.Form.for_update(:grant_access, as: "grant", actor: socket.assigns.current_user)
     |> to_form()
   end
+
+  attr :users, :list, required: true, doc: "the accounts the actor may list, or [] when none"
+  attr :credit_form, Form, required: true
+
+  defp credit_picker_modal(assigns) do
+    ~H"""
+    <.modal id="credit-picker-modal" title="Add a credit" on_cancel="cancel_credit_picker">
+      <div class="space-y-4">
+        <form
+          :if={@users != []}
+          id="credit-user-form"
+          phx-submit="credit_user"
+          class="rounded-lg border border-base-300 bg-base-200 p-3"
+        >
+          <p class="text-sm font-semibold">Someone with an account</p>
+          <p class="mb-2 text-xs text-base-content/60">
+            Credited as they asked to be on their account page.
+          </p>
+          <div class="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+            <select name="user_id" required class="select select-bordered select-sm">
+              <option value="">Pick a user…</option>
+              <option :for={user <- @users} value={user.id}>
+                <.user_name user={user} />
+              </option>
+            </select>
+            <select name="credit_type" class="select select-bordered select-sm">
+              <option :for={{label, value} <- credit_type_options()} value={value}>{label}</option>
+            </select>
+            <button type="submit" class="btn btn-eef btn-sm">Add</button>
+          </div>
+        </form>
+
+        <.form
+          for={@credit_form}
+          id="credit-handle-form"
+          phx-change="validate_credit"
+          phx-submit="credit_by_handle"
+          class="rounded-lg border border-base-300 p-3"
+        >
+          <p class="text-sm font-semibold">Someone by their handle, or by name</p>
+          <p class="mb-2 text-xs text-base-content/60">
+            A handle is checked at its provider. When it belongs to an account
+            here, the credit takes the name that account asked for; otherwise
+            the name on the profile, or the one you enter.
+          </p>
+          <div class="grid grid-cols-[auto_1fr] items-start gap-2">
+            <.input
+              id="credit_strategy"
+              name="credit[strategy]"
+              value={@credit_form.params["strategy"] || "github"}
+              type="select"
+              options={[{"GitHub", "github"}, {"hex.pm", "hex"}]}
+              class="select select-bordered select-sm"
+            >
+              <:label>Provider</:label>
+            </.input>
+            <.input
+              id="credit_username"
+              name="credit[username]"
+              value={@credit_form.params["username"]}
+              errors={translate_errors(@credit_form.errors, :handles)}
+              type="text"
+              placeholder="octocat"
+              class="input input-bordered input-sm w-full font-mono"
+            >
+              <:label>Username (optional)</:label>
+            </.input>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-x-4">
+            <.input
+              field={@credit_form[:name]}
+              type="text"
+              class="input input-bordered input-sm w-full"
+            >
+              <:label>Name</:label>
+              <:description>Only when the account and profile list none.</:description>
+            </.input>
+            <.input
+              field={@credit_form[:organization]}
+              type="text"
+              class="input input-bordered input-sm w-full"
+            >
+              <:label>Organization (optional)</:label>
+            </.input>
+          </div>
+          <.input
+            field={@credit_form[:credit_type]}
+            type="select"
+            options={credit_type_options()}
+            class="select select-bordered select-sm"
+          >
+            <:label>Credit type</:label>
+          </.input>
+          <div class="flex justify-end">
+            <button type="submit" class="btn btn-eef-quiet btn-sm">Add</button>
+          </div>
+        </.form>
+      </div>
+
+      <:actions>
+        <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_credit_picker">
+          Close
+        </button>
+      </:actions>
+    </.modal>
+    """
+  end
+
+  defp credit_picker_form(socket) do
+    CaseCredit
+    |> AshPhoenix.Form.for_create(:add, as: "credit", actor: socket.assigns.current_user)
+    |> to_form()
+  end
+
+  defp credit_by_handle_params(params, socket) do
+    handles =
+      case String.trim(params["username"] || "") do
+        "" -> []
+        username -> [%{"strategy" => params["strategy"], "username" => username}]
+      end
+
+    params
+    |> Map.put("handles", handles)
+    |> Map.put("case_id", socket.assigns.case_record.id)
+    |> put_append_position("credit", socket.assigns.display_case)
+  end
+
+  defp credit_type_options do
+    Enum.map(CaseCredit.CreditType.values(), &{&1 |> to_string() |> String.replace("_", " "), &1})
+  end
+
+  # A phantom row from a proposal has no account loaded.
+  defp credit_user(%{user: %Varsel.Accounts.User{} = user}), do: user
+  defp credit_user(_credit), do: nil
 
   # The mock's two avatar color variants, applied by assignment order (only
   # cosmetic — nothing tracks a "primary" assignee).

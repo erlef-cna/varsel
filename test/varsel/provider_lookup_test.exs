@@ -9,19 +9,28 @@ defmodule Varsel.Accounts.ProviderLookupTest do
   alias Varsel.HexPm
 
   describe "GitHub.user/1" do
-    test "returns the login as GitHub spells it, with the public address" do
+    test "returns the login as GitHub spells it, with the name and public address" do
       Req.Test.stub(GitHub, fn conn ->
         assert conn.request_path == "/users/AliCe"
-        Req.Test.json(conn, %{"login" => "alice", "email" => "alice@example.com"})
+
+        Req.Test.json(conn, %{
+          "login" => "alice",
+          "name" => "Alice Example",
+          "email" => "alice@example.com"
+        })
       end)
 
-      assert GitHub.user("AliCe") == {:ok, %{login: "alice", email: "alice@example.com"}}
+      assert GitHub.user("AliCe") ==
+               {:ok, %{login: "alice", name: "Alice Example", email: "alice@example.com"}}
     end
 
-    test "a profile without a public address has a nil email" do
-      Req.Test.stub(GitHub, &Req.Test.json(&1, %{"login" => "alice", "email" => nil}))
+    test "a profile without a name or public address has them nil" do
+      Req.Test.stub(
+        GitHub,
+        &Req.Test.json(&1, %{"login" => "alice", "name" => " ", "email" => nil})
+      )
 
-      assert GitHub.user("alice") == {:ok, %{login: "alice", email: nil}}
+      assert GitHub.user("alice") == {:ok, %{login: "alice", name: nil, email: nil}}
     end
 
     test "a missing account is not an error" do
@@ -62,7 +71,7 @@ defmodule Varsel.Accounts.ProviderLookupTest do
     end
 
     test "returns the username as hex.pm spells it, without a hidden address" do
-      assert HexPm.user("AliCe") == {:ok, %{username: "alice", email: nil}}
+      assert HexPm.user("AliCe") == {:ok, %{username: "alice", name: nil, email: nil}}
     end
 
     test "a missing account is not an error" do

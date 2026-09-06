@@ -734,11 +734,13 @@ none of the authorization properties, by construction rather than by defect.
 4. **Field-level PII redaction on `User`.**
    A non-POC who reaches a `User` row through a permitted relationship sees
    the attribution fields — `:name`, `:github_username`, `:hex_username`,
-   `:display_name` and `:avatar_url`; `:notification_email`,
-   `:identity_emails` and `:role` are POC-or-self. Usernames and the picture
-   are public attribution (a credit renders them), the addresses and the role
-   are not. Note the avatar can confirm a *guessed* address for an account
-   with no linked GitHub, which is accepted (§9). This is the second of two
+   `:display_name`, `:avatar_url`, `:credit_name`, `:credit_organization`
+   and `:credit_display_name`; `:notification_email`, `:identity_emails` and
+   `:role` are POC-or-self. Usernames, the picture and the credit the user
+   asked for are public attribution (a credit renders them), the addresses
+   and the role are not. Note the avatar can confirm a *guessed* address for
+   an account with no linked GitHub, which is accepted (§9). This is the
+   second of two
    layers: the row-level read policy already removes users the actor may not
    see, so a non-POC listing users directly gets an empty result rather than
    redacted rows.
