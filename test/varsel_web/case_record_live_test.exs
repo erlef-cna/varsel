@@ -37,7 +37,12 @@ defmodule VarselWeb.CaseRecordLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
-      for {path, label} <- [{"cve", "CVE"}, {"osv", "OSV"}, {"publication", "Publication"}] do
+      for {path, label} <- [
+            {"cve", "CVE"},
+            {"osv", "OSV"},
+            {"advisory", "Advisory"},
+            {"publication", "Publication"}
+          ] do
         assert has_element?(lv, ~s(a[href="/cases/#{case_record.id}/#{path}"]), label)
       end
 
@@ -178,6 +183,53 @@ defmodule VarselWeb.CaseRecordLiveTest do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve")
 
       refute render_async(lv) =~ "Diff to published"
+    end
+  end
+
+  describe "Advisory tab" do
+    test "renders the included sections as one markdown document", %{conn: conn, poc: poc} do
+      Fixtures.seed_attack_pattern(593, "Session Hijacking")
+
+      case_record =
+        Fixtures.open_case(poc, %{
+          title: "Advisory case",
+          description_md: "Sessions **outlive** logout.",
+          technical_analysis_md: "The token is never revoked.",
+          workarounds_md: "Rotate the signing secret."
+        })
+
+      impact = Cases.add_case_impact!(%{case_id: case_record.id, capec_id: 593}, actor: poc)
+
+      Cases.edit_case_impact!(impact, %{description_md: "Any logged-out session replays."}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/advisory")
+      markdown = lv |> render_async() |> advisory_markdown()
+
+      assert markdown =~ "## Summary"
+      assert markdown =~ "Sessions **outlive** logout."
+      assert markdown =~ "## Details"
+      assert markdown =~ "The token is never revoked."
+      assert markdown =~ "## Impact"
+      assert markdown =~ "Any logged-out session replays."
+      assert markdown =~ "## Workarounds"
+      refute markdown =~ "## Proof of concept"
+
+      # Unticking a section drops it from the document.
+      markdown =
+        lv
+        |> form("#advisory-sections", %{"workarounds" => "false", "details" => "false"})
+        |> render_change()
+        |> advisory_markdown()
+
+      assert markdown =~ "## Summary"
+      refute markdown =~ "## Details"
+      refute markdown =~ "## Workarounds"
+      assert markdown =~ "## Impact"
+    end
+
+    # The highlighted code block's text, one line per rendered line.
+    defp advisory_markdown(html) do
+      html |> LazyHTML.from_document() |> LazyHTML.query("pre.lumis") |> LazyHTML.text()
     end
   end
 

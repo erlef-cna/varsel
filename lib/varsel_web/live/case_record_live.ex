@@ -4,8 +4,9 @@
 
 defmodule VarselWeb.CaseRecordLive do
   @moduledoc """
-  The rendered side of a case: the CVE tab, the OSV tab, and the Publication
-  tab that validates the record and publishes it.
+  The rendered side of a case: the CVE tab, the OSV tab, the Advisory tab
+  that writes the record's prose up as one markdown document, and the
+  Publication tab that validates the record and publishes it.
 
   Each tab shows the record as it renders now, rendered once on mount and
   again on request. A case with a published record also offers a diff
@@ -17,6 +18,7 @@ defmodule VarselWeb.CaseRecordLive do
 
   alias Varsel.Cases
   alias Varsel.Cases.Case.Calculations.Preview.Diff
+  alias Varsel.CVE.Advisory
   alias VarselWeb.CaseLifecycle
 
   @impl Phoenix.LiveView
@@ -27,7 +29,8 @@ defmodule VarselWeb.CaseRecordLive do
         preview: :loading,
         validation: nil,
         record_views: %{cve: "record", osv: "record"},
-        diffs: %{}
+        diffs: %{},
+        advisory_sections: Advisory.keys()
       )
       |> CaseLifecycle.mount(id, load: [:cve_id, :cve_record], after_fetch: &after_fetch/2)
       |> render_preview()
@@ -61,6 +64,11 @@ defmodule VarselWeb.CaseRecordLive do
       end
 
     {:noreply, socket}
+  end
+
+  def handle_event("advisory_sections", params, socket) do
+    included = for key <- Advisory.keys(), params[to_string(key)] == "true", do: key
+    {:noreply, assign(socket, advisory_sections: included)}
   end
 
   # Publishing refreshes derivations (git fetches); run it off the LiveView.
@@ -220,6 +228,13 @@ defmodule VarselWeb.CaseRecordLive do
           </p>
         </.record_pane>
 
+        <.advisory_pane
+          :if={@live_action == :advisory}
+          loading={@preview == :loading}
+          cna={if(is_map(@preview), do: get_in(@preview.cve_record, ["containers", "cna"]))}
+          included={@advisory_sections}
+        />
+
         <.publication_pane
           :if={@live_action == :publication}
           case_record={@case_record}
@@ -302,6 +317,54 @@ defmodule VarselWeb.CaseRecordLive do
           />
         </div>
       </div>
+    </div>
+    """
+  end
+
+  attr :loading, :boolean, required: true
+  attr :cna, :map, required: true, doc: "the rendered CNA container, nil while absent"
+  attr :included, :list, required: true, doc: "the Advisory section keys to render"
+
+  defp advisory_pane(assigns) do
+    assigns =
+      assign(assigns, :markdown, assigns.cna && Advisory.render(assigns.cna, assigns.included))
+
+    ~H"""
+    <div class="space-y-3">
+      <div class="flex items-start justify-between gap-3">
+        <form
+          id="advisory-sections"
+          phx-change="advisory_sections"
+          class="flex flex-wrap gap-x-4 gap-y-1"
+        >
+          <label
+            :for={{key, heading} <- Advisory.sections()}
+            class="flex items-center gap-2 text-sm cursor-pointer"
+          >
+            <input type="hidden" name={key} value="false" />
+            <input
+              type="checkbox"
+              name={key}
+              value="true"
+              checked={key in @included}
+              class="checkbox checkbox-xs"
+            />
+            {heading}
+          </label>
+        </form>
+        <div class="ml-auto"><.render_link loading={@loading} /></div>
+      </div>
+
+      <p :if={@loading} class="text-sm text-base-content/60">Rendering…</p>
+      <.code_block
+        :if={@markdown && @markdown != ""}
+        source={@markdown}
+        language="markdown"
+        class="whitespace-pre-wrap"
+      />
+      <p :if={@markdown == ""} class="text-sm text-base-content/60">
+        None of the included sections has any text yet.
+      </p>
     </div>
     """
   end
