@@ -5,7 +5,8 @@
 defmodule Varsel.Cases.Case.Calculations.DerivedReferences do
   @moduledoc """
   The references the published record adds on its own — the `cna.erlef.org` /
-  `osv.dev` self-links and the fix-commit links — as a loadable calculation.
+  `osv.dev` self-links, the version-scheme page and the introducing and fix
+  commit links — as a loadable calculation.
 
   Like `Varsel.Cases.Case.Calculations.AffectedSummary`, it reads them off the
   case's own rendered `references[]` rather than rebuilding them, so what a
@@ -41,7 +42,7 @@ defmodule Varsel.Cases.Case.Calculations.DerivedReferences do
       |> get_in(["containers", "cna", "references"])
       |> List.wrap()
       |> Enum.reject(&MapSet.member?(stored_urls, &1["url"]))
-      |> Enum.map(&%DerivedReference{url: &1["url"], tags: &1["tags"] || []})
+      |> Enum.map(&%DerivedReference{url: &1["url"], tags: &1["tags"] || [], name: &1["name"]})
     end)
   end
 end

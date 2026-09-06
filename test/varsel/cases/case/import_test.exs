@@ -313,7 +313,8 @@ defmodule Varsel.Cases.Case.ImportTest do
             "references" => [
               %{
                 "tags" => ["vendor-advisory"],
-                "url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-x"
+                "url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-x",
+                "name" => "GHSA-x: Information disclosure"
               },
               %{"tags" => ["related"], "url" => "https://cna.erlef.org/cves/CVE-2026-31337.html"},
               %{
@@ -330,10 +331,13 @@ defmodule Varsel.Cases.Case.ImportTest do
                %{
                  url: "https://github.com/acme/acme_lib/security/advisories/GHSA-x",
                  tags: ["vendor-advisory"],
+                 name: "GHSA-x: Information disclosure",
                  position: 0
                },
-               %{url: "https://example.com/blog", tags: [], position: 1}
+               %{url: "https://example.com/blog", tags: [], position: 1} = unnamed
              ] = children.references
+
+      refute Map.has_key?(unnamed, :name)
     end
   end
 end

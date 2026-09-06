@@ -316,7 +316,7 @@ you chose, and the one fact that decided it.
 - `propose_cvss` with the vector from Step 3.
 - `propose_weakness` (CWE), `propose_impact` (CAPEC).
 - `propose_credit` per person.
-- `propose_reference` for the vendor advisory. That is normally the *only* reference you propose;
+- `propose_reference` for the vendor advisory, with its `name` (the advisory title). That is normally the *only* reference you propose;
   see the references note in the mechanics section below.
 
 **`open_case` must complete first**, because every proposal needs its `case_id`. After that the

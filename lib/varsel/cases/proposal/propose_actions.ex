@@ -190,12 +190,17 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       description """
       Proposes adding a reference URL to the case. Tags are e.g.
       ["vendor-advisory"], ["patch"], ["x_version-scheme"]. Do NOT propose the
-      cna.erlef.org/cves/... or osv.dev/... references -- Varsel adds those
-      automatically when the CVE ID is assigned.
+      cna.erlef.org/cves/... or osv.dev/... references, nor the introducing
+      and fix commits -- Varsel adds those automatically.
       """
 
       accept [:case_id, :reasoning]
       argument :url, :string, allow_nil?: false
+
+      argument :name, :string do
+        description "What the link is shown as, often the page's title."
+      end
+
       argument :tags, {:array, :string}
       change {PackProposal, target: :reference, operation: :insert}
     end

@@ -24,6 +24,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   alias Ash.Resource.Calculation
   alias Ash.Resource.Info
   alias Varsel.Cases.AffectedPackage
+  alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Case.Calculations.Preview.Channel
   alias Varsel.Cases.Case.Calculations.Preview.CvssV4
   alias Varsel.Cases.Case.Calculations.Preview.MergePatch
@@ -302,23 +303,25 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   ## ------------------------------------------------------------- references
 
   # Stored references (ordered) with the derived self-links spliced in after
-  # the leading vendor advisory and derived fix-commit links appended last —
-  # the published convention: advisory, cna.erlef.org, osv.dev, version scheme,
-  # stored patches/extras, fix commits. Stored rows win over derived on URL
-  # conflict. With no stored `vendor-advisory`, our own page becomes the
-  # advisory of record and is tagged `third-party-advisory`.
+  # the leading vendor advisory and derived commit links appended last — the
+  # published convention: advisory, cna.erlef.org, osv.dev, version scheme,
+  # stored patches/extras, introducing commits, fix commits. Stored rows win
+  # over derived on URL conflict. With no stored `vendor-advisory`, our own
+  # page becomes the advisory of record and is tagged `third-party-advisory`.
   defp references(case_record, affected) do
     stored =
       case_record.references
       |> Enum.sort_by(& &1.position)
-      |> Enum.map(fn reference -> render_reference(reference.url, reference.tags) end)
+      |> Enum.map(fn reference ->
+        render_reference(reference.url, reference.tags, reference.name)
+      end)
 
     {advisory, rest} = Enum.split(stored, 1)
 
     derived =
       self_links(case_record.cve_id, stored) ++ version_scheme_links(affected)
 
-    Enum.uniq_by(advisory ++ derived ++ rest ++ patch_links(case_record), & &1["url"])
+    Enum.uniq_by(advisory ++ derived ++ rest ++ commit_links(case_record), & &1["url"])
   end
 
   # A record naming OTP versions cites the scheme that orders them: they are
@@ -327,10 +330,11 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   defp version_scheme_links(affected) do
     if Enum.any?(affected, &otp_versioned?/1) do
       [
-        %{
-          "tags" => ["x_version-scheme"],
-          "url" => "https://www.erlang.org/doc/system/versions.html#order-of-versions"
-        }
+        render_reference(
+          "https://www.erlang.org/doc/system/versions.html#order-of-versions",
+          ["x_version-scheme"],
+          "Erlang/OTP version ordering"
+        )
       ]
     else
       []
@@ -341,8 +345,11 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     entry |> Map.get("versions", []) |> Enum.any?(&(&1["versionType"] == "otp"))
   end
 
-  defp render_reference(url, []), do: %{"url" => url}
-  defp render_reference(url, tags), do: %{"tags" => tags, "url" => url}
+  defp render_reference(url, tags, name) do
+    %{"url" => to_string(url)}
+    |> put_non_empty("tags", tags)
+    |> put_present("name", name)
+  end
 
   defp self_links(nil, _stored), do: []
 
@@ -350,8 +357,16 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     website = Application.get_env(:varsel, :cna_website_base_url, "https://cna.erlef.org")
 
     [
-      %{"tags" => self_tags(stored), "url" => "#{website}/cves/#{cve_id}.html"},
-      %{"tags" => ["related"], "url" => "https://osv.dev/vulnerability/EEF-#{cve_id}"}
+      render_reference(
+        "#{website}/cves/#{cve_id}.html",
+        self_tags(stored),
+        "EEF CNA record for #{cve_id}"
+      ),
+      render_reference(
+        "https://osv.dev/vulnerability/EEF-#{cve_id}",
+        ["related"],
+        "OSV record EEF-#{cve_id}"
+      )
     ]
   end
 
@@ -366,13 +381,41 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     end
   end
 
-  defp patch_links(case_record) do
+  # One link per boundary commit: the introducing ones as `related`, the fixes
+  # as `patch`. The erlang/otp root commit stands for "since creation" and
+  # links nothing.
+  defp commit_links(case_record) do
     for package <- case_record.affected_packages,
         package.repo_url,
+        event_kind <- [:introduced, :fixed],
         event <- package.version_events,
-        event.event == :fixed,
-        event.commit_sha do
-      %{"tags" => ["patch"], "url" => "#{package.repo_url}/commit/#{event.commit_sha}"}
+        event.event == event_kind,
+        event.commit_sha,
+        not Preset.otp_root_commit?(event.commit_sha) do
+      repo_url = to_string(package.repo_url)
+
+      render_reference(
+        "#{repo_url}/commit/#{event.commit_sha}",
+        commit_tags(event_kind),
+        "#{commit_label(event_kind)} #{String.slice(event.commit_sha, 0, 7)} in #{repo_label(repo_url)}"
+      )
+    end
+  end
+
+  defp commit_tags(:introduced), do: ["related"]
+  defp commit_tags(:fixed), do: ["patch"]
+
+  defp commit_label(:introduced), do: "Introducing commit"
+  defp commit_label(:fixed), do: "Fix commit"
+
+  # `owner/repo` for a GitHub-shaped URL, the host and path otherwise.
+  defp repo_label(repo_url) do
+    case URI.parse(repo_url) do
+      %URI{path: path} when is_binary(path) and path != "" ->
+        path |> String.trim("/") |> String.replace_suffix(".git", "")
+
+      %URI{host: host} ->
+        host
     end
   end
 

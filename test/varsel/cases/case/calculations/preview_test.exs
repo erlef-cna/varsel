@@ -285,7 +285,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     refute Map.has_key?(cvss, "exploitMaturity")
   end
 
-  test "orders references: advisory, self-links, stored patches, fix commits", %{
+  test "orders references: advisory, self-links, stored patches, commits", %{
     poc: poc,
     case: case_record
   } do
@@ -296,10 +296,44 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
              "https://cna.erlef.org/cves/CVE-2025-4754.html",
              "https://osv.dev/vulnerability/EEF-CVE-2025-4754",
              "https://github.com/team-alembic/ash_authentication_phoenix/pull/634",
+             "#{@repo}/commit/#{@intro_sha}",
              "#{@repo}/commit/#{@fix_sha}"
            ]
 
     assert List.first(cna(result)["references"])["tags"] == ["vendor-advisory", "related"]
+  end
+
+  test "names every derived reference and keeps a stored name", %{poc: poc, case: case_record} do
+    Cases.add_case_reference!(
+      %{
+        case_id: case_record.id,
+        url: "https://example.com/writeup",
+        name: "A write-up",
+        tags: ["technical-description"]
+      },
+      actor: poc
+    )
+
+    result = render!(case_record, poc)
+    names = Map.new(cna(result)["references"], &{&1["url"], &1["name"]})
+
+    assert names["https://cna.erlef.org/cves/CVE-2025-4754.html"] ==
+             "EEF CNA record for CVE-2025-4754"
+
+    assert names["https://osv.dev/vulnerability/EEF-CVE-2025-4754"] ==
+             "OSV record EEF-CVE-2025-4754"
+
+    assert names["#{@repo}/commit/#{@intro_sha}"] ==
+             "Introducing commit 1111111 in team-alembic/ash_authentication_phoenix"
+
+    assert names["#{@repo}/commit/#{@fix_sha}"] ==
+             "Fix commit a3253fb in team-alembic/ash_authentication_phoenix"
+
+    assert %{"tags" => ["related"]} =
+             Enum.find(cna(result)["references"], &(&1["url"] == "#{@repo}/commit/#{@intro_sha}"))
+
+    assert names["https://example.com/writeup"] == "A write-up"
+    refute Map.has_key?(Enum.find(cna(result)["references"], &(&1["url"] == @advisory)), "name")
   end
 
   test "keeps the self reference merely `related` while a vendor advisory is stored", %{

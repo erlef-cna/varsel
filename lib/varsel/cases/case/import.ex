@@ -16,7 +16,7 @@ defmodule Varsel.Cases.Case.Import do
 
   Imported: `title`, `datePublic`, `source.discovery`, `timeline[]`, a CVSS
   **v4** vector, `problemTypes[]` (CWE), `impacts[]` (CAPEC), `credits[]`, the
-  non-derived `references[]`, and the prose fields.
+  non-derived `references[]` with their names, and the prose fields.
 
   Prose takes the markdown `supportingMedia` when the record has one, else the
   HTML, else the plain-text `value`. Only the first is genuinely markdown — the
@@ -230,8 +230,12 @@ defmodule Varsel.Cases.Case.Import do
     |> Enum.map(fn {url, index} ->
       tags = for tag <- tags_of(url, cna), is_binary(tag), do: tag
 
-      %{url: url, tags: Enum.uniq(tags), position: index}
+      put_present(%{url: url, tags: Enum.uniq(tags), position: index}, :name, name_of(url, cna))
     end)
+  end
+
+  defp name_of(url, cna) do
+    Enum.find_value(cna["references"], &(&1["url"] == url and blank_to_nil(&1["name"])))
   end
 
   defp tags_of(url, cna) do
