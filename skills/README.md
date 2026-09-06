@@ -45,7 +45,6 @@ See <https://cna.erlef.org/api-access#mcp> for how to connect and authenticate.
 | `find-capec` | Pick a CAPEC — start from the CWE's `related_attack_patterns`, fall back to search. |
 | `find-intro-commit` | Git archaeology to return the introducing commit SHA. |
 | `verify` | Render the case preview, run the MCP validators, walk the convention checklist. |
-| `summarize-cve` | Human-readable technical write-up from a case or published CVE. |
 
 Each skill is invocable directly (e.g. `/new-case`); the orchestrator calls
 `cvss`, `find-cwe`, `find-capec`, `find-intro-commit`, and `verify` as sub-steps.
