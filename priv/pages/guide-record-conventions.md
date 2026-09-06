@@ -118,8 +118,10 @@ stands.
 ## References
 
 References are ordered: the vendor advisory comes first (a GHSA is tagged
-`vendor-advisory, related`). The `patch` reference is derived from the fix
-commits, so add one by hand only when there is no fix commit to point at, and
+`vendor-advisory, related`). A reference may carry a name, the page's title
+as a rule; the derived references come named. The `patch` reference is
+derived from the fix commits and a `related` one from the introducing commit,
+so add one by hand only when there is no fix commit to point at, and
 a record naming OTP versions gets the
 [OTP version-scheme page](https://www.erlang.org/doc/system/versions.html#order-of-versions)
 derived too. Add further references only

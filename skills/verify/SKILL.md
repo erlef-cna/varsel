@@ -123,7 +123,8 @@ gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
 - [ ] Second: `https://cna.erlef.org/cves/CVE-<num>.html` `["related"]` (add `"third-party-advisory"` if no vendor advisory).
 - [ ] Third: `https://osv.dev/vulnerability/EEF-CVE-<num>` `["related"]`.
 - [ ] OTP: `https://www.erlang.org/doc/system/versions.html#order-of-versions` `["x_version-scheme"]` present — derived from any OTP-versioned entry, so its absence means no entry is OTP-versioned.
-- [ ] At least one `"patch"`-tagged reference, unless the vulnerability is unpatched.
+- [ ] At least one `"patch"`-tagged reference, unless the vulnerability is unpatched. The introducing commit renders as a `"related"` reference, named, alongside them.
+- [ ] Each stored reference carries a `name` that is the page title, or none at all; the derived ones come named.
 
 ### CVSS
 - [ ] `baseScore` is not `0.0` — i.e. `cvss_v4` is set on the case and derived through.

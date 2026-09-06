@@ -962,7 +962,12 @@ defmodule VarselWeb.CaseDetailLive do
           >
             <:row :let={reference}>
               <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                <CveView.reference url={reference.url} tags={reference.tags} pills={:all} />
+                <CveView.reference
+                  url={reference.url}
+                  tags={reference.tags}
+                  name={reference.name}
+                  pills={:all}
+                />
               </span>
             </:row>
             <:footer>
@@ -1871,7 +1876,7 @@ defmodule VarselWeb.CaseDetailLive do
       <div :for={ref <- @refs} class="flex items-start gap-2 py-0.5 text-sm opacity-70">
         <.row_bullet class="mt-[0.45rem]" />
         <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-          <CveView.reference url={ref.url} tags={ref.tags} pills={:all} />
+          <CveView.reference url={ref.url} tags={ref.tags} name={ref.name} pills={:all} />
         </span>
       </div>
     </div>

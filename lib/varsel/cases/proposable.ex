@@ -70,7 +70,7 @@ defmodule Varsel.Cases.Proposable do
 
   @version_event_fields [:event, :commit_sha, :version, :note]
 
-  @reference_fields [:url, :tags, :position]
+  @reference_fields [:url, :name, :tags, :position]
 
   @credit_fields [:name, :organization, :credit_type, :position, :handles]
 

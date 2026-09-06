@@ -720,6 +720,8 @@ defmodule VarselWeb.CveView do
           github.com/{owner_repo} · <code>{id}</code> ↗
         <% %{kind: :osv, id: id} -> %>
           osv.dev · <code>{id}</code> ↗
+        <% %{kind: :link, name: name, host: host} -> %>
+          {name} <span class="text-base-content/60">({host})</span>
         <% %{kind: :link, name: name} -> %>
           {name}
       <% end %>
@@ -727,9 +729,13 @@ defmodule VarselWeb.CveView do
     """
   end
 
-  # How a reference URL reads: a named link wins outright, otherwise the URL
-  # shape decides whether an identifier or the bare link is the honest face.
-  defp reference_shape(_url, name) when is_binary(name), do: %{kind: :link, name: name}
+  # How a reference URL reads: a named link wins outright and names its host
+  # behind the name, otherwise the URL shape decides whether an identifier or
+  # the bare link is the honest face.
+  defp reference_shape(url, name) when is_binary(name) do
+    %{kind: :link, name: name, host: URI.parse(url || "").host}
+  end
+
   defp reference_shape(nil, _name), do: %{kind: :link, name: nil}
 
   defp reference_shape(url, _name) do

@@ -1221,6 +1221,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#child-form", %{
         "child" => %{
           "url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-x",
+          "name" => "GHSA-x: Information disclosure",
           "tags" => ["", "vendor-advisory", "related"],
           "custom_tags" => "x_version-scheme"
         }
@@ -1230,6 +1231,8 @@ defmodule VarselWeb.CaseLiveTest do
       case_record = Ash.load!(case_record, [:references], authorize?: false)
       assert [reference] = case_record.references
       assert reference.tags == ["vendor-advisory", "related", "x_version-scheme"]
+      assert reference.name == "GHSA-x: Information disclosure"
+      assert render(lv) =~ "GHSA-x: Information disclosure"
 
       # Editing shows the stored tags: checkboxes reflect the standard ones,
       # the custom input carries the x_ tag.

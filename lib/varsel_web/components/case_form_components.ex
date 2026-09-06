@@ -358,8 +358,8 @@ defmodule VarselWeb.CaseFormComponents do
   end
 
   @doc """
-  Renders the form for a reference: a URL and what it is — an advisory, a
-  patch, a report.
+  Renders the form for a reference: a URL, the name it is shown under, and
+  what it is — an advisory, a patch, a report.
   """
   attr :form, :any, required: true, doc: "an AshPhoenix.Form over the resource"
   attr :propose?, :boolean, default: false, doc: "commit as a suggestion rather than a change"
@@ -371,6 +371,10 @@ defmodule VarselWeb.CaseFormComponents do
     <.form for={@form} {@rest}>
       <.input field={@form[:url]} type="text" class="w-full input font-mono">
         <:label>URL</:label>
+      </.input>
+      <.input field={@form[:name]} type="text" class="w-full input">
+        <:label>Name (optional)</:label>
+        <:description>What the link is shown as, often the page's title.</:description>
       </.input>
 
       <fieldset class="fieldset mb-2">

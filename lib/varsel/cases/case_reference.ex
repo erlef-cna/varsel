@@ -4,12 +4,14 @@
 
 defmodule Varsel.Cases.CaseReference do
   @moduledoc """
-  One stored reference of a case, rendered into `references[]`.
+  One stored reference of a case, rendered into `references[]`: a URL, the
+  tags saying what it is, and the name the link is shown under.
 
   Only non-derivable references are stored: the vendor advisory (GHSA), extra
   advisories, version-scheme explainers, and so on. The `cna.erlef.org` /
-  `osv.dev` self-links and patch-commit links (repo + fixed commit SHA) are
-  appended at render time — stored rows win over derived ones on URL conflict.
+  `osv.dev` self-links and the commit links (repo + introducing and fixed
+  commit SHAs) are appended at render time, named — stored rows win over
+  derived ones on URL conflict.
 
   Ordering is meaningful (the vendor advisory comes first); `position` sorts
   the stored rows ahead of derived ones.
@@ -155,6 +157,12 @@ defmodule Varsel.Cases.CaseReference do
 
     attribute :url, Varsel.Types.URI do
       allow_nil? false
+      public? true
+    end
+
+    attribute :name, :string do
+      description "What the link is shown as, often the page's title. Left out, the URL stands."
+      constraints max_length: 512, allow_empty?: false, trim?: true
       public? true
     end
 

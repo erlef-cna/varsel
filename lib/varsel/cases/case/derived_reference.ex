@@ -5,8 +5,9 @@
 defmodule Varsel.Cases.Case.DerivedReference do
   @moduledoc """
   One reference the published record adds on its own — a `cna.erlef.org` /
-  `osv.dev` self-link or a fix-commit link — as read back off the rendered
-  container by `Varsel.Cases.Case.Calculations.DerivedReferences`.
+  `osv.dev` self-link, the version-scheme page, or a commit link — as read
+  back off the rendered container by
+  `Varsel.Cases.Case.Calculations.DerivedReferences`.
 
   Read-only by nature: these are never stored (that is
   `Varsel.Cases.CaseReference`) and never accepted as input, so the type exists
@@ -32,6 +33,11 @@ defmodule Varsel.Cases.Case.DerivedReference do
       description "CVE reference tags the renderer assigned (e.g. [\"patch\"])."
       allow_nil? false
       default []
+      public? true
+    end
+
+    attribute :name, :string do
+      description "What the renderer shows the link as."
       public? true
     end
   end
