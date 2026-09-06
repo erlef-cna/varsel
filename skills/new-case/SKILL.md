@@ -28,7 +28,8 @@ Every change to an opened case is a **proposal**. There is one typed `mcp__varse
 per thing you can change; pick the tool that names it:
 
 `propose_title`, `propose_description`, `propose_discovery`, `propose_configurations`,
-`propose_workarounds`, `propose_cvss`, `propose_weakness`, `propose_impact`, `propose_reference`,
+`propose_workarounds`, `propose_technical_analysis`, `propose_proof_of_concept`, `propose_cvss`,
+`propose_weakness`, `propose_impact`, `propose_impact_description`, `propose_reference`,
 `propose_credit`, `propose_affected_package` / `propose_otp_affected_package` /
 `propose_elixir_affected_package` / `propose_gleam_affected_package`, `propose_package_channel`,
 `propose_version_event`, `propose_delete`.
@@ -314,7 +315,10 @@ you chose, and the one fact that decided it.
 - The affected package, in one call with its channels and version events. Choose the tool by
   repository, not by language. See below.
 - `propose_cvss` with the vector from Step 3.
-- `propose_weakness` (CWE), `propose_impact` (CAPEC).
+- `propose_weakness` (CWE), `propose_impact` (CAPEC), the latter with a `description_md` when
+  the report says what the attacker gains; see the impact section below.
+- `propose_technical_analysis` and `propose_proof_of_concept` when the report carries them; see
+  the section below.
 - `propose_credit` per person.
 - `propose_reference` for the vendor advisory, with its `name` (the advisory title). That is normally the *only* reference you propose;
   see the references note in the mechanics section below.
@@ -598,6 +602,23 @@ Prefer short sentences. One clause where two would do.
 
 Keep the CVSS score, the severity, and any explanation of metric choices out entirely. Those live
 in structured fields, and metric reasoning belongs in the `propose_cvss` `reasoning`.
+
+### Technical analysis, proof of concept, impact
+
+These three carry the depth a GHSA puts under **Details**, **PoC**, and **Impact**. Fill them from
+the report when it has them; do not invent them. Each is markdown, and each is optional.
+
+- **`propose_technical_analysis`** (`x_technicalAnalysis` on the record): how the vulnerability
+  works. For a multi-step chain, structure it with bold sub-headings (**1. Input handling**,
+  **2. Unsafe processing**, **3. Execution**). The description still has to stand on its own:
+  write it as if this section did not exist.
+- **`propose_proof_of_concept`** (`x_proofOfConcept`): numbered steps, the minimum that reproduces
+  the issue. The attack path, not a complete exploit. Skip setup boilerplate unless it is
+  non-obvious. Never write a proof of concept you have not seen in the report or run yourself.
+- **Impact description** (`description_md` on `propose_impact`, or `propose_impact_description`
+  for an impact already on the case): one or two sentences on what an attacker can do and who is
+  affected in practice. No version ranges, no CVSS score or metric reasoning, and never "no fix
+  available". Without one the record shows the CAPEC catalog name, which is fine.
 
 ### Optional fields: workarounds, configurations, solutions
 

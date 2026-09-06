@@ -67,6 +67,11 @@ Read the rendered record and verify each item. Report PASS/FAIL for each.
 ### Configurations
 - [ ] If present, each entry has both plain text (`value`) and HTML.
 
+### Technical analysis, proof of concept, impact
+- [ ] `x_technicalAnalysis` and `x_proofOfConcept`, if present, each carry plain text (`value`), HTML and markdown.
+- [ ] The proof of concept is an attack path in numbered steps, not a complete exploit.
+- [ ] An authored `impacts[].descriptions[]` entry says what an attacker gains; no version ranges, no CVSS score, never "no fix available". An entry that only restates the CAPEC name is the default label, not a finding.
+
 ### Affected entries (mostly derived — check they came out right)
 - [ ] No version entry uses `versionType: "purl"`.
 - [ ] Git `changes` entries use the fix **commit SHA**, not a release-tag SHA.

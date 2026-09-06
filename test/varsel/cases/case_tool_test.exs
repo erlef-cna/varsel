@@ -15,7 +15,8 @@ defmodule Varsel.Cases.CaseToolTest do
 
   alias Varsel.Cases
 
-  @case_body ~w(description_md workarounds_md configurations_md solutions_md internal_notes)
+  @case_body ~w(description_md workarounds_md configurations_md solutions_md
+                technical_analysis_md proof_of_concept_md internal_notes)
 
   setup do
     poc = register_user("poc", :poc)
@@ -27,6 +28,8 @@ defmodule Varsel.Cases.CaseToolTest do
         workarounds_md: String.duplicate("workaround prose ", 30),
         configurations_md: String.duplicate("configuration prose ", 30),
         solutions_md: String.duplicate("solution prose ", 30),
+        technical_analysis_md: String.duplicate("analysis prose ", 30),
+        proof_of_concept_md: String.duplicate("poc prose ", 30),
         internal_notes: String.duplicate("internal note ", 30)
       })
 

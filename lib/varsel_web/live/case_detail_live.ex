@@ -121,7 +121,7 @@ defmodule VarselWeb.CaseDetailLive do
     "impact" => %{
       resource: CaseImpact,
       title: "CAPEC classification",
-      edit?: false,
+      edit?: true,
       target: :impact
     }
   }
@@ -284,7 +284,9 @@ defmodule VarselWeb.CaseDetailLive do
       |> to_form()
 
     {:noreply,
-     assign(socket,
+     socket
+     |> ensure_catalog_options(type)
+     |> assign(
        child_form: %{
          form: form,
          type: type,
@@ -1059,6 +1061,11 @@ defmodule VarselWeb.CaseDetailLive do
                 CAPEC-{impact.capec_id}
               </.link>
               {impact.attack_pattern.name}
+              <.markdown
+                :if={impact.description_md}
+                content={impact.description_md}
+                class="mt-1 text-sm text-base-content/80"
+              />
             </:row>
           </.rows_section>
 
@@ -1373,6 +1380,20 @@ defmodule VarselWeb.CaseDetailLive do
           label="Solutions (optional)"
           rows={3}
         />
+        <.live_component
+          module={VarselWeb.MarkdownInput}
+          id="case-technical-analysis-md"
+          field={@content_form[:technical_analysis_md]}
+          label="Technical analysis (optional)"
+          rows={6}
+        />
+        <.live_component
+          module={VarselWeb.MarkdownInput}
+          id="case-proof-of-concept-md"
+          field={@content_form[:proof_of_concept_md]}
+          label="Proof of concept (optional)"
+          rows={6}
+        />
         <.input
           field={@content_form[:discovery]}
           type="select"
@@ -1405,6 +1426,8 @@ defmodule VarselWeb.CaseDetailLive do
         configurations={@case_record.configurations_md}
         workarounds={@case_record.workarounds_md}
         solutions={@case_record.solutions_md}
+        technical_analysis={@case_record.technical_analysis_md}
+        proof_of_concept={@case_record.proof_of_concept_md}
         internal_notes={@case_record.internal_notes}
       />
 
@@ -1769,7 +1792,11 @@ defmodule VarselWeb.CaseDetailLive do
   slot :footer, doc: "read-only content below the editable rows (e.g. derived references)"
 
   defp rows_section(assigns) do
-    assigns = assign(assigns, :sortable, assigns.mode == :edit and assigns.sort_event != nil)
+    assigns =
+      assign(assigns,
+        sortable: assigns.mode == :edit and assigns.sort_event != nil,
+        editable_rows: Map.fetch!(@children, assigns.type).edit?
+      )
 
     ~H"""
     <.panel id={@id}>
@@ -1817,7 +1844,7 @@ defmodule VarselWeb.CaseDetailLive do
             class="flex gap-1 shrink-0"
           >
             <button
-              :if={@type in ["reference", "credit"]}
+              :if={@editable_rows}
               class="btn btn-ghost btn-xs"
               phx-click="edit_child"
               phx-value-type={@type}

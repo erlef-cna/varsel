@@ -707,12 +707,16 @@ defmodule VarselWeb.CaseComponents do
 
   def proposal_payload(%{proposal: %{operation: :insert, target: target}} = assigns)
       when target in [:weakness, :impact] do
-    assigns = assign(assigns, :entry, catalog_entry(assigns.proposal))
+    assigns =
+      assigns
+      |> assign(:entry, catalog_entry(assigns.proposal))
+      |> assign(:description, assigns.proposal.proposed_value["value"]["description_md"])
 
     ~H"""
     <p :if={@entry} class="mt-1 text-sm">
       <.catalog_link entry={@entry} />
     </p>
+    <.markdown :if={@description} content={@description} class="mt-1 text-sm" />
     """
   end
 
@@ -1027,8 +1031,9 @@ defmodule VarselWeb.CaseComponents do
   Renders a case's written content at rest: what the vulnerability is,
   followed by the sections that say what to do about it.
 
-  Each of `configurations`, `workarounds` and `solutions` appears only when
-  the case has something to say there, under its own heading.
+  Each of `configurations`, `workarounds`, `solutions`, `technical_analysis`
+  and `proof_of_concept` appears only when the case has something to say
+  there, under its own heading.
 
   `affected_summary` is the "This issue affects …" sentence the published
   record appends to the description. It is shown here, muted and labelled, so
@@ -1044,6 +1049,8 @@ defmodule VarselWeb.CaseComponents do
   attr :configurations, :string, default: nil
   attr :workarounds, :string, default: nil
   attr :solutions, :string, default: nil
+  attr :technical_analysis, :string, default: nil
+  attr :proof_of_concept, :string, default: nil
   attr :internal_notes, :string, default: nil
 
   def case_content(assigns) do
@@ -1063,7 +1070,9 @@ defmodule VarselWeb.CaseComponents do
         {label, content} <- [
           {"Configurations", @configurations},
           {"Workarounds", @workarounds},
-          {"Solutions", @solutions}
+          {"Solutions", @solutions},
+          {"Technical analysis", @technical_analysis},
+          {"Proof of concept", @proof_of_concept}
         ]
       }>
         <div :if={content}>

@@ -101,6 +101,32 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       change {PackProposal, target: :case, operation: :set, field: :solutions_md}
     end
 
+    create :propose_technical_analysis do
+      description """
+      Proposes setting the case's technical analysis (markdown): how the
+      vulnerability works, step by step. Published as
+      containers.cna.x_technicalAnalysis. The section is optional: pass an
+      explicit null value to propose removing it.
+      """
+
+      accept [:case_id, :reasoning]
+      argument :value, :string, allow_nil?: true
+      change {PackProposal, target: :case, operation: :set, field: :technical_analysis_md}
+    end
+
+    create :propose_proof_of_concept do
+      description """
+      Proposes setting the case's proof of concept (markdown): the minimum
+      steps that reproduce the issue. Published as
+      containers.cna.x_proofOfConcept. The section is optional: pass an
+      explicit null value to propose removing it.
+      """
+
+      accept [:case_id, :reasoning]
+      argument :value, :string, allow_nil?: true
+      change {PackProposal, target: :case, operation: :set, field: :proof_of_concept_md}
+    end
+
     create :propose_internal_notes do
       description """
       Proposes setting the case's internal working notes (markdown). These are
@@ -180,10 +206,29 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
     end
 
     create :propose_impact do
-      description "Proposes adding a CAPEC attack-pattern impact to the case."
+      description """
+      Proposes adding a CAPEC attack-pattern impact to the case, optionally
+      with a markdown description of the impact scenario: what an attacker
+      gains and who is affected in practice. Leave out version ranges and
+      the CVSS score; they are carried by other fields.
+      """
+
       accept [:case_id, :reasoning]
       argument :capec_id, :integer, allow_nil?: false
+      argument :description_md, :string
       change {PackProposal, target: :impact, operation: :insert}
+    end
+
+    create :propose_impact_description do
+      description """
+      Proposes setting the markdown description of an impact that is already
+      on the case (target_id). Pass an explicit null value to propose
+      removing it, which puts the CAPEC catalog name back in its place.
+      """
+
+      accept [:case_id, :target_id, :reasoning]
+      argument :value, :string, allow_nil?: true
+      change {PackProposal, target: :impact, operation: :set, field: :description_md}
     end
 
     create :propose_reference do

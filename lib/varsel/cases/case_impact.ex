@@ -6,9 +6,10 @@ defmodule Varsel.Cases.CaseImpact do
   @moduledoc """
   A CAPEC impact classification of the case, rendered into `impacts[]`.
 
-  References the locally synced CAPEC catalog (`Varsel.CAPEC.AttackPattern`);
-  the human-readable description ("CAPEC-66 SQL Injection") is derived from
-  the catalog at render time.
+  References the locally synced CAPEC catalog (`Varsel.CAPEC.AttackPattern`).
+  An entry may carry its own markdown description of the impact scenario;
+  without one, the catalog name ("CAPEC-66 SQL Injection") is rendered in
+  its place.
   """
 
   use Ash.Resource,
@@ -19,7 +20,9 @@ defmodule Varsel.Cases.CaseImpact do
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
+  alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Changes.SupersedeOrphanedProposals
+  alias Varsel.Cases.Proposable
 
   graphql do
     type :case_impact
@@ -51,7 +54,14 @@ defmodule Varsel.Cases.CaseImpact do
     create :add do
       description "Classifies the case with a CAPEC attack pattern."
       primary? true
-      accept [:case_id, :capec_id, :position]
+      accept [:case_id | Proposable.fields(__MODULE__)]
+    end
+
+    update :edit do
+      description "Edits a CAPEC classification. Only allowed while the case is editable."
+      primary? true
+      accept Proposable.fields(__MODULE__)
+      require_atomic? false
     end
 
     destroy :remove do
@@ -61,9 +71,20 @@ defmodule Varsel.Cases.CaseImpact do
       change SupersedeOrphanedProposals
     end
 
+    update :apply_proposal do
+      description "Internal: applies one accepted proposal value to a single field."
+      accept []
+      require_atomic? false
+
+      argument :field, :string, allow_nil?: false
+      argument :value, :term
+      argument :proposal_id, :uuid, allow_nil?: false
+      change ApplyProposedField
+    end
+
     create :apply_proposal_insert do
       description "Internal: creates the row proposed by an accepted :insert proposal."
-      accept [:case_id, :capec_id, :position]
+      accept [:case_id | Proposable.fields(__MODULE__)]
 
       argument :proposal_id, :uuid, allow_nil?: false
     end
@@ -85,7 +106,7 @@ defmodule Varsel.Cases.CaseImpact do
 
     # Writing a case's facts is editing the case, so it needs a role as
     # well as an assignment — an assigned collaborator proposes instead.
-    policy action_type([:create, :destroy]) do
+    policy action_type([:create, :update, :destroy]) do
       authorize_if actor_attribute_equals(:role, :poc)
 
       authorize_if expr(
@@ -95,7 +116,7 @@ defmodule Varsel.Cases.CaseImpact do
     end
 
     # Content freeze: child rows may only change while the parent case is editable.
-    policy action_type([:create, :destroy]) do
+    policy action_type([:create, :update, :destroy]) do
       authorize_if expr(case.state in [:draft, :review])
     end
   end
@@ -116,6 +137,18 @@ defmodule Varsel.Cases.CaseImpact do
       description "Order within impacts[]."
       allow_nil? false
       default 0
+      public? true
+    end
+
+    attribute :description_md, :string do
+      description """
+      Markdown description of the impact scenario: what an attacker gains and
+      who is affected in practice. Rendered as the entry's description; the
+      catalog name stands in when nil. The schema caps the plain text at
+      4096 characters.
+      """
+
+      constraints max_length: 4096
       public? true
     end
 

@@ -61,6 +61,8 @@ defmodule Varsel.Cases.Case.Import do
     |> put_present(:workarounds_md, prose_markdown(cna["workarounds"]))
     |> put_present(:configurations_md, prose_markdown(cna["configurations"]))
     |> put_present(:solutions_md, prose_markdown(cna["solutions"]))
+    |> put_present(:technical_analysis_md, prose_markdown(cna["x_technicalAnalysis"]))
+    |> put_present(:proof_of_concept_md, prose_markdown(cna["x_proofOfConcept"]))
     |> put_present(:discovery, discovery(cna))
     |> put_present(:cvss_v4, cvss_v4(cna))
     |> put_present(:date_public, date_public(cna))
@@ -211,14 +213,32 @@ defmodule Varsel.Cases.Case.Import do
     for_result =
       for impact <- cna["impacts"] || [],
           capec_id = numeric_id(impact["capecId"], "CAPEC") do
-        capec_id
+        {capec_id, impact_markdown(impact)}
       end
 
     for_result
-    |> Enum.uniq()
+    |> Enum.uniq_by(&elem(&1, 0))
     |> Enum.with_index()
-    |> Enum.map(fn {capec_id, index} -> %{capec_id: capec_id, position: index} end)
+    |> Enum.map(fn {{capec_id, description}, index} ->
+      put_present(%{capec_id: capec_id, position: index}, :description_md, description)
+    end)
   end
+
+  # A description that only restates the CAPEC id is the label the renderer
+  # emits for an entry without authored prose (see Preview `put_impacts`);
+  # importing it would freeze the catalog name into the case.
+  defp impact_markdown(impact) do
+    descriptions = List.wrap(impact["descriptions"])
+
+    case prose_markdown(descriptions) do
+      nil -> nil
+      markdown -> if capec_label?(markdown, impact["capecId"]), do: nil, else: markdown
+    end
+  end
+
+  defp capec_label?(text, capec_id) when is_binary(capec_id), do: String.starts_with?(text, capec_id)
+
+  defp capec_label?(_text, _capec_id), do: false
 
   defp references(cna) do
     (cna["references"] || [])

@@ -1342,6 +1342,32 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ ~s(href="https://capec.mitre.org/data/definitions/593.html")
     end
 
+    test "an impact's description is edited in the modal and rendered under its row", %{
+      conn: conn,
+      poc: poc
+    } do
+      Fixtures.seed_attack_pattern(593, "Session Hijacking")
+      case_record = Fixtures.open_case(poc)
+      impact = Cases.add_case_impact!(%{case_id: case_record.id, capec_id: 593}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+
+      lv |> element("#impacts-row-#{impact.id} button", "Edit") |> render_click()
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{"capec_id" => "593", "description_md" => "A session **outlives** logout."}
+      })
+      |> render_submit()
+
+      assert Ash.get!(Cases.CaseImpact, impact.id, authorize?: false).description_md ==
+               "A session **outlives** logout."
+
+      html = render(lv)
+      assert html =~ "CAPEC-593"
+      assert html =~ "A session <strong>outlives</strong> logout."
+    end
+
     test "credits append without a position field and reorder by drag & drop", %{
       conn: conn,
       poc: poc

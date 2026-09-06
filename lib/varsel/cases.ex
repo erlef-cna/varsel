@@ -88,6 +88,8 @@ defmodule Varsel.Cases do
     tool :propose_workarounds, Proposal, :propose_workarounds
     tool :propose_configurations, Proposal, :propose_configurations
     tool :propose_solutions, Proposal, :propose_solutions
+    tool :propose_technical_analysis, Proposal, :propose_technical_analysis
+    tool :propose_proof_of_concept, Proposal, :propose_proof_of_concept
     tool :propose_internal_notes, Proposal, :propose_internal_notes
     tool :propose_discovery, Proposal, :propose_discovery
     tool :propose_cvss, Proposal, :propose_cvss
@@ -96,6 +98,7 @@ defmodule Varsel.Cases do
     tool :propose_cna_override, Proposal, :propose_cna_override
     tool :propose_weakness, Proposal, :propose_weakness
     tool :propose_impact, Proposal, :propose_impact
+    tool :propose_impact_description, Proposal, :propose_impact_description
     tool :propose_reference, Proposal, :propose_reference
     tool :propose_credit, Proposal, :propose_credit
     tool :propose_affected_package, Proposal, :propose_affected_package
@@ -169,6 +172,7 @@ defmodule Varsel.Cases do
       destroy CaseWeakness, :remove_case_weakness, :remove
 
       create CaseImpact, :add_case_impact, :add
+      update CaseImpact, :edit_case_impact, :edit
       destroy CaseImpact, :remove_case_impact, :remove
 
       create Proposal, :propose_case_title, :propose_title
@@ -176,6 +180,8 @@ defmodule Varsel.Cases do
       create Proposal, :propose_case_workarounds, :propose_workarounds
       create Proposal, :propose_case_configurations, :propose_configurations
       create Proposal, :propose_case_solutions, :propose_solutions
+      create Proposal, :propose_case_technical_analysis, :propose_technical_analysis
+      create Proposal, :propose_case_proof_of_concept, :propose_proof_of_concept
       create Proposal, :propose_case_internal_notes, :propose_internal_notes
       create Proposal, :propose_case_discovery, :propose_discovery
       create Proposal, :propose_case_cvss, :propose_cvss
@@ -184,6 +190,7 @@ defmodule Varsel.Cases do
       create Proposal, :propose_case_cna_override, :propose_cna_override
       create Proposal, :propose_case_weakness, :propose_weakness
       create Proposal, :propose_case_impact, :propose_impact
+      create Proposal, :propose_case_impact_description, :propose_impact_description
       create Proposal, :propose_case_reference, :propose_reference
       create Proposal, :propose_case_credit, :propose_credit
       create Proposal, :propose_case_affected_package, :propose_affected_package
@@ -312,7 +319,9 @@ defmodule Varsel.Cases do
     resource CaseImpact do
       define :list_case_impacts, action: :read
       define :add_case_impact, action: :add
+      define :edit_case_impact, action: :edit
       define :remove_case_impact, action: :remove
+      define :apply_case_impact_proposal, action: :apply_proposal
       define :apply_case_impact_proposal_insert, action: :apply_proposal_insert
       define :apply_case_impact_proposal_delete, action: :apply_proposal_delete
     end
@@ -327,6 +336,8 @@ defmodule Varsel.Cases do
       define :propose_workarounds, action: :propose_workarounds
       define :propose_configurations, action: :propose_configurations
       define :propose_solutions, action: :propose_solutions
+      define :propose_technical_analysis, action: :propose_technical_analysis
+      define :propose_proof_of_concept, action: :propose_proof_of_concept
       define :propose_internal_notes, action: :propose_internal_notes
       define :propose_discovery, action: :propose_discovery
       define :propose_cvss, action: :propose_cvss
@@ -335,6 +346,7 @@ defmodule Varsel.Cases do
       define :propose_cna_override, action: :propose_cna_override
       define :propose_weakness, action: :propose_weakness
       define :propose_impact, action: :propose_impact
+      define :propose_impact_description, action: :propose_impact_description
       define :propose_reference, action: :propose_reference
       define :propose_credit, action: :propose_credit
       define :propose_affected_package, action: :propose_affected_package

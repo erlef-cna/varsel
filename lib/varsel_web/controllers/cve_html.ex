@@ -43,6 +43,16 @@ defmodule VarselWeb.CveHTML do
       },
       %{id: "description", toc_label: "Description", present?: not is_nil(description_prose)},
       %{
+        id: "technical-analysis",
+        toc_label: "Technical analysis",
+        present?: prose_present?(cna, "x_technicalAnalysis")
+      },
+      %{
+        id: "proof-of-concept",
+        toc_label: "Proof of concept",
+        present?: prose_present?(cna, "x_proofOfConcept")
+      },
+      %{
         id: "weaknesses",
         toc_label: "Weaknesses",
         present?: cwe_descriptions(cna) != [] or capec_items(cna) != []
