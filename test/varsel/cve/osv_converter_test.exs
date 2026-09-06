@@ -333,8 +333,28 @@ defmodule Varsel.CVE.OsvConverterTest do
 
       assert osv["details"] ==
                "## Summary\n\nUses \\`zip:unzip/1\\`." <>
-                 "\n\n## Workaround\n\nCheck with zip:list\\_dir/1." <>
-                 "\n\n## Configuration\n\nOnly with \\[memory\\] off."
+                 "\n\n## Workarounds\n\nCheck with zip:list\\_dir/1." <>
+                 "\n\n## Configurations\n\nOnly with \\[memory\\] off."
+    end
+
+    test "takes the markdown source over the plain value" do
+      cve_json =
+        put_cna(@cve_json, "workarounds", [
+          %{
+            "lang" => "en",
+            "value" => "Check with zip:list_dir/1.",
+            "supportingMedia" => [
+              %{
+                "type" => "text/markdown",
+                "base64" => false,
+                "value" => "Check with `zip:list_dir/1`."
+              }
+            ]
+          }
+        ])
+
+      assert {:ok, osv} = OsvConverter.convert(cve_json)
+      assert osv["details"] =~ "## Workarounds\n\nCheck with `zip:list_dir/1`."
     end
 
     test "renders the analysis, proof of concept and authored impact sections after the summary" do
@@ -366,7 +386,7 @@ defmodule Varsel.CVE.OsvConverterTest do
                  "\n\n## Details\n\nPaths are joined raw." <>
                  "\n\n## Proof of concept\n\n1. Unzip an archive with ../ entries." <>
                  "\n\n## Impact\n\nWrites files outside the target dir." <>
-                 "\n\n## Workaround\n\nCheck with zip:list\\_dir/1."
+                 "\n\n## Workarounds\n\nCheck with zip:list\\_dir/1."
     end
 
     test "emits an all-versions range when defaultStatus is affected without versions" do

@@ -18,6 +18,8 @@ defmodule Varsel.CVE.OsvConverter do
   version information or a git repository with commit version information.
   """
 
+  alias Varsel.CVE.Advisory
+
   @schema_version "1.7.3"
 
   # Package registries mirrored to OSV. Only hex packages get their concrete
@@ -178,35 +180,10 @@ defmodule Varsel.CVE.OsvConverter do
     end
   end
 
-  defp extract_details(cna) do
-    # Only the first English description makes the Summary section; the
-    # others are usually auto-generated variants of the same text.
-    summary =
-      case english_text(cna["descriptions"]) do
-        [description | _rest] -> escape_markdown(description)
-        [] -> ""
-      end
+  # Every prose section of the record; references have their own OSV field.
+  @details_sections Advisory.keys() -- [:references]
 
-    details = cna["x_technicalAnalysis"] |> english_text() |> escape_and_join()
-    proof_of_concept = cna["x_proofOfConcept"] |> english_text() |> escape_and_join()
-    impact = cna |> impact_text() |> escape_and_join()
-    workarounds = cna["workarounds"] |> english_text() |> escape_and_join()
-    configurations = cna["configurations"] |> english_text() |> escape_and_join()
-
-    sections =
-      [
-        {"Summary", summary},
-        {"Details", details},
-        {"Proof of concept", proof_of_concept},
-        {"Impact", impact},
-        {"Workaround", workarounds},
-        {"Configuration", configurations}
-      ]
-      |> Enum.reject(fn {title, text} -> title != "Summary" and text == "" end)
-      |> Enum.map(fn {title, text} -> "## #{title}\n\n#{text}" end)
-
-    Enum.join(sections, "\n\n")
-  end
+  defp extract_details(cna), do: Advisory.render(cna, @details_sections)
 
   defp english_text(entries) do
     entries
@@ -214,25 +191,6 @@ defmodule Varsel.CVE.OsvConverter do
     |> Enum.filter(&(&1["lang"] == "en"))
     |> Enum.map(&(&1["value"] || ""))
   end
-
-  # The authored impact prose. A description that only restates the entry's
-  # CAPEC id is the label a record carries when nothing was written.
-  defp impact_text(cna) do
-    for impact <- List.wrap(cna["impacts"]),
-        text <- english_text(impact["descriptions"]),
-        text != "",
-        not capec_label?(text, impact["capecId"]) do
-      text
-    end
-  end
-
-  defp capec_label?(text, capec_id) when is_binary(capec_id), do: String.starts_with?(text, capec_id)
-
-  defp capec_label?(_text, _capec_id), do: false
-
-  defp escape_and_join(texts), do: Enum.map_join(texts, "\n\n", &escape_markdown/1)
-
-  defp escape_markdown(text), do: String.replace(text, ~r/([_*\[\]`\\])/, "\\\\\\1")
 
   ## Affected
 
