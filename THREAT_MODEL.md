@@ -132,7 +132,7 @@ access says otherwise (`release.ex`).
 | Authenticated API (GraphQL, MCP) — login-gated even for read tools | `/gql`, `/mcp` | DB reads/writes, workbench tools | **Yes** |
 | GraphQL websocket — login-gated like `/gql` | `/ws/gql` | DB reads/writes under policy | **Yes** |
 | CVE validation actions — any authenticated user | `validate_cve_record*` (GraphQL + MCP) | **cvelint subprocess**, **hex.pm egress** | **Yes — §6** |
-| Auth surface (GitHub **and Hex.pm** OAuth login, OAuth 2.1 server, API keys, sessions) | `/auth`, `/oauth/*`, `/sign-in`, `/settings/tokens`, `/settings/account` | GitHub + Hex.pm IdPs, DB | **Yes** |
+| Auth surface (GitHub **and Hex.pm** OAuth login, OAuth 2.1 server, API keys, sessions) | `/auth`, `/oauth/*`, `/sign-in`, `/settings/tokens`, `/settings/account` | GitHub + Hex.pm IdPs, DB, **CIMD egress** | **Yes — §6** |
 | Account linking (attach a second provider to an existing account) | `/settings/account/link/start/:strategy` | IdP, DB | **Yes — §6** |
 | CNA workbench (cases, reports, CVE lifecycle, user mgmt, notifications) — LiveView + GraphQL/MCP tools | `/cases`, `/reports`, `/users`, `/cves`, `/notifications`, `/settings/notifications`, GraphQL/MCP POC tools | DB, **MITRE API**, **git egress** | **Yes** |
 | Render-time derivation (`exgit` git clone/fetch of package repos) | `Varsel.Cases.Derivation` | **Outbound git to `repo_url`** | **Yes — key boundary (§4)** |
@@ -338,6 +338,13 @@ claims:
   the host. A finding here that assumes an *ordinary* authenticated user, an
   assigned role-less collaborator, or an anonymous caller controls `repo_url`
   is out of model. (`affected_package.ex`)
+- **CIMD `client_id` egress** (`/oauth/authorize`) — reachable by **anyone**,
+  and the lowest privilege from which Varsel can be made to open an outbound
+  connection. The caller picks the URL; the fetcher decides whether it is
+  reached (public-resolving https host, pinned connect, no redirects, bounded
+  body and time — §6). A finding here is in model at *anonymous* privilege,
+  and one that reaches a non-public address is in model outright. Volume is
+  §3. (`oauth2_server.ex`)
 - **Report intake** — reachable by **any authenticated user**. `report_json`
   is fully attacker-controlled at that privilege; downstream sinks (email,
   triage UI) are the question.
@@ -407,9 +414,10 @@ claims:
 - **Opens outbound network connections** — yes: to MITRE (`cveawg`,
   `cwe.mitre.org`, `capec.mitre.org`), to `raw.githubusercontent.com` for the
   OTP versions table, to GitHub and hex.pm as OAuth IdPs and for handle
-  lookups, to `repo.hex.pm` for the package registry, to the SMTP relay, and —
-  critically — **to the public https host a case's `repo_url` names** during
-  derivation (see §6).
+  lookups, to `repo.hex.pm` for the package registry, to the SMTP relay,
+  **to the public https URL an anonymous caller hands `/oauth/authorize` as
+  a CIMD `client_id`** (see §6), and — critically — **to the public https
+  host a case's `repo_url` names** during derivation (see §6).
 - **Spawns a subprocess** — yes: the `cvelint` binary, run directly with a
   fixed argument list and fed the CVE JSON on its stdin (`cvelint.ex`).
 - **Sends email** — yes, to any user's `notification_email` via SMTP, gated by
@@ -476,6 +484,7 @@ from controlling only its size.
 | GitHub OAuth | `user_info` (sub, preferred_username, name, email) | data | IdP-supplied, verified by GitHub | Stored as `github_id/handle/name/email`; `handle` later in a client-side `img`/link |
 | Hex.pm OAuth | `user_info` (username as `sub`, email) | data | IdP-supplied by Hex.pm | Identity keyed on the **username**, since Hex.pm exposes no numeric id and offers no way to rename an account (§7). Email is opt-in-public there, so it is usually absent and is never used to match an account |
 | Account linking | `:strategy` path segment; `linking_from_user_id` **from the session** | data | Any authenticated user | Names the account by id from the signed session, not from `current_user`. Linking an identity another account already owns is refused (`resolve_oauth_identity.ex`) |
+| `/oauth/authorize` | URL-shaped `client_id` (Client ID Metadata Document) | resource name | **Yes — anonymous** | One outbound https GET per authorization request, then an upserted client row keyed on the URL. The fetcher rejects any host that resolves to a non-public address, pins the connection to the checked address, refuses redirects, and caps the body at 5 KiB and each phase at 5 s (`AshAuthentication.Oauth2Server.CIMD.ReqFetcher`, §6b). Rows unused for 30 days are expunged (`oauth_client.ex`) |
 | Sign-in pages (`/sign-in`, `/register`, `/reset`, `/auth/*`) | `return_to` query param | resource name | **Yes — anonymous**; anyone can hand a victim a crafted sign-in link | Parked in the session, spent as a `redirect` target after sign-in. Constrained to a same-site absolute **path** (property 17); a value that fails is dropped, not rewritten (`return_path.ex`) |
 | MCP/GraphQL tool args | per tool | data | scope-gated bearer (mcp/gql) + role policy | Same Ash actions as above; no separate trust level |
 
@@ -586,9 +595,11 @@ code) are `exgit` (git data from a case's `repo_url`), `mdex` (author markdown
 tree-sitter WASM grammar the fence's language names, among the configured
 few), and `cvelint` together with `exile`, which carries the record to it:
 any authenticated caller can hand `validate_cve_record*` an arbitrary
-`cve_json` (§5). `saxy` and `req` are fed only trusted or fixed-host data, so
-their surface is not attacker-reachable. This list informs prioritization of a
-dependency bump; it does not change the disposition.
+`cve_json` (§5), and `ash_authentication_oauth2_server` together with `req`,
+which fetch the metadata document at whatever URL an anonymous caller
+presents as a CIMD `client_id` (§6). `saxy` is fed only trusted or fixed-host
+data, so its surface is not attacker-reachable. This list informs
+prioritization of a dependency bump; it does not change the disposition.
 
 ---
 
@@ -618,7 +629,7 @@ dependency bump; it does not change the disposition.
   proposing, resolving their own proposal, and reaching any other case.
   **In scope** as a distinct actor.
 - **Byzantine OAuth client (MCP/GraphQL).** A registered OAuth 2.1 client
-  (DCR is enabled) presenting a bearer token. Bounded by the token's scope
+  (DCR and CIMD are enabled) presenting a bearer token. Bounded by the token's scope
   (`mcp` vs `gql`, enforced per surface) and the underlying user's role.
   Assumed to try: using a token minted for one surface on another (blocked by
   scope enforcement, `oauth_bearer_auth.ex`), or exceeding the user's role
@@ -1079,9 +1090,10 @@ number.
   the same cases. Serving the picture through the app would only move the
   hash into a redirect, and proxying it would put a fetch to a third party on
   every avatar — neither is worth it for that.
-- **Nothing bounds how much outbound traffic an authenticated user can drive.**
-  The validation actions reach hex.pm, and derivation reaches a case's
-  `repo_url`; neither is rate-limited in-app, so Varsel can be used to push
+- **Nothing bounds how much outbound traffic a caller can drive.**
+  The validation actions reach hex.pm, derivation reaches a case's
+  `repo_url`, and an anonymous authorization request reaches its CIMD
+  `client_id` URL; none is rate-limited in-app, so Varsel can be used to push
   volume at a third party. The per-call bounds (§8) limit a single request,
   not how many are made. Worth stating separately from §3 because the load
   lands on someone else: a third party seeing traffic from Varsel is reporting
@@ -1121,10 +1133,11 @@ number.
 
 - **DoS by request volume / large payloads** — out of scope (§3); defended at
   the platform edge, not here.
-- **OAuth 2.1 / DCR abuse** (open dynamic client registration) — a Byzantine
-  client can register; scope + role enforcement bound what it can do, but
-  registration itself is open by design to support AI/MCP client integration
-  (`dcr_enabled?: true`). (`oauth2_server.ex`)
+- **OAuth 2.1 / DCR / CIMD abuse** (open client registration, by dynamic
+  registration or by a metadata-document URL) — a Byzantine client can
+  register; scope + role enforcement bound what it can do, but registration
+  itself is open by design to support AI/MCP client integration
+  (`dcr_enabled?: true`, `cimd_enabled?: true`). (`oauth2_server.ex`)
 
 ---
 
