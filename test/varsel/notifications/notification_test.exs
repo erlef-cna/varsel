@@ -316,6 +316,49 @@ defmodule Varsel.Notifications.NotificationTest do
     end
   end
 
+  describe "mark_all_notifications_read" do
+    test "marks every unread row of the actor, leaving read rows and another user untouched", %{
+      poc: poc,
+      other: other,
+      case: case_record
+    } do
+      comment_posted =
+        Notifications.record_notification!(
+          %{kind: :comment_posted, user_id: poc.id, case_id: case_record.id},
+          authorize?: false
+        )
+
+      proposal_opened =
+        Notifications.record_notification!(
+          %{kind: :proposal_opened, user_id: poc.id, case_id: case_record.id},
+          authorize?: false
+        )
+
+      already_read =
+        %{kind: :case_published, user_id: poc.id, case_id: case_record.id}
+        |> Notifications.record_notification!(authorize?: false)
+        |> Notifications.mark_notification_read!(actor: poc)
+
+      other_notification =
+        Notifications.record_notification!(
+          %{kind: :comment_posted, user_id: other.id, case_id: case_record.id},
+          authorize?: false
+        )
+
+      assert %Ash.BulkResult{status: :success} =
+               Notifications.mark_all_notifications_read(actor: poc)
+
+      assert Ash.get!(Notification, comment_posted.id, authorize?: false).read_at
+      assert Ash.get!(Notification, proposal_opened.id, authorize?: false).read_at
+
+      assert Ash.get!(Notification, already_read.id, authorize?: false).read_at ==
+               already_read.read_at
+
+      assert is_nil(Ash.get!(Notification, other_notification.id, authorize?: false).read_at)
+      assert Notifications.unread_notification_count(actor: poc) == 0
+    end
+  end
+
   defp report_fixture(poc) do
     Varsel.CVE.submit_vulnerability_report!(
       %{

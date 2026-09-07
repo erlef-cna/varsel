@@ -114,6 +114,38 @@ defmodule VarselWeb.NotificationsLiveTest do
     assert has_element?(lv, "button[phx-value-row_id='#{notification.id}']", "Mark unread")
   end
 
+  test "marking all read clears every unread row and hides the button", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    first = record!(poc, case_record)
+    second = record!(poc, case_record, :proposal_opened)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
+    assert has_element?(lv, "*", "2 unread")
+
+    lv |> element("#mark-all-read") |> render_click()
+
+    render(lv)
+    assert has_element?(lv, "*", "Nothing unread")
+    refute has_element?(lv, "#mark-all-read")
+    assert has_element?(lv, "button[phx-value-row_id='#{first.id}']", "Mark unread")
+    assert has_element?(lv, "button[phx-value-row_id='#{second.id}']", "Mark unread")
+  end
+
+  test "the mark-all button is absent when nothing is unread", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    poc |> record!(case_record) |> Notifications.mark_notification_read!(actor: poc)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
+
+    refute has_element?(lv, "#mark-all-read")
+  end
+
   test "toggling an unknown row flashes an error instead of crashing", %{conn: conn, poc: poc} do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
 
