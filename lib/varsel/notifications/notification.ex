@@ -111,10 +111,10 @@ defmodule Varsel.Notifications.Notification do
     end
 
     update :mark_read do
-      description "Marks a notification as read."
+      description "Marks a notification as read; a row already read keeps its timestamp."
       primary? true
       accept []
-      change set_attribute(:read_at, &DateTime.utc_now/0)
+      change atomic_update(:read_at, expr(coalesce([read_at, now()])))
     end
 
     update :mark_unread do

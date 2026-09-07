@@ -48,6 +48,17 @@ defmodule Varsel.Notifications do
           ]
         ]
 
+      define :mark_all_notifications_read,
+        action: :mark_read,
+        require_reference?: false,
+        default_options: [
+          bulk_options: [
+            notify?: true,
+            return_errors?: true,
+            strategy: [:atomic, :atomic_batches, :stream]
+          ]
+        ]
+
       define :mark_notification_emailed, action: :mark_emailed
       define :send_notification_email, action: :send_email
       define :send_notification_digests, action: :send_digests

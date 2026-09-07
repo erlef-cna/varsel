@@ -5,7 +5,7 @@
 defmodule VarselWeb.NotificationsLive do
   @moduledoc """
   The signed-in user's own notifications: every kind, most recent first, with
-  a read/unread toggle per row.
+  a read/unread toggle per row and one action that marks every unread row read.
 
   Visiting the subject (`VarselWeb.CaseDetailLive`, `VarselWeb.ReportTriageLive`)
   is what marks a notification read; this page only lists and toggles.
@@ -58,6 +58,16 @@ defmodule VarselWeb.NotificationsLive do
     {:noreply, socket}
   end
 
+  def handle_event("mark_all_read", _params, socket) do
+    socket =
+      case Notifications.mark_all_notifications_read(actor: socket.assigns.current_user) do
+        %Ash.BulkResult{status: :success} -> socket
+        %Ash.BulkResult{} -> put_flash(socket, :error, "Could not mark your notifications read.")
+      end
+
+    {:noreply, socket}
+  end
+
   defp toggle(nil, _actor), do: {:error, :not_found}
 
   defp toggle(%{read_at: nil} = notification, actor),
@@ -82,6 +92,15 @@ defmodule VarselWeb.NotificationsLive do
     Enum.count(notifications.results, &is_nil(&1.read_at))
   end
 
+  # A record-less update cannot answer a row-filter policy, so the question
+  # is asked about one unread row on the page.
+  defp can_mark_all_read?(notifications, actor) do
+    case Enum.find(notifications.results, &is_nil(&1.read_at)) do
+      nil -> false
+      unread -> Notifications.can_mark_notification_read?(actor, unread)
+    end
+  end
+
   defp unread_headline(0), do: "Nothing unread"
   defp unread_headline(1), do: "1 unread"
   defp unread_headline(count), do: "#{count} unread"
@@ -99,6 +118,16 @@ defmodule VarselWeb.NotificationsLive do
         <:eyebrow>CNA Console</:eyebrow>
         <:title>Notifications</:title>
         <:subtitle>{unread_headline(unread_count(@notifications))}</:subtitle>
+        <:actions :if={can_mark_all_read?(@notifications, @current_user)}>
+          <button
+            type="button"
+            id="mark-all-read"
+            class="btn btn-sm btn-eef-quiet"
+            phx-click="mark_all_read"
+          >
+            Mark all read
+          </button>
+        </:actions>
       </.page_header>
 
       <.page_container>
