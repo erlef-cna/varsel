@@ -10,7 +10,8 @@ defmodule Varsel.Accounts.OauthClient do
     otp_app: :varsel,
     domain: Varsel.Accounts,
     data_layer: AshPostgres.DataLayer,
-    authorizers: [Ash.Policy.Authorizer]
+    authorizers: [Ash.Policy.Authorizer],
+    extensions: [AshAuthentication.Oauth2Server.ClientResource]
 
   postgres do
     table "oauth_clients"

@@ -39,9 +39,12 @@ such as Claude Code. A typical client configuration:
 
 ## Authenticating with OAuth 2.1
 
-Both surfaces accept OAuth 2.1 access tokens. Clients register themselves
-(dynamic client registration) and discover the authorization server through
-the standard metadata documents at `/.well-known/oauth-authorization-server`
+Both surfaces accept OAuth 2.1 access tokens. Clients register themselves,
+either by [dynamic client registration (RFC 7591)](https://www.rfc-editor.org/rfc/rfc7591)
+or by using the HTTPS URL of a
+[Client ID Metadata Document (CIMD)](https://client.dev/) as their
+`client_id`, and discover the authorization server through the standard
+metadata documents at `/.well-known/oauth-authorization-server`
 and `/.well-known/oauth-protected-resource`. MCP clients do all of this
 automatically starting from the discovery challenge of an unauthenticated
 request — point them at the MCP URL, approve the consent screen in your
