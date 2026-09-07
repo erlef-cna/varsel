@@ -160,6 +160,20 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
   # The CNA container from a Result, for the per-field assertions below.
   defp cna(%Result{cve_record: cve_record}), do: cve_record["containers"]["cna"]
 
+  test "renders dateAssigned from the assignment, and datePublic once set", %{
+    poc: poc,
+    case: case_record
+  } do
+    cna = cna(render!(case_record, poc))
+    assert cna["dateAssigned"] == DateTime.to_iso8601(case_record.cve_assigned_at)
+    refute Map.has_key?(cna, "datePublic")
+
+    case_record =
+      Cases.edit_case!(case_record, %{date_public: ~U[2026-01-15 09:30:00Z]}, actor: poc)
+
+    assert cna(render!(case_record, poc))["datePublic"] == "2026-01-15T09:30:00Z"
+  end
+
   test "renders the technical analysis, proof of concept and authored impact prose", %{
     poc: poc,
     case: case_record

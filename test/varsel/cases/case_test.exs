@@ -319,6 +319,7 @@ defmodule Varsel.Cases.CaseTest do
 
       case_record = Ash.load!(case_record, :cve_id, authorize?: false)
       assert case_record.cve_id == "CVE-#{year}-9999"
+      assert %DateTime{} = case_record.cve_assigned_at
 
       cve_record = Ash.get!(CveRecord, case_record.cve_record_id, authorize?: false)
       assert cve_record.state == :draft
@@ -473,6 +474,7 @@ defmodule Varsel.Cases.CaseTest do
 
       assert closed.state == :closed
       assert closed.cve_record_id == nil
+      assert closed.cve_assigned_at == nil
       assert Ash.get!(CveRecord, record.id, authorize?: false).state == :reserved
     end
 
@@ -502,6 +504,7 @@ defmodule Varsel.Cases.CaseTest do
         Cases.close_case!(case_record, %{reject_cve_id: true, closed_reason: "duplicate"}, actor: poc)
 
       assert case_record.state == :closed
+      assert %DateTime{} = case_record.cve_assigned_at
       assert Ash.get!(CveRecord, case_record.cve_record_id, authorize?: false).state == :rejected
     end
 

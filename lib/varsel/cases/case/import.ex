@@ -14,7 +14,8 @@ defmodule Varsel.Cases.Case.Import do
   derived is skipped here rather than guessed at, so a re-render of the adopted
   case reproduces it from the facts instead of restating a stale copy.
 
-  Imported: `title`, `datePublic`, `source.discovery`, `timeline[]`, a CVSS
+  Imported: `title`, `dateAssigned`, `datePublic`, `source.discovery`,
+  `timeline[]`, a CVSS
   **v4** vector, `problemTypes[]` (CWE), `impacts[]` (CAPEC), `credits[]`, the
   non-derived `references[]` with their names, and the prose fields.
 
@@ -65,6 +66,7 @@ defmodule Varsel.Cases.Case.Import do
     |> put_present(:proof_of_concept_md, prose_markdown(cna["x_proofOfConcept"]))
     |> put_present(:discovery, discovery(cna))
     |> put_present(:cvss_v4, cvss_v4(cna))
+    |> put_present(:cve_assigned_at, parse_time(cna["dateAssigned"]))
     |> put_present(:date_public, date_public(cna))
     |> put_present(:timeline, timeline(cna))
   end

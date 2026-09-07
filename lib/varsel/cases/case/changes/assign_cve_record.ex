@@ -35,7 +35,9 @@ defmodule Varsel.Cases.Case.Changes.AssignCveRecord do
            reserved
            |> Ash.Changeset.for_update(:assign, %{}, opts)
            |> Ash.update() do
-      Ash.Changeset.force_change_attribute(changeset, :cve_record_id, assigned.id)
+      changeset
+      |> Ash.Changeset.force_change_attribute(:cve_record_id, assigned.id)
+      |> Ash.Changeset.force_change_attribute(:cve_assigned_at, DateTime.utc_now())
     else
       {:error, error} -> Ash.Changeset.add_error(changeset, error)
     end
