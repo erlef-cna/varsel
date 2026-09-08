@@ -30,6 +30,9 @@ defmodule Varsel.Accounts.HandleLookup do
 
       :not_found ->
         {:error, "is not a GitHub account"}
+
+      {:error, _reason} ->
+        {:error, "could not be looked up at GitHub"}
     end
   end
 

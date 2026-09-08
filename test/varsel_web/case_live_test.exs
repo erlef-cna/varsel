@@ -8,12 +8,12 @@ defmodule VarselWeb.CaseLiveTest do
   import Phoenix.LiveViewTest
 
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
-  alias Varsel.Accounts.GitHub
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Fixtures
   alias Varsel.HexPm
   alias Varsel.Notifications
+  alias Varsel.Test.GitHubApi
   alias VarselWeb.HexServiceTokenFixture
 
   defp log_in(conn, user) do
@@ -1698,7 +1698,7 @@ defmodule VarselWeb.CaseLiveTest do
     end
 
     test "the credit picker confirms a handle at its provider", %{conn: conn, poc: poc} do
-      Req.Test.stub(GitHub, fn conn ->
+      GitHubApi.stub(fn conn ->
         case conn.request_path |> Path.basename() |> String.downcase() do
           "octocat" -> Req.Test.json(conn, %{"login" => "octocat", "name" => "The Octocat"})
           _unknown -> Plug.Conn.send_resp(conn, 404, "{}")
@@ -1757,7 +1757,7 @@ defmodule VarselWeb.CaseLiveTest do
       conn: conn,
       poc: poc
     } do
-      Req.Test.stub(GitHub, fn conn -> Plug.Conn.send_resp(conn, 404, "{}") end)
+      GitHubApi.stub(fn conn -> Plug.Conn.send_resp(conn, 404, "{}") end)
 
       member = Fixtures.register_user("handled_member")
       case_record = Fixtures.open_case(poc)
@@ -2115,7 +2115,7 @@ defmodule VarselWeb.CaseLiveTest do
         end
       end)
 
-      Req.Test.stub(GitHub, fn conn ->
+      GitHubApi.stub(fn conn ->
         case conn.request_path |> Path.basename() |> URI.decode() |> String.downcase() do
           "octocat" ->
             Req.Test.json(conn, %{"login" => "octocat", "email" => "octocat@example.com"})
