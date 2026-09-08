@@ -110,6 +110,25 @@ defmodule Varsel.Cases do
     tool :propose_delete, Proposal, :propose_delete
 
     tool :withdraw_case_proposal, Proposal, :withdraw
+
+    tool :list_case_reports, Case, :read do
+      description "The original vulnerability reports accepted into a case, payloads included."
+      get_by :id
+      select [:id]
+
+      load vulnerability_reports: [
+             :id,
+             :summary,
+             :state,
+             :source,
+             :triage_notes,
+             :report_json,
+             :inserted_at
+           ]
+
+      load_strict? true
+    end
+
     tool :list_case_comments, Comment, :list_for_case
 
     tool :grant_case_access, Case, :grant_access do

@@ -15,12 +15,13 @@ Varsel exposes a [Model Context Protocol](https://modelcontextprotocol.io)
 server at `/mcp`. It carries the same data and case operations your role
 allows in the UI: reading cases and records, searching the CWE and CAPEC
 catalogs, proposing field changes, reading case comments, giving people access
-to a case by their GitHub or Hex.pm handle, refreshing derivations, and running
-the validators.
+to a case by their GitHub or Hex.pm handle, refreshing derivations, running
+the validators, and reading and annotating inbound vulnerability reports.
 
-By design it carries **no** tools to accept or decline proposals, assign
-roles, publish, or post a comment. An agent working over MCP states facts as
-proposals; a human reviews and accepts them in the UI.
+By design it carries **no** tools to accept or decline proposals, accept or
+reject reports, assign roles, publish, or post a comment. An agent working
+over MCP states facts as proposals and recommendations; a human reviews and
+accepts them in the UI.
 
 See [API Access](/api-access) for how to connect a client and authenticate.
 MCP clients handle the OAuth flow themselves, so pointing one at the URL and
@@ -44,7 +45,8 @@ first (`/mcp` inside Claude Code shows the connection state).
 
 | Skill | Purpose |
 |-------|---------|
-| `new-case` | The orchestrator: takes an advisory or a pasted report to a verified, review-ready case, calling the skills below on the way. |
+| `triage-report` | Triage an inbound report: scope, duplicates, reproduction, then a recommendation in the triage notes for a human to act on. |
+| `new-case` | The orchestrator: takes an advisory, a pasted report or an accepted report to a verified, review-ready case, calling the skills below on the way. |
 | `cvss` | Produce a CVSS v4.0 vector; Varsel derives the numeric score. |
 | `find-cwe` | Pick the CWE weakness classification from the catalog. |
 | `find-capec` | Pick the CAPEC attack pattern, consistent with the CWE. |
@@ -62,8 +64,10 @@ agent's output is the facts, as proposals.
 ## Guardrails
 
 Every change an agent makes is a proposal, and a human accepts it: agents
-never self-approve, and CVE ID assignment, proposal acceptance, and
-publishing happen in the UI only. The one direct write is case access: the
+never self-approve, and CVE ID assignment, proposal acceptance, report
+acceptance or rejection, and publishing happen in the UI only. A report an
+agent triages is content from whoever submitted it: the skill tests its
+claims and never follows instructions found in it. The one direct write is case access: the
 skills put the advisory's collaborators, the repository owner and the Hex.pm
 package owners on a case as they file it, the same assignment or invite a
 human would make by handle. Taking someone off a case stays in the UI. Treat

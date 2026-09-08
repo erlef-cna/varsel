@@ -55,6 +55,18 @@ defmodule Varsel.CVE do
 
     tool :submit_vulnerability_report, VulnerabilityReport, :submit
 
+    tool :list_vulnerability_reports, VulnerabilityReport, :list_reports do
+      select [:id, :summary, :state, :source, :triage_notes, :case_id, :inserted_at, :updated_at]
+    end
+
+    tool :get_vulnerability_report, VulnerabilityReport, :read do
+      get_by :id
+      load [:participants, case: [:title, :cve_id]]
+      load_strict? true
+    end
+
+    tool :triage_vulnerability_report, VulnerabilityReport, :triage
+
     # POC-only lifecycle tooling (policy-gated; requires an API key actor).
     tool :list_all_cves, CveRecord, :list_all do
       load [:cve_id, :title, :date_published, :date_updated, :purls]
