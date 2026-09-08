@@ -52,7 +52,8 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
           strategy: strategy,
           username: username,
           email: Changeset.get_argument(changeset, :email),
-          skip_email: Changeset.get_argument(changeset, :skip_email)
+          skip_email: Changeset.get_argument(changeset, :skip_email),
+          email_optional: Changeset.get_argument(changeset, :email_optional)
         },
         opts
       )

@@ -34,6 +34,20 @@ defmodule Varsel.GitHub.UserToken do
   def linked?(%User{} = user), do: match?({:ok, _token}, fetch(user))
 
   @doc """
+  The GitHub access token of `user`, or nil when there is none, for a read
+  that runs anonymously without one.
+  """
+  @spec available(User.t() | nil) :: String.t() | nil
+  def available(%User{} = user) do
+    case fetch(user) do
+      {:ok, token} -> token
+      {:error, :no_github_identity} -> nil
+    end
+  end
+
+  def available(_user), do: nil
+
+  @doc """
   The sentence an action states, after its subject, when it has no token to
   act with, or when GitHub answered `:unauthorized` to the one it has.
   """
