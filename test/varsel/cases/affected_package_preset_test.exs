@@ -58,7 +58,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
              ] = package.program_files
 
       assert [
-               %{purl_type: "sid", namespace: "erlang.org", name: "otp", position: 0},
+               %{purl_type: "software-id", namespace: "erlang.org", name: "otp", position: 0},
                %{purl_type: "otp", name: "ssh", subpath: "lib/ssh", position: 1} = ssh,
                %{purl_type: "otp", name: "ssl", subpath: "lib/ssl", position: 2},
                %{purl_type: "github", namespace: "erlang", name: "otp"}
@@ -238,7 +238,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
   end
 
   describe "add_gleam" do
-    test "creates the prefilled package with the sid and OCI channels",
+    test "creates the prefilled package with the software-id and OCI channels",
          %{poc: poc, case: case_record} do
       package =
         Cases.add_gleam_affected_package!(
@@ -257,8 +257,8 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
       assert package.repo_url == "https://github.com/gleam-lang/gleam"
       assert package.cpe == "cpe:2.3:a:gleam-lang:gleam:*:*:*:*:*:*:*:*"
 
-      assert [sid, oci, repository] = package.channels
-      assert %{purl_type: "sid", namespace: "gleam.run", name: "gleam"} = sid
+      assert [software_id, oci, repository] = package.channels
+      assert %{purl_type: "software-id", namespace: "gleam.run", name: "gleam"} = software_id
       assert %{purl_type: "oci", name: "gleam"} = oci
       assert oci.qualifiers == %{"repository_url" => "ghcr.io/gleam-lang"}
       assert "erlang" in oci.tag_suffixes and "scratch" in oci.tag_suffixes
@@ -310,7 +310,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
                package.program_files
 
       assert [
-               %{purl_type: "sid", name: "otp"},
+               %{purl_type: "software-id", name: "otp"},
                %{purl_type: "otp", name: "ssh"},
                %{purl_type: "github", name: "otp"}
              ] = package.channels
@@ -340,7 +340,9 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
         )
 
       assert package.vendor == "Gleam"
-      assert [%{purl_type: "sid"}, %{purl_type: "oci"}, %{purl_type: "github"}] = package.channels
+
+      assert [%{purl_type: "software-id"}, %{purl_type: "oci"}, %{purl_type: "github"}] =
+               package.channels
     end
 
     test "an unknown preset is rejected at propose time", %{poc: poc, case: case_record} do

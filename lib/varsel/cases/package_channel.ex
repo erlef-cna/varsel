@@ -190,7 +190,7 @@ defmodule Varsel.Cases.PackageChannel do
 
     attribute :namespace, :string do
       description """
-      The purl namespace, e.g. "gleam.run" (sid), "erlang" (github) or an npm
+      The purl namespace, e.g. "gleam.run" (software-id), "erlang" (github) or an npm
       scope. Nil for unnamespaced ecosystems like hex.
       """
 

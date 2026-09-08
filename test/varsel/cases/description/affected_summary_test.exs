@@ -183,7 +183,7 @@ defmodule Varsel.Cases.Description.AffectedSummaryTest do
       [
         %{
           "packageName" => "otp",
-          "packageURL" => "pkg:sid/erlang.org/otp",
+          "packageURL" => "pkg:software-id/erlang.org/otp",
           "versions" => [
             %{
               "version" => "17.0",
@@ -224,7 +224,7 @@ defmodule Varsel.Cases.Description.AffectedSummaryTest do
       otp = [
         %{
           "packageName" => "otp",
-          "packageURL" => "pkg:sid/erlang.org/otp",
+          "packageURL" => "pkg:software-id/erlang.org/otp",
           "versions" => [
             %{
               "version" => "29.0.2",
@@ -246,7 +246,7 @@ defmodule Varsel.Cases.Description.AffectedSummaryTest do
       otp = [
         %{
           "packageName" => "otp",
-          "packageURL" => "pkg:sid/erlang.org/otp",
+          "packageURL" => "pkg:software-id/erlang.org/otp",
           "versions" => [
             %{
               "version" => "R13B03",
@@ -305,7 +305,7 @@ defmodule Varsel.Cases.Description.AffectedSummaryTest do
       affected = [
         %{
           "packageName" => "otp",
-          "packageURL" => "pkg:sid/erlang.org/otp",
+          "packageURL" => "pkg:software-id/erlang.org/otp",
           "versions" => [
             %{
               "version" => "0",
@@ -386,7 +386,7 @@ defmodule Varsel.Cases.Description.AffectedSummaryTest do
     # An image tag restates the release version once per flavor.
     test "an oci entry beside a version entry is dropped" do
       affected = [
-        entry("gleam", "pkg:sid/gleam.run/gleam", [version("1.15.0", "1.18.0")]),
+        entry("gleam", "pkg:software-id/gleam.run/gleam", [version("1.15.0", "1.18.0")]),
         entry("gleam-lang/gleam", "pkg:oci/gleam?repository_url=ghcr.io%2Fgleam-lang", [
           version("v1.15.0", "v1.18.0", "affected", "other"),
           version("v1.15.0-erlang", "v1.18.0-erlang", "affected", "other"),

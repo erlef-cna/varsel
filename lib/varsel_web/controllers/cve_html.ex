@@ -335,7 +335,7 @@ defmodule VarselWeb.CveHTML do
 
   # The release channels: the repository itself, and the distribution as a whole.
   defp otp_release_entry?(nil), do: false
-  defp otp_release_entry?("pkg:sid/erlang.org/otp" <> _rest), do: true
+  defp otp_release_entry?("pkg:software-id/erlang.org/otp" <> _rest), do: true
   defp otp_release_entry?("pkg:github/" <> _rest), do: true
   defp otp_release_entry?(_application), do: false
 

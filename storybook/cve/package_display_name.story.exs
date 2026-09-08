@@ -100,14 +100,14 @@ defmodule VarselWeb.Storybook.Cve.PackageDisplayName do
         ]
       },
       %VariationGroup{
-        id: :sid,
+        id: :software_id,
         description:
           "A software id names a project, not a package within one, so it reads as the project " <>
             "alone. Whitelisted per purl — a domain has no general rule.",
         variations: [
-          %Variation{id: :erlang, attributes: %{purl: "pkg:sid/erlang.org/otp"}},
-          %Variation{id: :gleam, attributes: %{purl: "pkg:sid/gleam.run/gleam"}},
-          %Variation{id: :unknown, attributes: %{purl: "pkg:sid/example.com/thing"}}
+          %Variation{id: :erlang, attributes: %{purl: "pkg:software-id/erlang.org/otp"}},
+          %Variation{id: :gleam, attributes: %{purl: "pkg:software-id/gleam.run/gleam"}},
+          %Variation{id: :unknown, attributes: %{purl: "pkg:software-id/example.com/thing"}}
         ]
       },
       %Variation{

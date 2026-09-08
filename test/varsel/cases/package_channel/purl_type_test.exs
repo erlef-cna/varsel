@@ -53,7 +53,7 @@ defmodule Varsel.Cases.PackageChannel.PurlTypeTest do
     end
 
     test "anything else versions in semver" do
-      assert PurlType.default_version_type("sid") == :semver
+      assert PurlType.default_version_type("software-id") == :semver
       assert PurlType.default_version_type("brand-new-ecosystem") == :semver
       assert PurlType.default_version_type(nil) == :semver
     end
@@ -67,7 +67,7 @@ defmodule Varsel.Cases.PackageChannel.PurlTypeTest do
 
     test "types with no single canonical registry have none" do
       assert PurlType.collection_url("oci") == nil
-      assert PurlType.collection_url("sid") == nil
+      assert PurlType.collection_url("software-id") == nil
       assert PurlType.collection_url(nil) == nil
     end
   end

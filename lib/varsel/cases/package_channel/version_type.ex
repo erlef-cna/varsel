@@ -8,8 +8,8 @@ defmodule Varsel.Cases.PackageChannel.VersionType do
   `versions[].versionType`.
 
   Stored explicitly on the channel rather than inferred from the purl type,
-  because the two are genuinely independent: `pkg:sid/erlang.org/otp` versions
-  in OTP releases while `pkg:sid/gleam.run/gleam` versions in semver, and the
+  because the two are genuinely independent: `pkg:software-id/erlang.org/otp` versions
+  in OTP releases while `pkg:software-id/gleam.run/gleam` versions in semver, and the
   same `pkg:oci` image may be tagged with either. `nil` on a channel means
   "whatever this purl type usually uses" (see
   `Varsel.Cases.PackageChannel.PurlType.default_version_type/1`).

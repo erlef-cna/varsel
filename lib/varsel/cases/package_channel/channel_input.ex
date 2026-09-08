@@ -44,7 +44,7 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
     attribute :purl_type, PurlType do
       description """
       Package URL type of this distribution channel, e.g. "hex", "otp", "oci",
-      "sid", "npm". Any purl type works. List the distribution channels only —
+      "software-id", "npm". Any purl type works. List the distribution channels only —
       the source repository's own channel is derived from the package's
       repo_url, so you normally don't add it here (do so only for something
       like a second forge host).
@@ -54,7 +54,7 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
     end
 
     attribute :namespace, :string do
-      description ~s{The purl namespace, e.g. "gleam.run" (sid) or an npm scope. Nil for unnamespaced ecosystems like hex.}
+      description ~s{The purl namespace, e.g. "gleam.run" (software-id) or an npm scope. Nil for unnamespaced ecosystems like hex.}
       public? true
     end
 

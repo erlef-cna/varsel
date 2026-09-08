@@ -14,7 +14,8 @@ defmodule Varsel.Cases.Derivation.EmitTest do
 
   describe "version_type/1" do
     test "the channel's own type wins over its purl type's default" do
-      assert Emit.version_type(%PackageChannel{purl_type: "sid", version_type: :otp}) == :otp
+      assert Emit.version_type(%PackageChannel{purl_type: "software-id", version_type: :otp}) ==
+               :otp
     end
 
     test "falls back to the purl type's default" do
@@ -306,7 +307,7 @@ defmodule Varsel.Cases.Derivation.EmitTest do
 
     test "an otp-versioned channel naming no application keeps the release bounds" do
       channel = %PackageChannel{
-        purl_type: "sid",
+        purl_type: "software-id",
         namespace: "erlang.org",
         name: "otp",
         version_type: :otp,
@@ -456,7 +457,7 @@ defmodule Varsel.Cases.Derivation.EmitTest do
   describe "OTP status-change form" do
     defp otp_channel do
       %PackageChannel{
-        purl_type: "sid",
+        purl_type: "software-id",
         namespace: "erlang.org",
         name: "otp",
         version_type: :otp,
@@ -562,7 +563,7 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     # states every fix-carrying span and adding ranges would say it twice.
     test "the status-change form states its fixes through transitions alone" do
       channel = %PackageChannel{
-        purl_type: "sid",
+        purl_type: "software-id",
         namespace: "erlang.org",
         name: "otp",
         version_type: :otp,
@@ -607,7 +608,7 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     # no lower bound to find.
     test "the status-change form opens at the zero bound" do
       channel = %PackageChannel{
-        purl_type: "sid",
+        purl_type: "software-id",
         namespace: "erlang.org",
         name: "otp",
         version_type: :otp,

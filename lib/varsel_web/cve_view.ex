@@ -1025,7 +1025,7 @@ defmodule VarselWeb.CveView do
   Splits a purl into `%{ecosystem: name | nil, name: String.t()}` for display.
 
   `ecosystem` is nil when the name stands on its own — either because the purl
-  names an ecosystem rather than a package (`pkg:sid/gleam.run/gleam` is just
+  names an ecosystem rather than a package (`pkg:software-id/gleam.run/gleam` is just
   "Gleam"), or because nothing matched and `name` is the untouched purl.
   """
   @spec package_name(String.t() | nil, String.t() | nil) :: %{
@@ -1090,11 +1090,11 @@ defmodule VarselWeb.CveView do
 
   # A software id names a project, not a package within one, so it reads as the
   # project alone. Whitelisted per purl — there is no general rule for a domain.
-  defp display_parts(%Purl{type: "sid", namespace: ["erlang.org"], name: "otp"}) do
+  defp display_parts(%Purl{type: "software-id", namespace: ["erlang.org"], name: "otp"}) do
     %{ecosystem: nil, name: "Erlang"}
   end
 
-  defp display_parts(%Purl{type: "sid", namespace: ["gleam.run"], name: "gleam"}) do
+  defp display_parts(%Purl{type: "software-id", namespace: ["gleam.run"], name: "gleam"}) do
     %{ecosystem: nil, name: "Gleam"}
   end
 

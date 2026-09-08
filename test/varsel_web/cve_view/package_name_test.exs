@@ -106,14 +106,14 @@ defmodule VarselWeb.CveView.PackageNameTest do
     end
   end
 
-  describe "sid — a software id names a project, not a package within one" do
+  describe "software-id — a software id names a project, not a package within one" do
     test "the whitelisted ids read as their project" do
-      assert name("pkg:sid/erlang.org/otp") == "Erlang"
-      assert name("pkg:sid/gleam.run/gleam") == "Gleam"
+      assert name("pkg:software-id/erlang.org/otp") == "Erlang"
+      assert name("pkg:software-id/gleam.run/gleam") == "Gleam"
     end
 
     test "any other software id is not shortened" do
-      purl = "pkg:sid/example.com/thing"
+      purl = "pkg:software-id/example.com/thing"
 
       assert name(purl) == purl
     end

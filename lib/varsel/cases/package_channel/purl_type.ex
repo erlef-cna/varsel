@@ -20,10 +20,8 @@ defmodule Varsel.Cases.PackageChannel.PurlType do
   mapping the repository channel is derived through.
 
   Types absent from those tables still work — that is the point of an open
-  vocabulary. `sid` (software without a registry, purl-spec decision 001) is
-  one: it needs no entry, since it takes the neutral defaults. The spec has
-  since renamed it, and we keep publishing `sid` until the final type lands —
-  a change of stored data, not of code.
+  vocabulary. `software-id` (software without a registry, purl-spec decision
+  001) is one: it needs no entry, since it takes the neutral defaults.
 
   Values are stored as `:string`, so an existing `:string` attribute can adopt
   this type without a migration.
