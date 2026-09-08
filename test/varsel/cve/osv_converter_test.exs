@@ -404,6 +404,61 @@ defmodule Varsel.CVE.OsvConverterTest do
                osv["affected"]
     end
 
+    test "preserves bounded affected ranges when defaultStatus is affected" do
+      hex_affected =
+        @hex_affected
+        |> Map.put("defaultStatus", "affected")
+        |> Map.put("versions", [
+          %{
+            "version" => "0.1.0",
+            "lessThan" => "3.0.0",
+            "status" => "affected",
+            "versionType" => "semver"
+          }
+        ])
+
+      git_affected =
+        @git_affected
+        |> Map.put("defaultStatus", "affected")
+        |> Map.put("versions", [
+          %{
+            "version" => "bc11f4a2",
+            "lessThan" => "6a523f3a",
+            "status" => "affected",
+            "versionType" => "git"
+          }
+        ])
+
+      cve_json = put_cna(@cve_json, "affected", [hex_affected, git_affected])
+
+      assert {:ok, osv} = OsvConverter.convert(cve_json)
+
+      assert [
+               %{
+                 "ranges" => [
+                   %{
+                     "type" => "SEMVER",
+                     "events" => [
+                       %{"introduced" => "0.1.0"},
+                       %{"fixed" => "3.0.0"}
+                     ]
+                   }
+                 ]
+               },
+               %{
+                 "ranges" => [
+                   %{
+                     "type" => "GIT",
+                     "events" => [
+                       %{"introduced" => "bc11f4a2"},
+                       %{"fixed" => "6a523f3a"}
+                     ]
+                   }
+                 ]
+               }
+             ] = osv["affected"]
+    end
+
     # An unaffected row states where a fix landed; it does not open an affected
     # span. Giving it the schema-required `introduced` event would have to
     # invent one — `0` — claiming every version below the fix is affected, which

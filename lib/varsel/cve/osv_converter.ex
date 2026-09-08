@@ -221,7 +221,7 @@ defmodule Varsel.CVE.OsvConverter do
   end
 
   defp semver_ranges(item) do
-    if item["defaultStatus"] == "affected" do
+    if sets_default_affected_events?(item, "semver") do
       [%{"type" => "SEMVER", "events" => default_affected_events(item, "semver", :semver)}]
     else
       item
@@ -248,6 +248,23 @@ defmodule Varsel.CVE.OsvConverter do
     transitions = Enum.flat_map(rows, &change_events(&1, type))
 
     sort_events(Enum.uniq([%{"introduced" => "0"} | spans ++ transitions]))
+  end
+
+  defp sets_default_affected_events?(item, version_type) do
+    versions = Map.get(item, "versions", [])
+
+    item["defaultStatus"] == "affected" and
+      no_bounded_affected_versions?(versions, version_type)
+  end
+
+  defp no_bounded_affected_versions?([], _version_type), do: true
+
+  defp no_bounded_affected_versions?(versions, version_type),
+    do: not Enum.any?(versions, &bounded_affected_of_type?(&1, version_type))
+
+  defp bounded_affected_of_type?(version_entry, version_type) do
+    affected_of_type?(version_entry, version_type) and
+      Enum.any?(~w(lessThan lessThanOrEqual), &(version_entry[&1] not in [nil, "*"]))
   end
 
   defp semver_range(version_entry) do
@@ -282,7 +299,7 @@ defmodule Varsel.CVE.OsvConverter do
       repo = item["repo"]
 
       events =
-        if item["defaultStatus"] == "affected" do
+        if sets_default_affected_events?(item, "git") do
           default_affected_events(item, "git", :git)
         else
           item
