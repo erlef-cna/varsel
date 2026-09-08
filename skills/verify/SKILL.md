@@ -124,7 +124,7 @@ gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
 - [ ] If none genuine: `workarounds` omitted entirely.
 
 ### References (in order)
-- [ ] First: vendor advisory `["vendor-advisory"]` (GHSA → `["vendor-advisory", "related"]`).
+- [ ] First: vendor advisory `["vendor-advisory"]` (GHSA → `["vendor-advisory", "related"]`; a case linked to its GitHub advisory renders this one itself).
 - [ ] Second: `https://cna.erlef.org/cves/CVE-<num>.html` `["related"]` (add `"third-party-advisory"` if no vendor advisory).
 - [ ] Third: `https://osv.dev/vulnerability/EEF-CVE-<num>` `["related"]`.
 - [ ] OTP: `https://www.erlang.org/doc/system/versions.html#order-of-versions` `["x_version-scheme"]` present — derived from any OTP-versioned entry, so its absence means no entry is OTP-versioned.

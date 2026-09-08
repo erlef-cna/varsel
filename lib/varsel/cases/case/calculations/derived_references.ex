@@ -4,9 +4,9 @@
 
 defmodule Varsel.Cases.Case.Calculations.DerivedReferences do
   @moduledoc """
-  The references the published record adds on its own — the `cna.erlef.org` /
-  `osv.dev` self-links, the version-scheme page and the introducing and fix
-  commit links — as a loadable calculation.
+  The references the published record adds on its own — the linked GitHub
+  advisory, the `cna.erlef.org` / `osv.dev` self-links, the version-scheme
+  page and the introducing and fix commit links — as a loadable calculation.
 
   Like `Varsel.Cases.Case.Calculations.AffectedSummary`, it reads them off the
   case's own rendered `references[]` rather than rebuilding them, so what a
