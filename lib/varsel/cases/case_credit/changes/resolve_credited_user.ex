@@ -12,9 +12,10 @@ defmodule Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser do
   `mode: :fill` writes only what the credit leaves blank, so what a caller
   gave stands, and a handle the row already carries is not asked about again.
   A credit with no account and no name takes the name the provider lists for
-  the handle. `mode: :overwrite` asks about every handle again and replaces
-  the name and organization with the account's current preference, or the
-  name with the one the provider now lists when no account holds a handle.
+  the handle, or the handle itself when the provider lists none.
+  `mode: :overwrite` asks about every handle again and replaces the name and
+  organization with the account's current preference, or the name with the
+  one the provider now lists when no account holds a handle.
   """
 
   use Ash.Resource.Change
@@ -156,7 +157,14 @@ defmodule Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser do
   end
 
   defp complete_from_provider(changeset, :fill, names) do
-    put_if_blank(changeset, :name, List.first(names))
+    put_if_blank(changeset, :name, List.first(names) || first_handle(changeset))
+  end
+
+  defp first_handle(changeset) do
+    case changeset |> Changeset.get_attribute(:handles) |> List.wrap() do
+      [handle | _rest] -> plain(handle).username
+      [] -> nil
+    end
   end
 
   defp complete_from_user(changeset, mode, user_id) do

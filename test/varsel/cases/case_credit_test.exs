@@ -199,18 +199,23 @@ defmodule Varsel.Cases.CaseCreditTest do
       assert String.ends_with?(error.message, "could not be looked up at GitHub")
     end
 
-    test "still needs a name when the profile lists none", %{poc: poc, case: case_record} do
-      assert {:error, %Invalid{errors: [error]}} =
-               Cases.add_case_credit(
-                 %{
-                   case_id: case_record.id,
-                   credit_type: :finder,
-                   handles: [%{strategy: :github, username: "hermit"}]
-                 },
-                 actor: poc
-               )
+    test "takes the handle as the name when the profile lists none", %{
+      poc: poc,
+      case: case_record
+    } do
+      credit =
+        Cases.add_case_credit!(
+          %{
+            case_id: case_record.id,
+            credit_type: :finder,
+            handles: [%{strategy: :github, username: "Hermit"}]
+          },
+          actor: poc
+        )
 
-      assert error.field == :name
+      assert credit.user_id == nil
+      assert credit.name == "hermit"
+      assert handles(credit) == [github: "hermit"]
     end
 
     test "keeps one handle per provider, the first given", %{poc: poc, case: case_record} do

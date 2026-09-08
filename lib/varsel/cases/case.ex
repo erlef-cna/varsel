@@ -192,6 +192,35 @@ defmodule Varsel.Cases.Case do
       change Varsel.Cases.Case.Changes.AdoptCveRecord
     end
 
+    create :open_from_github_advisory do
+      description """
+      Opens a draft case from a GitHub security advisory, filled in from what
+      the advisory states: title, description, CVSS v4 vector, publication
+      date, CWEs, credits by GitHub login, and each affected package with its
+      distribution channel and no version boundaries. The advisory is linked
+      and leads the rendered references. See
+      `Varsel.Cases.GitHubAdvisory.Import`.
+
+      The advisory is read as the caller, so a draft has to be one they can
+      see on GitHub. A published advisory needs no GitHub account.
+      """
+
+      accept []
+
+      argument :advisory_url, :string do
+        allow_nil? false
+        description "The advisory's URL on GitHub, or its GHSA id."
+      end
+
+      argument :assignments, {:array, :map} do
+        public? false
+      end
+
+      change AssignOpener
+      change manage_relationship(:assignments, type: :create)
+      change Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory
+    end
+
     update :edit do
       description "Edits case content. Only allowed while the case is in :draft or :review."
       primary? true
@@ -408,7 +437,7 @@ defmodule Varsel.Cases.Case do
     end
 
     # Supporters open their own cases; POCs open any.
-    policy action(:open) do
+    policy action([:open, :open_from_github_advisory]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if actor_attribute_equals(:role, :supporter)
     end

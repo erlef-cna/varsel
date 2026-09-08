@@ -129,6 +129,32 @@ defmodule Varsel.Cases.GitHubAdvisory.ImportTest do
                Import.child_params(advisory).affected
     end
 
+    test "spells the applications as the presets do" do
+      elixir =
+        hex_advisory()
+        |> Map.put(
+          "html_url",
+          "https://github.com/elixir-lang/elixir/security/advisories/GHSA-2cfg-hjmp-qrvw"
+        )
+        |> Map.put("vulnerabilities", [
+          %{"package" => %{"ecosystem" => "elixir", "name" => "ExUnit"}},
+          %{"package" => %{"ecosystem" => "elixir", "name" => "IEx"}},
+          %{"package" => %{"ecosystem" => "elixir", "name" => "Logger"}},
+          %{"package" => %{"ecosystem" => "elixir", "name" => "ex_unit"}},
+          %{"package" => %{"ecosystem" => "elixir", "name" => "Phoenix"}}
+        ])
+
+      assert [%{preset: :elixir, applications: ["ex_unit", "iex", "logger", "phoenix"]}] =
+               Import.child_params(elixir).affected
+
+      otp =
+        Map.put(otp_advisory(), "vulnerabilities", [
+          %{"package" => %{"ecosystem" => "otp", "name" => "SSH"}}
+        ])
+
+      assert [%{preset: :otp, applications: ["ssh"]}] = Import.child_params(otp).affected
+    end
+
     test "a gleam-lang/gleam advisory names no applications" do
       advisory =
         hex_advisory()
