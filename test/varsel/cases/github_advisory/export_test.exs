@@ -206,4 +206,102 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
              }
            ]
   end
+
+  test "affected packages replace the advisory's entry for a derived channel and keep every other entry" do
+    matched = %{
+      "package" => %{"ecosystem" => "erlang", "name" => "ACME_LIB"},
+      "vulnerable_version_range" => "< 1.2.0",
+      "patched_versions" => "1.2.0",
+      "vulnerable_functions" => []
+    }
+
+    not_derived = %{
+      "package" => %{"ecosystem" => "erlang", "name" => "acme_extra"},
+      "vulnerable_version_range" => "< 0.3.0",
+      "patched_versions" => "0.3.0",
+      "vulnerable_functions" => []
+    }
+
+    no_channel = %{
+      "package" => %{"ecosystem" => "other", "name" => "acme_widget"},
+      "vulnerable_version_range" => "< 2.0.0",
+      "patched_versions" => "2.0.0",
+      "vulnerable_functions" => ["Widget.render/1"]
+    }
+
+    advisory = %{
+      "html_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw",
+      "vulnerabilities" => [matched, not_derived, no_channel]
+    }
+
+    packages = [
+      package("acme_lib", [
+        {%PackageChannel{purl_type: "hex", name: "acme_lib"},
+         [
+           github_range(">= 1.0.0, < 1.2.3", ["1.2.3"]),
+           github_range(">= 2.0.0, < 2.0.1", ["2.0.1"])
+         ]},
+        {%PackageChannel{purl_type: "hex", name: "acme_extra"}, []},
+        {%PackageChannel{purl_type: "hex", name: "acme_new"}, [github_range("< 0.1.1", ["0.1.1"])]}
+      ])
+    ]
+
+    assert %{body: %{"vulnerabilities" => vulnerabilities}} =
+             Export.body(case_record(%{affected_packages: packages}), [:affected], advisory)
+
+    assert vulnerabilities == [
+             %{
+               "package" => %{"ecosystem" => "erlang", "name" => "acme_lib"},
+               "vulnerable_version_range" => ">= 1.0.0, < 1.2.3",
+               "patched_versions" => "1.2.3"
+             },
+             %{
+               "package" => %{"ecosystem" => "erlang", "name" => "acme_lib"},
+               "vulnerable_version_range" => ">= 2.0.0, < 2.0.1",
+               "patched_versions" => "2.0.1"
+             },
+             not_derived,
+             no_channel,
+             %{
+               "package" => %{"ecosystem" => "erlang", "name" => "acme_new"},
+               "vulnerable_version_range" => "< 0.1.1",
+               "patched_versions" => "0.1.1"
+             }
+           ]
+  end
+
+  test "an application entry of a preset advisory is replaced by the channel spelled as the preset spells it" do
+    advisory = %{
+      "html_url" => "https://github.com/elixir-lang/elixir/security/advisories/GHSA-2cfg-hjmp-qrvw",
+      "vulnerabilities" => [
+        %{
+          "package" => %{"ecosystem" => "elixir", "name" => "ExUnit"},
+          "vulnerable_version_range" => "< 1.17.0",
+          "patched_versions" => "1.17.0"
+        },
+        %{
+          "package" => %{"ecosystem" => "elixir", "name" => "ExUnit"},
+          "vulnerable_version_range" => ">= 1.18.0, < 1.18.2",
+          "patched_versions" => "1.18.2"
+        }
+      ]
+    }
+
+    packages = [
+      package("elixir", [
+        {%PackageChannel{purl_type: "otp", name: "ex_unit", version_type: :otp}, [github_range("< 1.18.3", ["1.18.3"])]}
+      ])
+    ]
+
+    assert %{body: %{"vulnerabilities" => vulnerabilities}} =
+             Export.body(case_record(%{affected_packages: packages}), [:affected], advisory)
+
+    assert vulnerabilities == [
+             %{
+               "package" => %{"ecosystem" => "other", "name" => "ex_unit"},
+               "vulnerable_version_range" => "< 1.18.3",
+               "patched_versions" => "1.18.3"
+             }
+           ]
+  end
 end

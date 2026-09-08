@@ -17,10 +17,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
 
   Affected packages compare per distribution channel: the ranges the case
   **derived** for the channel, in GitHub's spelling from the derivation
-  cache, against the ranges the advisory states. The advisory's `ecosystem`
-  picks the channel. An `erlang` entry matches the `pkg:hex` channel of that
-  name. An `otp` entry matches the `pkg:otp` channel of that name. Any other
-  entry matches a channel or a product that carries the name.
+  cache, against the ranges the advisory states. The advisory's entries are
+  paired with the channels by `Varsel.Cases.GitHubAdvisory.Channels`.
 
   The case needs `Varsel.Cases.GitHubAdvisory.Export.load/0` loaded.
   """
@@ -28,6 +26,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Case
   alias Varsel.Cases.GitHubAdvisory
+  alias Varsel.Cases.GitHubAdvisory.Channels
   alias Varsel.Cases.GitHubAdvisory.Export
   alias Varsel.Cases.GitHubAdvisory.Import
   alias Varsel.Cases.GitHubAdvisory.People
@@ -69,7 +68,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
         Enum.map(children.weaknesses, & &1.cwe_id)
       ),
       credits(People.people(case_record.credits), People.people(children.credits))
-    ] ++ affected_rows(case_record, Import.vulnerabilities(advisory))
+    ] ++ affected_rows(case_record, advisory)
   end
 
   @doc """
@@ -103,9 +102,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
   @doc """
   Whether the case can write a row to the advisory: a value the advisory
   lacks or has differently, a person with a GitHub account it lacks, derived
-  ranges that differ from its own. Pushing affected packages replaces the
-  advisory's list with the case's derived ranges, so a channel that derived
-  nothing offers none.
+  ranges that differ from its own. A channel that derived nothing has
+  nothing to write, and a push keeps the advisory's entry for it.
   """
   @spec pushable?(row()) :: boolean()
   def pushable?(%{status: status}) when status in [:same, :theirs_only, :not_derived], do: false
@@ -197,23 +195,24 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
   def package_present?(case_record, %{preset: preset}) when not is_nil(preset) do
     product = Preset.attributes(preset).product
 
-    Enum.any?(case_record.affected_packages, &same_name?(&1.product, product))
+    Enum.any?(case_record.affected_packages, &Channels.same_name?(&1.product, product))
   end
 
   def package_present?(case_record, %{vulnerabilities: vulnerabilities}) do
-    channels = channels(case_record)
+    channels = Channels.of_case(case_record)
 
     Enum.any?(vulnerabilities, fn vulnerability ->
-      Enum.any?(channels, &matches?(&1, vulnerability))
+      Enum.any?(channels, &Channels.matches?(&1, vulnerability, nil))
     end)
   end
 
-  defp affected_rows(case_record, vulnerabilities) do
-    channels = channels(case_record)
+  defp affected_rows(case_record, advisory) do
+    channels = Channels.of_case(case_record)
+    preset = Import.preset(advisory)
 
     matches =
-      Enum.map(vulnerabilities, fn vulnerability ->
-        {vulnerability, Enum.find(channels, &matches?(&1, vulnerability))}
+      Enum.map(Import.vulnerabilities(advisory), fn vulnerability ->
+        {vulnerability, Enum.find(channels, &Channels.matches?(&1, vulnerability, preset))}
       end)
 
     matched = for {_vulnerability, %{id: id}} <- matches, do: id
@@ -233,22 +232,6 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
       end
 
     theirs_rows ++ ours_only
-  end
-
-  defp channels(case_record) do
-    for package <- case_record.affected_packages, channel <- package.channels do
-      cached =
-        get_in(package.derivation_cache || %{}, ["channels", channel.id, "github_ranges"]) || []
-
-      %{
-        id: channel.id,
-        purl_type: channel.purl_type,
-        name: channel.name,
-        product: package.product,
-        label: channel_label(channel),
-        github_ranges: cached
-      }
-    end
   end
 
   defp affected_row(package, nil, vulnerability) do
@@ -302,30 +285,6 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
     %{ranges: List.wrap(range), patched: patched}
   end
 
-  defp matches?(%{purl_type: "hex", name: name}, %{ecosystem: "erlang", name: theirs}), do: same_name?(name, theirs)
-
-  defp matches?(_channel, %{ecosystem: "erlang"}), do: false
-
-  defp matches?(%{purl_type: "otp", name: name}, %{ecosystem: "otp", name: theirs}), do: same_name?(name, theirs)
-
-  defp matches?(_channel, %{ecosystem: "otp"}), do: false
-
-  defp matches?(%{name: name, product: product}, %{name: theirs}) do
-    same_name?(name, theirs) or same_name?(product, theirs)
-  end
-
-  defp same_name?(name, theirs) when is_binary(name) and is_binary(theirs) do
-    String.downcase(name) == String.downcase(theirs)
-  end
-
-  defp same_name?(_name, _theirs), do: false
-
   defp package_label(%{ecosystem: nil, name: name}), do: name
   defp package_label(%{ecosystem: ecosystem, name: name}), do: "#{ecosystem}/#{name}"
-
-  defp channel_label(%{kind: :service, domain: domain}), do: domain || "service"
-
-  defp channel_label(%{purl_type: purl_type, name: name}) when is_binary(name), do: "#{purl_type}/#{name}"
-
-  defp channel_label(%{purl_type: purl_type}), do: to_string(purl_type)
 end
