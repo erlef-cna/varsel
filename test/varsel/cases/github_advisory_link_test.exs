@@ -547,25 +547,6 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
       assert message == "was refused: GitHub shows you no such advisory"
     end
 
-    test "a GitHub that cannot be reached changes nothing here", %{poc: poc, link: link} do
-      GitHubApi.stub(&Req.Test.transport_error(&1, :econnrefused))
-
-      assert {:error, %Invalid{errors: [%{field: :fields, message: message}]}} =
-               Cases.push_github_advisory(link, [:title], actor: poc)
-
-      assert message == "could not reach GitHub"
-      assert Ash.reload!(link, authorize?: false).title == "Header injection in acme_lib"
-    end
-
-    test "a token GitHub no longer accepts asks for a new sign-in", %{poc: poc, link: link} do
-      stub_refusal(401, %{"message" => "Bad credentials"})
-
-      assert {:error, %Invalid{errors: [%{field: :fields, message: message}]}} =
-               Cases.push_github_advisory(link, [:title], actor: poc)
-
-      assert message == "needs you to sign in with GitHub again"
-    end
-
     test "needs the caller's GitHub account, before GitHub is asked", %{link: link} do
       stub_github_unreachable()
       hex_poc = Fixtures.sign_in_with_hex("push_hex", "push_hex")

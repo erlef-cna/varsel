@@ -280,9 +280,11 @@ stale-record error and the whole transaction rolls back — including anything a
 hook already did inside it. State-machine transitions are likewise validated
 against the stored row, not the caller's copy. Both are correct outcomes of
 concurrent editing, not races: the caller reloads and retries against current
-state. The one update outside the lock is `Case.refresh_derivation`, which
-rewrites only derived caches and runs nested inside `:publish`. (`case.ex`,
-`cve_record.ex`, `vulnerability_report.ex`, `proposal.ex`)
+state. The updates outside the lock are `Case.refresh_derivation`, which
+rewrites only derived caches and runs nested inside `:publish`, and
+`Case.grant_access` and `Case.report_to_github`, which write a child row and
+nothing on the case. (`case.ex`, `cve_record.ex`, `vulnerability_report.ex`,
+`proposal.ex`)
 
 **The websocket carries the same login requirement as `/gql`.** A socket has
 no `conn`, so `/ws/gql` authenticates the connection itself in `connect/3`,
@@ -421,9 +423,10 @@ claims:
   `cwe.mitre.org`, `capec.mitre.org`), to `raw.githubusercontent.com` for the
   OTP versions table, to GitHub and hex.pm as OAuth IdPs and for handle
   lookups, GitHub's carrying the OAuth app's client credentials, to GitHub
-  for organization owner and team member listings as the acting user,
-  advisory reads, as the acting user or anonymously, and writes as the
-  acting user (`client.ex`), to `repo.hex.pm` for the package registry, to
+  for organization owner and team member listings and repository
+  permission reads as the acting user, advisory reads, as the acting user
+  or anonymously, and writes as the acting user (`client.ex`), to
+  `repo.hex.pm` for the package registry, to
   the SMTP relay,
   **to the public https URL an anonymous caller hands `/oauth/authorize` as
   a CIMD `client_id`** (see §6), and — critically — **to the public https
@@ -487,6 +490,7 @@ from controlling only its size.
 | `Case.grant_access` / `CaseInvite.invite` | `email` | data | **Yes — POC / assigned supporter only** | One outbound invite email to that address, accepted only when the handle's provider lists no address for the account and refused when it lists a different one. One email per address per case (`resolve_contact.ex`) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
+| `Case.report_to_github` | `owner`, `repo`, `description` | resource name + data | **Yes — POC / assigned supporter only**, on an unlinked case in `:draft` or `:review`, decided before the write (`case.ex`) | `owner` and `repo` become path segments of one `api.github.com` read and one write, encoded; the host is fixed. The read asks whether the caller administers the repository. The write then carries the description and the case's content to that repository's maintainers as a private vulnerability report, or opens a draft advisory there when the caller administers it. Both are made with the caller's own GitHub token (`report_to_github.ex`, `repositories.ex`, `advisories.ex`) |
 | `Case.open_from_github_advisory` / `GitHubAdvisoryLink.link` | `advisory_url` | resource name | **Yes — POC / supporter** (open) or **POC / assigned supporter** (link), decided before the read (`case.ex`, `case_editable.ex`) | Parsed into the owner, repository and GHSA id of one `api.github.com` read, path-encoded, made with the caller's own GitHub token or anonymously; the host is fixed. The answer is stored whole on the link and compared as data (`fetch.ex`, `advisories.ex`, `store_advisory.ex`). Opening a case from it writes the advisory's prose into the case markdown, which renders through the sanitizing sinks of §6a like prose imported from a CVE record, and its logins into credit handles confirmed at GitHub like hand-entered ones (`import.ex`, `resolve_credited_user.ex`) |
 | `VersionEvent` | `commit_sha` | data | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
 | `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | data | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
@@ -573,7 +577,7 @@ a trusted integration partner.
 | Notification emails (immediate + digest) | Plain-text mail | Yes — `text_body`, fixed headers, and **content-free**: each carries only the event kind and a link to the authenticated console, never case or report content, since email offers no encryption we can rely on end to end (`emails.ex`) | — |
 | Case invite email | Plain-text mail to a person with no account | Yes — same shape: the provider handle the invite names and a sign-in link, no case content and no inviter (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
-| Case fields → the linked GitHub advisory (`GitHubAdvisoryLink.push`) | GitHub, as the acting user | JSON body of typed fields and the advisory description rendered from the case's own sections as markdown (`export.ex`). Written with the caller's own GitHub token, so GitHub attributes it to them and decides whether they may (`push.ex`, `advisories.ex`) | — |
+| Case fields → the linked GitHub advisory (`GitHubAdvisoryLink.push`), or a new private report or draft advisory on a repository (`Case.report_to_github`) | GitHub, as the acting user | JSON body of typed fields and the advisory description rendered from the case's own sections as markdown (`export.ex`). Written with the caller's own GitHub token, so GitHub attributes it to them and decides whether they may (`push.ex`, `report_to_github.ex`, `advisories.ex`) | — |
 
 Every markdown/HTML render sink sanitizes (ammonia allow-list) before `raw/1`,
 so injected script/handlers are stripped at the source. The app-wide
@@ -1302,8 +1306,8 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
   every action no other policy names, which is what turns "an action nobody
   wrote a policy for" from refused into permitted (§4).
 - Adding a state-machine resource or update action **outside the
-  optimistic-lock pattern**, exempting one from it beyond
-  `Case.refresh_derivation`, or **widening the import's upsert condition** —
+  optimistic-lock pattern**, exempting one from it beyond the ones §4
+  names, or **widening the import's upsert condition** —
   each reopens the stale-write and import-overwrite classes properties 15–16
   close.
 - Re-introducing a **route-level role gate** in the router. The model rests

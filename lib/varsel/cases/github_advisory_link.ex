@@ -71,7 +71,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
     end
 
     create :record do
-      description "Internal: records the advisory a case was opened from."
+      description "Internal: records the advisory a case was opened from, or the one GitHub opened for its report."
       accept [:case_id]
 
       argument :advisory, :map, allow_nil?: false

@@ -19,6 +19,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Push do
   alias Ash.Changeset
   alias Varsel.Cases
   alias Varsel.Cases.GitHubAdvisory.Export
+  alias Varsel.Cases.GitHubAdvisory.Refusal
   alias Varsel.GitHub.Advisories
   alias Varsel.GitHub.UserToken
 
@@ -74,17 +75,8 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Push do
       {:ok, advisory} ->
         {:ok, advisory}
 
-      :not_found ->
-        {:error, "was refused: GitHub shows you no such advisory"}
-
-      {:error, :unauthorized} ->
-        {:error, UserToken.message(:unauthorized)}
-
-      {:error, {:http, _status, %{"message" => message}}} ->
-        {:error, "was refused by GitHub: #{message}"}
-
-      {:error, _reason} ->
-        {:error, "could not reach GitHub"}
+      answer ->
+        {:error, Refusal.message(answer, "was refused: GitHub shows you no such advisory")}
     end
   end
 end
