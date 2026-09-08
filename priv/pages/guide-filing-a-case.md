@@ -74,6 +74,21 @@ path from there to a published CVE.
    record on the **CVE** tab against the advisory one last time: ranges,
    credits, resolved `TODO`s.
 
+   The **GitHub** tab does that cross-check for a GitHub security advisory.
+   Link the advisory by its URL or its GHSA id, and the tab sets the case
+   against it field by field: title, description, CVE ID, CVSS vector, CWEs,
+   credits, and the derived ranges of each channel, spelled the way GitHub
+   spells them. Pull a field when the advisory should win, or push it when
+   the case should. A pull adds and replaces and never removes. A push
+   writes to the advisory as you, so GitHub decides whether you may. Refresh
+   reads the advisory again after it changed on GitHub. The linked advisory
+   leads the published references as the vendor advisory, and no stored
+   reference is needed for it. Unlink takes it out again. Linking, pulling
+   and unlinking are edits and stop once the case is approved. Draft
+   advisories are read and written with your GitHub account. When none is
+   linked to yours, the tab says so and holds Refresh and Push until you
+   [link GitHub in account settings](/settings/account).
+
 6. **Take a CVE ID and hand it to review**
 
    Take the next free CVE ID, then send the case to review. A Point of
