@@ -62,8 +62,8 @@ defmodule Varsel.Cases.CaseCredit do
     create :add do
       description """
       Adds a credit to a case. The name may be left out when a handle or
-      `user_id` names an account: the credit then takes the name the account
-      asked to be credited as.
+      `user_id` is given: the credit takes the name the account asked to be
+      credited as, the name the provider lists for the handle, or the handle.
       """
 
       primary? true

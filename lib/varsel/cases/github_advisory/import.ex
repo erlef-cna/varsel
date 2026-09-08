@@ -23,10 +23,10 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
   and **no boundaries**. An `erlang` package gets a `pkg:hex` channel. The
   well-known repositories (erlang/otp, elixir-lang/elixir, gleam-lang/gleam)
   go through their presets, with the entries' names as the affected
-  applications. Any other entry is a package with no channel, for a person to
-  place. The repository owner is the vendor. The ranges travel with the
-  package, for `Varsel.Cases.GitHubAdvisory.Diff` to compare with the
-  derived ones.
+  applications, spelled as the presets spell them (`ex_unit`, `inets`). Any
+  other entry is a package with no channel, for a person to place. The
+  repository owner is the vendor. The ranges travel with the package, for
+  `Varsel.Cases.GitHubAdvisory.Diff` to compare with the derived ones.
 
   GitHub's `ecosystem` is free text on a repository advisory. erlang/otp
   writes `otp` for its applications and leaves it empty for the release.
@@ -74,6 +74,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
     "https://github.com/elixir-lang/elixir" => :elixir,
     "https://github.com/gleam-lang/gleam" => :gleam
   }
+
+  @elixir_applications ~w(elixir eex ex_unit iex logger mix)
 
   @doc """
   Case params read from the advisory, only the keys with a value.
@@ -199,7 +201,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
       for %{ecosystem: ecosystem, name: name} <- vulnerabilities,
           Preset.applications?(preset) and ecosystem not in [nil, "erlang"],
           uniq: true,
-          do: name
+          do: application(preset, name)
 
     %{
       preset: preset,
@@ -209,6 +211,16 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
       vulnerabilities: vulnerabilities
     }
   end
+
+  # `Preset.channels/2` names the `pkg:otp` channel and its `lib/` subpath
+  # after the application in OTP's lowercase spelling. GitHub lists Elixir's
+  # applications by module name (`ExUnit`).
+  defp application(:elixir, name) do
+    key = name |> String.downcase() |> String.replace("_", "")
+    Enum.find(@elixir_applications, String.downcase(name), &(String.replace(&1, "_", "") == key))
+  end
+
+  defp application(_preset, name), do: String.downcase(name)
 
   defp plain_package(%{ecosystem: "erlang", name: name} = vulnerability, repository) do
     plain = plain_package(%{vulnerability | ecosystem: nil}, repository)
