@@ -101,6 +101,15 @@ defmodule Varsel.Cases.CaseInvite do
         description "Send no invite email. Accepted only when the provider lists no address for the account."
       end
 
+      argument :email_optional, :boolean do
+        default false
+
+        description """
+        Invite without an email when the provider lists no address for the
+        account. An address the provider lists is emailed as usual.
+        """
+      end
+
       change ResolveContact
       change run_oban_trigger(:email)
     end

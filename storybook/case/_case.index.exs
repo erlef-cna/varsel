@@ -12,6 +12,8 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("activity_feed"), do: [name: "Activity feed", icon: {:local, "hero-clock"}]
 
+  def entry("advisory_audience"), do: [name: "Advisory audience", icon: {:local, "hero-users"}]
+
   def entry("advisory_card"), do: [name: "Advisory card", icon: {:local, "hero-link"}]
 
   def entry("advisory_diff"), do: [name: "Advisory diff", icon: {:local, "hero-arrows-right-left"}]

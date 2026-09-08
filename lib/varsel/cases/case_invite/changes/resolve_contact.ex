@@ -28,10 +28,11 @@ defmodule Varsel.Cases.CaseInvite.Changes.ResolveContact do
       username = changeset |> Changeset.get_attribute(:username) |> to_string() |> String.trim()
       given = changeset |> Changeset.get_argument(:email) |> blank_to_nil()
       skip? = Changeset.get_argument(changeset, :skip_email) == true
+      optional? = Changeset.get_argument(changeset, :email_optional) == true
 
       with :ok <- present(username),
            {:ok, canonical, provider_email} <- lookup(strategy, username),
-           {:ok, email, status} <- decide(strategy, provider_email, given, skip?) do
+           {:ok, email, status} <- decide(strategy, provider_email, given, skip?, optional?) do
         {email, status} = deduplicate(changeset, email, status, context)
 
         changeset
@@ -54,24 +55,25 @@ defmodule Varsel.Cases.CaseInvite.Changes.ResolveContact do
     end
   end
 
-  defp decide(_strategy, nil, nil, true), do: {:ok, nil, :skipped}
+  defp decide(_strategy, nil, nil, true, _optional?), do: {:ok, nil, :skipped}
+  defp decide(_strategy, nil, nil, false, true), do: {:ok, nil, :skipped}
 
-  defp decide(strategy, nil, nil, false) do
+  defp decide(strategy, nil, nil, false, false) do
     {:error, :email,
      "is needed: #{provider_name(strategy)} lists no address for this account. Enter one, or skip the email."}
   end
 
-  defp decide(_strategy, nil, _given, true) do
+  defp decide(_strategy, nil, _given, true, _optional?) do
     {:error, :skip_email, "cannot be set together with an email"}
   end
 
-  defp decide(_strategy, nil, given, false), do: {:ok, given, :pending}
+  defp decide(_strategy, nil, given, false, _optional?), do: {:ok, given, :pending}
 
-  defp decide(strategy, _provider_email, _given, true) do
+  defp decide(strategy, _provider_email, _given, true, _optional?) do
     {:error, :skip_email, "#{provider_name(strategy)} lists an address for this account, so the email cannot be skipped"}
   end
 
-  defp decide(strategy, provider_email, given, false) do
+  defp decide(strategy, provider_email, given, false, _optional?) do
     if is_nil(given) or same_address?(given, provider_email) do
       {:ok, provider_email, :pending}
     else

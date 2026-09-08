@@ -4,8 +4,8 @@
 
 defmodule VarselWeb.AdvisoryComponents do
   @moduledoc """
-  The GitHub tab's pieces: the card of the advisory a case is linked to, and
-  the case set against it field by field.
+  The GitHub tab's pieces: the card of the advisory a case is linked to, who
+  sees it on GitHub, and the case set against it field by field.
   """
   use VarselWeb, :html
 
@@ -84,6 +84,105 @@ defmodule VarselWeb.AdvisoryComponents do
 
   defp state_label(:unknown), do: "unknown state"
   defp state_label(state), do: to_string(state)
+
+  @doc """
+  Renders who sees the linked advisory on GitHub, as
+  `Varsel.Cases.GitHubAdvisory.Audience` resolved it: the collaborators, each
+  team's members and the organization's owners, each marked when they are on
+  the case already. With `can_grant`, everyone else offers to be given access.
+  `loading` shows the panel while GitHub is asked.
+  """
+  attr :audience, :map, default: nil, doc: "the resolved `Varsel.Cases.GitHubAdvisory.Audience`"
+
+  attr :on_case, :map,
+    default: %{},
+    doc: "downcased GitHub login to `:assigned` or `:invited` for everyone on the case"
+
+  attr :can_grant, :boolean, default: false
+  attr :loading, :boolean, default: false
+
+  def advisory_audience(assigns) do
+    ~H"""
+    <.panel id="advisory-audience">
+      <:title>Who sees it on GitHub</:title>
+      <p :if={@loading} class="text-sm text-base-content/60">Asking GitHub…</p>
+      <div :if={!@loading} class="space-y-3 text-sm">
+        <.audience_group
+          :if={@audience.users != []}
+          label="Collaborators"
+          logins={@audience.users}
+          on_case={@on_case}
+          can_grant={@can_grant}
+        />
+        <.audience_group
+          :for={team <- @audience.teams}
+          label={"Team #{team.slug}"}
+          logins={team.members}
+          on_case={@on_case}
+          can_grant={@can_grant}
+        />
+        <.audience_group
+          label="Organization owners"
+          logins={@audience.owners}
+          on_case={@on_case}
+          can_grant={@can_grant}
+        />
+      </div>
+    </.panel>
+    """
+  end
+
+  attr :label, :string, required: true
+
+  attr :logins, :any,
+    required: true,
+    doc: "the logins, or `:unknown` when the viewer cannot list them"
+
+  attr :on_case, :map, required: true
+  attr :can_grant, :boolean, required: true
+
+  defp audience_group(assigns) do
+    ~H"""
+    <div>
+      <p class="text-[0.66rem] font-semibold uppercase tracking-wider text-base-content/50">
+        {@label}
+      </p>
+      <p :if={@logins == :unknown} class="text-base-content/60">
+        Not readable with your GitHub account. GitHub lists an organization's people to its
+        members.
+      </p>
+      <p :if={@logins == []} class="text-base-content/60">Nobody.</p>
+      <ul :if={is_list(@logins) and @logins != []} class="divide-y divide-base-300">
+        <li :for={login <- @logins} class="flex items-center gap-3 py-1" id={"audience-#{login}"}>
+          <.link
+            href={"https://github.com/#{login}"}
+            target="_blank"
+            rel="noopener"
+            class="link link-hover font-mono text-xs"
+          >
+            {login}
+          </.link>
+          <.state :if={@on_case[String.downcase(login)] == :assigned} dot="bg-success" class="text-xs">
+            on the case
+          </.state>
+          <.state :if={@on_case[String.downcase(login)] == :invited} dot="bg-info" class="text-xs">
+            invited
+          </.state>
+          <button
+            :if={@can_grant and is_nil(@on_case[String.downcase(login)])}
+            type="button"
+            phx-click="grant_access"
+            phx-value-login={login}
+            data-confirm={"Give #{login} access to this case?"}
+            class="btn btn-xs btn-ghost ml-auto"
+          >
+            Give access
+          </button>
+        </li>
+      </ul>
+    </div>
+    """
+  end
 
   @doc """
   Renders the diff rows of `Varsel.Cases.GitHubAdvisory.Diff` as a table:

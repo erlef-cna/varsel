@@ -13,6 +13,7 @@ defmodule VarselWeb.CaseLiveTest do
   alias Varsel.Fixtures
   alias Varsel.HexPm
   alias Varsel.Notifications
+  alias Varsel.Test.GitHubAdvisoryFixtures
   alias Varsel.Test.GitHubApi
 
   defp log_in(conn, user) do
@@ -95,6 +96,37 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert {path, _flash} = assert_redirect(lv)
       assert path =~ ~r{^/cases/}
+    end
+
+    test "the popover also opens a case from a GitHub advisory", %{conn: conn, poc: poc} do
+      GitHubApi.stub_advisory(GitHubAdvisoryFixtures.hex_advisory())
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      lv |> element("button", "Open case") |> render_click()
+
+      lv
+      |> form("#open-case-advisory-form", %{
+        "advisory_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+      })
+      |> render_submit()
+
+      assert {path, _flash} = assert_redirect(lv)
+      assert path =~ ~r{^/cases/.+/github$}
+
+      assert [%{title: "Header injection in acme_lib"}] = Cases.list_cases!(actor: poc)
+    end
+
+    test "an address that is no advisory keeps the viewer on the list", %{conn: conn, poc: poc} do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      lv |> element("button", "Open case") |> render_click()
+
+      lv
+      |> form("#open-case-advisory-form", %{"advisory_url" => "https://github.com/acme"})
+      |> render_submit()
+
+      assert has_element?(lv, "#flash-error", "Could not open case:")
+      assert has_element?(lv, "#flash-error", "is not a GitHub advisory URL or GHSA id")
+      assert has_element?(lv, "#open-case-advisory-form")
     end
 
     test "pipeline cards show one package chip per affected package", %{conn: conn, poc: poc} do

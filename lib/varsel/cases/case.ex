@@ -298,6 +298,17 @@ defmodule Varsel.Cases.Case do
         """
       end
 
+      argument :email_optional, :boolean do
+        default false
+
+        description """
+        Invite without an email when the provider lists no address for the
+        account. An address the provider lists is emailed as usual. Use it
+        for a person who already sees the case's matter elsewhere, such as
+        on the linked GitHub advisory.
+        """
+      end
+
       change Varsel.Cases.Case.Changes.GrantAccess
     end
 

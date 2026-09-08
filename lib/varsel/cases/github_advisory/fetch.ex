@@ -32,23 +32,14 @@ defmodule Varsel.Cases.GitHubAdvisory.Fetch do
   @doc "The advisory a parsed reference names: on its repository, or the global database entry."
   @spec fetch_ref(Advisories.ref(), User.t() | nil) :: result()
   def fetch_ref(%{owner: owner, repo: repo, ghsa_id: ghsa_id}, actor) when is_binary(owner) and is_binary(repo) do
-    owner |> Advisories.fetch(repo, ghsa_id, token: token(actor)) |> fetched()
+    owner |> Advisories.fetch(repo, ghsa_id, token: UserToken.available(actor)) |> fetched()
   end
 
   def fetch_ref(%{ghsa_id: ghsa_id}, actor) do
-    ghsa_id |> Advisories.fetch_global(token: token(actor)) |> fetched()
+    ghsa_id |> Advisories.fetch_global(token: UserToken.available(actor)) |> fetched()
   end
 
   defp fetched({:ok, advisory}), do: {:ok, advisory}
   defp fetched(:not_found), do: {:error, "names no advisory you can see on GitHub"}
   defp fetched({:error, _reason}), do: {:error, "could not be fetched from GitHub"}
-
-  defp token(%User{} = actor) do
-    case UserToken.fetch(actor) do
-      {:ok, token} -> token
-      {:error, _no_token} -> nil
-    end
-  end
-
-  defp token(_actor), do: nil
 end
