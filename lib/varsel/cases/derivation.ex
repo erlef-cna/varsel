@@ -35,12 +35,20 @@ defmodule Varsel.Cases.Derivation do
   ## Result shape (JSON-safe, cached in jsonb, all string keys)
 
       %{
-        "channels" => %{<channel-uuid> => %{"versions" => [...],
-                                            "default_status" => "unaffected" | "unknown" | "affected",
-                                            "pending" => [...],
-                                            "unreleased_intros" => [...],
-                                            "issues" => [...]}},
-        # either bound is nil when the range is open on that side (the preview drops it)
+        "channels" => %{
+          <channel-uuid> => %{
+            "versions" => [...],
+            # The channel's spans as GitHub states them, each fix as a patched version.
+            "github_ranges" => [
+              %{"vulnerable_version_range" => _, "patched_versions" => [...]}
+            ],
+            "default_status" => "unaffected" | "unknown" | "affected",
+            "pending" => [...],
+            "unreleased_intros" => [...],
+            "issues" => [...]
+          }
+        },
+        # Either bound is nil when the range is open on that side (the preview drops it).
         "cpe_matches" => [%{"versionStartIncluding" => _, "versionEndExcluding" => _}],
         "call_outs" => [%{...}],
         "issues" => ["..."]
@@ -146,20 +154,24 @@ defmodule Varsel.Cases.Derivation do
   # Scoped ranges are asserted by hand, so the unaffected spans an `unknown`
   # default would owe cannot be derived from them.
   defp derive_channel(channel, _reach, [_ | _] = scoped_events, _emit_opts) do
-    channel
-    |> derive_scoped_channel(scoped_events)
+    result = derive_scoped_channel(channel, scoped_events)
+
+    result
+    |> Map.put("github_ranges", Emit.github_from_versions(result["versions"]))
     |> Map.put("default_status", "unaffected")
   end
 
   defp derive_channel(%{kind: :service}, _reach, [], _emit_opts) do
     []
     |> channel_result(["service channels need channel-scoped version events"])
+    |> Map.put("github_ranges", [])
     |> Map.put("default_status", "unaffected")
   end
 
   defp derive_channel(channel, reach, [], emit_opts) do
     channel
     |> Emit.channel(reach.ranges, emit_opts)
+    |> Map.put("github_ranges", Emit.github(channel, reach.ranges, emit_opts))
     |> Map.put("default_status", to_string(Keyword.fetch!(emit_opts, :default_status)))
     |> Map.put("pending", reach.pending_fixes)
     |> Map.put("unreleased_intros", reach.unreleased_intros)
