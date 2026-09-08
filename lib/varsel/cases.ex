@@ -236,6 +236,7 @@ defmodule Varsel.Cases do
     resource Case do
       define :open_case, action: :open
       define :open_case_from_github_advisory, action: :open_from_github_advisory
+      define :report_case_to_github, action: :report_to_github
       define :adopt_cve_record, action: :adopt_cve_record
       define :list_cases, action: :list_cases
       define :get_case, action: :read, get_by: [:id]

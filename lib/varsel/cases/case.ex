@@ -348,6 +348,43 @@ defmodule Varsel.Cases.Case do
       change Varsel.Cases.Case.Changes.GrantAccess
     end
 
+    update :report_to_github do
+      description """
+      Reports the case to the maintainers of `owner/repo` as a private
+      vulnerability report on GitHub, as the caller, with what the case
+      states and the description written for them. A caller who administers
+      the repository opens a draft advisory in their name instead, as GitHub
+      requires. The advisory GitHub opens becomes the case's linked advisory,
+      so the case must not be linked yet.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :owner, :string do
+        allow_nil? false
+        description "The owner of the repository on GitHub."
+      end
+
+      argument :repo, :string do
+        allow_nil? false
+        description "The name of the repository on GitHub."
+      end
+
+      argument :description, :string do
+        allow_nil? false
+        constraints max_length: 65_535
+        description "The advisory text for the maintainers."
+      end
+
+      metadata :github_report, :atom do
+        constraints one_of: [:report, :draft]
+        description "Whether GitHub took a private report or the caller opened a draft advisory."
+      end
+
+      change Varsel.Cases.Case.Changes.ReportToGitHub
+    end
+
     update :request_review do
       description "Marks a drafted case ready for POC review."
       accept []
@@ -481,10 +518,15 @@ defmodule Varsel.Cases.Case do
     # Content freeze: case content may only change in :draft or :review, or in
     # :approved by a POC, so late detail lands without a reopen. From
     # :publishing on the record is MITRE's and an amendment reopens.
-    policy action([:edit, :apply_proposal]) do
+    policy action([:edit, :apply_proposal, :report_to_github]) do
       authorize_if expr(state in [:draft, :review])
 
       authorize_if expr(state == :approved and ^actor(:role) == :poc)
+    end
+
+    # A case holds one advisory.
+    policy action(:report_to_github) do
+      authorize_if expr(not exists(github_advisory_link, true))
     end
 
     # Supporters open their own cases; POCs open any.
@@ -530,7 +572,7 @@ defmodule Varsel.Cases.Case do
       authorize_if actor_attribute_equals(:role, :poc)
     end
 
-    policy action(:grant_access) do
+    policy action([:grant_access, :report_to_github]) do
       authorize_if actor_attribute_equals(:role, :poc)
 
       authorize_if expr(
@@ -561,13 +603,13 @@ defmodule Varsel.Cases.Case do
     # whose row moved since that load (StaleRecord) is what entitles the
     # update policies to trust `changeset.data`. :refresh_derivation is exempt:
     # it only rewrites derived caches and runs nested inside :publish, where a
-    # version bump would trip the outer changeset's own lock. :grant_access is
-    # exempt for the same reason: it writes a child row and nothing on the case,
-    # so locking it would make two people adding two different collaborators
-    # collide.
+    # version bump would trip the outer changeset's own lock. :grant_access and
+    # :report_to_github are exempt for the same reason: each writes a child row
+    # and nothing on the case, so locking them would make two people adding two
+    # different collaborators collide.
     change optimistic_lock(:version),
       on: [:update],
-      where: [negate(action_is([:refresh_derivation, :grant_access]))]
+      where: [negate(action_is([:refresh_derivation, :grant_access, :report_to_github]))]
   end
 
   attributes do
