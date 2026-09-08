@@ -7,11 +7,11 @@ defmodule Varsel.Cases.CaseReference do
   One stored reference of a case, rendered into `references[]`: a URL, the
   tags saying what it is, and the name the link is shown under.
 
-  Only non-derivable references are stored: the vendor advisory (GHSA), extra
-  advisories, version-scheme explainers, and so on. The `cna.erlef.org` /
-  `osv.dev` self-links and the commit links (repo + introducing and fixed
-  commit SHAs) are appended at render time, named — stored rows win over
-  derived ones on URL conflict.
+  Only non-derivable references are stored: a vendor advisory the case is not
+  linked to, extra advisories, version-scheme explainers, and so on. The
+  linked GitHub advisory, the `cna.erlef.org` / `osv.dev` self-links and the
+  commit links (repo + introducing and fixed commit SHAs) are appended at
+  render time, named — stored rows win over derived ones on URL conflict.
 
   Ordering is meaningful (the vendor advisory comes first); `position` sorts
   the stored rows ahead of derived ones.

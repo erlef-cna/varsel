@@ -326,7 +326,7 @@ you chose, and the one fact that decided it.
 - `propose_technical_analysis` and `propose_proof_of_concept` when the report carries them; see
   the section below.
 - `propose_credit` per person.
-- `propose_reference` for the vendor advisory, with its `name` (the advisory title). That is normally the *only* reference you propose;
+- `propose_reference` for the vendor advisory, with its `name` (the advisory title), unless the case is linked to its GitHub advisory in Varsel, which renders that reference itself. That is normally the *only* reference you propose;
   see the references note in the mechanics section below.
 
 **`open_case` must complete first**, because every proposal needs its `case_id`. After that the

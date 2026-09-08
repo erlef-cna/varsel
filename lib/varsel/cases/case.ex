@@ -668,6 +668,11 @@ defmodule Varsel.Cases.Case do
       description "Inbound reports consolidated into this case."
       public? true
     end
+
+    has_one :github_advisory_link, Varsel.Cases.GitHubAdvisoryLink do
+      description "The GitHub security advisory this case is linked to, if any."
+      public? true
+    end
   end
 
   calculations do
@@ -727,10 +732,11 @@ defmodule Varsel.Cases.Case do
       filterable? false
 
       description """
-      The references the published record adds on its own — the cna.erlef.org /
-      osv.dev self-links, the version-scheme page and the introducing and fix
-      commit links — as rendered `{"url", "tags", "name"}` maps. Read it to
-      see what will ship; never store these as references yourself.
+      The references the published record adds on its own — the linked GitHub
+      advisory, the cna.erlef.org / osv.dev self-links, the version-scheme page
+      and the introducing and fix commit links — as rendered `{"url", "tags",
+      "name"}` maps. Read it to see what will ship; never store these as
+      references yourself.
       """
     end
 

@@ -262,8 +262,9 @@ check a report against, not the framework's default.
 `Case`'s strict policy asks only that someone is signed in; *which* cases they
 may see is decided by the filter policy after it, so a role-less caller is
 **filtered to the cases they are assigned to** — an empty list when they are
-assigned to none — rather than refused. Every other private resource (case
-children, proposals, comments) is filter-scoped the same way. Reading each
+assigned to none — rather than refused. `GitHubAdvisoryLink` carries the same
+strict gate. Every other private resource (case children, proposals,
+comments) is filter-scoped the same way. Reading each
 resource as an anonymous actor and as a role-less one bears this out: the
 strict resources refuse the anonymous caller, the filter-scoped ones return
 zero of the rows that exist. **An "empty list" is therefore not evidence of a
@@ -486,6 +487,7 @@ from controlling only its size.
 | `Case.grant_access` / `CaseInvite.invite` | `email` | data | **Yes — POC / assigned supporter only** | One outbound invite email to that address, accepted only when the handle's provider lists no address for the account and refused when it lists a different one. One email per address per case (`resolve_contact.ex`) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
+| `GitHubAdvisoryLink.link` | `advisory_url` | resource name | **Yes — POC / assigned supporter only**, decided before the read (`case_editable.ex`) | Parsed into the owner, repository and GHSA id of one `api.github.com` read, path-encoded, made with the caller's own GitHub token or anonymously; the host is fixed. The answer is stored whole on the link and compared as data (`fetch.ex`, `advisories.ex`, `store_advisory.ex`) |
 | `VersionEvent` | `commit_sha` | data | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
 | `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | data | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
 | `CveValidation.validate*` | `cve_json` | data | **Yes — any authenticated user** | **cvelint subprocess** (piped to stdin; argv, not shell) and **hex.pm lookups** keyed on package names taken from the JSON. No policy authorizer on this resource; the login gate is the control (§4) |

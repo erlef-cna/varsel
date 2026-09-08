@@ -17,6 +17,8 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
   alias Varsel.Cases
   alias Varsel.Cases.Case.Calculations.Preview.Result
   alias Varsel.Fixtures
+  alias Varsel.Test.GitHubAdvisoryFixtures
+  alias Varsel.Test.GitHubApi
   alias Varsel.Test.StubGitBackend
 
   @repo "https://github.com/team-alembic/ash_authentication_phoenix"
@@ -439,6 +441,54 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     result = render!(case_record, poc)
 
     assert %{"tags" => ["related", "third-party-advisory"]} = self_reference(result)
+  end
+
+  describe "the linked GitHub advisory" do
+    @linked "https://github.com/team-alembic/ash_authentication_phoenix/security/advisories/GHSA-2cfg-hjmp-qrvw"
+
+    defp link!(case_record, poc, url) do
+      advisory = Map.put(GitHubAdvisoryFixtures.hex_advisory(), "html_url", url)
+      GitHubApi.stub(&Req.Test.json(&1, advisory))
+      Cases.link_github_advisory!(%{case_id: case_record.id, advisory_url: url}, actor: poc)
+    end
+
+    defp drop_stored_advisory(poc) do
+      {:ok, references} = Cases.list_case_references(actor: poc)
+
+      references
+      |> Enum.filter(&("vendor-advisory" in &1.tags))
+      |> Enum.each(&Cases.remove_case_reference!(&1, actor: poc))
+    end
+
+    test "leads the references as the vendor advisory without being stored", %{
+      poc: poc,
+      case: case_record
+    } do
+      drop_stored_advisory(poc)
+      link!(case_record, poc, @linked)
+
+      result = render!(case_record, poc)
+
+      assert [%{"url" => @linked, "tags" => ["vendor-advisory", "related"]} | _rest] =
+               cna(result)["references"]
+
+      assert %{"tags" => ["related"]} = self_reference(result)
+
+      refute [actor: poc]
+             |> Cases.list_case_references!()
+             |> Enum.map(&to_string(&1.url))
+             |> Enum.member?(@linked)
+    end
+
+    test "a stored reference carrying the same URL wins, once", %{poc: poc, case: case_record} do
+      link!(case_record, poc, @advisory)
+
+      result = render!(case_record, poc)
+      urls = Enum.map(cna(result)["references"], & &1["url"])
+
+      assert List.first(urls) == @advisory
+      assert Enum.count(urls, &(&1 == @advisory)) == 1
+    end
   end
 
   describe "the OTP version-scheme reference" do

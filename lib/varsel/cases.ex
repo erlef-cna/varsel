@@ -17,6 +17,7 @@ defmodule Varsel.Cases do
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.Comment
+  alias Varsel.Cases.GitHubAdvisoryLink
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Proposal
   alias Varsel.Cases.VersionEvent
@@ -384,6 +385,14 @@ defmodule Varsel.Cases do
       define :decline_case_proposal, action: :decline
       define :withdraw_case_proposal, action: :withdraw
       define :supersede_case_proposal, action: :supersede
+    end
+
+    resource GitHubAdvisoryLink do
+      define :list_github_advisory_links, action: :read
+      define :link_github_advisory, action: :link
+      define :record_github_advisory_link, action: :record
+      define :refresh_github_advisory_link, action: :refresh
+      define :unlink_github_advisory, action: :unlink
     end
 
     resource Comment do
