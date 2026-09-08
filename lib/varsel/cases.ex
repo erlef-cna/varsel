@@ -393,6 +393,8 @@ defmodule Varsel.Cases do
       define :link_github_advisory, action: :link
       define :record_github_advisory_link, action: :record
       define :refresh_github_advisory_link, action: :refresh
+      define :pull_github_advisory, action: :pull, args: [:fields]
+      define :push_github_advisory, action: :push, args: [:fields]
       define :unlink_github_advisory, action: :unlink
     end
 

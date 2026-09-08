@@ -573,6 +573,7 @@ a trusted integration partner.
 | Notification emails (immediate + digest) | Plain-text mail | Yes — `text_body`, fixed headers, and **content-free**: each carries only the event kind and a link to the authenticated console, never case or report content, since email offers no encryption we can rely on end to end (`emails.ex`) | — |
 | Case invite email | Plain-text mail to a person with no account | Yes — same shape: the provider handle the invite names and a sign-in link, no case content and no inviter (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
+| Case fields → the linked GitHub advisory (`GitHubAdvisoryLink.push`) | GitHub, as the acting user | JSON body of typed fields and the advisory description rendered from the case's own sections as markdown (`export.ex`). Written with the caller's own GitHub token, so GitHub attributes it to them and decides whether they may (`push.ex`, `advisories.ex`) | — |
 
 Every markdown/HTML render sink sanitizes (ammonia allow-list) before `raw/1`,
 so injected script/handlers are stripped at the source. The app-wide

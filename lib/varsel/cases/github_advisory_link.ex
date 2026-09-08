@@ -24,6 +24,8 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
   alias Varsel.Cases.Case
   alias Varsel.Cases.GitHubAdvisory.State
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.FetchAdvisory
+  alias Varsel.Cases.GitHubAdvisoryLink.Changes.Pull
+  alias Varsel.Cases.GitHubAdvisoryLink.Changes.Push
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.StoreAdvisory
   alias Varsel.Cases.GitHubAdvisoryLink.Checks.CaseEditable
 
@@ -87,6 +89,62 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
       change StoreAdvisory
     end
 
+    update :pull do
+      description """
+      Takes `fields` of the stored advisory over onto the case, through the
+      case's own actions as the caller. A scalar replaces the case's value.
+      A set gains what the case lacks and loses nothing.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :fields, {:array, :atom} do
+        allow_nil? false
+
+        constraints min_length: 1,
+                    items: [one_of: [:title, :cvss_v4, :weaknesses, :credits, :affected]]
+      end
+
+      change Pull
+    end
+
+    update :push do
+      description """
+      Writes `fields` of the case onto the advisory at GitHub, as the caller,
+      and stores the advisory as GitHub then answered. A credit or an affected
+      entry the advisory has and the case does not stays on it. People
+      credited without a linked GitHub account come back as `skipped_credits`.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :fields, {:array, :atom} do
+        allow_nil? false
+
+        constraints min_length: 1,
+                    items: [
+                      one_of: [
+                        :title,
+                        :description,
+                        :cve_id,
+                        :cvss_v4,
+                        :weaknesses,
+                        :credits,
+                        :affected
+                      ]
+                    ]
+      end
+
+      metadata :skipped_credits, {:array, :string} do
+        description "The names of the people credited here whom the advisory cannot state."
+      end
+
+      change Push
+      change StoreAdvisory
+    end
+
     destroy :unlink do
       description "Unlinks the advisory."
       primary? true
@@ -109,7 +167,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
       authorize_if CaseEditable
     end
 
-    policy action(:unlink) do
+    policy action([:unlink, :pull, :push]) do
       authorize_if actor_attribute_equals(:role, :poc)
 
       authorize_if expr(
@@ -118,8 +176,9 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
                    )
     end
 
-    # Content freeze: the link may only change while the parent case is editable.
-    policy action(:unlink) do
+    # Content freeze: the link and the case may only change while the case is
+    # editable.
+    policy action([:unlink, :pull]) do
       authorize_if expr(case.state in [:draft, :review])
     end
 

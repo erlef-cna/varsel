@@ -186,11 +186,29 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
 
   defp credit_type(_type), do: :other
 
+  @doc "The preset the advisory's repository goes through, or nil."
+  @spec preset(GitHubAdvisory.t()) :: Preset.t() | nil
+  def preset(advisory), do: Map.get(@presets, GitHubAdvisory.repo_url(advisory))
+
+  @doc """
+  An application `name` from a preset advisory as the preset spells it.
+  `Preset.channels/2` names the `pkg:otp` channel and its `lib/` subpath after
+  the application in OTP's lowercase spelling. GitHub lists Elixir's
+  applications by module name (`ExUnit`).
+  """
+  @spec application(Preset.t(), String.t()) :: String.t()
+  def application(:elixir, name) do
+    key = name |> String.downcase() |> String.replace("_", "")
+    Enum.find(@elixir_applications, String.downcase(name), &(String.replace(&1, "_", "") == key))
+  end
+
+  def application(_preset, name), do: String.downcase(name)
+
   defp affected(advisory) do
     vulnerabilities = vulnerabilities(advisory)
     repository = GitHubAdvisory.repository(advisory)
 
-    case Map.get(@presets, GitHubAdvisory.repo_url(advisory)) do
+    case preset(advisory) do
       nil -> Enum.map(vulnerabilities, &plain_package(&1, repository))
       preset -> [preset_package(preset, vulnerabilities)]
     end
@@ -211,16 +229,6 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
       vulnerabilities: vulnerabilities
     }
   end
-
-  # `Preset.channels/2` names the `pkg:otp` channel and its `lib/` subpath
-  # after the application in OTP's lowercase spelling. GitHub lists Elixir's
-  # applications by module name (`ExUnit`).
-  defp application(:elixir, name) do
-    key = name |> String.downcase() |> String.replace("_", "")
-    Enum.find(@elixir_applications, String.downcase(name), &(String.replace(&1, "_", "") == key))
-  end
-
-  defp application(_preset, name), do: String.downcase(name)
 
   defp plain_package(%{ecosystem: "erlang", name: name} = vulnerability, repository) do
     plain = plain_package(%{vulnerability | ecosystem: nil}, repository)

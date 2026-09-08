@@ -272,6 +272,49 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
            ]
   end
 
+  test "an application of a preset advisory matches the channel spelled as the preset spells it" do
+    advisory =
+      hex_advisory()
+      |> Map.put(
+        "html_url",
+        "https://github.com/elixir-lang/elixir/security/advisories/GHSA-2cfg-hjmp-qrvw"
+      )
+      |> Map.put("vulnerabilities", [
+        %{
+          "package" => %{"ecosystem" => "elixir", "name" => "ExUnit"},
+          "vulnerable_version_range" => "< 1.18.0",
+          "patched_versions" => "1.18.0"
+        }
+      ])
+
+    packages = [
+      package_with("elixir", [{otp_app("ex_unit"), [github_range("< 1.18.0", ["1.18.0"])]}])
+    ]
+
+    rows = Diff.rows(case_record(%{affected_packages: packages}), advisory)
+
+    assert Enum.map(by_field(rows, :affected), &{&1.package, &1.status}) == [
+             {"elixir/ExUnit", :same}
+           ]
+  end
+
+  test "an otp entry of any other advisory matches the channel by its plain name" do
+    advisory =
+      Map.put(hex_advisory(), "vulnerabilities", [
+        %{
+          "package" => %{"ecosystem" => "otp", "name" => "Inets"},
+          "vulnerable_version_range" => "< 9.7.3",
+          "patched_versions" => "9.7.3"
+        }
+      ])
+
+    packages = [package_with("OTP", [{otp_app("inets"), [github_range("< 9.7.3", ["9.7.3"])]}])]
+
+    rows = Diff.rows(case_record(%{affected_packages: packages}), advisory)
+
+    assert Enum.map(by_field(rows, :affected), &{&1.package, &1.status}) == [{"otp/Inets", :same}]
+  end
+
   test "a channel that derived nothing yet is reported as such, and a package the case lacks as theirs alone" do
     packages = [package_with("acme_lib", [{hex("acme_lib"), []}])]
 

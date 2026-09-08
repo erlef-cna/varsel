@@ -22,11 +22,16 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
     * Affected packages as `vulnerabilities`, one per derived range of each
       channel, spelled as `Varsel.Cases.Derivation.Emit.github/3` cached
       them. A `pkg:hex` channel is an `erlang` package. Every other channel
-      is `other`, named as the channel is.
+      is `other`, named as the channel is. An advisory entry that names a
+      channel with derived ranges (`Varsel.Cases.GitHubAdvisory.Channels`)
+      is replaced by them, in its place. Every other advisory entry stays as
+      it is. A push never drops an entry.
   """
 
   alias Varsel.Cases.Case
   alias Varsel.Cases.CaseCredit.CreditType
+  alias Varsel.Cases.GitHubAdvisory.Channels
+  alias Varsel.Cases.GitHubAdvisory.Import
   alias Varsel.Cases.GitHubAdvisory.People
   alias Varsel.CVE.Advisory
 
@@ -52,7 +57,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
 
   @doc """
   The request fields for `fields` of the case. `advisory` is the advisory as
-  GitHub last returned it, whose credits are kept. nil for a report.
+  GitHub last returned it, whose credits and affected entries are kept. nil
+  for a report.
   """
   @spec body(Case.t(), [field()], map() | nil) :: t()
   def body(case_record, fields, advisory \\ nil) do
@@ -116,8 +122,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
     |> Map.update!(:skipped_credits, &(&1 ++ Enum.map(skipped, fn person -> person.name end)))
   end
 
-  defp put_field(export, :affected, %{affected_packages: packages}, _advisory) do
-    put_body(export, "vulnerabilities", vulnerabilities(packages))
+  defp put_field(export, :affected, case_record, advisory) do
+    put_body(export, "vulnerabilities", vulnerabilities(case_record, advisory))
   end
 
   defp put_body(export, key, value), do: %{export | body: Map.put(export.body, key, value)}
@@ -133,23 +139,57 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
     end
   end
 
-  defp vulnerabilities(packages) do
-    for package <- packages,
-        channel <- package.channels,
-        range <- github_ranges(package, channel) do
+  defp vulnerabilities(case_record, advisory) do
+    channels = Channels.of_case(case_record)
+    preset = advisory && Import.preset(advisory)
+    named = Map.new(advisory_vulnerabilities(advisory), &{&1.position, &1})
+
+    {entries, written} =
+      advisory
+      |> advisory_entries()
+      |> Enum.with_index()
+      |> Enum.flat_map_reduce(MapSet.new(), fn {entry, index}, written ->
+        replace(entry, channel_for(named[index], channels, preset), written)
+      end)
+
+    entries ++
+      for channel <- channels,
+          not MapSet.member?(written, channel.id),
+          entry <- channel_entries(channel),
+          do: entry
+  end
+
+  defp channel_for(nil, _channels, _preset), do: nil
+
+  defp channel_for(vulnerability, channels, preset) do
+    Enum.find(channels, &Channels.matches?(&1, vulnerability, preset))
+  end
+
+  defp replace(_entry, %{github_ranges: [_range | _rest], id: id} = channel, written) do
+    if MapSet.member?(written, id),
+      do: {[], written},
+      else: {channel_entries(channel), MapSet.put(written, id)}
+  end
+
+  defp replace(entry, _channel, written), do: {[entry], written}
+
+  defp advisory_entries(nil), do: []
+  defp advisory_entries(advisory), do: List.wrap(advisory["vulnerabilities"])
+
+  defp advisory_vulnerabilities(nil), do: []
+  defp advisory_vulnerabilities(advisory), do: Import.vulnerabilities(advisory)
+
+  defp channel_entries(channel) do
+    for range <- channel.github_ranges do
       %{
         "package" => %{
           "ecosystem" => ecosystem(channel),
-          "name" => channel.name || package.product
+          "name" => channel.name || channel.product
         },
         "vulnerable_version_range" => range["vulnerable_version_range"],
         "patched_versions" => Enum.join(range["patched_versions"] || [], ", ")
       }
     end
-  end
-
-  defp github_ranges(package, channel) do
-    get_in(package.derivation_cache || %{}, ["channels", channel.id, "github_ranges"]) || []
   end
 
   defp ecosystem(%{purl_type: "hex"}), do: "erlang"
