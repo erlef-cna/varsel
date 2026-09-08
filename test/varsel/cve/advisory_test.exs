@@ -86,6 +86,11 @@ defmodule Varsel.CVE.AdvisoryTest do
              "## Summary\n\nSessions **outlive** logout.\n\n## Workarounds\n\nRotate the signing secret."
   end
 
+  test "heads sections at the given level" do
+    assert Advisory.render(cna(), [:summary], heading_level: 3) ==
+             "### Summary\n\nSessions **outlive** logout."
+  end
+
   test "skips a section the record does not carry and a non-English entry" do
     assert Advisory.render(cna(), [:solutions]) == ""
     assert Advisory.render(%{}, Advisory.keys()) == ""
