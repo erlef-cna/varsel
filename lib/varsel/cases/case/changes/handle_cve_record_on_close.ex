@@ -53,6 +53,7 @@ defmodule Varsel.Cases.Case.Changes.HandleCveRecordOnClose do
       {:ok, %{state: :draft} = record} ->
         changeset
         |> Changeset.force_change_attribute(:cve_record_id, nil)
+        |> Changeset.force_change_attribute(:cve_assigned_at, nil)
         |> Changeset.put_context(:releasing_cve_record, record)
 
       {:ok, _record} ->

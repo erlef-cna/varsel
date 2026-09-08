@@ -30,18 +30,20 @@ defmodule Varsel.Cases.Case.ImportTest do
   end
 
   describe "case_params/1 — scalars" do
-    test "takes the title, discovery and datePublic" do
+    test "takes the title, discovery, dateAssigned and datePublic" do
       params =
         Import.case_params(
           record(%{
             "title" => "Information disclosure in acme_lib",
             "source" => %{"discovery" => "EXTERNAL"},
+            "dateAssigned" => "2026-01-10T08:00:00.000Z",
             "datePublic" => "2026-01-15T09:30:00.000Z"
           })
         )
 
       assert params.title == "Information disclosure in acme_lib"
       assert params.discovery == :external
+      assert params.cve_assigned_at == ~U[2026-01-10 08:00:00Z]
       assert params.date_public == ~U[2026-01-15 09:30:00Z]
     end
 
@@ -56,6 +58,7 @@ defmodule Varsel.Cases.Case.ImportTest do
 
       refute Map.has_key?(params, :discovery)
       refute Map.has_key?(params, :timeline)
+      refute Map.has_key?(params, :cve_assigned_at)
       refute Map.has_key?(params, :date_public)
     end
 

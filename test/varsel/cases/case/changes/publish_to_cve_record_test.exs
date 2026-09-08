@@ -161,7 +161,33 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
 
     case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
     assert case_record.state == :published
-    assert case_record.published_at
+    assert %DateTime{} = case_record.published_at
+    assert case_record.date_public == case_record.published_at
+  end
+
+  test "a date_public set by hand survives the publish", %{
+    poc: poc,
+    case: case_record,
+    cve_id: cve_id
+  } do
+    stub_mitre_accepting(cve_id)
+
+    case_record =
+      Cases.edit_case!(case_record, %{date_public: ~U[2026-01-15 09:30:00Z]}, actor: poc)
+
+    case_record = Cases.request_case_review!(case_record, actor: poc)
+    case_record = Cases.approve_case!(case_record, actor: poc)
+    Cases.publish_case!(case_record, actor: poc)
+
+    AshOban.Test.schedule_and_run_triggers({CveRecord, :publish}, scheduled_actions?: false)
+
+    AshOban.Test.schedule_and_run_triggers({Cases.Case, :mark_published},
+      scheduled_actions?: false
+    )
+
+    case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+    assert case_record.state == :published
+    assert case_record.date_public == ~U[2026-01-15 09:30:00Z]
   end
 
   test "publish blocks on render blockers", %{poc: poc, case: case_record} do

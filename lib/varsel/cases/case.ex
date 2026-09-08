@@ -603,6 +603,11 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
+    attribute :cve_assigned_at, :utc_datetime do
+      description "When the CVE ID was assigned to this case (dateAssigned); omitted when nil."
+      public? true
+    end
+
     attribute :published_at, :utc_datetime do
       description "When the case was first successfully published to MITRE."
       public? true

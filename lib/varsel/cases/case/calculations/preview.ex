@@ -88,6 +88,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       |> Map.put("source", %{
         "discovery" => case_record.discovery |> to_string() |> String.upcase()
       })
+      |> put_present("dateAssigned", format_time(case_record.cve_assigned_at))
       |> put_present("datePublic", format_time(case_record.date_public))
       |> put_timeline(case_record.timeline)
       |> put_metrics(case_record.cvss_v4)

@@ -37,6 +37,7 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecordTest do
         %{
           "title" => "Information disclosure in acme_lib",
           "source" => %{"discovery" => "EXTERNAL"},
+          "dateAssigned" => "2026-01-10T08:00:00.000Z",
           "datePublic" => "2026-01-15T09:30:00.000Z",
           "metrics" => [%{"cvssV4_0" => %{"vectorString" => @vector}}],
           "problemTypes" => [%{"descriptions" => [%{"cweId" => "CWE-200", "type" => "CWE"}]}],
@@ -77,6 +78,7 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecordTest do
 
       assert case_record.title == "Information disclosure in acme_lib"
       assert case_record.discovery == :external
+      assert case_record.cve_assigned_at == ~U[2026-01-10 08:00:00Z]
       assert case_record.date_public == ~U[2026-01-15 09:30:00Z]
       assert case_record.cvss_v4.vector == @vector
       assert case_record.cvss_v4.version == :v4
