@@ -8,11 +8,11 @@ defmodule Varsel.Cases.CaseCreditTest do
   alias Ash.Error.Forbidden
   alias Ash.Error.Invalid
   alias Varsel.Accounts
-  alias Varsel.Accounts.GitHub
   alias Varsel.Cases
   alias Varsel.Cases.CaseCredit
   alias Varsel.Fixtures
   alias Varsel.HexPm
+  alias Varsel.Test.GitHubApi
 
   setup do
     Req.Test.stub(HexPm, fn conn ->
@@ -25,7 +25,7 @@ defmodule Varsel.Cases.CaseCreditTest do
       end
     end)
 
-    Req.Test.stub(GitHub, fn conn ->
+    GitHubApi.stub(fn conn ->
       case conn.request_path |> Path.basename() |> URI.decode() |> String.downcase() do
         "octocat" ->
           Req.Test.json(conn, %{"login" => "octocat", "name" => "The Octocat", "email" => nil})
@@ -182,6 +182,23 @@ defmodule Varsel.Cases.CaseCreditTest do
       assert error.message =~ "nobody is not a GitHub account"
     end
 
+    test "refuses a handle the provider would not answer about", %{poc: poc, case: case_record} do
+      GitHubApi.stub(&Plug.Conn.send_resp(&1, 403, "{}"))
+
+      assert {:error, %Invalid{errors: [error]}} =
+               Cases.add_case_credit(
+                 %{
+                   case_id: case_record.id,
+                   credit_type: :finder,
+                   handles: [%{strategy: :github, username: "octocat"}]
+                 },
+                 actor: poc
+               )
+
+      assert error.field == :handles
+      assert String.ends_with?(error.message, "could not be looked up at GitHub")
+    end
+
     test "still needs a name when the profile lists none", %{poc: poc, case: case_record} do
       assert {:error, %Invalid{errors: [error]}} =
                Cases.add_case_credit(
@@ -226,7 +243,7 @@ defmodule Varsel.Cases.CaseCreditTest do
           actor: poc
         )
 
-      Req.Test.stub(GitHub, fn conn -> Plug.Conn.send_resp(conn, 404, "{}") end)
+      GitHubApi.stub(fn conn -> Plug.Conn.send_resp(conn, 404, "{}") end)
 
       edited = Cases.edit_case_credit!(credit, %{name: "Octo Cat"}, actor: poc)
       assert edited.name == "Octo Cat"

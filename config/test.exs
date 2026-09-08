@@ -66,7 +66,8 @@ config :varsel,
     repo_verify: false,
     repo_verify_origin: false
   },
-  github_api: [plug: {Req.Test, Varsel.Accounts.GitHub}],
+  github_api: [plug: {Req.Test, Varsel.GitHub.Client}],
+  github: [client_id: "Ov23liTestApp", client_secret: "test-secret"],
   hex_api: [plug: {Req.Test, Varsel.HexPm}],
   # hexpm's dev fixture key, which its test config pins under this kid.
   hex_signing_key:

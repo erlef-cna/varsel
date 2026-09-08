@@ -407,14 +407,23 @@ claims:
   vault (`CLOAK_KEY`) is configured for `ash_cloak`-encrypted fields
   (`runtime.exs`). `HEX_SIGNING_KEY` is the private key that signs Varsel's
   own requests to hex.pm and is held by the environment only
-  (`service_token.ex`).
+  (`service_token.ex`). A user's GitHub token is the one their sign-in
+  stored. It carries the `repo` and `read:org` scopes, so it reaches every
+  repository and organization the person can, and it is used only as that
+  person, for advisory reads and writes and for listing an organization's
+  owners and team members (`user_token.ex`, `advisories.ex`,
+  `organizations.ex`).
 
 **What the app does to its host (side-effect inventory):**
 
 - **Opens outbound network connections** — yes: to MITRE (`cveawg`,
   `cwe.mitre.org`, `capec.mitre.org`), to `raw.githubusercontent.com` for the
   OTP versions table, to GitHub and hex.pm as OAuth IdPs and for handle
-  lookups, to `repo.hex.pm` for the package registry, to the SMTP relay,
+  lookups, GitHub's carrying the OAuth app's client credentials, to GitHub
+  for organization owner and team member listings as the acting user,
+  advisory reads, as the acting user or anonymously, and writes as the
+  acting user (`client.ex`), to `repo.hex.pm` for the package registry, to
+  the SMTP relay,
   **to the public https URL an anonymous caller hands `/oauth/authorize` as
   a CIMD `client_id`** (see §6), and — critically — **to the public https
   host a case's `repo_url` names** during derivation (see §6).

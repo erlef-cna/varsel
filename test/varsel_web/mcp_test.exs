@@ -8,8 +8,8 @@ defmodule VarselWeb.McpTest do
   import Varsel.Fixtures
 
   alias AshAuthentication.Oauth2Server.Jwt
-  alias Varsel.Accounts.GitHub
   alias Varsel.CVE.CveRecord
+  alias Varsel.Test.GitHubApi
 
   @year Date.utc_today().year
 
@@ -130,7 +130,7 @@ defmodule VarselWeb.McpTest do
   end
 
   test "grant_case_access replies with the case's membership, not its body", %{conn: conn} do
-    Req.Test.stub(GitHub, fn conn ->
+    GitHubApi.stub(fn conn ->
       Req.Test.json(conn, %{"login" => "octocat", "email" => "octocat@example.com"})
     end)
 

@@ -111,6 +111,10 @@ defmodule Varsel.Accounts.User do
         redirect_uri Varsel.Secrets
         client_secret Varsel.Secrets
         identity_resource UserIdentity
+        # `repo` is what GitHub requires to read any draft or triage advisory,
+        # the user's own repositories included. `read:org` is what listing an
+        # organization's owners and team members requires.
+        authorization_params scope: "read:user user:email repo read:org"
         # A provider is linked to an account from an authenticated session,
         # never by presenting a matching email — not even a verified one, which
         # the strategy would otherwise trust by default. Reaching an existing

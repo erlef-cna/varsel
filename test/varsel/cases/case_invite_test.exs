@@ -7,10 +7,10 @@ defmodule Varsel.Cases.CaseInviteTest do
 
   alias Ash.Error.Forbidden
   alias Ash.Error.Invalid
-  alias Varsel.Accounts.GitHub
   alias Varsel.Cases
   alias Varsel.Fixtures
   alias Varsel.HexPm
+  alias Varsel.Test.GitHubApi
 
   setup do
     Req.Test.stub(HexPm, fn conn ->
@@ -30,7 +30,7 @@ defmodule Varsel.Cases.CaseInviteTest do
       end
     end)
 
-    Req.Test.stub(GitHub, fn conn ->
+    GitHubApi.stub(fn conn ->
       case conn.request_path |> Path.basename() |> URI.decode() |> String.downcase() do
         "octocat" ->
           Req.Test.json(conn, %{"login" => "octocat", "email" => "octocat@example.com"})
