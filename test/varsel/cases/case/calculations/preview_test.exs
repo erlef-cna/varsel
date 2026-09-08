@@ -471,7 +471,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          purl_type: "sid",
+          purl_type: "software-id",
           namespace: "erlang.org",
           name: "otp",
           version_type: :otp

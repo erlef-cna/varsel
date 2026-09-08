@@ -397,7 +397,7 @@ routines to its own subpath automatically, so do not write per-application prefi
 
 `propose_otp_affected_package` and `propose_elixir_affected_package` create one `pkg:otp/<application>`
 channel per listed application. `propose_gleam_affected_package` takes no `applications` and gets
-its `sid` plus OCI channels.
+its `software-id` plus OCI channels.
 
 **When vulnerable code moved between OTP applications** over time, additionally propose
 channel-scoped explicit `version_event`s bounding the former application's channel. The preset
@@ -702,7 +702,7 @@ as `{}` and `tag_suffixes` as `[]` rather than `null`, and include `namespace`, 
 **`purl_type` is any purl type**, not a fixed list — `hex`, `npm`, `oci`, `otp`, `cargo`, `gem`,
 whatever the ecosystem publishes as. The well-known ones fill in their registry URL and version
 type on their own, so leave `version_type` null unless the channel genuinely disagrees with its
-ecosystem (the OTP release channel is `pkg:sid` versioned `otp`, for instance).
+ecosystem (the OTP release channel is `pkg:software-id` versioned `otp`, for instance).
 
 **A service is a `kind: "service"` channel on the same package**, not a purl type and not a
 second affected product: pass the `domain` it answers on (e.g. `hex.pm`) and none of the purl

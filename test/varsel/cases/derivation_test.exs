@@ -310,7 +310,7 @@ defmodule Varsel.Cases.DerivationTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          purl_type: "sid",
+          purl_type: "software-id",
           namespace: "erlang.org",
           name: "otp",
           version_type: :otp
@@ -369,7 +369,7 @@ defmodule Varsel.Cases.DerivationTest do
              }
            ]
 
-    # The sid release channel carries the OTP release versions (bare).
+    # The software-id release channel carries the OTP release versions (bare).
     assert derivation["channels"][release_channel.id]["versions"] == [
              %{
                "version" => "26.0",
@@ -418,7 +418,7 @@ defmodule Varsel.Cases.DerivationTest do
           %{
             case_id: case_record.id,
             affected_package_id: package.id,
-            purl_type: "sid",
+            purl_type: "software-id",
             namespace: "erlang.org",
             name: "otp",
             version_type: :otp
@@ -515,7 +515,7 @@ defmodule Varsel.Cases.DerivationTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          purl_type: "sid",
+          purl_type: "software-id",
           namespace: "erlang.org",
           name: "otp",
           version_type: :otp
@@ -583,7 +583,7 @@ defmodule Varsel.Cases.DerivationTest do
       %{
         case_id: case_record.id,
         affected_package_id: package.id,
-        purl_type: "sid",
+        purl_type: "software-id",
         namespace: "erlang.org",
         name: "otp",
         version_type: :otp
@@ -631,7 +631,7 @@ defmodule Varsel.Cases.DerivationTest do
         %{
           case_id: case_record.id,
           affected_package_id: package.id,
-          purl_type: "sid",
+          purl_type: "software-id",
           namespace: "erlang.org",
           name: "otp",
           version_type: :otp

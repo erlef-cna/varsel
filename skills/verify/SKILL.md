@@ -90,8 +90,8 @@ Detect the type from the first affected entry's `packageURL` and apply the match
 - [ ] First entry `programFiles` are library-root-relative (`src/ssh_sftpd.erl`); second entry `programFiles` are full repo path (`lib/ssh/src/ssh_sftpd.erl`).
 - [ ] Each entry has `programFiles`, `programRoutines`, `modules`.
 
-**Gleam compiler** (`pkg:sid/gleam.run/gleam`):
-- [ ] First: `pkg:sid/gleam.run/gleam`, `versionType: "semver"`. Second: `pkg:github/gleam-lang/gleam`, both `semver` and `git` blocks. Optional third: `pkg:oci/gleam?repository_url=ghcr.io/gleam-lang` with per-image `versionType: "other"` entries.
+**Gleam compiler** (`pkg:software-id/gleam.run/gleam`):
+- [ ] First: `pkg:software-id/gleam.run/gleam`, `versionType: "semver"`. Second: `pkg:github/gleam-lang/gleam`, both `semver` and `git` blocks. Optional third: `pkg:oci/gleam?repository_url=ghcr.io/gleam-lang` with per-image `versionType: "other"` entries.
 - [ ] Each entry has `programFiles`, `programRoutines`, `modules`.
 
 **Hex package** (`pkg:hex/<name>`):

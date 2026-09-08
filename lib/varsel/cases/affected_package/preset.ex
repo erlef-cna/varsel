@@ -12,7 +12,7 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
   records spell them (vendor/product/repo/CPE) and expands the user-supplied
   facts into child rows:
 
-  * `:otp` — the `pkg:sid/erlang.org/otp` release channel (OTP release
+  * `:otp` — the `pkg:software-id/erlang.org/otp` release channel (OTP release
     versions, whole distribution) plus one `pkg:otp/<application>` channel per
     affected OTP application, subpath `lib/<application>` (`erts` for erts);
     the per-application boundaries resolve to per-application versions through
@@ -21,7 +21,7 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
     application (elixir, eex, ex_unit, iex, logger, mix), subpath
     `lib/<application>`; Elixir's applications version with Elixir itself,
     so ranges derive as semver from the elixir-lang/elixir tags.
-  * `:gleam` — the `pkg:sid/gleam.run/gleam` tool channel plus the ghcr.io
+  * `:gleam` — the `pkg:software-id/gleam.run/gleam` tool channel plus the ghcr.io
     OCI image channel with its tag flavors.
 
   Every preset additionally gets the source repository's own channel, from the
@@ -113,7 +113,7 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
   @spec channels(t(), [String.t()] | nil) :: [map()]
   def channels(:gleam, _applications) do
     [
-      %{purl_type: "sid", namespace: "gleam.run", name: "gleam", position: 0},
+      %{purl_type: "software-id", namespace: "gleam.run", name: "gleam", position: 0},
       %{
         purl_type: "oci",
         name: "gleam",
@@ -126,15 +126,16 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
   end
 
   # OTP releases the whole distribution under its own release versions, so the
-  # release channel leads the per-application ones. It is a `sid` channel (no
-  # registry publishes the OTP distribution) that nonetheless versions in OTP
-  # releases, hence the explicit version_type: sid itself implies nothing.
+  # release channel leads the per-application ones. It is a `software-id`
+  # channel (no registry publishes the OTP distribution) that nonetheless
+  # versions in OTP releases, hence the explicit version_type: software-id
+  # itself implies nothing.
   # Elixir's applications version with Elixir itself, so their per-application
   # channels already carry the release version — no separate release channel
   # there, and their `otp` channels version in semver rather than OTP releases.
   def channels(:otp, applications) do
     release = %{
-      purl_type: "sid",
+      purl_type: "software-id",
       namespace: "erlang.org",
       name: "otp",
       version_type: :otp,

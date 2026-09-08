@@ -234,7 +234,8 @@ defmodule Varsel.Cases.Description.AffectedSummary do
   ## -------------------------------------------------------------------- otp
 
   defp otp_entry?(%{purl: purl}) when is_binary(purl) do
-    String.starts_with?(purl, "pkg:sid/erlang.org/otp") or String.starts_with?(purl, "pkg:otp/")
+    String.starts_with?(purl, "pkg:software-id/erlang.org/otp") or
+      String.starts_with?(purl, "pkg:otp/")
   end
 
   defp otp_entry?(_entry), do: false
@@ -245,7 +246,7 @@ defmodule Varsel.Cases.Description.AffectedSummary do
   defp otp_clause([], _style), do: nil
 
   defp otp_clause(entries, style) do
-    {release, apps} = Enum.split_with(entries, &(&1.purl =~ "pkg:sid/erlang.org/otp"))
+    {release, apps} = Enum.split_with(entries, &(&1.purl =~ "pkg:software-id/erlang.org/otp"))
 
     case {release, apps} do
       {[], apps} ->

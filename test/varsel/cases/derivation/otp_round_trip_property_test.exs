@@ -22,7 +22,7 @@ defmodule Varsel.Cases.Derivation.OtpRoundTripPropertyTest do
   alias Varsel.CVE.VersionResolution
 
   @channel %PackageChannel{
-    purl_type: "sid",
+    purl_type: "software-id",
     namespace: "erlang.org",
     name: "otp",
     version_type: :otp,

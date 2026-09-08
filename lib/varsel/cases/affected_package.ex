@@ -145,7 +145,7 @@ defmodule Varsel.Cases.AffectedPackage do
     create :add_gleam do
       description """
       Adds Gleam as an affected product: prefills vendor/product/repo/CPE as
-      the published records spell them, creates the pkg:sid/gleam.run/gleam
+      the published records spell them, creates the pkg:software-id/gleam.run/gleam
       channel plus the ghcr.io OCI image channel (with its tag flavors) and
       version boundary facts from the given commits.
       """
