@@ -52,6 +52,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       [
         :cve_id,
         references: all_fields(CaseReference),
+        github_advisory_link: [:html_url, :title, :ghsa_id],
         credits: all_fields(CaseCredit),
         weaknesses: all_fields(CaseWeakness) ++ [weakness: [:name]],
         impacts: all_fields(CaseImpact) ++ [attack_pattern: [:name]],
@@ -308,9 +309,11 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   # Stored references (ordered) with the derived self-links spliced in after
   # the leading vendor advisory and derived commit links appended last — the
   # published convention: advisory, cna.erlef.org, osv.dev, version scheme,
-  # stored patches/extras, introducing commits, fix commits. Stored rows win
-  # over derived on URL conflict. With no stored `vendor-advisory`, our own
-  # page becomes the advisory of record and is tagged `third-party-advisory`.
+  # stored patches/extras, introducing commits, fix commits. The leading
+  # advisory is the linked GitHub advisory when the case has one, else the
+  # first stored row. Stored rows win over derived on URL conflict. With no
+  # `vendor-advisory` among them, our own page becomes the advisory of record
+  # and is tagged `third-party-advisory`.
   defp references(case_record, affected) do
     stored =
       case_record.references
@@ -319,13 +322,28 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
         render_reference(reference.url, reference.tags, reference.name)
       end)
 
-    {advisory, rest} = Enum.split(stored, 1)
+    {advisory, rest} = split_advisory(stored, linked_advisory(case_record))
 
     derived =
-      self_links(case_record.cve_id, stored) ++ version_scheme_links(affected)
+      self_links(case_record.cve_id, advisory ++ rest) ++ version_scheme_links(affected)
 
     Enum.uniq_by(advisory ++ derived ++ rest ++ commit_links(case_record), & &1["url"])
   end
+
+  defp split_advisory(stored, nil), do: Enum.split(stored, 1)
+
+  defp split_advisory(stored, linked) do
+    case Enum.split_with(stored, &(&1["url"] == linked["url"])) do
+      {[], rest} -> {[linked], rest}
+      {[stored_advisory | _repeats], rest} -> {[stored_advisory], rest}
+    end
+  end
+
+  defp linked_advisory(%{github_advisory_link: %{html_url: url} = link}) when not is_nil(url) do
+    render_reference(url, ["vendor-advisory", "related"], link.title || link.ghsa_id)
+  end
+
+  defp linked_advisory(_case_record), do: nil
 
   # A record naming OTP versions cites the scheme that orders them: they are
   # only partially ordered, so a reader comparing `27.3.4.15` against `28.0`

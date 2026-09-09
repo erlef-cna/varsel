@@ -51,6 +51,7 @@ defmodule VarselWeb.CaseLifecycle do
   def tabs(case_id) do
     [
       %{id: :workspace, label: "Workspace", navigate: ~p"/cases/#{case_id}"},
+      %{id: :github, label: "GitHub", navigate: ~p"/cases/#{case_id}/github"},
       %{id: :cve, label: "CVE", navigate: ~p"/cases/#{case_id}/cve"},
       %{id: :osv, label: "OSV", navigate: ~p"/cases/#{case_id}/osv"},
       %{id: :advisory, label: "Advisory", navigate: ~p"/cases/#{case_id}/advisory"},

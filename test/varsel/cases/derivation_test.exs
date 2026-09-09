@@ -113,6 +113,15 @@ defmodule Varsel.Cases.DerivationTest do
     assert derivation["cpe_matches"] == [
              %{"versionStartIncluding" => "0.1.0", "versionEndExcluding" => "2.10.0"}
            ]
+
+    assert derivation["channels"][channels[:hex].id]["github_ranges"] == [
+             %{
+               "vulnerable_version_range" => ">= 0.1.0, < 2.10.0",
+               "patched_versions" => ["2.10.0"]
+             }
+           ]
+
+    assert derivation["channels"][channels[:git].id]["github_ranges"] == []
   end
 
   test "multi-branch fixes cut two bounded ranges", %{poc: poc, case: case_record} do
@@ -173,6 +182,14 @@ defmodule Varsel.Cases.DerivationTest do
     assert derivation["cpe_matches"] == [
              %{"versionStartIncluding" => "1.0.0", "versionEndExcluding" => "1.5.3"},
              %{"versionStartIncluding" => "2.0.0", "versionEndExcluding" => "2.1.0"}
+           ]
+
+    assert derivation["channels"][channels[:hex].id]["github_ranges"] == [
+             %{
+               "vulnerable_version_range" => ">= 1.0.0, < 1.5.3",
+               "patched_versions" => ["1.5.3"]
+             },
+             %{"vulnerable_version_range" => ">= 2.0.0, < 2.1.0", "patched_versions" => ["2.1.0"]}
            ]
   end
 
@@ -487,6 +504,9 @@ defmodule Varsel.Cases.DerivationTest do
                    "status" => "affected",
                    "versionType" => "otp"
                  }
+               ],
+               "github_ranges" => [
+                 %{"vulnerable_version_range" => "< 9.1.0.1", "patched_versions" => ["9.1.0.1"]}
                ],
                "default_status" => "unaffected",
                "pending" => [],

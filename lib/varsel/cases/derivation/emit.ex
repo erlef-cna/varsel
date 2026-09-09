@@ -39,6 +39,7 @@ defmodule Varsel.Cases.Derivation.Emit do
   """
 
   alias Varsel.Cases.Derivation.OtpVersionsTable
+  alias Varsel.Cases.GitHubAdvisory.Ranges
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.PackageChannel.PurlType
   alias Varsel.Cases.Reachability
@@ -101,49 +102,121 @@ defmodule Varsel.Cases.Derivation.Emit do
   """
   @spec cpe_matches([range()], keyword()) :: [map()]
   def cpe_matches(ranges, opts \\ []) do
-    case Keyword.get(opts, :default_status, :unaffected) do
-      :affected -> opts |> Keyword.get(:fixed_ranges, []) |> gaps_between()
-      :unknown -> affected_matches(ranges, true)
-      _unaffected -> affected_matches(ranges, false)
+    for span <- affected_spans(ranges, opts) do
+      %{"versionStartIncluding" => bare(span.from), "versionEndExcluding" => bare(span.until)}
     end
   end
 
-  defp affected_matches(ranges, drop_lowest_bound?) do
-    # Reachability emits ranges in ascending release order, so the first is the
-    # lowest, and the only one an unclaimed span borders.
-    for {range, index} <- Enum.with_index(ranges) do
-      # cpe has no "*" sentinel: an open range simply has no upper bound.
-      upper = if range.until == :unbounded, do: nil, else: bare(range.until)
-      lower = if drop_lowest_bound? and index == 0, do: nil, else: bare(range.from)
+  @doc """
+  GitHub's `vulnerabilities[]` ranges for a channel: the spans `cpe_matches/2`
+  states as possibly affected, each as one `vulnerable_version_range` with the
+  versions closing it as `patched_versions`, in the channel's own vocabulary.
 
-      %{"versionStartIncluding" => lower, "versionEndExcluding" => upper}
+  GitHub has no default status: a version outside every range reads as safe,
+  so the ranges take the same worst reading as the CPE matches. A scheme
+  without a total order (OTP) cannot bound a span between maintenance lines,
+  so several spans collapse into one open range from the lowest bound, with
+  every fix listed as patched. This is how GitHub writes erlang/otp's own
+  advisories. Commit ranges have no GitHub form. A bound that does not
+  translate to the channel's application leaves no ranges, and the
+  `versions[]` block reports the failure.
+  """
+  @spec github(PackageChannel.t(), [range()], keyword()) :: [map()]
+  def github(channel, ranges, opts) do
+    version_type = version_type(channel)
+
+    with false <- version_type == :git,
+         {:ok, spans} <-
+           map_all(affected_spans(ranges, opts), &translate_span(channel, version_type, &1)) do
+      github_ranges(version_type, spans)
+    else
+      _git_or_untranslatable -> []
+    end
+  end
+
+  @doc """
+  GitHub's ranges for channel-scoped `versions[]` entries, whose bounds were
+  asserted by hand and need no translation. Commit ranges have no GitHub
+  form.
+  """
+  @spec github_from_versions([map()]) :: [map()]
+  def github_from_versions(versions) do
+    for %{"version" => from, "lessThan" => until} = entry <- versions,
+        entry["versionType"] != "git" do
+      github_range(%{from: from, until: if(until == "*", do: nil, else: until)})
+    end
+  end
+
+  defp github_ranges(version_type, spans) do
+    if VersionComparator.total_order?(version_type) or length(spans) < 2 do
+      Enum.map(spans, &github_range/1)
+    else
+      [
+        %{
+          "vulnerable_version_range" => Ranges.format(hd(spans).from, nil),
+          "patched_versions" => patched(spans)
+        }
+      ]
+    end
+  end
+
+  defp github_range(%{until: until} = span) do
+    %{
+      "vulnerable_version_range" => Ranges.format(span.from, until),
+      "patched_versions" => patched([span])
+    }
+  end
+
+  defp patched(spans), do: for(%{until: until} <- spans, is_binary(until), do: until)
+
+  defp translate_span(channel, version_type, %{from: from, until: until}) do
+    with {:ok, from} <- translate_bound(channel, version_type, from, &lower_bound/3),
+         {:ok, until} <- translate_bound(channel, version_type, until, &upper_bound/3) do
+      {:ok, %{from: from, until: until}}
+    end
+  end
+
+  defp translate_bound(_channel, _version_type, nil, _bound), do: {:ok, nil}
+
+  defp translate_bound(channel, version_type, tag, bound), do: bound.(channel, version_type, bare(tag))
+
+  defp affected_spans(ranges, opts) do
+    case Keyword.get(opts, :default_status, :unaffected) do
+      :affected -> opts |> Keyword.get(:fixed_ranges, []) |> gaps_between()
+      :unknown -> spans(ranges, true)
+      _unaffected -> spans(ranges, false)
+    end
+  end
+
+  # Reachability emits ranges in ascending release order, so the first is the
+  # lowest, and the only one an unclaimed span borders.
+  defp spans(ranges, drop_lowest_bound?) do
+    for {range, index} <- Enum.with_index(ranges) do
+      lower = if drop_lowest_bound? and index == 0, do: nil, else: range.from
+
+      %{from: lower, until: open_to_nil(range.until)}
     end
   end
 
   defp gaps_between(fixed_ranges) do
     {gaps, last_end} =
-      Enum.reduce(fixed_ranges, {[], nil}, fn range, {matches, previous_end} ->
-        match = %{
-          "versionStartIncluding" => previous_end,
-          "versionEndExcluding" => bare(range.from)
-        }
-
-        {[match | matches], upper_of(range)}
+      Enum.reduce(fixed_ranges, {[], nil}, fn range, {gaps, previous_end} ->
+        {[%{from: previous_end, until: range.from} | gaps], open_to_nil(range.until)}
       end)
 
     Enum.reverse(trailing_gap(last_end, fixed_ranges) ++ gaps)
   end
 
   # Nothing listed as safe, so every version is possibly affected.
-  defp trailing_gap(_last_end, []), do: [%{"versionStartIncluding" => nil, "versionEndExcluding" => nil}]
+  defp trailing_gap(_last_end, []), do: [%{from: nil, until: nil}]
 
   # A fix carried to the newest release leaves nothing above it.
   defp trailing_gap(nil, _fixed_ranges), do: []
 
-  defp trailing_gap(last_end, _fixed_ranges), do: [%{"versionStartIncluding" => last_end, "versionEndExcluding" => nil}]
+  defp trailing_gap(last_end, _fixed_ranges), do: [%{from: last_end, until: nil}]
 
-  defp upper_of(%{until: :unbounded}), do: nil
-  defp upper_of(%{until: until}), do: bare(until)
+  defp open_to_nil(:unbounded), do: nil
+  defp open_to_nil(bound), do: bound
 
   ## ------------------------------------------------------------ decoration
 
@@ -351,6 +424,7 @@ defmodule Varsel.Cases.Derivation.Emit do
     }
   end
 
+  defp bare(nil), do: nil
   defp bare(:unbounded), do: :unbounded
   defp bare("OTP-" <> rest), do: rest
   defp bare("OTP_" <> rest), do: rest

@@ -6,12 +6,14 @@ defmodule Varsel.Accounts.GitHub do
   @moduledoc """
   Thin client for checking that a GitHub account exists.
 
-  Authenticates with the login app's client credentials from
-  `config :varsel, :github` when they are set. GitHub shows a profile's
-  public email address to authenticated requests only, so without them the
-  lookup confirms the login and never returns an address. Request options
-  (a `Req.Test` plug in tests) come from `config :varsel, :github_api`.
+  Asks with the OAuth app's client credentials from `config :varsel, :github`
+  when they are set: GitHub shows a profile's public email address to
+  authenticated requests only, and grants them the authenticated rate limit.
+  Without them the lookup confirms the login and never returns an address.
+  Requests go through `Varsel.GitHub.Client`.
   """
+
+  alias Varsel.GitHub.Client
 
   @typedoc """
   A GitHub account: its login as GitHub spells it, and the name and public
@@ -20,34 +22,21 @@ defmodule Varsel.Accounts.GitHub do
   @type user :: %{login: String.t(), name: String.t() | nil, email: String.t() | nil}
 
   @doc "Whether a GitHub account with this login exists, with its canonical spelling, name and public address."
-  @spec user(String.t()) :: {:ok, user()} | :not_found
+  @spec user(String.t()) :: {:ok, user()} | :not_found | {:error, term()}
   def user(login) when is_binary(login) do
-    case Req.get!(build_req(), url: "/users/#{URI.encode(login)}") do
-      %Req.Response{status: 200, body: %{"login" => canonical} = body} ->
+    case Req.get(Client.api(auth()), url: "/users/:login", path_params: [login: login]) do
+      {:ok, %Req.Response{status: 200, body: %{"login" => canonical} = body}} ->
         {:ok, %{login: canonical, name: blank_to_nil(body["name"]), email: body["email"]}}
 
-      %Req.Response{status: 404} ->
+      {:ok, %Req.Response{status: 404}} ->
         :not_found
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:http, status, body}}
+
+      {:error, exception} ->
+        {:error, exception}
     end
-  end
-
-  defp blank_to_nil(name) when is_binary(name) do
-    case String.trim(name) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp blank_to_nil(_name), do: nil
-
-  defp build_req do
-    Req.new(
-      [
-        base_url: "https://api.github.com",
-        retry: false,
-        headers: [{"accept", "application/vnd.github+json"}]
-      ] ++ auth() ++ Application.get_env(:varsel, :github_api, [])
-    )
   end
 
   defp auth do
@@ -61,4 +50,13 @@ defmodule Varsel.Accounts.GitHub do
         []
     end
   end
+
+  defp blank_to_nil(name) when is_binary(name) do
+    case String.trim(name) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_to_nil(_name), do: nil
 end

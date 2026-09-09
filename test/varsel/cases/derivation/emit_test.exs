@@ -454,6 +454,216 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
   end
 
+  describe "github/3" do
+    test "one range per affected span, its upper bound the patched version" do
+      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
+      ranges = [range("v1.0.0", "v1.5.3"), range("v1.6.0", "v2.1.0")]
+
+      assert Emit.github(channel, ranges, []) == [
+               %{
+                 "vulnerable_version_range" => ">= 1.0.0, < 1.5.3",
+                 "patched_versions" => ["1.5.3"]
+               },
+               %{
+                 "vulnerable_version_range" => ">= 1.6.0, < 2.1.0",
+                 "patched_versions" => ["2.1.0"]
+               }
+             ]
+    end
+
+    test "an unbounded span has no patched version" do
+      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
+
+      assert Emit.github(channel, [range("v1.0.0", :unbounded)], []) == [
+               %{"vulnerable_version_range" => ">= 1.0.0", "patched_versions" => []}
+             ]
+    end
+
+    test "an unknown default opens the lowest span below" do
+      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
+      ranges = [range("v1.0.0", "v1.5.3"), range("v1.6.0", "v2.1.0")]
+
+      assert Emit.github(channel, ranges, default_status: :unknown) == [
+               %{"vulnerable_version_range" => "< 1.5.3", "patched_versions" => ["1.5.3"]},
+               %{
+                 "vulnerable_version_range" => ">= 1.6.0, < 2.1.0",
+                 "patched_versions" => ["2.1.0"]
+               }
+             ]
+    end
+
+    test "an affected default states the gaps between the fix-carrying spans" do
+      channel = %PackageChannel{purl_type: "hex", name: "acme", tag_suffixes: []}
+
+      opts = [
+        default_status: :affected,
+        fixed_ranges: [%{from: "v1.2.0", until: "v2.0.0"}, %{from: "v3.0.0", until: :unbounded}]
+      ]
+
+      assert Emit.github(channel, [], opts) == [
+               %{"vulnerable_version_range" => "< 1.2.0", "patched_versions" => ["1.2.0"]},
+               %{
+                 "vulnerable_version_range" => ">= 2.0.0, < 3.0.0",
+                 "patched_versions" => ["3.0.0"]
+               }
+             ]
+
+      assert Emit.github(channel, [], default_status: :affected, fixed_ranges: []) == [
+               %{"vulnerable_version_range" => ">= 0", "patched_versions" => []}
+             ]
+    end
+
+    test "tag decoration does not apply" do
+      channel = %PackageChannel{
+        purl_type: "oci",
+        name: "gleam",
+        version_type: :semver,
+        tag_prefix: "v",
+        tag_suffixes: ~w(erlang node)
+      }
+
+      assert Emit.github(channel, [range("v1.0.0", "v1.1.0")], []) == [
+               %{
+                 "vulnerable_version_range" => ">= 1.0.0, < 1.1.0",
+                 "patched_versions" => ["1.1.0"]
+               }
+             ]
+    end
+
+    test "several OTP maintenance lines collapse into one open range listing every fix" do
+      channel = %PackageChannel{
+        purl_type: "software-id",
+        namespace: "erlang.org",
+        name: "otp",
+        version_type: :otp
+      }
+
+      ranges = [range("OTP-26.0", "OTP-26.2.5.15"), range("OTP-27.0", "OTP-27.3.4.3")]
+
+      assert Emit.github(channel, ranges, []) == [
+               %{
+                 "vulnerable_version_range" => ">= 26.0",
+                 "patched_versions" => ["26.2.5.15", "27.3.4.3"]
+               }
+             ]
+
+      assert Emit.github(channel, ranges, default_status: :unknown) == [
+               %{
+                 "vulnerable_version_range" => ">= 0",
+                 "patched_versions" => ["26.2.5.15", "27.3.4.3"]
+               }
+             ]
+    end
+
+    test "a single OTP line stays bounded" do
+      channel = %PackageChannel{
+        purl_type: "software-id",
+        namespace: "erlang.org",
+        name: "otp",
+        version_type: :otp
+      }
+
+      assert Emit.github(channel, [range("OTP-26.0", "OTP-26.2.5.15")], []) == [
+               %{
+                 "vulnerable_version_range" => ">= 26.0, < 26.2.5.15",
+                 "patched_versions" => ["26.2.5.15"]
+               }
+             ]
+    end
+
+    test "commit ranges have no GitHub form" do
+      channel = %PackageChannel{purl_type: "github", namespace: "acme", name: "acme"}
+
+      assert Emit.github(channel, [range("v1.0.0", "v1.5.3")], intro_shas: ["a"], fix_shas: ["b"]) ==
+               []
+    end
+  end
+
+  describe "github/3 otp app translation" do
+    setup do
+      Req.Test.stub(OtpVersionsTable, fn conn ->
+        Plug.Conn.send_resp(conn, 200, """
+        OTP-27.3.4.3 : ssh-5.2.3.4 stdlib-6.2.2.1 tftp-1.2.1 :
+        OTP-27.0 : ssh-5.2 stdlib-6.0 tftp-1.2 :
+        OTP-26.2.5.15 : ssh-5.1.4.12 stdlib-5.2.3.4 :
+        OTP-26.0 : ssh-5.0 stdlib-5.0 :
+        """)
+      end)
+
+      on_exit(&OtpVersionsTable.reset/0)
+    end
+
+    test "speaks the application's own versions" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "ssh",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      ranges = [range("OTP-26.0", "OTP-26.2.5.15"), range("OTP-27.0", "OTP-27.3.4.3")]
+
+      assert Emit.github(channel, ranges, []) == [
+               %{
+                 "vulnerable_version_range" => ">= 5.0",
+                 "patched_versions" => ["5.1.4.12", "5.2.3.4"]
+               }
+             ]
+    end
+
+    test "a bound the application cannot express leaves no ranges" do
+      channel = %PackageChannel{
+        purl_type: "otp",
+        name: "tftp",
+        version_type: :otp,
+        tag_suffixes: []
+      }
+
+      assert Emit.github(channel, [range("OTP-26.0", "OTP-26.2.5.15")], []) == []
+    end
+  end
+
+  test "github_from_versions/1 spells hand-asserted bounds" do
+    versions = [
+      %{
+        "version" => "2024-01-01",
+        "lessThan" => "2024-02-01",
+        "status" => "affected",
+        "versionType" => "date"
+      },
+      %{"version" => "1.0", "lessThan" => "*", "status" => "affected", "versionType" => "semver"}
+    ]
+
+    assert Emit.github_from_versions(versions) == [
+             %{
+               "vulnerable_version_range" => ">= 2024-01-01, < 2024-02-01",
+               "patched_versions" => ["2024-02-01"]
+             },
+             %{"vulnerable_version_range" => ">= 1.0", "patched_versions" => []}
+           ]
+  end
+
+  test "github_from_versions/1 leaves commit bounds out" do
+    versions = [
+      %{
+        "version" => "0123456789abcdef0123456789abcdef01234567",
+        "lessThan" => "fedcba9876543210fedcba9876543210fedcba98",
+        "status" => "affected",
+        "versionType" => "git"
+      },
+      %{
+        "version" => "1.0",
+        "lessThan" => "1.1",
+        "status" => "affected",
+        "versionType" => "semver"
+      }
+    ]
+
+    assert Emit.github_from_versions(versions) == [
+             %{"vulnerable_version_range" => ">= 1.0, < 1.1", "patched_versions" => ["1.1"]}
+           ]
+  end
+
   describe "OTP status-change form" do
     defp otp_channel do
       %PackageChannel{

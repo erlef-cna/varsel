@@ -49,12 +49,15 @@ defmodule Varsel.CVE.Advisory do
   @doc """
   The advisory markdown for the given sections of a CNA container. Sections
   render in the order of `sections/0` whatever order they are given in.
+  `heading_level:` is the heading rank of a section, 2 unless given.
   """
-  @spec render(map(), [section()]) :: String.t()
-  def render(cna, included) when is_map(cna) and is_list(included) do
+  @spec render(map(), [section()], heading_level: 1..6) :: String.t()
+  def render(cna, included, opts \\ []) when is_map(cna) and is_list(included) do
+    marks = String.duplicate("#", Keyword.get(opts, :heading_level, 2))
+
     for_result =
       for {key, heading} <- @sections, key in included, text = text(cna, key), text != "" do
-        "## #{heading}\n\n#{text}"
+        "#{marks} #{heading}\n\n#{text}"
       end
 
     Enum.join(for_result, "\n\n")
