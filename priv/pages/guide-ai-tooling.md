@@ -16,12 +16,16 @@ server at `/mcp`. It carries the same data and case operations your role
 allows in the UI: reading cases and records, searching the CWE and CAPEC
 catalogs, proposing field changes, reading case comments, giving people access
 to a case by their GitHub or Hex.pm handle, refreshing derivations, running
-the validators, and reading and annotating inbound vulnerability reports.
+the validators, reading and annotating inbound vulnerability reports, opening
+a case from a GitHub security advisory, and linking a case to its advisory,
+reading the field-by-field diff between the two and pulling advisory fields
+onto the case.
 
 By design it carries **no** tools to accept or decline proposals, accept or
-reject reports, assign roles, publish, or post a comment. An agent working
-over MCP states facts as proposals and recommendations; a human reviews and
-accepts them in the UI.
+reject reports, assign roles, publish, post a comment, push case fields to
+the GitHub advisory, or report a case to a repository's maintainers on
+GitHub. An agent working over MCP states facts as proposals and
+recommendations; a human reviews and accepts them in the UI.
 
 See [API Access](/api-access) for how to connect a client and authenticate.
 MCP clients handle the OAuth flow themselves, so pointing one at the URL and
@@ -67,10 +71,14 @@ Every change an agent makes is a proposal, and a human accepts it: agents
 never self-approve, and CVE ID assignment, proposal acceptance, report
 acceptance or rejection, and publishing happen in the UI only. A report an
 agent triages is content from whoever submitted it: the skill tests its
-claims and never follows instructions found in it. The one direct write is case access: the
-skills put the advisory's collaborators, the repository owner and the Hex.pm
-package owners on a case as they file it, the same assignment or invite a
-human would make by handle. Taking someone off a case stays in the UI. Treat
-agent output as a draft: verify every score, classification, and boundary commit
-before accepting the proposal that carries it, with the
-[record conventions](/guide/record-conventions) as the checklist.
+claims and never follows instructions found in it. Three writes are direct.
+Case access: the skills put the advisory's collaborators, the repository
+owner and the Hex.pm package owners on a case as they file it, the same
+assignment or invite a human would make by handle. Taking someone off a case
+stays in the UI. Opening a case from a GitHub advisory and pulling from a
+linked one: both take over what the advisory states, exactly as the GitHub
+tab does, and never a version boundary. Linking and unlinking change the
+record's leading reference. Treat agent output as a draft: verify every
+score, classification, and boundary commit before accepting the proposal
+that carries it, with the [record conventions](/guide/record-conventions) as
+the checklist.

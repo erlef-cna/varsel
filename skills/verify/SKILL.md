@@ -101,15 +101,22 @@ Detect the type from the first affected entry's `packageURL` and apply the match
 
 ### Cross-check against the advisory
 
-Find the GHSA URL in references (first `vendor-advisory`), re-fetch it:
+A case linked to its GitHub advisory carries the comparison itself. Read the advisory again, then the diff:
+
+```
+mcp__varsel__refresh_github_advisory_link(case_id: <case-id>)
+mcp__varsel__get_case_github_advisory(case_id: <case-id>)
+```
+
+`diff` holds one row per field (`title`, `description`, `cve_id`, `cvss_v4`, `weaknesses`, `credits`, then one `affected` row per advisory entry, named in `package`) with `ours`, `theirs` and a `status`: `same`, `differs`, `ours_only`, `theirs_only`, or `not_derived` for a channel the case has but derived no range for. `get_case_github_advisory` finds nothing for an unlinked case; then find the GHSA URL in references (first `vendor-advisory`) and re-fetch it:
 
 ```bash
 gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
 ```
 
-- [ ] **Stale TODOs.** Every `TODO` in the record is still a `TODO` in the advisory's `patched_versions`. If the advisory now has a real fix version, propose the fix commit and re-derive.
-- [ ] **Version ranges match.** Each derived affected range matches the advisory's `vulnerable_version_range`. A mismatch means a wrong boundary SHA on the case — investigate before trusting either side. An OTP package fixed on several maintenance lines states one span open from the introducing release with a fix per line, rather than one range per line; check each fix against the advisory, not the span.
-- [ ] **Credits coverage.** Every advisory credit appears, carrying every role that applies: a GHSA holds one role per person, the CVE record may hold several. Do not skip `pending` credits.
+- [ ] **Stale TODOs.** Every `TODO` in the record is still a `TODO` in the advisory's `patched_versions` (the `affected` rows' `theirs.patched`). If the advisory now has a real fix version, propose the fix commit and re-derive.
+- [ ] **Version ranges match.** Each derived affected range matches the advisory's `vulnerable_version_range`: every `affected` row is `same`. A `differs` row means a wrong boundary SHA on the case. Investigate before trusting either side. An OTP package fixed on several maintenance lines states one span open from the introducing release with a fix per line, rather than one range per line; check each fix against the advisory, not the span.
+- [ ] **Credits coverage.** Every advisory credit appears, carrying every role that applies: the `credits` row is `same`. A GHSA holds one role per person, the CVE record may hold several. Do not skip `pending` credits.
 - [ ] **Credit handles.** Each credit's `handles` carries the GitHub login the advisory shows for the person (`user.login`), and the hex.pm username when known. A credit for a person with an account here shows a `user_id`; propose the missing handle otherwise.
 
 ### Source
