@@ -4,11 +4,13 @@
 
 defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.FetchAdvisory do
   @moduledoc """
-  Reads the advisory a link names before the transaction, as the actor, and
-  leaves it in the changeset context for `StoreAdvisory`.
+  Reads the advisory a link names, as the actor, and leaves it in the
+  changeset context for `StoreAdvisory`.
 
   A link being created names it by the `advisory_url` argument. An existing
-  link names it by the repository and GHSA id it stored.
+  link names it by the repository and GHSA id it stored. The read runs inside
+  the transaction: a create's filter policies decide against the written row,
+  which Ash allows only for an action without transaction hooks.
   """
 
   use Ash.Resource.Change
@@ -18,7 +20,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.FetchAdvisory do
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
-    Changeset.before_transaction(changeset, &fetch(&1, context.actor))
+    Changeset.before_action(changeset, &fetch(&1, context.actor))
   end
 
   defp fetch(%{action_type: :create} = changeset, actor) do

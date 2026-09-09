@@ -704,12 +704,12 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
     end
 
     test "a supporter off the case sees and does nothing", %{poc: poc, case: case_record} do
-      stub_github_unreachable()
+      GitHubApi.stub_advisory(hex_advisory())
       stranger = Fixtures.register_user("link_stranger", :supporter)
 
       assert {:error, %Forbidden{}} = link(case_record, stranger)
+      assert Ash.read!(GitHubAdvisoryLink, authorize?: false) == []
 
-      GitHubApi.stub_advisory(hex_advisory())
       link = link!(case_record, poc)
 
       assert {:error, %Forbidden{}} = Cases.refresh_github_advisory_link(link, actor: stranger)
@@ -734,9 +734,10 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
     test "an approved case takes no link", %{poc: poc} do
       other = Fixtures.open_case(poc, %{title: "Approved case"})
       approve!(other, poc)
-      stub_github_unreachable()
+      GitHubApi.stub_advisory(hex_advisory())
 
       assert {:error, %Forbidden{}} = link(other, poc)
+      assert Ash.read!(GitHubAdvisoryLink, authorize?: false) == []
     end
   end
 end

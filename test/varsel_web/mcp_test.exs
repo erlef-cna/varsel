@@ -220,7 +220,7 @@ defmodule VarselWeb.McpTest do
       case_record = open_case(poc)
       supporter = register_user("supporter", :supporter)
       {_api_key, plaintext} = create_api_key(supporter)
-      GitHubApi.stub(fn _conn -> flunk("GitHub was contacted before the caller was refused") end)
+      GitHubApi.stub_advisory(hex_advisory())
 
       assert %{"isError" => true, "content" => [%{"text" => text}]} =
                conn
