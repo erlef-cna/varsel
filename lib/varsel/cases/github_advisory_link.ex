@@ -27,7 +27,6 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.Pull
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.Push
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.StoreAdvisory
-  alias Varsel.Cases.GitHubAdvisoryLink.Checks.CaseEditable
 
   postgres do
     table "case_github_advisory_links"
@@ -162,17 +161,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
 
-    policy action(:link) do
-      access_type :strict
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if actor_attribute_equals(:role, :supporter)
-    end
-
-    policy action(:link) do
-      authorize_if CaseEditable
-    end
-
-    policy action([:unlink, :pull, :push]) do
+    policy action([:link, :unlink, :pull, :push]) do
       authorize_if actor_attribute_equals(:role, :poc)
 
       authorize_if expr(
@@ -183,7 +172,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
 
     # Content freeze: the link and the case may only change while the case is
     # editable.
-    policy action([:unlink, :pull]) do
+    policy action([:link, :unlink, :pull]) do
       authorize_if expr(case.state in [:draft, :review])
     end
 
