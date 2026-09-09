@@ -6,12 +6,19 @@ defmodule VarselWeb.McpTest do
   use VarselWeb.ConnCase, async: true
 
   import Varsel.Fixtures
+  import Varsel.Test.GitHubAdvisoryFixtures
 
   alias AshAuthentication.Oauth2Server.Jwt
+  alias Varsel.Cases
+  alias Varsel.Cases.GitHubAdvisoryLink
   alias Varsel.CVE.CveRecord
   alias Varsel.Test.GitHubApi
 
   @year Date.utc_today().year
+  @hex_url "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+  @advisory_tools ~w(open_case_from_github_advisory get_case_github_advisory
+                     link_github_advisory unlink_github_advisory
+                     refresh_github_advisory_link pull_github_advisory)
 
   defp mcp(conn, method, params \\ %{}) do
     conn
@@ -91,6 +98,171 @@ defmodule VarselWeb.McpTest do
           do: Atom.to_string(tool.name)
 
     assert defined -- Enum.map(tools, & &1["name"]) == []
+  end
+
+  # The link's policy decides on the case a changeset names. The probe names
+  # none, and the tool has to stay listed for the roles that may link.
+  test "a supporter's tools/list carries the advisory tools", %{conn: conn} do
+    supporter = register_user("supporter", :supporter)
+    {_api_key, plaintext} = create_api_key(supporter)
+
+    names = tool_names(conn, plaintext)
+
+    for tool <- @advisory_tools do
+      assert tool in names
+    end
+  end
+
+  test "a role-less user's tools/list carries no advisory write", %{conn: conn} do
+    register_user("bootstrap_poc")
+    nobody = register_user("nobody")
+    {_api_key, plaintext} = create_api_key(nobody)
+
+    names = tool_names(conn, plaintext)
+
+    for tool <- ~w(open_case_from_github_advisory link_github_advisory
+                   unlink_github_advisory pull_github_advisory) do
+      refute tool in names
+    end
+  end
+
+  describe "the advisory tools" do
+    setup do
+      GitHubApi.stub_advisory(hex_advisory())
+      poc = register_user("poc", :poc)
+      {_api_key, plaintext} = create_api_key(poc)
+
+      %{poc: poc, plaintext: plaintext}
+    end
+
+    test "open_case_from_github_advisory opens a linked case", %{
+      conn: conn,
+      poc: poc,
+      plaintext: plaintext
+    } do
+      row =
+        conn
+        |> tool_call(plaintext, "open_case_from_github_advisory", %{
+          input: %{advisory_url: @hex_url}
+        })
+        |> tool_result()
+
+      assert %{"id" => id, "title" => "Header injection in acme_lib", "state" => "draft"} = row
+
+      case_record = Cases.get_case!(id, actor: poc, load: [github_advisory_link: [:ghsa_id]])
+      assert case_record.github_advisory_link.ghsa_id == "GHSA-2cfg-hjmp-qrvw"
+    end
+
+    test "get_case_github_advisory answers the link and the diff rows", %{
+      conn: conn,
+      poc: poc,
+      plaintext: plaintext
+    } do
+      case_record = open_case(poc, %{title: "Working title"})
+      link_advisory!(case_record, poc)
+
+      row =
+        conn
+        |> tool_call(plaintext, "get_case_github_advisory", %{case_id: case_record.id})
+        |> tool_result()
+
+      assert %{"case_id" => case_id, "ghsa_id" => "GHSA-2cfg-hjmp-qrvw", "diff" => rows} = row
+      assert case_id == case_record.id
+      refute Map.has_key?(row, "advisory")
+
+      assert %{
+               "field" => "title",
+               "ours" => "Working title",
+               "theirs" => "Header injection in acme_lib",
+               "status" => "differs"
+             } = Enum.find(rows, &(&1["field"] == "title"))
+
+      assert %{"field" => "affected", "package" => "erlang/acme_lib", "status" => "theirs_only"} =
+               Enum.find(rows, &(&1["field"] == "affected"))
+    end
+
+    test "get_case_github_advisory finds nothing for an unlinked case", %{
+      conn: conn,
+      poc: poc,
+      plaintext: plaintext
+    } do
+      case_record = open_case(poc)
+
+      assert %{"isError" => true} =
+               conn
+               |> tool_call(plaintext, "get_case_github_advisory", %{case_id: case_record.id})
+               |> Map.fetch!("result")
+    end
+
+    test "pull_github_advisory takes the fields onto the case", %{
+      conn: conn,
+      poc: poc,
+      plaintext: plaintext
+    } do
+      case_record = open_case(poc, %{title: "Working title"})
+      link_advisory!(case_record, poc)
+
+      row =
+        conn
+        |> tool_call(plaintext, "pull_github_advisory", %{
+          case_id: case_record.id,
+          input: %{fields: ["title"]}
+        })
+        |> tool_result()
+
+      assert %{"field" => "title", "status" => "same"} =
+               Enum.find(row["diff"], &(&1["field"] == "title"))
+
+      assert Cases.get_case!(case_record.id, actor: poc).title == "Header injection in acme_lib"
+    end
+
+    test "link_github_advisory is refused for a supporter off the case", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = open_case(poc)
+      supporter = register_user("supporter", :supporter)
+      {_api_key, plaintext} = create_api_key(supporter)
+      GitHubApi.stub(fn _conn -> flunk("GitHub was contacted before the caller was refused") end)
+
+      assert %{"isError" => true, "content" => [%{"text" => text}]} =
+               conn
+               |> tool_call(plaintext, "link_github_advisory", %{
+                 input: %{case_id: case_record.id, advisory_url: @hex_url}
+               })
+               |> Map.fetch!("result")
+
+      assert text =~ "forbidden"
+      assert Ash.read!(GitHubAdvisoryLink, authorize?: false) == []
+    end
+  end
+
+  defp tool_names(conn, plaintext) do
+    body =
+      conn
+      |> put_req_header("authorization", "Bearer " <> plaintext)
+      |> mcp("tools/list")
+      |> json_response(200)
+
+    Enum.map(body["result"]["tools"], & &1["name"])
+  end
+
+  defp tool_call(conn, plaintext, name, arguments) do
+    conn
+    |> put_req_header("authorization", "Bearer " <> plaintext)
+    |> mcp("tools/call", %{name: name, arguments: arguments})
+    |> json_response(200)
+  end
+
+  defp tool_result(body) do
+    assert %{"result" => %{"content" => [%{"text" => text}]} = result} = body
+    refute result["isError"], text
+
+    Jason.decode!(text)
+  end
+
+  defp link_advisory!(case_record, actor) do
+    Cases.link_github_advisory!(%{case_id: case_record.id, advisory_url: @hex_url}, actor: actor)
   end
 
   test "public tools work with an API key", %{conn: conn} do

@@ -164,6 +164,11 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
 
     policy action(:link) do
       access_type :strict
+      authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if actor_attribute_equals(:role, :supporter)
+    end
+
+    policy action(:link) do
       authorize_if CaseEditable
     end
 

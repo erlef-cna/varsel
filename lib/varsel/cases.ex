@@ -26,11 +26,104 @@ defmodule Varsel.Cases do
     show? true
   end
 
+  @advisory_link_fields [
+    :id,
+    :case_id,
+    :ghsa_id,
+    :owner,
+    :repo,
+    :html_url,
+    :state,
+    :title,
+    :cve_id,
+    :fetched_at
+  ]
+
   tools do
     # Opening a fresh draft is the one lifecycle action exposed to the agent:
     # it creates the empty workspace the agent then fills via proposals, rather
     # than advancing or resolving an existing case (POC-only, same as the UI).
     tool :open_case, Case, :open
+
+    tool :open_case_from_github_advisory, Case, :open_from_github_advisory do
+      description """
+      Opens a draft case from a GitHub security advisory, given its URL or GHSA
+      id, and links the case to it. Use it when a new case starts from an
+      advisory. The case takes the advisory's title, description, CVSS v4
+      vector, publication date, CWEs, credits and affected packages with
+      their channels. It takes no version boundaries: the introducing and fix
+      commits stay yours to establish. Use link_github_advisory for a case
+      that already exists.
+      """
+
+      select [:id, :title, :state]
+    end
+
+    # The advisory link: reading it and pulling from it. A push and a report
+    # write to GitHub in the caller's name and stay in the human UI.
+    tool :get_case_github_advisory, GitHubAdvisoryLink, :read do
+      description """
+      The GitHub advisory a case is linked to and the diff of the case against
+      it, one row per field with `ours`, `theirs` and a `status` of same,
+      differs, ours_only, theirs_only or not_derived. Affected packages come
+      one row per advisory entry, named in `package`. A case without a link
+      is not found.
+      """
+
+      get_by :case_id
+      select @advisory_link_fields
+      load [:diff]
+    end
+
+    tool :link_github_advisory, GitHubAdvisoryLink, :link do
+      description """
+      Links an existing case to the GitHub advisory at `advisory_url` (its URL
+      or GHSA id) and answers with the link and the diff. A draft advisory is
+      read with your own GitHub account. Linking is a content edit: the case
+      has to be in draft or review. It changes no field of the case. Use
+      pull_github_advisory afterwards to take fields over.
+      """
+
+      select @advisory_link_fields
+      load [:diff]
+    end
+
+    tool :unlink_github_advisory, GitHubAdvisoryLink, :unlink do
+      description """
+      Removes the link between the case and its GitHub advisory. Fields
+      already pulled stay on the case. The case has to be in draft or review.
+      """
+
+      identity :unique_case
+      select @advisory_link_fields
+    end
+
+    tool :refresh_github_advisory_link, GitHubAdvisoryLink, :refresh do
+      description """
+      Reads the linked advisory from GitHub again and answers with the link
+      and the diff. Use it before you read the diff when the advisory may
+      have changed. It changes nothing on the case.
+      """
+
+      identity :unique_case
+      select @advisory_link_fields
+      load [:diff]
+    end
+
+    tool :pull_github_advisory, GitHubAdvisoryLink, :pull do
+      description """
+      Takes the given `fields` of the linked advisory over onto the case:
+      title, cvss_v4, weaknesses, credits, affected. A scalar replaces the
+      case's value. A set gains what the case lacks and never loses an entry.
+      Affected packages arrive with their channels and no version boundaries.
+      This is a direct edit, not a proposal, and a content edit: the case has
+      to be in draft or review. It writes nothing to GitHub.
+      """
+
+      identity :unique_case
+      select @advisory_link_fields
+      load [:diff]
+    end
 
     # Case reading + previews (policy-gated: POC or assigned; requires an API key actor).
     tool :list_cases, Case, :list_cases do

@@ -665,6 +665,15 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
       assert {:error, %Forbidden{}} = Cases.unlink_github_advisory(link, actor: stranger)
     end
 
+    test "a link naming no case is refused before GitHub is asked", %{poc: poc} do
+      stub_github_unreachable()
+
+      for actor <- [nil, poc] do
+        assert {:error, %Invalid{errors: [%Ash.Error.Changes.Required{field: :case_id}]}} =
+                 Cases.link_github_advisory(%{advisory_url: @hex_url}, actor: actor)
+      end
+    end
+
     test "an assigned supporter links, refreshes and unlinks", %{
       case: case_record,
       supporter: supporter
