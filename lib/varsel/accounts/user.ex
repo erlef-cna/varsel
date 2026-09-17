@@ -196,7 +196,7 @@ defmodule Varsel.Accounts.User do
       # create should get.
       primary? true
       argument :user_info, :map, allow_nil?: false
-      argument :oauth_tokens, :map, allow_nil?: false
+      argument :oauth_tokens, :map, allow_nil?: false, sensitive?: true
       upsert? true
       # No `upsert_identity`, so Ash upserts on the primary key — and only
       # ResolveOauthIdentity sets it, from the identity row that names the
@@ -214,7 +214,7 @@ defmodule Varsel.Accounts.User do
     create :register_with_hex do
       description "Registers or updates a user from a Hex.pm OAuth sign-in."
       argument :user_info, :map, allow_nil?: false
-      argument :oauth_tokens, :map, allow_nil?: false
+      argument :oauth_tokens, :map, allow_nil?: false, sensitive?: true
       upsert? true
       # As above: the primary key, set from the identity row.
       upsert_fields [:name]
@@ -291,7 +291,7 @@ defmodule Varsel.Accounts.User do
       create :register_with_mock do
         description "Dev-only: registers or signs in the dummy account for a role."
         argument :user_info, :map, allow_nil?: false
-        argument :oauth_tokens, :map, allow_nil?: false
+        argument :oauth_tokens, :map, allow_nil?: false, sensitive?: true
         # Only on the way in: signing in again does not put back a role the
         # console has since changed, exactly as a real provider would not.
         argument :role, Role, allow_nil?: true

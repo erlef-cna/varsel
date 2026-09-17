@@ -100,7 +100,7 @@ defmodule Varsel.Accounts.UserIdentity do
       accept [:strategy]
 
       argument :user_info, :map, allow_nil?: false
-      argument :oauth_tokens, :map, allow_nil?: false
+      argument :oauth_tokens, :map, allow_nil?: false, sensitive?: true
       argument :user_id, :uuid, allow_nil?: false
 
       change AshAuthentication.UserIdentity.UpsertIdentityChange
