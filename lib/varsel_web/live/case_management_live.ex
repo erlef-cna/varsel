@@ -263,6 +263,21 @@ defmodule VarselWeb.CaseManagementLive do
     {:noreply, socket}
   end
 
+  def handle_event("open_case_from_advisory", %{"advisory_url" => url}, socket) do
+    socket =
+      case Cases.open_case_from_github_advisory(%{advisory_url: url},
+             actor: socket.assigns.current_user
+           ) do
+        {:ok, case_record} ->
+          push_navigate(socket, to: ~p"/cases/#{case_record.id}/github")
+
+        {:error, error} ->
+          put_flash(socket, :error, "Could not open case: #{errors_to_string(error)}")
+      end
+
+    {:noreply, socket}
+  end
+
   def handle_event("search", %{"query" => query}, socket) do
     to =
       if socket.assigns.face == :archive do
@@ -449,6 +464,26 @@ defmodule VarselWeb.CaseManagementLive do
                 />
                 <button type="submit" class="btn btn-sm btn-eef">Open</button>
               </form>
+              <%= if Cases.can_open_case_from_github_advisory?(@current_user, %{}) do %>
+                <p class="mt-3 mb-1 text-[0.66rem] font-semibold uppercase tracking-wider text-base-content/50">
+                  or from a GitHub advisory
+                </p>
+                <form
+                  id="open-case-advisory-form"
+                  phx-submit="open_case_from_advisory"
+                  class="flex items-center gap-2"
+                >
+                  <input
+                    id="open-case-advisory"
+                    type="text"
+                    name="advisory_url"
+                    placeholder="GHSA-… or advisory URL"
+                    required
+                    class="input input-bordered input-sm w-56"
+                  />
+                  <button type="submit" class="btn btn-sm btn-eef-quiet">Open</button>
+                </form>
+              <% end %>
             </div>
           </div>
         </:actions>

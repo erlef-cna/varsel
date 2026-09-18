@@ -14,7 +14,10 @@ path from there to a published CVE.
    If the vulnerability warrants a CVE (check the
    [criteria](/cve-criteria)), open a case under [Cases](/cases). You are on
    it automatically, and nothing about it is visible to anyone but the
-   people on the case and the Points of Contact.
+   people on the case and the Points of Contact. A vulnerability that
+   reached you as a GitHub security advisory opens from the same place:
+   paste the advisory's URL or GHSA id, and the case arrives filled in from
+   it, with the advisory linked.
 
 2. **Write the record**
 
@@ -73,6 +76,36 @@ path from there to a published CVE.
    cvelint, hex.pm package check) must pass. Then cross-check the rendered
    record on the **CVE** tab against the advisory one last time: ranges,
    credits, resolved `TODO`s.
+
+   The **GitHub** tab does that cross-check for a GitHub security advisory.
+   Link the advisory by its URL or its GHSA id, and the tab sets the case
+   against it field by field: title, description, CVE ID, CVSS vector, CWEs,
+   credits, and the derived ranges of each channel, spelled the way GitHub
+   spells them. Pull a field when the advisory should win, or push it when
+   the case should. A pull adds and replaces and never removes. A push
+   writes to the advisory as you, so GitHub decides whether you may. Refresh
+   reads the advisory again after it changed on GitHub. The linked advisory
+   leads the published references as the vendor advisory, and no stored
+   reference is needed for it. Unlink takes it out again. Linking, pulling
+   and unlinking are edits and stop once the case is approved. Draft
+   advisories are read and written with your GitHub account. When none is
+   linked to yours, the tab says so and holds Refresh, Push and Report until
+   you [link GitHub in account settings](/settings/account).
+
+   A case that has no advisory yet is reported from the same tab to the
+   maintainers of one of its GitHub repositories, as a private vulnerability
+   report in your name, with everything the case states and a description
+   you write for them. The advisory GitHub opens for the report becomes the
+   linked one. A repository that takes no private reports is flagged there,
+   with the [maintainer process](/maintainer-process) to point its
+   maintainers at. Where you administer the repository, GitHub takes no
+   report from you and the case opens a draft advisory in your name instead.
+   A linked advisory also lists who sees it on GitHub, its collaborators,
+   its teams and the organization's owners, marks who is on the case, and
+   gives the rest access with one click, as an assignment or an invite. The
+   invite email goes to the address GitHub lists for the person, and an
+   account without one is invited without an email: they already see the
+   advisory on GitHub.
 
 6. **Take a CVE ID and hand it to review**
 

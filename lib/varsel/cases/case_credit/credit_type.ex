@@ -33,4 +33,28 @@ defmodule Varsel.Cases.CaseCredit.CreditType do
   @doc "The CVE JSON representation of a credit type."
   @spec render(t()) :: String.t()
   def render(type), do: type |> to_string() |> String.replace("_", " ")
+
+  @precedence [
+    :remediation_developer,
+    :finder,
+    :reporter,
+    :analyst,
+    :remediation_reviewer,
+    :remediation_verifier,
+    :coordinator,
+    :sponsor,
+    :tool,
+    :other
+  ]
+
+  @doc """
+  The one role that stands for a person where only one can, as on a GitHub
+  advisory: the weightiest of the roles they carry. Writing the fix weighs
+  most. Then come discovery, disclosure and analysis, then the roles around
+  the fix, then coordination, funding and tooling.
+  """
+  @spec weightiest([t(), ...]) :: t()
+  def weightiest([_type | _rest] = types) do
+    Enum.min_by(types, &Enum.find_index(@precedence, fn type -> type == &1 end))
+  end
 end

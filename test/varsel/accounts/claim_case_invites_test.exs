@@ -5,10 +5,10 @@
 defmodule Varsel.Accounts.ClaimCaseInvitesTest do
   use Varsel.DataCase, async: false
 
-  alias Varsel.Accounts.GitHub
   alias Varsel.Cases
   alias Varsel.Fixtures
   alias Varsel.HexPm
+  alias Varsel.Test.GitHubApi
 
   setup do
     Req.Test.stub(HexPm, fn conn ->
@@ -25,7 +25,7 @@ defmodule Varsel.Accounts.ClaimCaseInvitesTest do
       end
     end)
 
-    Req.Test.stub(GitHub, fn conn ->
+    GitHubApi.stub(fn conn ->
       login = conn.request_path |> Path.basename() |> URI.decode() |> String.downcase()
 
       if login in ["newcomer", "octocat"] do

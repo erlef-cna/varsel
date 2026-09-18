@@ -12,6 +12,12 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("activity_feed"), do: [name: "Activity feed", icon: {:local, "hero-clock"}]
 
+  def entry("advisory_audience"), do: [name: "Advisory audience", icon: {:local, "hero-users"}]
+
+  def entry("advisory_card"), do: [name: "Advisory card", icon: {:local, "hero-link"}]
+
+  def entry("advisory_diff"), do: [name: "Advisory diff", icon: {:local, "hero-arrows-right-left"}]
+
   def entry("affected_package_form"), do: [name: "Affected package form", icon: {:local, "hero-cube"}]
 
   def entry("boundary_fact"), do: [name: "Boundary fact", icon: {:local, "hero-flag"}]

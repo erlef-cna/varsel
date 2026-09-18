@@ -7,10 +7,10 @@ defmodule Varsel.Cases.CaseInviteTest do
 
   alias Ash.Error.Forbidden
   alias Ash.Error.Invalid
-  alias Varsel.Accounts.GitHub
   alias Varsel.Cases
   alias Varsel.Fixtures
   alias Varsel.HexPm
+  alias Varsel.Test.GitHubApi
 
   setup do
     Req.Test.stub(HexPm, fn conn ->
@@ -30,7 +30,7 @@ defmodule Varsel.Cases.CaseInviteTest do
       end
     end)
 
-    Req.Test.stub(GitHub, fn conn ->
+    GitHubApi.stub(fn conn ->
       case conn.request_path |> Path.basename() |> URI.decode() |> String.downcase() do
         "octocat" ->
           Req.Test.json(conn, %{"login" => "octocat", "email" => "octocat@example.com"})
@@ -194,6 +194,28 @@ defmodule Varsel.Cases.CaseInviteTest do
 
       assert invite.email == nil
       assert invite.email_status == :skipped
+    end
+
+    test "an optional email is left out when the profile lists no address", %{
+      poc: poc,
+      case: case_record
+    } do
+      invite =
+        invite!(case_record, poc, %{strategy: :github, username: "hermit", email_optional: true})
+
+      assert invite.email == nil
+      assert invite.email_status == :skipped
+    end
+
+    test "an optional email still goes to the address the profile lists", %{
+      poc: poc,
+      case: case_record
+    } do
+      invite =
+        invite!(case_record, poc, %{strategy: :github, username: "octocat", email_optional: true})
+
+      assert to_string(invite.email) == "octocat@example.com"
+      assert invite.email_status == :pending
     end
 
     test "the email cannot be skipped when the profile lists an address", %{
@@ -416,6 +438,18 @@ defmodule Varsel.Cases.CaseInviteTest do
       assert [invite] = Cases.list_case_invites!(actor: poc)
       assert to_string(invite.username) == "octocat"
       assert invite.email_status == :pending
+    end
+
+    test "invites without an email when the email is optional and the profile lists none", %{
+      poc: poc,
+      case: case_record
+    } do
+      assert {:ok, _} =
+               Cases.grant_case_access(case_record, :github, "hermit", %{email_optional: true}, actor: poc)
+
+      assert [invite] = Cases.list_case_invites!(actor: poc)
+      assert to_string(invite.username) == "hermit"
+      assert invite.email_status == :skipped
     end
 
     test "granting a handle that is assigned changes nothing", %{poc: poc, case: case_record} do

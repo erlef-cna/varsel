@@ -368,9 +368,7 @@ defmodule VarselWeb.CaseComponents do
           id={"#{row.id}-content"}
           class="hidden px-2.5 py-1 whitespace-pre-wrap break-words text-base-content/70"
           phx-no-format
-        >
-          <.diff_segments :for={segments <- row.paragraphs} segments={segments} />
-        </div>
+        ><.diff_segments :for={segments <- row.paragraphs} segments={segments} /></div>
       </div>
     <% end %>
     """

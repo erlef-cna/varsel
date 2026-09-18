@@ -38,6 +38,7 @@ defmodule VarselWeb.CaseRecordLiveTest do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
       for {path, label} <- [
+            {"github", "GitHub"},
             {"cve", "CVE"},
             {"osv", "OSV"},
             {"advisory", "Advisory"},

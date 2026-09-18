@@ -168,6 +168,7 @@ defmodule VarselWeb.Router do
       live "/cases/:id", CaseDetailLive, :view
       live "/cases/:id/edit", CaseDetailLive, :edit
       live "/cases/:id/propose", CaseDetailLive, :propose
+      live "/cases/:id/github", CaseGitHubLive, :github
       live "/cases/:id/cve", CaseRecordLive, :cve
       live "/cases/:id/osv", CaseRecordLive, :osv
       live "/cases/:id/advisory", CaseRecordLive, :advisory
@@ -319,7 +320,13 @@ defmodule VarselWeb.Router do
         :propose_delete,
         :withdraw_case_proposal,
         :list_case_comments,
-        :grant_case_access
+        :grant_case_access,
+        :open_case_from_github_advisory,
+        :get_case_github_advisory,
+        :link_github_advisory,
+        :unlink_github_advisory,
+        :refresh_github_advisory_link,
+        :pull_github_advisory
       ],
       otp_app: :varsel
   end
