@@ -77,7 +77,10 @@
           modules = [
             ./devenv.nix
             # Same toolchain as the release (see `beam` above).
-            { languages.elixir.package = (beam system).elixir; }
+            {
+              languages.elixir.package = (beam system).elixir;
+              languages.erlang.package = (beam system).erlang;
+            }
           ];
         };
       });

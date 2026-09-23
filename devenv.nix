@@ -19,6 +19,7 @@ in
   # The elixir package comes from flake.nix (`beam`), shared with the
   # production release build.
   languages.elixir.enable = true;
+  languages.erlang.enable = true;
 
   # Hex/Rebar for mix, installed once per $HOME on shell entry (dev machines
   # and every CI `nix develop` alike). --force only suppresses the prompt;
