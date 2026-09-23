@@ -31,7 +31,8 @@ defmodule VarselWeb.Storybook.Cve.AffectedRangeList do
         status: :affected,
         after_status: :unaffected,
         changes: [],
-        branch_label: nil
+        branch_label: nil,
+        version_type: "semver"
       },
       fields
     )
@@ -135,10 +136,15 @@ defmodule VarselWeb.Storybook.Cve.AffectedRangeList do
         attributes: %{
           default_status: "unaffected",
           ranges: [
-            row(%{upper: "17.0", status: :unknown}),
-            row(%{lower: "17.0", upper: "27.3.4.15"}),
-            row(%{lower: "28.0", upper: "28.5.0.4", branch_label: "maint-28"}),
-            row(%{lower: "29.0", upper: "29.0.4", branch_label: "maint-29"})
+            row(%{upper: "17.0", status: :unknown, version_type: "otp"}),
+            row(%{lower: "17.0", upper: "27.3.4.15", version_type: "otp"}),
+            row(%{
+              lower: "28.0",
+              upper: "28.5.0.4",
+              branch_label: "maint-28",
+              version_type: "otp"
+            }),
+            row(%{lower: "29.0", upper: "29.0.4", branch_label: "maint-29", version_type: "otp"})
           ]
         }
       },
@@ -172,6 +178,7 @@ defmodule VarselWeb.Storybook.Cve.AffectedRangeList do
           ranges: [
             row(%{
               kind: :git,
+              version_type: "git",
               lower: "f26876aa67aaeb38e616638aa3efbcc2fe2906a5",
               upper: "3f00dfad4e20ba88472e315c90a25742bf178f8e",
               # Shas cannot be resolved, so the bound takes no colour.
@@ -185,7 +192,7 @@ defmodule VarselWeb.Storybook.Cve.AffectedRangeList do
         description: "A hosted service versions itself by date; the same grammar applies.",
         attributes: %{
           default_status: "unaffected",
-          ranges: [row(%{upper: "2026-03-10"})]
+          ranges: [row(%{upper: "2026-03-10", version_type: "date"})]
         }
       }
     ]

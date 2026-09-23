@@ -173,18 +173,22 @@ SPDX-License-Identifier: Apache-2.0
           All versions affected.
         </p>
 
+        <% ranges = affected_ranges(entry) %>
+
         <.affected_range_list
-          :if={affected_ranges(entry) != []}
-          ranges={affected_ranges(entry)}
+          :if={ranges != []}
+          ranges={ranges}
           default_status={entry["defaultStatus"]}
         />
 
-        <.field_list
-          class="mt-2"
-          rows={[
-            {"cpe", cpe_line(entry)}
-          ]}
-        />
+        <.field_list class="mt-2">
+          <:field :if={cpe_line(entry)} label="cpe">{cpe_line(entry)}</:field>
+          <:field :if={version_types(ranges) != []} label="version type">
+            <span :for={type <- version_types(ranges)} class="mr-2">
+              <.version_type_link type={type} />
+            </span>
+          </:field>
+        </.field_list>
 
         <.disclosure
           :if={has_components?(entry)}
