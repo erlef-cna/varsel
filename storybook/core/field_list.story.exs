@@ -55,6 +55,36 @@ defmodule VarselWeb.Storybook.Core.FieldList do
             {"purl", "pkg:generic/acme_lib?vcs_url=git%2Bhttps:%2F%2Fgit.example.com%2Fteam%2Facme_lib"}
           ]
         }
+      },
+      %Variation{
+        id: :markup_field,
+        description:
+          "A `:field` slot carries a value that is markup rather than text, here the linked " <>
+            "version schemes an affected entry states. Slot fields follow the rows.",
+        attributes: %{
+          rows: [
+            {"cpe", "cpe:2.3:a:erlang:erlang\\/otp:*:*:*:*:*:*:*:*"}
+          ]
+        },
+        slots: [
+          """
+          <:field label="version type">
+            <a href="https://www.erlang.org/doc/system/versions.html#version-scheme" class="link">otp</a>
+          </:field>
+          """
+        ]
+      },
+      %Variation{
+        id: :prose_field,
+        description: "A slot field drops the mono face with `prose`, as a value row does.",
+        attributes: %{rows: []},
+        slots: [
+          """
+          <:field label="scheme" prose>
+            Versions order by <a href="https://semver.org/" class="link">semver</a>.
+          </:field>
+          """
+        ]
       }
     ]
   end

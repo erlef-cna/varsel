@@ -333,6 +333,54 @@ defmodule VarselWeb.CveView do
     """
   end
 
+  @doc """
+  Names the vocabulary a range's bounds are written in, linking to the scheme
+  that defines how they order.
+
+  The CVE schema's `versionType` is what tells a reader whether `1.17.4` is a
+  semver version or an OTP release, and the two order differently. Without it
+  the bounds are ambiguous.
+  """
+  attr :type, :string, required: true
+
+  def version_type_link(assigns) do
+    assigns = assign(assigns, :href, version_type_href(assigns.type))
+
+    ~H"""
+    <.link :if={@href} href={@href} target="_blank" rel="noopener" class="link">
+      {@type}
+    </.link>
+    <span :if={is_nil(@href)}>{@type}</span>
+    """
+  end
+
+  # The schemes a `versionType` can name, each at the document that defines its
+  # ordering. `git` and `date` are both described by the CVE schema's own
+  # source-control section; anything else prints unlinked.
+  defp version_type_href("semver"), do: "https://semver.org/"
+
+  defp version_type_href("otp"), do: "https://www.erlang.org/doc/system/versions.html#version-scheme"
+
+  defp version_type_href(type) when type in ["git", "date"],
+    do: "https://github.com/CVEProject/cve-schema/blob/main/schema/docs/versions.md#source-control-versions"
+
+  defp version_type_href(_other), do: nil
+
+  @doc """
+  The distinct `versionType`s a set of range rows is written in, in first-seen
+  order.
+
+  One entry may mix vocabularies: an OTP record carries both release-tagged and
+  semver ranges, so the field names each one present rather than assuming one.
+  """
+  @spec version_types([map()]) :: [String.t()]
+  def version_types(ranges) do
+    ranges
+    |> Enum.map(&Map.get(&1, :version_type))
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+  end
+
   # An exclusive `<` bound is the first version OUTSIDE the span, so it carries
   # the status that follows, not the one that ends there — the version you
   # upgrade to, in the colour of what it gets you. An inclusive `≤` bound is

@@ -91,9 +91,18 @@ defmodule VarselWeb.DisclosureComponents do
   that reads as words rather than as an identifier and so does not want the
   mono face. A row whose value is nil or empty is dropped, so callers can list
   every field they might show without guarding each one.
+
+  A `:field` slot carries a value that is markup rather than text — a linked
+  scheme name, a chip. It takes the same `label`, and the same `face` choice
+  through `prose`. Slot fields follow the `rows`.
   """
-  attr :rows, :list, required: true, doc: ~s({label, value} or {label, value, :prose})
+  attr :rows, :list, default: [], doc: ~s({label, value} or {label, value, :prose})
   attr :class, :any, default: nil
+
+  slot :field, doc: "a row whose value is markup" do
+    attr :label, :string, required: true
+    attr :prose, :boolean, doc: "drop the mono face, as {label, value, :prose} does"
+  end
 
   def field_list(assigns) do
     assigns =
@@ -104,18 +113,27 @@ defmodule VarselWeb.DisclosureComponents do
       )
 
     ~H"""
-    <div :if={@rows != []} class={["flex flex-col gap-0.5", @class]}>
+    <div :if={@rows != [] or @field != []} class={["flex flex-col gap-0.5", @class]}>
       <div :for={{label, value, face} <- @rows} class="flex items-baseline gap-3 py-0.5">
-        <span class="w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
-          {label}
-        </span>
+        <span class={label_class()}>{label}</span>
         <span class={["break-all text-xs text-base-content/70", face == :mono && "font-mono"]}>
           {value}
+        </span>
+      </div>
+      <div :for={field <- @field} class="flex items-baseline gap-3 py-0.5">
+        <span class={label_class()}>{field.label}</span>
+        <span class={[
+          "break-all text-xs text-base-content/70",
+          not Map.get(field, :prose, false) && "font-mono"
+        ]}>
+          {render_slot(field)}
         </span>
       </div>
     </div>
     """
   end
+
+  defp label_class, do: "w-24 flex-shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50"
 
   defp normalize_row({label, value}), do: {label, value, :mono}
   defp normalize_row({label, value, face}), do: {label, value, face}

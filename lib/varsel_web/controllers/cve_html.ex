@@ -165,7 +165,8 @@ defmodule VarselWeb.CveHTML do
         single?:,                  # neither bound: the entry names ONE version
         status:,                   # :affected | :unaffected | :unknown
         changes:,                  # [%{at:, at_title:, status:}] in ARRAY order
-        kind:, branch_label:
+        kind:, branch_label:,
+        version_type:              # `versionType`, nil when the entry omits it
       }
 
   `changes` keep their array order, so the page shows the record as published.
@@ -201,7 +202,8 @@ defmodule VarselWeb.CveHTML do
       status: row_status(version),
       after_status: after_status(upper, all_ranges, entry["defaultStatus"]),
       changes: entry_changes(version),
-      branch_label: branch_label_for(multi_branch?, lower, upper, type, entry)
+      branch_label: branch_label_for(multi_branch?, lower, upper, type, entry),
+      version_type: type
     }
   end
 
