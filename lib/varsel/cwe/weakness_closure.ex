@@ -30,9 +30,9 @@ defmodule Varsel.CWE.WeaknessClosure do
 
   alias Varsel.CWE.View
   alias Varsel.CWE.Weakness
+  alias Varsel.CWE.WeaknessClosure.Actions.InView
+  alias Varsel.CWE.WeaknessClosure.Actions.Refresh
   alias Varsel.Types.OkResult
-
-  require Ash.Query
 
   postgres do
     table "cwe_weakness_closure"
@@ -56,12 +56,7 @@ defmodule Varsel.CWE.WeaknessClosure do
     action :refresh, OkResult do
       description "Refreshes the cwe_weakness_closure materialized view."
 
-      # Keeps reads of the view unblocked while it rebuilds; requires the
-      # unique index created in the migration.
-      run fn _input, _context ->
-        Varsel.Repo.query!("REFRESH MATERIALIZED VIEW CONCURRENTLY cwe_weakness_closure")
-        {:ok, :ok}
-      end
+      run Refresh
     end
 
     action :in_view?, :boolean do
@@ -74,17 +69,7 @@ defmodule Varsel.CWE.WeaknessClosure do
       argument :view_id, :integer, allow_nil?: false
       argument :cwe_id, :integer, allow_nil?: false
 
-      run fn input, context ->
-        exists? =
-          __MODULE__
-          |> Ash.Query.filter(
-            view_id == ^input.arguments.view_id and is_nil(parent_cwe_id) and
-              descendant_cwe_id == ^input.arguments.cwe_id
-          )
-          |> Ash.exists?(Ash.Context.to_opts(context))
-
-        {:ok, exists?}
-      end
+      run InView
     end
   end
 

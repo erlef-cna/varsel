@@ -8,7 +8,7 @@ defmodule Varsel.CWE.CatalogSync do
   parses it, and reconciles weaknesses, views, weakness relationships and
   view memberships against what is currently stored.
 
-  Called from `Varsel.CWE.Weakness`'s `:sync_cwe_catalog` action — kept out of
+  Implements `Varsel.CWE.Weakness`'s `:sync_cwe_catalog` action — kept out of
   that resource module so the resource DSL doesn't keep growing with
   orchestration code.
 
@@ -44,6 +44,8 @@ defmodule Varsel.CWE.CatalogSync do
   CONCURRENTLY`.
   """
 
+  use Ash.Resource.Actions.Implementation
+
   alias Varsel.CWE.CweMetadata
   alias Varsel.CWE.CweXmlParser
   alias Varsel.CWE.View
@@ -51,8 +53,10 @@ defmodule Varsel.CWE.CatalogSync do
 
   @catalog_url "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip"
 
-  @spec run(keyword()) :: {:ok, :ok} | {:error, term()}
-  def run(opts) do
+  @impl Ash.Resource.Actions.Implementation
+  def run(_input, _opts, context) do
+    opts = Varsel.ObanContext.forward(context)
+
     req = build_req()
     stored_last_modified = fetch_stored_last_modified(opts)
 

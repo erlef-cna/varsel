@@ -153,9 +153,7 @@ defmodule Varsel.CWE.Weakness do
       views, and their relationships/memberships.
       """
 
-      run fn _input, context ->
-        CatalogSync.run(Varsel.ObanContext.forward(context))
-      end
+      run CatalogSync
     end
   end
 
