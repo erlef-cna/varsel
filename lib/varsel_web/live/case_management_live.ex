@@ -21,6 +21,7 @@ defmodule VarselWeb.CaseManagementLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
+  import VarselWeb.CveView, only: [package_display_name: 1]
   import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
   import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
@@ -209,7 +210,10 @@ defmodule VarselWeb.CaseManagementLive do
         :cve_id,
         :cvss_score,
         :severity_bucket,
-        affected_packages: Ash.Query.select(AffectedPackage, [:product, :vendor, :position])
+        affected_packages:
+          AffectedPackage
+          |> Ash.Query.select([:product, :vendor, :position])
+          |> Ash.Query.load(channels: [:purl])
       ],
       query: archive_query(socket.assigns.scope, socket.assigns.query),
       page: page_opts || socket.assigns.archive_page_opts
@@ -383,11 +387,22 @@ defmodule VarselWeb.CaseManagementLive do
   defp format_age(seconds), do: "#{div(seconds, 86_400)} d"
 
   defp package_chips(case_record) do
-    case_record
-    |> Map.get(:affected_packages, [])
-    |> case do
-      %Ash.NotLoaded{} -> []
-      packages -> Enum.map(packages, &(&1.product || &1.vendor))
+    Enum.map(case_record.affected_packages, &(&1.product || &1.vendor))
+  end
+
+  # One entry per distribution channel, as the CVE list names them: a package
+  # published to Hex and GitHub reads as both.
+  defp package_purls(case_record) do
+    Enum.flat_map(case_record.affected_packages, &channel_purls/1)
+  end
+
+  # A channel with no purl is a service; it falls back to the package's name.
+  defp channel_purls(package) do
+    name = package.product || package.vendor
+
+    case package.channels do
+      [] -> [{nil, name}]
+      channels -> Enum.map(channels, &{&1.purl, name})
     end
   end
 
@@ -507,7 +522,7 @@ defmodule VarselWeb.CaseManagementLive do
         </:actions>
       </.page_header>
 
-      <.page_container width={if @face == :pipeline, do: :wide, else: :normal}>
+      <.page_container width={:wide}>
         <.pipeline_face
           :if={@face == :pipeline}
           lanes={@lanes}
@@ -762,11 +777,12 @@ defmodule VarselWeb.CaseManagementLive do
         <table class="table w-full">
           <thead>
             <tr class="text-[0.65rem] font-bold uppercase tracking-wider text-base-content/50">
+              <th class="w-32">CVE ID</th>
               <th>Title</th>
-              <th>CVE ID</th>
-              <th>Severity</th>
-              <th>State</th>
-              <th>Published</th>
+              <th class="w-56">Packages</th>
+              <th class="w-20">Severity</th>
+              <th class="w-44">State</th>
+              <th class="w-32">Published</th>
             </tr>
           </thead>
           <tbody>
@@ -775,6 +791,9 @@ defmodule VarselWeb.CaseManagementLive do
               class="hover:bg-base-300/40 group cursor-pointer"
               phx-click={JS.navigate(~p"/cases/#{case_record.id}")}
             >
+              <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
+                {if case_record.state == :closed, do: "—", else: case_record.cve_id || "—"}
+              </td>
               <td class={[
                 "max-w-md truncate",
                 if(case_record.state == :closed,
@@ -784,8 +803,13 @@ defmodule VarselWeb.CaseManagementLive do
               ]}>
                 {case_record.title || "Untitled"}
               </td>
-              <td class="font-mono text-xs text-base-content/60">
-                {if case_record.state == :closed, do: "—", else: case_record.cve_id || "—"}
+              <td phx-click={%JS{}}>
+                <div
+                  :for={{purl, fallback} <- package_purls(case_record)}
+                  class="text-xs break-all"
+                >
+                  <.package_display_name purl={purl} fallback={fallback} link={true} />
+                </div>
               </td>
               <td>
                 <.severity_chip
@@ -796,7 +820,7 @@ defmodule VarselWeb.CaseManagementLive do
               <td>
                 <.archive_state_cell case_record={case_record} />
               </td>
-              <td class="font-mono text-xs text-base-content/60">
+              <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
                 {if case_record.state == :closed, do: "—", else: format_date(case_record.published_at)}
               </td>
             </tr>
@@ -824,6 +848,12 @@ defmodule VarselWeb.CaseManagementLive do
               <% else %>
                 <.severity_chip :if={case_record.cvss_score} score={case_record.cvss_score} />
                 <span class="font-mono text-xs text-base-content/60">{case_record.cve_id || "—"}</span>
+                <span
+                  :for={product <- package_chips(case_record)}
+                  class="text-xs text-base-content/60"
+                >
+                  {product}
+                </span>
                 <span class="font-mono text-xs text-base-content/60">{format_date(
                   case_record.published_at
                 )}</span>
@@ -844,10 +874,13 @@ defmodule VarselWeb.CaseManagementLive do
 
   defp archive_state_cell(assigns) do
     ~H"""
-    <span :if={@case_record.state == :published} class="text-base-content/60 text-sm">
+    <span
+      :if={@case_record.state == :published}
+      class="whitespace-nowrap text-base-content/60 text-sm"
+    >
       ● Published
     </span>
-    <span :if={@case_record.state == :closed} class="text-base-content/50 text-sm">
+    <span :if={@case_record.state == :closed} class="whitespace-nowrap text-base-content/50 text-sm">
       ● Closed · {format_short_date(@case_record.updated_at)}
     </span>
     """
