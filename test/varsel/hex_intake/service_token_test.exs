@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Varsel.HexIntake.ServiceTokenTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias Varsel.HexIntake.ServiceToken
 

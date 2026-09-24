@@ -11,7 +11,7 @@ defmodule VarselWeb.MockSignInTest do
   every provider does, and the account it makes carries a normal identity row.
   """
 
-  use VarselWeb.ConnCase, async: false
+  use VarselWeb.ConnCase, async: true
 
   alias Varsel.Accounts.User
 

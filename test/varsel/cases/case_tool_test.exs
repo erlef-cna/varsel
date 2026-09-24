@@ -9,7 +9,7 @@ defmodule Varsel.Cases.CaseToolTest do
   preview is the verdict rather than the whole case echoed back to deliver it.
   """
 
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   import Varsel.Fixtures
 

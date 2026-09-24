@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule VarselWeb.CveHtmlTest do
-  use VarselWeb.ConnCase, async: false
+  use VarselWeb.ConnCase, async: true
 
   import Varsel.Fixtures, only: [seed_weakness: 2, seed_attack_pattern: 2]
 

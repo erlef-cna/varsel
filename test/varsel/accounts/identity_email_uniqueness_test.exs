@@ -8,7 +8,7 @@ defmodule Varsel.Accounts.IdentityEmailUniquenessTest do
   concurrent OAuth callbacks cannot both slip past a read-then-write check.
   """
 
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   import Varsel.Fixtures
 

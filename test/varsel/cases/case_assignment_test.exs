@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Varsel.Cases.CaseAssignmentTest do
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   alias Varsel.Cases
   alias Varsel.Cases.CaseAssignment

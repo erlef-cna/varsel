@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule VarselWeb.ApiKeySettingsLiveTest do
-  use VarselWeb.ConnCase, async: false
+  use VarselWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
   import Varsel.Fixtures

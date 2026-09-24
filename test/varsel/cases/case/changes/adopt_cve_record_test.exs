@@ -8,7 +8,7 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecordTest do
   done twice or by the wrong actor.
   """
 
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   alias Ash.Error.Forbidden
   alias Ash.Error.Invalid

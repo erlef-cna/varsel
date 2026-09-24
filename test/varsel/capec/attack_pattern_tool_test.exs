@@ -10,7 +10,7 @@ defmodule Varsel.CAPEC.AttackPatternToolTest do
   expanded, since a nested CWE arriving whole outweighs the record requested.
   """
 
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   import Varsel.Fixtures
 
