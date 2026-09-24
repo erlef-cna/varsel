@@ -9,8 +9,8 @@ defmodule VarselWeb.CaseLifecycle do
 
   A tab calls `mount/3` once. That keeps the case record fresh from pub_sub,
   marks the case notifications read, and handles the lifecycle events its
-  components push. Publish is the one lifecycle action that stays out: only
-  the Publication tab shows it, next to the validation it depends on.
+  components push. The header only links to publishing: the act stays on the
+  Publication tab, next to the validation it depends on.
   """
   use VarselWeb, :html
 
@@ -165,11 +165,12 @@ defmodule VarselWeb.CaseLifecycle do
   ## -------------------------------------------------------------- components
 
   @doc """
-  Renders the lifecycle actions the actor may take on the case. Publish is
-  not among them: the Publication tab renders it next to the validation.
+  Renders the lifecycle actions the actor may take on the case. Publishing is
+  a link: the act belongs on the Publication tab, next to its validation.
   """
   attr :case_record, :map, required: true
   attr :current_user, :map, required: true
+  attr :active_tab, :atom, default: nil, doc: "the tab being rendered"
 
   def lifecycle_buttons(assigns) do
     ~H"""
@@ -205,6 +206,16 @@ defmodule VarselWeb.CaseLifecycle do
       >
         Approve
       </button>
+      <.link
+        :if={
+          @active_tab != :publication and
+            Cases.can_publish_case?(@current_user, @case_record, validate?: true)
+        }
+        navigate={~p"/cases/#{@case_record.id}/publication"}
+        class="btn btn-sm btn-eef"
+      >
+        Publish
+      </.link>
       <button
         :if={Cases.can_reopen_case?(@current_user, @case_record, validate?: true)}
         class="btn btn-ghost btn-sm"
