@@ -12,7 +12,7 @@ defmodule VarselWeb.AccountLinkTest do
   action directly, since the provider half of the round trip cannot be faked.
   """
 
-  use VarselWeb.ConnCase, async: false
+  use VarselWeb.ConnCase, async: true
 
   import Varsel.Fixtures
 

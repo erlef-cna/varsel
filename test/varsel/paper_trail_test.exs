@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Varsel.PaperTrailTest do
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   alias Varsel.Accounts
   alias Varsel.CVE

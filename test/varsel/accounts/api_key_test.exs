@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Varsel.Accounts.ApiKeyTest do
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   import Varsel.Fixtures
 

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Varsel.Cases.PackageChannelTest do
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage

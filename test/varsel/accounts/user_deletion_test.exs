@@ -7,7 +7,7 @@ defmodule Varsel.Accounts.UserDeletionTest do
   Deleting an account takes what it *was* and keeps what it *wrote*.
   """
 
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   import Varsel.Fixtures
 

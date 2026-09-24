@@ -9,7 +9,7 @@ defmodule Varsel.Accounts.NotificationEmailReconciliationTest do
   account falls back to an address some identity still reports — nil if none.
   """
 
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   alias Varsel.Accounts
   alias Varsel.Accounts.User
