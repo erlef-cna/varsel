@@ -96,10 +96,16 @@ defmodule Varsel.Cases.Case do
     custom_statements do
       # Weights rank a title hit above a body hit. The id is in the vector
       # because a pasted URL is how a case gets shared.
+      #
+      # The id is indexed twice, both under the query's own config. A segment
+      # like `30e75d15` parses as scientific notation, which splits the lexeme
+      # and leaves the whole id unmatchable; the hyphen-split copy is what
+      # makes one segment findable on its own.
       statement :add_search_vector do
         up """
         ALTER TABLE cases ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (
-          setweight(to_tsvector('simple', id::text), 'A') ||
+          setweight(to_tsvector('english', id::text), 'A') ||
+          setweight(to_tsvector('english', replace(id::text, '-', ' ')), 'A') ||
           setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
           setweight(to_tsvector('english', coalesce(description_md, '')), 'B') ||
           setweight(to_tsvector('english', coalesce(technical_analysis_md, '')), 'C') ||

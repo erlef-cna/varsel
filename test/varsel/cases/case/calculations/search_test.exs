@@ -105,6 +105,17 @@ defmodule Varsel.Cases.Case.Calculations.SearchTest do
       [leading | _] = String.split(target.id, "-")
       assert titles(leading, poc) == ["Found by id"]
     end
+
+    # `30e75d15` parses as scientific notation, which used to split the lexeme
+    # and leave the id unmatchable. Around one id in twenty looks like this,
+    # so a random one only catches it sometimes.
+    test "matches an id whose segment reads as a number", %{poc: poc} do
+      id = "30e75d15-d1e3-4626-adbe-a0be5359d245"
+      Ash.Seed.seed!(Case, %{id: id, title: "Numeric id", state: :draft})
+
+      assert titles(id, poc) == ["Numeric id"]
+      assert titles("30e75d15", poc) == ["Numeric id"]
+    end
   end
 
   describe "matches_query — no match" do
