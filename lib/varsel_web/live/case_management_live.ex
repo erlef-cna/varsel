@@ -27,6 +27,7 @@ defmodule VarselWeb.CaseManagementLive do
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.Case
+  alias Varsel.CVE
   alias VarselWeb.BoardComponents
   alias VarselWeb.CaseManagementLive.LaneSort
 
@@ -63,6 +64,7 @@ defmodule VarselWeb.CaseManagementLive do
         scope: params["scope"] || "all",
         sort: LaneSort.parse(params["sort"])
       )
+      |> assign_cve_record_matches()
       |> keep_pipeline_live()
       |> keep_archive_live(params)
 
@@ -139,6 +141,25 @@ defmodule VarselWeb.CaseManagementLive do
     ]
     |> Cases.list_cases!()
     |> Enum.frequencies_by(& &1.state)
+  end
+
+  # A CVE ID with no case finds nothing here, which reads as "it does not
+  # exist". The count says where it does live. The read policy filters the
+  # records to what this actor may see.
+  defp assign_cve_record_matches(socket) do
+    count =
+      case String.trim(socket.assigns.query) do
+        "" ->
+          0
+
+        term ->
+          %{}
+          |> CVE.query_to_list_all_cve_records(actor: socket.assigns.current_user)
+          |> Ash.Query.filter(matches_query(query: ^String.downcase(term)))
+          |> Ash.count!()
+      end
+
+    assign(socket, :cve_record_match_count, count)
   end
 
   defp lane_dot(:draft), do: "bg-warning"
@@ -377,6 +398,7 @@ defmodule VarselWeb.CaseManagementLive do
   attr :face, :atom, required: true
   attr :query, :string, required: true
   attr :sort, :atom, required: true
+  attr :cve_record_match_count, :integer, required: true
   attr :pipeline_count, :integer, required: true
   attr :archive_count, :integer, required: true
   attr :pipeline_match_count, :integer, required: true
@@ -404,6 +426,13 @@ defmodule VarselWeb.CaseManagementLive do
       <span :if={@query != ""} class="text-xs text-base-content/50">
         matches for '{@query}'
       </span>
+      <.link
+        :if={@cve_record_match_count > 0}
+        navigate={~p"/cves?#{[q: @query]}"}
+        class="text-xs text-info hover:underline"
+      >
+        {@cve_record_match_count} in CVEs →
+      </.link>
     </div>
     """
   end
@@ -433,6 +462,7 @@ defmodule VarselWeb.CaseManagementLive do
             face={@face}
             query={@query}
             sort={@sort}
+            cve_record_match_count={@cve_record_match_count}
             pipeline_count={@pipeline_count}
             archive_count={@archive_count}
             pipeline_match_count={@pipeline_match_count}
@@ -486,6 +516,7 @@ defmodule VarselWeb.CaseManagementLive do
           archive_match_count={@archive_match_count}
           can_open?={Cases.can_open_case?(@current_user, %{})}
           sort={@sort}
+          cve_record_match_count={@cve_record_match_count}
         />
         <.archive_face
           :if={@face == :archive}
@@ -508,6 +539,7 @@ defmodule VarselWeb.CaseManagementLive do
   attr :archive_match_count, :integer, required: true
   attr :can_open?, :boolean, required: true
   attr :sort, :atom, required: true
+  attr :cve_record_match_count, :integer, required: true
 
   defp pipeline_face(assigns) do
     all_empty? = Enum.all?(assigns.lanes, &(&1.count == 0))
@@ -525,6 +557,17 @@ defmodule VarselWeb.CaseManagementLive do
       <.link patch={archive_path("all", @query, nil, @sort)} class="link text-primary">
         Archive →
       </.link>
+      <span :if={@cve_record_match_count > 0}>
+        ,
+        <.count_label
+          count={@cve_record_match_count}
+          singular="match"
+          plural="matches"
+        /> in
+        <.link navigate={~p"/cves?#{[q: @query]}"} class="link text-primary">
+          CVEs →
+        </.link>
+      </span>
     </div>
 
     <BoardComponents.board :if={!@zero_matches?}>

@@ -73,6 +73,7 @@ defmodule VarselWeb.CveListLive do
   def handle_params(params, _url, socket) do
     {:noreply,
      socket
+     |> assign(:query, params["q"] || "")
      |> assign(:page_opts, count: true, offset: offset_param(params))
      |> keep_records_live()}
   end
@@ -355,11 +356,14 @@ defmodule VarselWeb.CveListLive do
   end
 
   def handle_event("filter", %{"filter" => filter}, socket) do
-    {:noreply, socket |> assign(filter: filter) |> push_patch(to: ~p"/cves")}
+    {:noreply,
+     socket
+     |> assign(filter: filter)
+     |> push_patch(to: records_path(0, socket.assigns.query))}
   end
 
   def handle_event("search", %{"query" => query}, socket) do
-    {:noreply, socket |> assign(query: query) |> push_patch(to: ~p"/cves")}
+    {:noreply, push_patch(socket, to: records_path(0, query))}
   end
 
   def handle_event("jump_page", %{"page" => target}, socket) do
@@ -367,7 +371,7 @@ defmodule VarselWeb.CveListLive do
       case Integer.parse(target) do
         {number, ""} when number >= 1 ->
           offset = (number - 1) * socket.assigns.cve_records.limit
-          push_patch(socket, to: records_path(offset: offset))
+          push_patch(socket, to: records_path(offset, socket.assigns.query))
 
         _not_a_page ->
           socket
@@ -404,18 +408,28 @@ defmodule VarselWeb.CveListLive do
   end
 
   # The limit is dropped from the link deliberately: it is fixed server-side.
-  defp records_step_path(page, target) do
+  defp records_step_path(page, target, query) do
     case page_link_params(page, target) do
       :invalid -> nil
-      params -> records_path(Keyword.take(params, [:offset]))
+      params -> records_path(Keyword.get(params, :offset, 0), query)
     end
   end
 
-  # The first page is the bare path, so the list's canonical URL stays
-  # parameter-free.
-  defp records_path(offset: 0), do: ~p"/cves"
-  defp records_path([]), do: ~p"/cves"
-  defp records_path(params), do: ~p"/cves?#{params}"
+  # The first page of an unsearched list is the bare path, so the list's
+  # canonical URL stays parameter-free. Every other combination keeps both
+  # parameters, so paging never drops the search.
+  defp records_path(offset, query) do
+    params =
+      Enum.reject(
+        [q: (query != "" && query) || nil, offset: (offset != 0 && offset) || nil],
+        fn {_key, value} -> is_nil(value) end
+      )
+
+    case params do
+      [] -> ~p"/cves"
+      params -> ~p"/cves?#{params}"
+    end
+  end
 
   # Every active record — including :draft, which stays listed (and
   # editable) here as the manual escape hatch alongside the /cases flow.
@@ -756,7 +770,7 @@ defmodule VarselWeb.CveListLive do
             <.pagination
               page={@cve_records}
               noun={if @console?, do: "record", else: "CVE"}
-              patch={&records_step_path(@cve_records, &1)}
+              patch={&records_step_path(@cve_records, &1, @query)}
             />
           </:footer>
         </.list_card>
