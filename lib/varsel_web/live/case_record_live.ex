@@ -199,7 +199,11 @@ defmodule VarselWeb.CaseRecordLive do
         active={@live_action}
       >
         <:actions>
-          <CaseLifecycle.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
+          <CaseLifecycle.lifecycle_buttons
+            case_record={@case_record}
+            current_user={@current_user}
+            active_tab={@live_action}
+          />
         </:actions>
       </.case_header>
 

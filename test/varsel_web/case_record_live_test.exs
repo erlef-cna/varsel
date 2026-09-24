@@ -93,6 +93,33 @@ defmodule VarselWeb.CaseRecordLiveTest do
       assert html =~ "opacity-45"
       assert html =~ "blocking publish"
     end
+
+    test "an approved case links to the Publication tab", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Approved case", description_md: "desc"})
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      Cases.approve_case!(case_record, actor: poc)
+
+      publication = ~s{a[href="/cases/#{case_record.id}/publication"]}
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      assert has_element?(lv, publication, "Publish")
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve")
+      render_async(lv)
+      assert has_element?(lv, publication, "Publish")
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/publication")
+      render_async(lv)
+      refute has_element?(lv, publication, "Publish")
+    end
+
+    test "a draft case offers no publish link", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Draft case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      refute has_element?(lv, ~s{a[href="/cases/#{case_record.id}/publication"]}, "Publish")
+    end
   end
 
   describe "Publication tab" do
