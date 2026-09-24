@@ -320,6 +320,68 @@ defmodule VarselWeb.CaseLiveTest do
       refute html =~ "in CVEs"
     end
 
+    test "both face tabs count matches while searching, on either face", %{conn: conn, poc: poc} do
+      Fixtures.open_case(poc, %{title: "bandit smuggling bug"})
+      Fixtures.open_case(poc, %{title: "unrelated draft"})
+      Fixtures.open_case(poc, %{title: "another unrelated draft"})
+      Fixtures.archived_case(:published, "bandit archived report", DateTime.utc_now())
+      Fixtures.archived_case(:published, "quiet unrelated record", DateTime.utc_now())
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      tab_counts = fn lv ->
+        for label <- ["Pipeline", "Archive"] do
+          lv
+          |> element("a", label)
+          |> render()
+          |> LazyHTML.from_fragment()
+          |> LazyHTML.query(".tabular-nums")
+          |> LazyHTML.text()
+          |> String.trim()
+        end
+      end
+
+      assert ["3", "2"] = tab_counts.(lv)
+
+      # The active tab used to keep showing its total.
+      lv |> form("#case-search", %{"query" => "bandit"}) |> render_change()
+      assert ["1", "1"] = tab_counts.(lv)
+
+      lv |> element("a", "Archive") |> render_click()
+      assert ["1", "1"] = tab_counts.(lv)
+
+      lv |> form("#case-search", %{"query" => ""}) |> render_change()
+      assert ["3", "2"] = tab_counts.(lv)
+    end
+
+    test "the archive scope tabs count matches too", %{conn: conn, poc: poc} do
+      Fixtures.archived_case(:published, "bandit archived report", DateTime.utc_now())
+      Fixtures.archived_case(:published, "quiet unrelated record", DateTime.utc_now())
+      Fixtures.archived_case(:closed, "closed bandit case", DateTime.utc_now())
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+
+      html = lv |> form("#case-search", %{"query" => "bandit"}) |> render_change()
+
+      assert html =~ "bandit archived report"
+      refute html =~ "quiet unrelated record"
+
+      # "a" alone also matches the footer's "All CVEs".
+      scope_count = fn label ->
+        lv
+        |> element(~s{a[href*="scope="]}, label)
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(".tabular-nums")
+        |> LazyHTML.text()
+        |> String.trim()
+      end
+
+      assert scope_count.("All") == "2"
+      assert scope_count.("Published") == "1"
+      assert scope_count.("Closed") == "1"
+    end
+
     test "search filters lanes in place and the inactive tab shows the cross-face match count", %{
       conn: conn,
       poc: poc
