@@ -53,6 +53,29 @@ defmodule Varsel.Cases.AffectedPackage do
     references do
       reference :case, on_delete: :delete
     end
+
+    # The migration generator cannot express GENERATED ALWAYS.
+    migration_ignore_attributes [:search_vector]
+
+    custom_statements do
+      # `english` matches the query's own config. A vector built under another
+      # config never matches, because the stemmer rewrites the query's lexemes
+      # but not the stored ones.
+      statement :add_search_vector do
+        up """
+        ALTER TABLE case_affected_packages ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (
+          to_tsvector('english', coalesce(product, '') || ' ' || coalesce(vendor, ''))
+        ) STORED
+        """
+
+        down "ALTER TABLE case_affected_packages DROP COLUMN IF EXISTS search_vector"
+      end
+
+      statement :add_search_vector_gin_index do
+        up "CREATE INDEX case_affected_packages_search_vector_gin ON case_affected_packages USING GIN (search_vector)"
+        down "DROP INDEX IF EXISTS case_affected_packages_search_vector_gin"
+      end
+    end
   end
 
   paper_trail do
@@ -332,6 +355,13 @@ defmodule Varsel.Cases.AffectedPackage do
   attributes do
     uuid_primary_key :id
 
+    attribute :search_vector, Varsel.Types.TSVector do
+      writable? false
+      public? false
+      generated? true
+      select_by_default? false
+    end
+
     attribute :vendor, :string do
       description ~s{Rendered as affected[].vendor (e.g. "Erlang", "ash-project").}
       allow_nil? false
@@ -465,6 +495,21 @@ defmodule Varsel.Cases.AffectedPackage do
   end
 
   calculations do
+    calculate :matches_query,
+              :boolean,
+              expr(
+                fragment("? @@ websearch_to_tsquery('english', ?)", search_vector, ^arg(:query)) or
+                  contains(string_downcase(product), ^arg(:query)) or
+                  contains(string_downcase(vendor), ^arg(:query))
+              ) do
+      description "Whether the package's name matches a search term."
+      public? false
+
+      argument :query, :string do
+        allow_nil? false
+      end
+    end
+
     calculate :normalized_repo_url,
               :ci_string,
               expr(fragment("regexp_replace(?, ?, '')", repo_url, "(\\.git)?/*$")) do

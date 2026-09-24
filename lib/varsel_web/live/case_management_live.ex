@@ -25,6 +25,7 @@ defmodule VarselWeb.CaseManagementLive do
   import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
   alias Varsel.Cases
+  alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.Case
   alias VarselWeb.BoardComponents
   alias VarselWeb.CaseManagementLive.LaneSort
@@ -70,9 +71,9 @@ defmodule VarselWeb.CaseManagementLive do
 
   # ------------------------------------------------------------- pipeline face
 
-  # The pipeline is never paginated: one query for the whole active-state
-  # working set, grouped into lanes in memory. keep_live still carries the
-  # PubSub reactivity (case:all) so lane contents update live.
+  # The pipeline is never paginated: one query for the active states, grouped
+  # into lanes in memory. keep_live carries the PubSub reactivity (case:all)
+  # so lane contents update live.
   defp keep_pipeline_live(socket) do
     socket.endpoint.unsubscribe("case:all")
 
@@ -91,40 +92,53 @@ defmodule VarselWeb.CaseManagementLive do
         :cvss_score,
         :severity_bucket,
         assignments: [user: [:avatar_url, :display_name]],
-        affected_packages: Ash.Query.select(Varsel.Cases.AffectedPackage, [:product, :vendor, :position])
+        affected_packages: Ash.Query.select(AffectedPackage, [:product, :vendor, :position])
       ],
-      query: Ash.Query.filter(Case, state in ^@lane_states)
+      query:
+        Case
+        |> Ash.Query.filter(state in ^@lane_states)
+        |> filter_search(socket.assigns.query)
     )
   end
 
   defp assign_lanes(cases, socket) do
-    matches? = search_predicate(socket.assigns.query)
     grouped = Enum.group_by(cases, & &1.state)
-
+    totals = lane_totals(socket)
     searching? = socket.assigns.query != ""
 
     lanes =
       for state <- @lane_states do
         cards = grouped |> Map.get(state, []) |> LaneSort.sort(socket.assigns.sort)
-        matched = Enum.filter(cards, matches?)
+        total = Map.get(totals, state, 0)
 
         %{
           state: state,
           label: Phoenix.Naming.humanize(state),
           dot: lane_dot(state),
-          count: length(cards),
-          match_count: length(matched),
+          count: total,
+          match_count: length(cards),
           # The header count reflects matches while a query is active; the
           # live total returns when the input clears.
-          display_count: if(searching?, do: length(matched), else: length(cards)),
-          cards: matched
+          display_count: if(searching?, do: length(cards), else: total),
+          cards: cards
         }
       end
 
     socket
     |> assign(:lanes, lanes)
-    |> assign(:pipeline_count, length(cases))
-    |> assign(:pipeline_match_count, cases |> Enum.filter(matches?) |> length())
+    |> assign(:pipeline_count, totals |> Map.values() |> Enum.sum())
+    |> assign(:pipeline_match_count, length(cases))
+  end
+
+  # The rows are already filtered by the search, so a lane's total needs its
+  # own query.
+  defp lane_totals(socket) do
+    [
+      actor: socket.assigns.current_user,
+      query: Case |> Ash.Query.filter(state in ^@lane_states) |> Ash.Query.select([:state])
+    ]
+    |> Cases.list_cases!()
+    |> Enum.frequencies_by(& &1.state)
   end
 
   defp lane_dot(:draft), do: "bg-warning"
@@ -132,20 +146,10 @@ defmodule VarselWeb.CaseManagementLive do
   defp lane_dot(:approved), do: "bg-[color:var(--violet)]"
   defp lane_dot(:publishing), do: "bg-info"
 
-  defp search_predicate("") do
-    fn _case_record -> true end
-  end
-
-  defp search_predicate(query) do
-    term = String.downcase(query)
-
-    # is_binary/1, not truthiness: an unloaded calculation is an
-    # %Ash.NotLoaded{} struct, which is truthy.
-    fn case_record ->
-      (is_binary(case_record.title) &&
-         String.contains?(String.downcase(case_record.title), term)) ||
-        (is_binary(case_record.cve_id) &&
-           String.contains?(String.downcase(case_record.cve_id), term))
+  defp filter_search(base, query) do
+    case String.trim(query) do
+      "" -> base
+      term -> Ash.Query.filter(base, matches_query(query: ^String.downcase(term)))
     end
   end
 
@@ -180,7 +184,12 @@ defmodule VarselWeb.CaseManagementLive do
   defp list_archive_cases(socket, page_opts) do
     Cases.list_cases!(
       actor: socket.assigns.current_user,
-      load: [:cve_id, :cvss_score, :severity_bucket],
+      load: [
+        :cve_id,
+        :cvss_score,
+        :severity_bucket,
+        affected_packages: Ash.Query.select(AffectedPackage, [:product, :vendor, :position])
+      ],
       query: archive_query(socket.assigns.scope, socket.assigns.query),
       page: page_opts || socket.assigns.archive_page_opts
     )
@@ -204,20 +213,6 @@ defmodule VarselWeb.CaseManagementLive do
   defp filter_archive_scope(base, "closed"), do: Ash.Query.filter(base, state == :closed)
   defp filter_archive_scope(base, _all), do: base
 
-  defp filter_search(base, query) do
-    case query |> String.trim() |> String.downcase() do
-      "" ->
-        base
-
-      term ->
-        Ash.Query.filter(
-          base,
-          contains(string_downcase(title), ^term) or
-            contains(string_downcase(cve_record.cve_id), ^term)
-        )
-    end
-  end
-
   defp assign_archive_counts(_page, socket) do
     counts =
       [
@@ -234,8 +229,6 @@ defmodule VarselWeb.CaseManagementLive do
       if socket.assigns.query == "" do
         published + closed
       else
-        # Counted with the same server-side filter the archive face uses —
-        # the in-memory predicate would need :cve_id loaded on every row.
         [
           actor: socket.assigns.current_user,
           query:

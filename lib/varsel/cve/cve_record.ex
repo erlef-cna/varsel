@@ -137,6 +137,9 @@ defmodule Varsel.CVE.CveRecord do
                         cwe_ids: "cve_record_cwe_ids(cve_json)",
                         capec_ids: "cve_record_capec_ids(cve_json)"
 
+    # The migration generator cannot express GENERATED ALWAYS.
+    migration_ignore_attributes [:search_vector]
+
     custom_statements do
       statement :cve_record_search_vector_fn do
         up """
@@ -902,6 +905,13 @@ defmodule Varsel.CVE.CveRecord do
       public? false
     end
 
+    attribute :search_vector, Varsel.Types.TSVector do
+      writable? false
+      public? false
+      generated? true
+      select_by_default? false
+    end
+
     attribute :reservation_json, :map do
       description "Raw MITRE reservation object. Present from the :reserved state onward."
       public? true
@@ -1054,7 +1064,7 @@ defmodule Varsel.CVE.CveRecord do
     # pass for broader recall.
     calculate :matches_query,
               :boolean,
-              expr(fragment("search_vector @@ websearch_to_tsquery('english', ?)", ^arg(:query))) do
+              expr(fragment("? @@ websearch_to_tsquery('english', ?)", search_vector, ^arg(:query))) do
       public? false
 
       argument :query, :string do
@@ -1066,7 +1076,8 @@ defmodule Varsel.CVE.CveRecord do
               :float,
               expr(
                 fragment(
-                  "ts_rank(search_vector, websearch_to_tsquery('english', ?))",
+                  "ts_rank(?, websearch_to_tsquery('english', ?))",
+                  search_vector,
                   ^arg(:query)
                 )
               ) do
