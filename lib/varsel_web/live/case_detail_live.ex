@@ -316,7 +316,7 @@ defmodule VarselWeb.CaseDetailLive do
       _edit ->
         case AshPhoenix.Form.submit(form, params: params) do
           {:ok, _row} ->
-            {:noreply, socket |> assign(child_form: nil) |> put_flash(:info, "Saved.")}
+            {:noreply, assign(socket, child_form: nil)}
 
           {:error, form} ->
             {:noreply, assign(socket, child_form: %{socket.assigns.child_form | form: form})}
@@ -389,10 +389,8 @@ defmodule VarselWeb.CaseDetailLive do
 
     socket =
       case Cases.add_case_credit(params, actor: socket.assigns.current_user) do
-        {:ok, credit} ->
-          socket
-          |> assign(:credit_picker, nil)
-          |> put_flash(:info, "#{credit.name} credited.")
+        {:ok, _credit} ->
+          assign(socket, :credit_picker, nil)
 
         {:error, error} ->
           put_flash(socket, :error, errors_to_string(error))
@@ -415,8 +413,8 @@ defmodule VarselWeb.CaseDetailLive do
     case AshPhoenix.Form.submit(socket.assigns.credit_picker.form,
            params: credit_by_handle_params(params, socket)
          ) do
-      {:ok, credit} ->
-        {:noreply, socket |> assign(:credit_picker, nil) |> put_flash(:info, "#{credit.name} credited.")}
+      {:ok, _credit} ->
+        {:noreply, assign(socket, :credit_picker, nil)}
 
       {:error, form} ->
         {:noreply, assign(socket, :credit_picker, %{socket.assigns.credit_picker | form: form})}
@@ -452,9 +450,7 @@ defmodule VarselWeb.CaseDetailLive do
              actor: socket.assigns.current_user
            ) do
         {:ok, _assignment} ->
-          socket
-          |> assign(:people_picker?, false)
-          |> put_flash(:info, "User assigned.")
+          assign(socket, :people_picker?, false)
 
         {:error, error} ->
           put_flash(socket, :error, errors_to_string(error))
@@ -471,9 +467,7 @@ defmodule VarselWeb.CaseDetailLive do
     socket =
       case AshPhoenix.Form.submit(socket.assigns.grant_form, params: params) do
         {:ok, _case_record} ->
-          socket
-          |> assign(:people_picker?, false)
-          |> put_flash(:info, "#{params["username"]} added.")
+          assign(socket, :people_picker?, false)
 
         {:error, form} ->
           assign(socket, :grant_form, form)
@@ -595,10 +589,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp save_content(socket, params) do
     case AshPhoenix.Form.submit(socket.assigns.content_form, params: params) do
       {:ok, _case_record} ->
-        {:noreply,
-         socket
-         |> assign(editing_section: nil, content_form: nil)
-         |> put_flash(:info, "Case saved.")}
+        {:noreply, assign(socket, editing_section: nil, content_form: nil)}
 
       {:error, form} ->
         {:noreply, assign(socket, content_form: form)}

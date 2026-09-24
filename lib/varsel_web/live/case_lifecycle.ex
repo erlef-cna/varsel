@@ -135,12 +135,8 @@ defmodule VarselWeb.CaseLifecycle do
 
     socket =
       case Cases.assign_case_cve_id(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
-        {:ok, case_record} ->
-          assigned = Ash.load!(case_record, [:cve_id], actor: socket.assigns.current_user).cve_id
-
-          socket
-          |> assign(:cve_picker, nil)
-          |> put_flash(:info, "Assigned #{assigned}.")
+        {:ok, _case_record} ->
+          assign(socket, :cve_picker, nil)
 
         {:error, error} ->
           put_flash(socket, :error, errors_to_string(error))

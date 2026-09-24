@@ -50,7 +50,7 @@ defmodule VarselWeb.CveListLive do
         page_title: if(console?, do: "CVE records", else: "Issued CVEs"),
         console?: console?,
         may_adopt?: Ash.can?({Cases.Case, :adopt_cve_record}, socket.assigns.current_user),
-        mitre_syncing?: false,
+        mitre_sync: :idle,
         query: "",
         filter: "all",
         record_counts: %{},
@@ -181,7 +181,7 @@ defmodule VarselWeb.CveListLive do
 
     socket =
       socket
-      |> assign(mitre_syncing?: true)
+      |> assign(mitre_sync: :running)
       |> start_async(:mitre_sync, fn ->
         CVE.import_cves_from_mitre!(%{}, actor: actor)
         CVE.sync_reserved_cves_from_mitre!(%{}, actor: actor)
@@ -260,10 +260,8 @@ defmodule VarselWeb.CveListLive do
 
     socket =
       case CVE.withhold_cve_record(record, %{withhold_reason: reason}, actor: actor) do
-        {:ok, withheld} ->
-          socket
-          |> assign(:withholding_id, nil)
-          |> put_flash(:info, "Withheld #{withheld.cve_id} from the pool.")
+        {:ok, _withheld} ->
+          assign(socket, :withholding_id, nil)
 
         {:error, error} ->
           put_flash(socket, :error, "Could not withhold: #{errors_to_string(error)}")
@@ -343,10 +341,8 @@ defmodule VarselWeb.CveListLive do
 
     socket =
       case CVE.reject_cve_record(record, %{rejection_reason: reason}, actor: actor) do
-        {:ok, rejected} ->
-          socket
-          |> assign(:confirming_reject_id, nil)
-          |> put_flash(:info, "Rejected #{rejected.cve_id}.")
+        {:ok, _rejected} ->
+          assign(socket, :confirming_reject_id, nil)
 
         {:error, error} ->
           put_flash(socket, :error, "Could not reject: #{errors_to_string(error)}")
@@ -382,18 +378,23 @@ defmodule VarselWeb.CveListLive do
 
   @impl Phoenix.LiveView
   def handle_async(:mitre_sync, {:ok, :ok}, socket) do
-    {:noreply,
-     socket
-     |> assign(mitre_syncing?: false)
-     |> put_flash(:info, "MITRE import and sync finished.")}
+    Process.send_after(self(), :clear_mitre_sync, 4_000)
+    {:noreply, assign(socket, mitre_sync: :done)}
   end
 
   def handle_async(:mitre_sync, {:exit, reason}, socket) do
     {:noreply,
      socket
-     |> assign(mitre_syncing?: false)
+     |> assign(mitre_sync: :idle)
      |> put_flash(:error, "MITRE sync failed: #{Exception.format_exit(reason)}")}
   end
+
+  @impl Phoenix.LiveView
+  def handle_info(:clear_mitre_sync, socket), do: {:noreply, assign(socket, mitre_sync: :idle)}
+
+  defp mitre_sync_label(:running), do: "Syncing…"
+  defp mitre_sync_label(:done), do: "Synced"
+  defp mitre_sync_label(:idle), do: "Sync pool"
 
   # The keep_live callback: page_opts is nil on the first run and the stored
   # page (with the stability filter) on refetches/page changes. The fallback
@@ -581,9 +582,15 @@ defmodule VarselWeb.CveListLive do
             :if={Ash.can?({CveRecord, :import_from_mitre}, @current_user)}
             class="btn btn-sm btn-eef-quiet"
             phx-click="sync_with_mitre"
-            disabled={@mitre_syncing?}
+            disabled={@mitre_sync == :running}
           >
-            {if @mitre_syncing?, do: "Syncing…", else: "Sync pool"}
+            {mitre_sync_label(@mitre_sync)}
+            <.icon
+              :if={@mitre_sync == :running}
+              name="hero-arrow-path"
+              class="ml-1 size-3 motion-safe:animate-spin"
+            />
+            <.icon :if={@mitre_sync == :done} name="hero-check" class="ml-1 size-3" />
           </button>
           <button
             :if={Ash.can?({CveRecord, :assign}, @current_user)}

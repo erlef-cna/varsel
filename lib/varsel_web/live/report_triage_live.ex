@@ -88,13 +88,13 @@ defmodule VarselWeb.ReportTriageLive do
   end
 
   def handle_event("triage", %{"report_id" => report_id, "triage_notes" => notes}, socket) do
-    act(socket, report_id, "marked under triage", fn report, actor ->
+    act(socket, report_id, fn report, actor ->
       CVE.triage_vulnerability_report(report, %{triage_notes: presence(notes)}, actor: actor)
     end)
   end
 
   def handle_event("reject", %{"report_id" => report_id, "triage_notes" => notes}, socket) do
-    act(socket, report_id, "rejected", fn report, actor ->
+    act(socket, report_id, fn report, actor ->
       CVE.reject_vulnerability_report(report, %{triage_notes: presence(notes)}, actor: actor)
     end)
   end
@@ -105,10 +105,7 @@ defmodule VarselWeb.ReportTriageLive do
 
     case CVE.accept_vulnerability_report(report, args, actor: socket.assigns.current_user) do
       {:ok, accepted} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Report accepted into a case.")
-         |> push_navigate(to: ~p"/cases/#{accepted.case_id}")}
+        {:noreply, push_navigate(socket, to: ~p"/cases/#{accepted.case_id}")}
 
       {:error, error} ->
         {:noreply, put_flash(socket, :error, errors_to_string(error))}
@@ -116,16 +113,16 @@ defmodule VarselWeb.ReportTriageLive do
   end
 
   def handle_event("withdraw", %{"report_id" => report_id}, socket) do
-    act(socket, report_id, "withdrawn", fn report, actor ->
+    act(socket, report_id, fn report, actor ->
       CVE.withdraw_vulnerability_report(report, actor: actor)
     end)
   end
 
-  defp act(socket, report_id, verb, fun) do
+  defp act(socket, report_id, fun) do
     socket =
       case fun.(find_report(socket, report_id), socket.assigns.current_user) do
         # The list refreshes via the pub_sub notification handled above.
-        {:ok, _report} -> socket |> put_flash(:info, "Report #{verb}.") |> assign(deciding: nil)
+        {:ok, _report} -> assign(socket, deciding: nil)
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
