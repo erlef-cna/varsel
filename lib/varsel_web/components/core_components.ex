@@ -1113,6 +1113,51 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  A menu that picks one option, for a console control that sits beside the
+  search box rather than inside a form.
+
+  The trigger names the current choice, so the board's order is readable
+  without opening the menu.
+  """
+  attr :id, :string, required: true
+  attr :label, :string, required: true, doc: "what the control chooses, e.g. \"Sort\""
+  attr :value, :atom, required: true, doc: "the selected option"
+  attr :options, :list, required: true, doc: "{value, label} pairs, in menu order"
+  attr :event, :string, required: true, doc: "pushed with the chosen value as `selection`"
+
+  def console_menu(assigns) do
+    ~H"""
+    <div id={@id} class="dropdown dropdown-end">
+      <div
+        tabindex="0"
+        role="button"
+        aria-label={@label}
+        class="btn btn-sm btn-ghost border border-base-300 font-normal gap-1.5"
+      >
+        <.icon name="hero-bars-arrow-down-mini" class="size-4 text-base-content/50 shrink-0" />
+        <span class="text-base-content/60">{@label}:</span>
+        {Enum.find_value(@options, fn {value, label} -> value == @value && label end)}
+      </div>
+      <ul
+        tabindex="0"
+        class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-48 p-2 z-50"
+      >
+        <li :for={{value, label} <- @options}>
+          <button
+            type="button"
+            phx-click={@event}
+            phx-value-selection={value}
+            class={[value == @value && "active font-semibold"]}
+          >
+            {label}
+          </button>
+        </li>
+      </ul>
+    </div>
+    """
+  end
+
+  @doc """
   Renders an input with label and error messages.
 
   A `Phoenix.HTML.FormField` may be passed as argument,

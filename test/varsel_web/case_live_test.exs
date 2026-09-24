@@ -140,7 +140,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Archived case"
     end
 
-    test "lanes group by state, order oldest-updated-first, and show empty lanes as \"—\"", %{
+    test "lanes group by state, order newest-updated-first, and show empty lanes as \"—\"", %{
       conn: conn,
       poc: poc
     } do
@@ -154,9 +154,9 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
 
-      # The older draft renders before the newer one (oldest-in-state first).
-      [_before, after_older] = String.split(html, "Older draft", parts: 2)
-      assert String.contains?(after_older, "Newer draft")
+      # The newer draft renders before the older one (newest-in-state first).
+      [_before, after_newer] = String.split(html, "Newer draft", parts: 2)
+      assert String.contains?(after_newer, "Older draft")
 
       assert html =~ "In review"
       # Approved is empty: the lane stays, its body shows "—" right after its
@@ -167,7 +167,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert approved_lane =~ "—"
     end
 
-    test "a lane past 8 cards clips oldest-first with a \"Show all N\" footer that expands in place",
+    test "a lane past 8 cards clips the tail with a \"Show all N\" footer that expands in place",
          %{conn: conn, poc: poc} do
       for n <- 1..9 do
         Fixtures.open_case(poc, %{title: "Draft #{n}"})
@@ -177,14 +177,82 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
 
       assert html =~ "Show all 9"
-      # Oldest-first clipping hides only the freshest intake: Draft 9 (the
-      # last one opened) is clipped; Draft 1 (the oldest) always shows.
-      assert html =~ "Draft 1"
-      refute html =~ "Draft 9"
+      # Newest-first clipping keeps the freshest intake in view: Draft 9 (the
+      # last one opened) shows; Draft 1 (the oldest) falls past the clip.
+      assert html =~ "Draft 9"
+      refute html =~ "Draft 1"
 
       html = lv |> element("button[phx-value-lane=draft]") |> render_click()
       assert html =~ "Show fewer"
-      assert html =~ "Draft 9"
+      assert html =~ "Draft 1"
+    end
+
+    test "the sort picker reorders the lanes and persists in the URL", %{conn: conn, poc: poc} do
+      old = Fixtures.open_case(poc, %{title: "Older draft"})
+      _new = Fixtures.open_case(poc, %{title: "Newer draft"})
+      Ash.Seed.update!(old, %{updated_at: DateTime.shift(DateTime.utc_now(), day: -1)})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      lv |> element(~s{#lane-sort button[phx-value-selection=oldest]}) |> render_click()
+
+      assert_patched(lv, "/cases?sort=oldest")
+
+      html = render(lv)
+      [_before, after_older] = String.split(html, "Older draft", parts: 2)
+      assert String.contains?(after_older, "Newer draft")
+    end
+
+    test "a sort in the URL is applied on load; the default is left out of it", %{
+      conn: conn,
+      poc: poc
+    } do
+      old = Fixtures.open_case(poc, %{title: "Older draft"})
+      _new = Fixtures.open_case(poc, %{title: "Newer draft"})
+      Ash.Seed.update!(old, %{updated_at: DateTime.shift(DateTime.utc_now(), day: -1)})
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?sort=oldest")
+
+      [_before, after_older] = String.split(html, "Older draft", parts: 2)
+      assert String.contains?(after_older, "Newer draft")
+
+      # Returning to the default drops the parameter rather than spelling it out.
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?sort=oldest")
+      lv |> element(~s{#lane-sort button[phx-value-selection=newest]}) |> render_click()
+      assert_patched(lv, "/cases")
+    end
+
+    test "an unknown sort falls back to the default instead of failing", %{conn: conn, poc: poc} do
+      Fixtures.open_case(poc, %{title: "Some draft"})
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?sort=sideways")
+
+      assert html =~ "Some draft"
+      assert html =~ "Newest first"
+    end
+
+    test "the sort survives a search and a trip through the archive", %{conn: conn, poc: poc} do
+      Fixtures.open_case(poc, %{title: "bandit draft"})
+      Fixtures.archived_case(:published, "bandit archived", DateTime.utc_now())
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?sort=severity")
+
+      lv |> form("#case-search", %{"query" => "bandit"}) |> render_change()
+      assert_patched(lv, "/cases?q=bandit&sort=severity")
+
+      lv |> element(~s{a[href*="face=archive"]}) |> render_click()
+      assert_patch(lv) =~ "sort=severity"
+    end
+
+    test "the picker is a pipeline control and stays off the archive face", %{
+      conn: conn,
+      poc: poc
+    } do
+      Fixtures.archived_case(:published, "An archived case", DateTime.utc_now())
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+
+      refute html =~ ~s{id="lane-sort"}
     end
 
     test "staleness: a card past its lane's threshold names the lane in its age", %{
