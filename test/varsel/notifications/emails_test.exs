@@ -9,7 +9,7 @@ defmodule Varsel.Notifications.EmailsTest do
   a digest listing counts per kind.
   """
 
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   alias Varsel.Accounts
   alias Varsel.Cases
