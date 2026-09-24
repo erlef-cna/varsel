@@ -155,15 +155,41 @@ defmodule VarselWeb.CveListLiveTest do
       assert has_element?(lv, detail_link("CVE-2025-1001"))
     end
 
+    test "paging keeps the search", %{conn: conn} do
+      # 30 records, all matching "title", so a search still spans two pages.
+      thirty_published()
+
+      {:ok, lv, _html} = live(conn, ~p"/cves?#{[q: "title"]}")
+
+      lv |> element("#{@pager} a", "»") |> render_click()
+      assert_patch(lv, "/cves?offset=25&q=title")
+
+      # The second page of the search, not the second page of everything.
+      assert has_element?(lv, detail_link("CVE-2025-1005"))
+
+      lv |> form(@pager, %{page: "1"}) |> render_submit()
+      assert_patch(lv, "/cves?q=title")
+    end
+
     test "searching resets to the first page", %{conn: conn} do
       thirty_published()
 
       {:ok, lv, _html} = live(conn, ~p"/cves?offset=25")
 
       lv |> form("#cve-record-search", %{query: "title30"}) |> render_change()
-      assert_patch(lv, "/cves")
+      # The term rides in the URL; the offset does not survive it.
+      assert_patch(lv, "/cves?q=title30")
 
       assert has_element?(lv, detail_link("CVE-2025-1030"))
+    end
+
+    test "a search in the URL is applied on load", %{conn: conn} do
+      thirty_published()
+
+      {:ok, lv, _html} = live(conn, ~p"/cves?#{[q: "title30"]}")
+
+      assert has_element?(lv, detail_link("CVE-2025-1030"))
+      refute has_element?(lv, detail_link("CVE-2025-1001"))
     end
 
     test "a malformed offset falls back to the first page", %{conn: conn} do

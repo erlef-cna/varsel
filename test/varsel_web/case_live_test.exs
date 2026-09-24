@@ -292,6 +292,34 @@ defmodule VarselWeb.CaseLiveTest do
       assert after_review =~ "Needs an owner"
     end
 
+    test "a CVE ID with no case points at the CVEs tab", %{conn: conn, poc: poc} do
+      Fixtures.published_cve_record("CVE-2026-50001", "Record without a case")
+      Fixtures.open_case(poc, %{title: "An unrelated case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      html = lv |> form("#case-search", %{"query" => "CVE-2026-50001"}) |> render_change()
+
+      # No case carries the ID, so the board is empty and the link is the only
+      # thing telling the searcher where the record lives.
+      refute html =~ "An unrelated case"
+      assert html =~ "No active cases match"
+      assert html =~ "1 match in"
+      assert html =~ "CVEs →"
+      assert has_element?(lv, ~s{a[href="/cves?q=CVE-2026-50001"]})
+    end
+
+    test "a search matching no CVE record shows no CVEs link", %{conn: conn, poc: poc} do
+      Fixtures.open_case(poc, %{title: "bandit smuggling"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      html = lv |> form("#case-search", %{"query" => "bandit"}) |> render_change()
+
+      assert html =~ "bandit smuggling"
+      refute html =~ "in CVEs"
+    end
+
     test "search filters lanes in place and the inactive tab shows the cross-face match count", %{
       conn: conn,
       poc: poc
