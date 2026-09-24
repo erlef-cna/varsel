@@ -63,6 +63,7 @@ defmodule VarselWeb.CoreComponents do
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
+      phx-hook={@kind == :info && "VarselWeb.CoreComponents.AutoDismiss"}
       role="alert"
       class="toast toast-top toast-end z-50"
       {@rest}
@@ -84,6 +85,19 @@ defmodule VarselWeb.CoreComponents do
         </button>
       </div>
     </div>
+    <%!-- Named in full, not as `.AutoDismiss`: a leading dot resolves against
+          the module that RENDERS the element, and `Layouts.flash_group/1`
+          does that from another module. --%>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".AutoDismiss">
+      export default {
+        mounted() {
+          this.timer = setTimeout(() => this.el.click(), 5000)
+        },
+        destroyed() {
+          clearTimeout(this.timer)
+        }
+      }
+    </script>
     """
   end
 

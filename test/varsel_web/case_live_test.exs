@@ -741,7 +741,8 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Assign the next free ID") |> render_click()
 
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == lowest.id
-      assert render(lv) =~ "Assigned CVE-#{year}-31002."
+      # The workspace names the assigned ID; that is the feedback.
+      assert render(lv) =~ "CVE-#{year}-31002"
     end
 
     test "the auto path offers no particular ID up front", %{conn: conn, poc: poc} do
@@ -772,7 +773,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> render_submit()
 
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == chosen.id
-      assert render(lv) =~ "Assigned CVE-#{year}-31005."
+      assert render(lv) =~ "CVE-#{year}-31005"
     end
 
     test "withheld IDs are offered below the free ones, with their reason", %{

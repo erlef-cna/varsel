@@ -58,8 +58,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
          socket
          |> assign(created_key: {api_key, api_key.__metadata__.plaintext_api_key}, expiry: "30")
          |> assign_form()
-         |> assign_api_keys()
-         |> put_flash(:info, "Token #{api_key.name} created.")}
+         |> assign_api_keys()}
 
       {:error, form} ->
         {:noreply,
@@ -84,9 +83,7 @@ defmodule VarselWeb.ApiKeySettingsLive do
     socket =
       case Accounts.revoke_api_key(api_key, actor: actor) do
         :ok ->
-          socket
-          |> assign_api_keys()
-          |> put_flash(:info, "Token #{api_key.name} revoked.")
+          assign_api_keys(socket)
 
         {:error, _error} ->
           put_flash(socket, :error, "Could not revoke token #{api_key.name}.")

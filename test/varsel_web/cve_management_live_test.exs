@@ -535,7 +535,8 @@ defmodule VarselWeb.VarselLiveTest do
     lv |> element("button", "Sync pool") |> render_click()
     render_async(lv, 5000)
 
-    assert render(lv) =~ "MITRE import and sync finished."
+    # The button reports the finished sync where the action was taken.
+    assert render(lv) =~ "Synced"
 
     by_id =
       CveRecord
