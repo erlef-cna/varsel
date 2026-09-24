@@ -14,16 +14,14 @@ defmodule Varsel.Accounts.Token do
     extensions: [AshAuthentication.TokenResource, AshPaperTrail.Resource],
     simple_notifiers: [AshAuthentication.Phoenix.TokenRevocationNotifier]
 
+  alias Varsel.Accounts.Token.LiveSocketId
+
   # Revoking a token only stops it authenticating *afresh*. A LiveView already
   # mounted keeps its actor until it remounts, so revocation also broadcasts a
   # disconnect to the socket that token opened.
-  #
-  # Sign-in names the socket from the JWT's claims (string keys) and revocation
-  # from the token row (atom keys), so the template has to read both to arrive
-  # at the same topic.
   token do
     endpoints [VarselWeb.Endpoint]
-    live_socket_id_template &"users_sessions:#{&1["jti"] || &1[:jti]}"
+    live_socket_id_template &LiveSocketId.template/1
   end
 
   postgres do

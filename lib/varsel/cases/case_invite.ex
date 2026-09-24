@@ -29,10 +29,10 @@ defmodule Varsel.Cases.CaseInvite do
 
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.Case
+  alias Varsel.Cases.CaseInvite.Changes.DeliverInvite
   alias Varsel.Cases.CaseInvite.Changes.ResolveContact
   alias Varsel.Cases.CaseInvite.EmailStatus
   alias Varsel.Cases.CaseInvite.Strategy
-  alias Varsel.Notifications.Emails
 
   postgres do
     table "case_invites"
@@ -117,10 +117,7 @@ defmodule Varsel.Cases.CaseInvite do
       change set_attribute(:email_status, :sent)
       change set_attribute(:emailed_at, &DateTime.utc_now/0)
 
-      change after_action(fn _changeset, invite, _context ->
-               Emails.deliver_invite(invite)
-               {:ok, invite}
-             end)
+      change DeliverInvite
     end
 
     read :for_identity do

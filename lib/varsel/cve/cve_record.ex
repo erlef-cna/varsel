@@ -111,13 +111,14 @@ defmodule Varsel.CVE.CveRecord do
 
   import Ash.Expr
 
+  alias Varsel.CVE.CveRecord.Actions.ImportFromMitre
+  alias Varsel.CVE.CveRecord.Actions.RefillPool
+  alias Varsel.CVE.CveRecord.Actions.RunRejectStale
+  alias Varsel.CVE.CveRecord.Actions.SyncReservedFromMitre
+  alias Varsel.CVE.CveRecord.Changes.RejectAtMitre
   alias Varsel.CVE.CveRecord.Preparations.FilterByCwe
   alias Varsel.CVE.CveRecord.Validations.ValidCveRecord
-  alias Varsel.CVE.MitreCveApi
   alias Varsel.Types.OkResult
-
-  require Ash.Query
-  require Logger
 
   graphql do
     type :cve_record
@@ -620,42 +621,7 @@ defmodule Varsel.CVE.CveRecord do
       with a warning (see the :import upsert_condition).
       """
 
-      run fn _input, context ->
-        opts = Varsel.ObanContext.forward(context)
-
-        # Warning and GET-saving only: a row that enters a protected state
-        # after this snapshot is still skipped (silently) by the :import
-        # upsert_condition, which stays the enforcement.
-        protected_ids =
-          __MODULE__
-          |> Ash.Query.filter(state not in [:reserved, :withheld, :published])
-          |> Ash.Query.load(:cve_id)
-          |> Ash.read!(opts)
-          |> MapSet.new(& &1.cve_id)
-
-        MitreCveApi.stream_ids()
-        |> Stream.reject(fn cve_id ->
-          skip? = MapSet.member?(protected_ids, cve_id)
-
-          if skip? do
-            Logger.warning(
-              "Skipped MITRE import of #{cve_id}: the local record is none of :reserved, :withheld or :published"
-            )
-          end
-
-          skip?
-        end)
-        |> Enum.map(fn cve_id ->
-          {:ok, cve_json} = MitreCveApi.get(cve_id)
-          %{cve_json: cve_json}
-        end)
-        |> Enum.chunk_every(100)
-        |> Enum.each(fn chunk ->
-          Varsel.CVE.import_cve_record!(chunk, opts)
-        end)
-
-        {:ok, :ok}
-      end
+      run ImportFromMitre
     end
 
     update :assign do
@@ -763,22 +729,7 @@ defmodule Varsel.CVE.CveRecord do
       change transition_state(:rejected)
       change set_attribute(:rejected_at, &DateTime.utc_now/0)
 
-      change before_action(fn changeset, _context ->
-               cve_id =
-                 case changeset.data.cve_id do
-                   %Ash.NotLoaded{} ->
-                     get_in(changeset.data.cve_json || %{}, ["cveMetadata", "cveId"]) ||
-                       get_in(changeset.data.reservation_json || %{}, ["cve_id"])
-
-                   cve_id ->
-                     cve_id
-                 end
-
-               case MitreCveApi.reject(cve_id) do
-                 {:ok, _} -> changeset
-                 {:error, reason} -> Ash.Changeset.add_error(changeset, reason)
-               end
-             end)
+      change RejectAtMitre
     end
 
     update :mark_rejected do
@@ -817,38 +768,7 @@ defmodule Varsel.CVE.CveRecord do
         description "Skip (no MITRE call) when no CVE records exist locally at all."
       end
 
-      run fn input, context ->
-        opts = Varsel.ObanContext.forward(context)
-        skip_on_empty = input.arguments[:skip_on_empty]
-
-        if skip_on_empty and Ash.count!(__MODULE__, opts) == 0 do
-          {:ok, :ok}
-        else
-          year = input.arguments[:year] || Date.utc_today().year
-          min_size = Application.get_env(:varsel, :cve_pool_min_size, 10)
-
-          open_count =
-            year
-            |> Varsel.CVE.query_to_available_cve_records(opts)
-            |> Ash.count!(opts)
-
-          if open_count < min_size do
-            amount = min_size - open_count
-
-            case MitreCveApi.reserve(year, amount) do
-              {:ok, reservation_jsons} ->
-                inputs = Enum.map(reservation_jsons, &%{reservation_json: &1})
-
-                Varsel.CVE.reserve_cve_record!(inputs, opts)
-
-              {:error, reason} ->
-                raise "Failed to reserve CVE IDs from MITRE: #{reason}"
-            end
-          end
-
-          {:ok, :ok}
-        end
-      end
+      run RefillPool
     end
 
     action :sync_reserved_from_mitre, OkResult do
@@ -858,25 +778,7 @@ defmodule Varsel.CVE.CveRecord do
       IDs published externally are picked up by the import_from_mitre action instead.
       """
 
-      run fn _input, context ->
-        opts = Varsel.ObanContext.forward(context)
-
-        # 1. Upsert all RESERVED IDs from MITRE
-        MitreCveApi.stream_reserved_ids()
-        |> Stream.map(&%{reservation_json: &1})
-        |> Stream.chunk_every(100)
-        |> Enum.each(fn chunk ->
-          Varsel.CVE.reserve_cve_record!(chunk, opts)
-        end)
-
-        # 2. Mark local pool rows rejected for IDs that MITRE has rejected externally.
-        #    Only un-published pool rows are affected; published records are left intact.
-        Enum.each(MitreCveApi.stream_rejected_ids(), fn rejected_cve_id ->
-          reject_pool_row(rejected_cve_id, "Rejected externally at MITRE", opts)
-        end)
-
-        {:ok, :ok}
-      end
+      run SyncReservedFromMitre
     end
 
     action :run_reject_stale, OkResult do
@@ -885,24 +787,7 @@ defmodule Varsel.CVE.CveRecord do
       Rejects all open prior-year reservations at MITRE via :reject.
       """
 
-      run fn _input, context ->
-        opts = Varsel.ObanContext.forward(context)
-        current_year = Date.utc_today().year
-        current_year_start = DateTime.new!(Date.new!(current_year, 1, 1), ~T[00:00:00])
-
-        __MODULE__
-        |> Ash.Query.filter(state == :reserved and reserved_at < ^current_year_start)
-        |> Varsel.CVE.reject_cve_record!(
-          %{rejection_reason: "Stale prior-year reservation"},
-          Keyword.put(opts, :bulk_options,
-            return_errors?: true,
-            strategy: :stream,
-            allow_stream_with: :full_read
-          )
-        )
-
-        {:ok, :ok}
-      end
+      run RunRejectStale
     end
   end
 
@@ -1258,20 +1143,5 @@ defmodule Varsel.CVE.CveRecord do
 
   identities do
     identity :unique_cve_id, [:cve_id]
-  end
-
-  defp reject_pool_row(cve_id, reason, opts) do
-    __MODULE__
-    |> Ash.Query.filter(cve_id == ^cve_id and state in [:reserved, :withheld])
-    |> Varsel.CVE.mark_cve_record_rejected!(
-      %{rejection_reason: reason},
-      Keyword.put(opts, :bulk_options,
-        return_errors?: true,
-        strategy: :stream,
-        allow_stream_with: :full_read
-      )
-    )
-
-    :ok
   end
 end

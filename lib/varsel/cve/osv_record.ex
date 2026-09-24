@@ -48,10 +48,9 @@ defmodule Varsel.CVE.OsvRecord do
 
   alias Varsel.CVE.CveRecord
   alias Varsel.CVE.OsvConverter
+  alias Varsel.CVE.OsvRecord.Actions.CreateMissing
   alias Varsel.HexPm
   alias Varsel.Types.OkResult
-
-  require Ash.Query
 
   graphql do
     type :osv_record
@@ -131,47 +130,7 @@ defmodule Varsel.CVE.OsvRecord do
       raises (for the Oban retry) after all records were attempted.
       """
 
-      run fn _input, context ->
-        opts = Varsel.ObanContext.forward(context)
-
-        errors =
-          CveRecord
-          |> Ash.Query.filter(state == :published and not exists(osv_record, true))
-          |> Ash.read!(opts)
-          |> Enum.flat_map(fn cve_record ->
-            case derive(cve_record) do
-              {:ok, osv, content_hash} ->
-                now = DateTime.utc_now()
-
-                Ash.create!(
-                  __MODULE__,
-                  %{
-                    osv_id: osv["id"],
-                    cve_record_id: cve_record.id,
-                    osv_json: stamp_modified(osv, now),
-                    content_hash: content_hash,
-                    modified_at: now,
-                    synced_at: now
-                  },
-                  Keyword.put(opts, :action, :create)
-                )
-
-                []
-
-              {:skip, _reason} ->
-                []
-
-              {:error, reason} ->
-                [{get_in(cve_record.cve_json, ["cveMetadata", "cveId"]), reason}]
-            end
-          end)
-
-        if errors == [] do
-          {:ok, :ok}
-        else
-          raise "Failed to create OSV records: #{inspect(errors)}"
-        end
-      end
+      run CreateMissing
     end
 
     update :sync do
