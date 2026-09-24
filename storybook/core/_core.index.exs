@@ -20,6 +20,8 @@ defmodule VarselWeb.Storybook.Core do
   def entry("page_container"), do: [name: "Page container", icon: {:local, "hero-view-columns"}]
   def entry("page_header"), do: [name: "Page header", icon: {:local, "hero-window"}]
 
+  def entry("console_menu"), do: [name: "Console menu", icon: {:local, "hero-bars-arrow-down"}]
+
   def entry("console_search"), do: [name: "Console search", icon: {:local, "hero-magnifying-glass"}]
 
   def entry("count_label"), do: [name: "Count label", icon: {:local, "hero-hashtag"}]

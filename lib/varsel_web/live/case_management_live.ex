@@ -13,9 +13,10 @@ defmodule VarselWeb.CaseManagementLive do
   archived-at (published_at, or `updated_at` for closed rows — see
   `archive_query/2`) descending.
 
-  The face lives in `?face=` (`page`/`q` ride along), so both faces and any
-  search are deep-linkable and survive a face switch. Lane-clip expansion is
-  ephemeral UI state (not in the URL, reset on reload) per the checklist.
+  The face lives in `?face=` (`page`/`q`/`sort` ride along), so both faces,
+  any search and the lane order are deep-linkable and survive a face switch.
+  Lane-clip expansion is ephemeral UI state (not in the URL, reset on reload)
+  per the checklist.
   """
   use VarselWeb, :live_view
 
@@ -26,6 +27,7 @@ defmodule VarselWeb.CaseManagementLive do
   alias Varsel.Cases
   alias Varsel.Cases.Case
   alias VarselWeb.BoardComponents
+  alias VarselWeb.CaseManagementLive.LaneSort
 
   require Ash.Query
   require Ash.Sort
@@ -54,7 +56,12 @@ defmodule VarselWeb.CaseManagementLive do
 
     socket =
       socket
-      |> assign(face: face, query: query, scope: params["scope"] || "all")
+      |> assign(
+        face: face,
+        query: query,
+        scope: params["scope"] || "all",
+        sort: LaneSort.parse(params["sort"])
+      )
       |> keep_pipeline_live()
       |> keep_archive_live(params)
 
@@ -98,7 +105,7 @@ defmodule VarselWeb.CaseManagementLive do
 
     lanes =
       for state <- @lane_states do
-        cards = grouped |> Map.get(state, []) |> Enum.sort_by(& &1.updated_at, {:asc, DateTime})
+        cards = grouped |> Map.get(state, []) |> LaneSort.sort(socket.assigns.sort)
         matched = Enum.filter(cards, matches?)
 
         %{
@@ -266,16 +273,22 @@ defmodule VarselWeb.CaseManagementLive do
   def handle_event("search", %{"query" => query}, socket) do
     to =
       if socket.assigns.face == :archive do
-        archive_path(socket, socket.assigns.scope, query, nil)
+        archive_path(socket.assigns.scope, query, nil, socket.assigns.sort)
       else
-        pipeline_path(query)
+        pipeline_path(query, socket.assigns.sort)
       end
 
     {:noreply, push_patch(socket, to: to)}
   end
 
+  def handle_event("sort", %{"selection" => selection}, socket) do
+    sort = LaneSort.parse(selection)
+
+    {:noreply, push_patch(socket, to: pipeline_path(socket.assigns.query, sort))}
+  end
+
   def handle_event("scope", %{"scope" => scope}, socket) do
-    {:noreply, push_patch(socket, to: archive_path(socket, scope, socket.assigns.query, nil))}
+    {:noreply, push_patch(socket, to: archive_path(scope, socket.assigns.query, nil, socket.assigns.sort))}
   end
 
   def handle_event("paginate", %{"page" => target}, socket) do
@@ -307,20 +320,29 @@ defmodule VarselWeb.CaseManagementLive do
     {:noreply, assign(socket, :expanded_lanes, expanded)}
   end
 
-  defp pipeline_path(""), do: ~p"/cases"
-  defp pipeline_path(query), do: ~p"/cases?#{[q: query]}"
+  defp pipeline_path(query, sort) do
+    case drop_empty(q: (query != "" && query) || nil, sort: LaneSort.param(sort)) do
+      [] -> ~p"/cases"
+      params -> ~p"/cases?#{params}"
+    end
+  end
 
-  defp archive_path(_socket, scope, query, page) do
+  # The sort rides along even on the archive face, which does not use it, so
+  # switching back to the pipeline returns to the board you left.
+  defp archive_path(scope, query, page, sort) do
     params =
-      Enum.reject(
-        [face: "archive", scope: scope, page: page, q: (query != "" && query) || nil],
-        fn {_k, v} ->
-          is_nil(v)
-        end
+      drop_empty(
+        face: "archive",
+        scope: scope,
+        page: page,
+        q: (query != "" && query) || nil,
+        sort: LaneSort.param(sort)
       )
 
     ~p"/cases?#{params}"
   end
+
+  defp drop_empty(params), do: Enum.reject(params, fn {_key, value} -> is_nil(value) end)
 
   # ------------------------------------------------------------------ helpers
 
@@ -359,9 +381,9 @@ defmodule VarselWeb.CaseManagementLive do
     case_record.state in [:review, :approved] and case_record.assignments == []
   end
 
-  attr :socket, :any, required: true
   attr :face, :atom, required: true
   attr :query, :string, required: true
+  attr :sort, :atom, required: true
   attr :pipeline_count, :integer, required: true
   attr :archive_count, :integer, required: true
   attr :pipeline_match_count, :integer, required: true
@@ -370,7 +392,7 @@ defmodule VarselWeb.CaseManagementLive do
   defp face_tabs(assigns) do
     ~H"""
     <div class="flex items-center gap-4 text-sm mt-1.5">
-      <.link patch={pipeline_path(@query)}>
+      <.link patch={pipeline_path(@query, @sort)}>
         <.scope_tab
           active?={@face == :pipeline}
           label="Pipeline"
@@ -378,7 +400,7 @@ defmodule VarselWeb.CaseManagementLive do
           matched?={searched_elsewhere?(@face == :pipeline, @query)}
         />
       </.link>
-      <.link patch={archive_path(@socket, "all", @query, nil)}>
+      <.link patch={archive_path("all", @query, nil, @sort)}>
         <.scope_tab
           active?={@face == :archive}
           label="Archive"
@@ -415,9 +437,9 @@ defmodule VarselWeb.CaseManagementLive do
         <:title>Cases</:title>
         <:meta>
           <.face_tabs
-            socket={@socket}
             face={@face}
             query={@query}
+            sort={@sort}
             pipeline_count={@pipeline_count}
             archive_count={@archive_count}
             pipeline_match_count={@pipeline_match_count}
@@ -425,6 +447,14 @@ defmodule VarselWeb.CaseManagementLive do
           />
         </:meta>
         <:actions>
+          <.console_menu
+            :if={@face == :pipeline}
+            id="lane-sort"
+            label="Sort"
+            value={@sort}
+            options={LaneSort.options()}
+            event="sort"
+          />
           <.console_search id="case-search" value={@query} placeholder="Search all cases…" />
           <div :if={Cases.can_open_case?(@current_user, %{})} class="relative">
             <button type="button" class="btn btn-sm btn-eef" phx-click="toggle_open_case">
@@ -462,7 +492,7 @@ defmodule VarselWeb.CaseManagementLive do
           expanded_lanes={@expanded_lanes}
           archive_match_count={@archive_match_count}
           can_open?={Cases.can_open_case?(@current_user, %{})}
-          socket={@socket}
+          sort={@sort}
         />
         <.archive_face
           :if={@face == :archive}
@@ -472,7 +502,7 @@ defmodule VarselWeb.CaseManagementLive do
           published_count={@archive_published_count}
           closed_count={@archive_closed_count}
           archive_count={@archive_count}
-          socket={@socket}
+          sort={@sort}
         />
       </.page_container>
     </Layouts.app>
@@ -484,7 +514,7 @@ defmodule VarselWeb.CaseManagementLive do
   attr :expanded_lanes, :any, required: true
   attr :archive_match_count, :integer, required: true
   attr :can_open?, :boolean, required: true
-  attr :socket, :any, required: true
+  attr :sort, :atom, required: true
 
   defp pipeline_face(assigns) do
     all_empty? = Enum.all?(assigns.lanes, &(&1.count == 0))
@@ -499,7 +529,7 @@ defmodule VarselWeb.CaseManagementLive do
         singular="match"
         plural="matches"
       /> in
-      <.link patch={archive_path(@socket, "all", @query, nil)} class="link text-primary">
+      <.link patch={archive_path("all", @query, nil, @sort)} class="link text-primary">
         Archive →
       </.link>
     </div>
@@ -521,7 +551,7 @@ defmodule VarselWeb.CaseManagementLive do
         Open a case
       </button>
       to start one, or browse the <.link
-        patch={archive_path(@socket, "all", "", nil)}
+        patch={archive_path("all", "", nil, @sort)}
         class="link text-primary"
       >archive</.link>.
     </p>
@@ -531,7 +561,7 @@ defmodule VarselWeb.CaseManagementLive do
       class="text-center text-sm text-base-content/60 mt-4"
     >
       No active cases. Browse the <.link
-        patch={archive_path(@socket, "all", "", nil)}
+        patch={archive_path("all", "", nil, @sort)}
         class="link text-primary"
       >archive</.link>.
     </p>
@@ -655,7 +685,7 @@ defmodule VarselWeb.CaseManagementLive do
   attr :published_count, :integer, required: true
   attr :closed_count, :integer, required: true
   attr :archive_count, :integer, required: true
-  attr :socket, :any, required: true
+  attr :sort, :atom, required: true
 
   defp archive_face(assigns) do
     ~H"""
@@ -667,7 +697,7 @@ defmodule VarselWeb.CaseManagementLive do
           label="All"
           count={@archive_count}
           query={@query}
-          socket={@socket}
+          sort={@sort}
         />
         <.scope_link
           scope={@scope}
@@ -675,7 +705,7 @@ defmodule VarselWeb.CaseManagementLive do
           label="Published"
           count={@published_count}
           query={@query}
-          socket={@socket}
+          sort={@sort}
         />
         <.scope_link
           scope={@scope}
@@ -683,7 +713,7 @@ defmodule VarselWeb.CaseManagementLive do
           label="Closed"
           count={@closed_count}
           query={@query}
-          socket={@socket}
+          sort={@sort}
         />
       </:tabs>
       <:empty>
@@ -792,13 +822,13 @@ defmodule VarselWeb.CaseManagementLive do
   attr :label, :string, required: true
   attr :count, :integer, required: true
   attr :query, :string, required: true
-  attr :socket, :any, required: true
+  attr :sort, :atom, required: true
 
   defp scope_link(assigns) do
     assigns = assign(assigns, :active?, assigns.scope == assigns.value)
 
     ~H"""
-    <.link patch={archive_path(@socket, @value, @query, nil)}>
+    <.link patch={archive_path(@value, @query, nil, @sort)}>
       <.scope_tab active?={@active?} label={@label} count={@count} />
     </.link>
     """
