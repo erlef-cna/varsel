@@ -60,6 +60,7 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.TimelineEntry
   alias Varsel.Cases.Changes.AssignOpener
   alias Varsel.Cases.Validations.CveIdAssignable
+  alias Varsel.Types.TSVector
 
   @content_fields [
     :title,
@@ -87,6 +88,46 @@ defmodule Varsel.Cases.Case do
 
     references do
       reference :cve_record, on_delete: :nilify
+    end
+
+    # The migration generator cannot express GENERATED ALWAYS.
+    migration_ignore_attributes [:search_vector]
+
+    custom_statements do
+      # Weights rank a title hit above a body hit. The id is in the vector
+      # because a pasted URL is how a case gets shared.
+      statement :add_search_vector do
+        up """
+        ALTER TABLE cases ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (
+          setweight(to_tsvector('simple', id::text), 'A') ||
+          setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+          setweight(to_tsvector('english', coalesce(description_md, '')), 'B') ||
+          setweight(to_tsvector('english', coalesce(technical_analysis_md, '')), 'C') ||
+          setweight(to_tsvector('english', coalesce(workarounds_md, '')), 'C') ||
+          setweight(to_tsvector('english', coalesce(solutions_md, '')), 'C')
+        ) STORED
+        """
+
+        down "ALTER TABLE cases DROP COLUMN IF EXISTS search_vector"
+      end
+
+      statement :add_search_vector_gin_index do
+        up "CREATE INDEX cases_search_vector_gin ON cases USING GIN (search_vector)"
+        down "DROP INDEX IF EXISTS cases_search_vector_gin"
+      end
+
+      # Postgres concatenates two tsvectors but ships no aggregate over a set
+      # of them.
+      statement :tsvector_concat_agg do
+        up """
+        CREATE AGGREGATE tsvector_concat_agg(tsvector) (
+          SFUNC = tsvector_concat,
+          STYPE = tsvector
+        )
+        """
+
+        down "DROP AGGREGATE IF EXISTS tsvector_concat_agg(tsvector)"
+      end
     end
   end
 
@@ -497,6 +538,13 @@ defmodule Varsel.Cases.Case do
   attributes do
     uuid_primary_key :id
 
+    attribute :search_vector, TSVector do
+      writable? false
+      public? false
+      generated? true
+      select_by_default? false
+    end
+
     attribute :state, State do
       description "Lifecycle state of the case."
       allow_nil? false
@@ -680,6 +728,61 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
+    # websearch_to_tsquery tolerates arbitrary input without raising, and
+    # honors the OR and quoted-phrase operators a caller may type.
+    #
+    # A vector matches whole lexemes only. Substring matching sits alongside it
+    # so a half-typed word still finds its case.
+    calculate :matches_query,
+              :boolean,
+              expr(
+                fragment("? @@ websearch_to_tsquery('english', ?)", search_vector, ^arg(:query)) or
+                  fragment(
+                    "? @@ websearch_to_tsquery('english', ?)",
+                    cve_record.search_vector,
+                    ^arg(:query)
+                  ) or
+                  contains(string_downcase(title), ^arg(:query)) or
+                  contains(string_downcase(cve_record.cve_id), ^arg(:query)) or
+                  exists(affected_packages, matches_query(query: ^arg(:query)))
+              ) do
+      description """
+      Whether the case matches a search term: its own text, its CVE ID, the
+      published record's text, or the name of any affected package.
+      """
+
+      public? false
+
+      argument :query, :string do
+        allow_nil? false
+      end
+    end
+
+    # `||` against NULL is NULL. A case with no packages and a case with no CVE
+    # record both reach this with one, so each side coalesces to stay rankable.
+    calculate :search_rank,
+              :float,
+              expr(
+                fragment(
+                  """
+                  ts_rank(
+                    ? || coalesce(?, ''::tsvector) || coalesce(?, ''::tsvector),
+                    websearch_to_tsquery('english', ?)
+                  )\
+                  """,
+                  search_vector,
+                  package_search_vector,
+                  cve_record.search_vector,
+                  ^arg(:query)
+                )
+              ) do
+      public? false
+
+      argument :query, :string do
+        allow_nil? false
+      end
+    end
+
     calculate :affects_repo,
               :boolean,
               expr(fragment("regexp_replace(?, ?, '')", ^arg(:repo_url), "(\\.git)?/*$") in affected_repos) do
@@ -794,6 +897,11 @@ defmodule Varsel.Cases.Case do
   end
 
   aggregates do
+    custom :package_search_vector, :affected_packages, TSVector do
+      description "Every affected package's search vector, concatenated into one."
+      implementation {Varsel.Cases.Case.Aggregates.ConcatVectors, field: :search_vector}
+    end
+
     list :affected_repos, :affected_packages, :normalized_repo_url do
       description "The normalized repository URLs of every package this case affects."
       sort []
