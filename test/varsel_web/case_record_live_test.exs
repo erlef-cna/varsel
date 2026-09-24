@@ -3,13 +3,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule VarselWeb.CaseRecordLiveTest do
-  use VarselWeb.ConnCase, async: false
+  use VarselWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
 
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Cases
   alias Varsel.Fixtures
+
+  # Rendering a case loads the markdown and subprocess NIFs and the JSON schema
+  # validators, which costs ~40 ms once per VM. Under the parallel suite that
+  # lands outside the 100 ms `render_async/1` default.
+  @render_timeout 500
 
   defp log_in(conn, user) do
     conn
@@ -81,13 +86,13 @@ defmodule VarselWeb.CaseRecordLiveTest do
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
       refute html =~ ~s(phx-value-action="publish")
-      refute render_async(lv) =~ ~s(phx-value-action="publish")
+      refute render_async(lv, @render_timeout) =~ ~s(phx-value-action="publish")
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve")
-      refute render_async(lv) =~ ~s(phx-value-action="publish")
+      refute render_async(lv, @render_timeout) =~ ~s(phx-value-action="publish")
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/publication")
-      html = render_async(lv)
+      html = render_async(lv, @render_timeout)
 
       assert html =~ ~s(phx-value-action="publish")
       assert html =~ "opacity-45"
@@ -105,11 +110,11 @@ defmodule VarselWeb.CaseRecordLiveTest do
       assert has_element?(lv, publication, "Publish")
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve")
-      render_async(lv)
+      render_async(lv, @render_timeout)
       assert has_element?(lv, publication, "Publish")
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/publication")
-      render_async(lv)
+      render_async(lv, @render_timeout)
       refute has_element?(lv, publication, "Publish")
     end
 
@@ -130,7 +135,7 @@ defmodule VarselWeb.CaseRecordLiveTest do
       case_record = Fixtures.open_case(poc, %{title: "Preview case", description_md: "desc"})
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/publication")
-      html = render_async(lv)
+      html = render_async(lv, @render_timeout)
 
       # Findings are ✗ rows, not an alert/callout box.
       refute html =~ "alert-warning"
@@ -159,12 +164,12 @@ defmodule VarselWeb.CaseRecordLiveTest do
       case_record = Fixtures.open_case(poc, %{title: "Stale case", description_md: "desc"})
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/publication")
-      render_async(lv)
+      render_async(lv, @render_timeout)
 
       Cases.edit_case!(case_record, %{title: "Fresh case"}, actor: poc)
 
       lv |> element("button", "Re-render") |> render_click()
-      html = render_async(lv)
+      html = render_async(lv, @render_timeout)
 
       assert html =~ "Fresh case"
     end
@@ -175,7 +180,7 @@ defmodule VarselWeb.CaseRecordLiveTest do
       case_record = Fixtures.open_case(poc, %{title: "JSON case", description_md: "desc"})
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve")
-      html = render_async(lv)
+      html = render_async(lv, @render_timeout)
 
       # The JSON is open (no <details>), Lumis-highlighted: keys are
       # .l-property tokens, string values .l-string.
@@ -191,10 +196,10 @@ defmodule VarselWeb.CaseRecordLiveTest do
       link_published_record(case_record, cve_record)
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve")
-      assert render_async(lv) =~ "Diff to published"
+      assert render_async(lv, @render_timeout) =~ "Diff to published"
 
       lv |> element("button", "Diff to published") |> render_click()
-      html = render_async(lv)
+      html = render_async(lv, @render_timeout)
 
       # The published title leaves, the case title arrives, tinted by the
       # Lumis diff grammar's minus/plus tokens.
@@ -209,7 +214,7 @@ defmodule VarselWeb.CaseRecordLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve")
 
-      refute render_async(lv) =~ "Diff to published"
+      refute render_async(lv, @render_timeout) =~ "Diff to published"
     end
   end
 
@@ -230,7 +235,7 @@ defmodule VarselWeb.CaseRecordLiveTest do
       Cases.edit_case_impact!(impact, %{description_md: "Any logged-out session replays."}, actor: poc)
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/advisory")
-      markdown = lv |> render_async() |> advisory_markdown()
+      markdown = lv |> render_async(@render_timeout) |> advisory_markdown()
 
       assert markdown =~ "## Summary"
       assert markdown =~ "Sessions **outlive** logout."
@@ -266,7 +271,8 @@ defmodule VarselWeb.CaseRecordLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/osv")
 
-      assert render_async(lv) =~ "No OSV record: No hex, npm, or git repositories"
+      assert render_async(lv, @render_timeout) =~
+               "No OSV record: No hex, npm, or git repositories"
     end
 
     test "diffs against the published OSV record", %{conn: conn, poc: poc} do
@@ -293,10 +299,10 @@ defmodule VarselWeb.CaseRecordLiveTest do
       link_published_record(case_record, cve_record)
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/osv")
-      render_async(lv)
+      render_async(lv, @render_timeout)
 
       lv |> element(~s(button[phx-value-view="diff"])) |> render_click()
-      html = render_async(lv)
+      html = render_async(lv, @render_timeout)
 
       # The case has no packages, so the preview derives no OSV document: the
       # published one leaves in full.
