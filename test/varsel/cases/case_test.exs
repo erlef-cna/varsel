@@ -216,25 +216,66 @@ defmodule Varsel.Cases.CaseTest do
       assert Exception.message(error) =~ "length must be less than or equal to"
     end
 
-    test "content is frozen from approved onward", %{poc: poc} do
+    test "a POC edits an approved case", %{poc: poc} do
       case_record = Fixtures.open_case(poc)
       case_record = Cases.request_case_review!(case_record, actor: poc)
       case_record = Cases.approve_case!(case_record, actor: poc)
 
-      assert {:error, %Forbidden{}} = Cases.edit_case(case_record, %{title: "nope"}, actor: poc)
+      case_record = Cases.edit_case!(case_record, %{title: "late detail"}, actor: poc)
+
+      assert case_record.title == "late detail"
+      assert case_record.state == :approved
     end
 
-    test "a stale snapshot cannot edit a case approved in the meantime", %{poc: poc} do
+    test "an assigned supporter cannot edit an approved case", %{poc: poc, supporter: supporter} do
       case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      case_record = Cases.approve_case!(case_record, actor: poc)
+
+      assert {:error, %Forbidden{}} =
+               Cases.edit_case(case_record, %{title: "nope"}, actor: supporter)
+    end
+
+    # The POC window opens at :approved and closes again at :publishing, where
+    # the record is MITRE's. Reaching :publishing for real needs an assigned
+    # CVE ID and a MITRE stub, so the boundary is asked of the policy directly.
+    test "the POC window does not extend past approved", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      case_record = Cases.approve_case!(case_record, actor: poc)
+
+      refute Cases.can_edit_case?(poc, %{case_record | state: :publishing}, %{})
+      refute Cases.can_edit_case?(poc, %{case_record | state: :published}, %{})
+      refute Cases.can_edit_case?(poc, %{case_record | state: :closed}, %{})
+      assert Cases.can_edit_case?(poc, case_record, %{})
+    end
+
+    test "a stale snapshot cannot edit a case approved in the meantime", %{
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
       in_review = Cases.request_case_review!(case_record, actor: poc)
       Cases.approve_case!(in_review, actor: poc)
 
       assert {:error, %Forbidden{}} =
-               Cases.edit_case(in_review, %{title: "changed after approval"}, actor: poc)
+               Cases.edit_case(in_review, %{title: "changed after approval"}, actor: supporter)
 
       reloaded = Cases.get_case!(case_record.id, actor: poc)
       assert reloaded.state == :approved
       refute reloaded.title == "changed after approval"
+    end
+
+    test "a POC's stale snapshot of an approved case is rejected by the lock", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      in_review = Cases.request_case_review!(case_record, actor: poc)
+      Cases.approve_case!(in_review, actor: poc)
+
+      assert {:error, %Invalid{errors: [%StaleRecord{}]}} =
+               Cases.edit_case(in_review, %{title: "changed after approval"}, actor: poc)
     end
 
     test "a stale snapshot is rejected even when the case is still editable", %{poc: poc} do
@@ -260,17 +301,35 @@ defmodule Varsel.Cases.CaseTest do
       assert %{title: "yes"} = Cases.edit_case!(case_record, %{title: "yes"}, actor: supporter)
     end
 
-    test "child rows follow the same freeze", %{poc: poc} do
+    test "child rows follow the same freeze", %{poc: poc, supporter: supporter} do
       case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
       package = Fixtures.add_affected_package(poc, case_record)
 
       case_record = Cases.request_case_review!(case_record, actor: poc)
       _case_record = Cases.approve_case!(case_record, actor: poc)
 
       assert {:error, %Forbidden{}} =
-               Cases.edit_affected_package(package, %{vendor: "nope"}, actor: poc)
+               Cases.edit_affected_package(package, %{vendor: "nope"}, actor: supporter)
 
       assert {:error, %Forbidden{}} =
+               Cases.add_case_reference(
+                 %{case_id: case_record.id, url: "https://example.com/advisory"},
+                 actor: supporter
+               )
+    end
+
+    test "a POC edits child rows on an approved case", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      package = Fixtures.add_affected_package(poc, case_record)
+
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      _case_record = Cases.approve_case!(case_record, actor: poc)
+
+      assert %{vendor: "corrected"} =
+               Cases.edit_affected_package!(package, %{vendor: "corrected"}, actor: poc)
+
+      assert {:ok, _reference} =
                Cases.add_case_reference(
                  %{case_id: case_record.id, url: "https://example.com/advisory"},
                  actor: poc

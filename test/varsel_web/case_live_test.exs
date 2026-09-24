@@ -882,8 +882,8 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Approve") |> render_click()
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :approved
 
-      # Approved content is frozen: suggesting is forced on.
-      assert render(lv) =~ "Suggest: on"
+      # A POC still edits an approved case directly, so suggesting stays off.
+      assert render(lv) =~ "Suggest: off"
 
       lv |> element("button", "Reopen") |> render_click()
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
@@ -2350,13 +2350,15 @@ defmodule VarselWeb.CaseLiveTest do
   describe "propose mode" do
     test "a frozen case forces suggest mode; edits become proposals", %{
       conn: conn,
-      poc: poc
+      poc: poc,
+      supporter: supporter
     } do
       case_record = Fixtures.open_case(poc, %{title: "Frozen case"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
       case_record = Cases.request_case_review!(case_record, actor: poc)
       case_record = Cases.approve_case!(case_record, actor: poc)
 
-      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
 
       # Suggesting is forced on the frozen case; nothing is being edited yet.
       assert html =~ "Suggest: on"
@@ -2387,6 +2389,30 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Created 1 proposal(s)."
       assert html =~ "line-through decoration-error/40"
       assert html =~ "Better frozen title"
+    end
+
+    test "a POC edits an approved case directly", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Approved case"})
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      case_record = Cases.approve_case!(case_record, actor: poc)
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert html =~ "Suggest: off"
+
+      lv
+      |> element(~s{button[phx-click=edit_section][phx-value-section=summary]})
+      |> render_click()
+
+      lv
+      |> form("#case-content-form", %{"form" => %{"title" => "Corrected after approval"}})
+      |> render_submit()
+
+      assert render(lv) =~ "Corrected after approval"
+
+      reloaded = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      assert reloaded.title == "Corrected after approval"
+      assert reloaded.state == :approved
     end
 
     test "open proposals show as accepted; untouched values propose nothing, edits counter", %{

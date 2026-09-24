@@ -4,12 +4,12 @@
 
 defmodule Varsel.Cases.Proposal.Validations.CaseState do
   @moduledoc """
-  Guards proposal actions by the parent case's lifecycle state:
+  Guards `:propose` by the parent case's lifecycle state: allowed in every
+  state except the terminal `:closed`, since post-publish enrichment proposals
+  are a core flow.
 
-  * `:propose` — allowed in every state except the terminal `:closed`
-    (post-publish enrichment proposals are a core flow).
-  * `:accept` / `:decline` — only while the case content is editable
-    (`:draft` / `:review`); a published case must be reopened first.
+  Resolving a proposal is governed by the content-freeze policy on `:accept`,
+  which mirrors the case and its child rows.
   """
 
   use Ash.Resource.Validation
