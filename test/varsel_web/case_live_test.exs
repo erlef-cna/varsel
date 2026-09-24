@@ -384,6 +384,37 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Archive"
     end
 
+    test "the archive names each row's affected package", %{conn: conn, poc: poc} do
+      archived = Fixtures.archived_case(:published, "Archived row", DateTime.utc_now())
+
+      # Seeded, not added: a published case is frozen against writes.
+      package =
+        Ash.Seed.seed!(Varsel.Cases.AffectedPackage, %{
+          case_id: archived.id,
+          vendor: "acme",
+          product: "my_library",
+          position: 0
+        })
+
+      Ash.Seed.seed!(Varsel.Cases.PackageChannel, %{
+        case_id: archived.id,
+        affected_package_id: package.id,
+        kind: :package,
+        purl_type: :hex,
+        name: "my_library",
+        position: 0
+      })
+
+      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
+
+      assert html =~ "Archived row"
+      # The header and the ecosystem/name split both match the CVE list, so
+      # the two tables read alike.
+      assert html =~ "Packages"
+      assert html =~ "Hex"
+      assert html =~ "my_library"
+    end
+
     test "archive collates published + closed by archived-at descending, closed rows carry their date on state",
          %{conn: conn, poc: poc} do
       old_published =
