@@ -329,7 +329,7 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
 
     test "single fix renders a bounded git-sha range" do
-      opts = [intro_shas: [@intro], fix_shas: [@fix1]]
+      opts = [intro_shas: [@intro], fix_shas: [@fix1], default_status: :unknown]
 
       assert Emit.channel(repo_channel(), [], opts) == %{
                "versions" => [
@@ -337,6 +337,12 @@ defmodule Varsel.Cases.Derivation.EmitTest do
                    "version" => @intro,
                    "lessThan" => @fix1,
                    "status" => "affected",
+                   "versionType" => "git"
+                 },
+                 %{
+                   "version" => @fix1,
+                   "lessThan" => "*",
+                   "status" => "unaffected",
                    "versionType" => "git"
                  }
                ],
@@ -349,19 +355,25 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     # with it.
     test "a change backported to several branches states every introducing commit" do
       second_intro = String.duplicate("d", 40)
-      opts = [intro_shas: [@intro, second_intro], fix_shas: [@fix1]]
+      opts = [intro_shas: [@intro, second_intro], fix_shas: [@fix1], default_status: :unknown]
 
       assert %{"versions" => versions, "issues" => []} = Emit.channel(repo_channel(), [], opts)
 
-      assert Enum.map(versions, & &1["version"]) == [@intro, second_intro]
-      assert Enum.map(versions, & &1["lessThan"]) == [@fix1, @fix1]
+      assert Enum.map(versions, & &1["version"]) == [@intro, second_intro, @fix1]
+      assert Enum.map(versions, & &1["lessThan"]) == [@fix1, @fix1, "*"]
+      assert Enum.map(versions, & &1["status"]) == ["affected", "affected", "unaffected"]
     end
 
     test "each introducing commit carries the whole fix chain" do
       second_intro = String.duplicate("d", 40)
-      opts = [intro_shas: [@intro, second_intro], fix_shas: [@fix1, @fix2]]
 
-      assert %{"versions" => [first, second]} = Emit.channel(repo_channel(), [], opts)
+      opts = [
+        intro_shas: [@intro, second_intro],
+        fix_shas: [@fix1, @fix2],
+        default_status: :unknown
+      ]
+
+      assert %{"versions" => [first, second | fixed]} = Emit.channel(repo_channel(), [], opts)
 
       assert first["version"] == @intro
       assert second["version"] == second_intro
@@ -370,10 +382,40 @@ defmodule Varsel.Cases.Derivation.EmitTest do
         assert entry["lessThan"] == "*"
         assert Enum.map(entry["changes"], & &1["at"]) == [@fix1, @fix2]
       end
+
+      assert Enum.map(fixed, & &1["version"]) == [@fix1, @fix2]
+      assert Enum.all?(fixed, &(&1["status"] == "unaffected"))
+    end
+
+    # Shas are unorderable, so without this entry the fix falls through to
+    # `defaultStatus`, which under `unknown` leaves it unstated.
+    test "the fix states its own descendants unaffected" do
+      opts = [intro_shas: [@intro], fix_shas: [@fix1], default_status: :unknown]
+
+      assert %{"versions" => versions} = Emit.channel(repo_channel(), [], opts)
+
+      assert %{"version" => @fix1, "lessThan" => "*", "status" => "unaffected"} =
+               Enum.find(versions, &(&1["status"] == "unaffected"))
+    end
+
+    test "an unaffected default already says it, so no entry is added" do
+      opts = [intro_shas: [@intro], fix_shas: [@fix1], default_status: :unaffected]
+
+      assert %{"versions" => versions} = Emit.channel(repo_channel(), [], opts)
+
+      assert Enum.map(versions, & &1["status"]) == ["affected"]
+    end
+
+    test "an affected default states only what it does not cover" do
+      opts = [intro_shas: [@intro], fix_shas: [@fix1], default_status: :affected]
+
+      assert %{"versions" => versions} = Emit.channel(repo_channel(), [], opts)
+
+      assert [%{"version" => @fix1, "lessThan" => "*", "status" => "unaffected"}] = versions
     end
 
     test "multiple fixes render a changes[] chain (SHAs aren't orderable)" do
-      opts = [intro_shas: [@intro], fix_shas: [@fix1, @fix2]]
+      opts = [intro_shas: [@intro], fix_shas: [@fix1, @fix2], default_status: :unknown]
 
       assert Emit.channel(repo_channel(), [], opts) == %{
                "versions" => [
@@ -386,6 +428,18 @@ defmodule Varsel.Cases.Derivation.EmitTest do
                      %{"at" => @fix1, "status" => "unaffected"},
                      %{"at" => @fix2, "status" => "unaffected"}
                    ]
+                 },
+                 %{
+                   "version" => @fix1,
+                   "lessThan" => "*",
+                   "status" => "unaffected",
+                   "versionType" => "git"
+                 },
+                 %{
+                   "version" => @fix2,
+                   "lessThan" => "*",
+                   "status" => "unaffected",
+                   "versionType" => "git"
                  }
                ],
                "issues" => []

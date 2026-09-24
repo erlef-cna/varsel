@@ -35,7 +35,8 @@ defmodule Varsel.Cases.Derivation.Emit do
   maintenance patches do not have (see `Varsel.Cases.Reachability.OTPVersion`).
   Those publish one open entry carrying a `changes[]` transition per fix, which
   the schema resolves by applying every transition at or below the version
-  asked about. Commit SHAs have no order at all and take the same shape.
+  asked about. Commit SHAs order by ancestry, which is partial, and take the
+  same shape.
   """
 
   alias Varsel.Cases.Derivation.OtpVersionsTable
@@ -67,7 +68,11 @@ defmodule Varsel.Cases.Derivation.Emit do
   end
 
   defp emit(:git, _channel, _ranges, opts) do
-    git(Keyword.get(opts, :intro_shas, []), Keyword.get(opts, :fix_shas, []))
+    git(
+      Keyword.get(opts, :intro_shas, []),
+      Keyword.get(opts, :fix_shas, []),
+      Keyword.get(opts, :default_status)
+    )
   end
 
   defp emit(version_type, channel, ranges, opts) do
@@ -321,11 +326,21 @@ defmodule Varsel.Cases.Derivation.Emit do
   # and a consumer walking the commit graph reaches only the commits descending
   # from the intro it was given. Each therefore states its own entry, or the
   # commits below the ones left out read as safe.
-  defp git([], _fix_shas), do: %{"versions" => [], "issues" => ["the introduced boundary has no commit SHA"]}
+  defp git([], _fix_shas, _default_status),
+    do: %{"versions" => [], "issues" => ["the introduced boundary has no commit SHA"]}
 
-  defp git(intro_shas, fix_shas) do
-    %{"versions" => Enum.map(intro_shas, &git_entry(&1, fix_shas)), "issues" => []}
+  defp git(intro_shas, fix_shas, default_status) do
+    %{
+      "versions" => git_affected(intro_shas, fix_shas, default_status) ++ git_fixed(fix_shas, default_status),
+      "issues" => []
+    }
   end
+
+  # Each status is stated only where the default does not already say it, as
+  # `statused_ranges/2` does for the orderable types.
+  defp git_affected(_intro_shas, _fix_shas, :affected), do: []
+
+  defp git_affected(intro_shas, fix_shas, _default_status), do: Enum.map(intro_shas, &git_entry(&1, fix_shas))
 
   defp git_entry(intro, []), do: version_object(intro, "*", "git", "affected")
   defp git_entry(intro, [fix]), do: version_object(intro, fix, "git", "affected")
@@ -339,6 +354,13 @@ defmodule Varsel.Cases.Derivation.Emit do
       "changes" => Enum.map(fixes, &%{"at" => &1, "status" => "unaffected"})
     }
   end
+
+  # A bounded range stops at the fix, leaving the fix and its descendants to
+  # `defaultStatus`. Where that already reads as safe the entry says nothing
+  # new; otherwise each fix states its own descendants safe.
+  defp git_fixed(_fix_shas, :unaffected), do: []
+
+  defp git_fixed(fix_shas, _default_status), do: Enum.map(fix_shas, &version_object(&1, "*", "git", "unaffected"))
 
   ## ------------------------------------------------------------ shared
 
