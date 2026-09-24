@@ -74,7 +74,7 @@ defmodule Varsel.CAPEC.AttackPatternToolTest do
 
   describe "collections" do
     test "list_attack_patterns carries only what identifies a pattern", %{actor: actor} do
-      rows = run(:list_attack_patterns, %{}, actor)
+      %{"results" => rows, "has_more" => false} = run(:list_attack_patterns, %{}, actor)
 
       assert length(rows) == 2
 
@@ -153,7 +153,7 @@ defmodule Varsel.CAPEC.AttackPatternToolTest do
   end
 
   test "a listed pattern is a fraction of the detail payload", %{actor: actor} do
-    [summary | _] = run(:list_attack_patterns, %{}, actor)
+    %{"results" => [summary | _]} = run(:list_attack_patterns, %{}, actor)
     detail = run(:get_attack_pattern, %{"capec_id" => 63}, actor)
 
     assert byte_size(Jason.encode!(summary)) * 10 < byte_size(Jason.encode!(detail))
