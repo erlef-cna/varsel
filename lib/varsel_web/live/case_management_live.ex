@@ -238,38 +238,30 @@ defmodule VarselWeb.CaseManagementLive do
   defp filter_archive_scope(base, "closed"), do: Ash.Query.filter(base, state == :closed)
   defp filter_archive_scope(base, _all), do: base
 
+  # `archive_count` stays unfiltered: an empty result reads differently when
+  # the archive itself is empty.
   defp assign_archive_counts(_page, socket) do
     counts =
-      [
-        actor: socket.assigns.current_user,
-        query: Case |> Ash.Query.filter(state in ^@archive_states) |> Ash.Query.select([:state])
-      ]
-      |> Cases.list_cases!()
+      Case
+      |> Ash.Query.filter(state in ^@archive_states)
+      |> filter_search(socket.assigns.query)
+      |> Ash.Query.select([:state])
+      |> Ash.read!(actor: socket.assigns.current_user)
       |> Enum.frequencies_by(& &1.state)
 
     published = Map.get(counts, :published, 0)
     closed = Map.get(counts, :closed, 0)
 
-    archive_match_count =
-      if socket.assigns.query == "" do
-        published + closed
-      else
-        [
-          actor: socket.assigns.current_user,
-          query:
-            "all"
-            |> archive_query(socket.assigns.query)
-            |> Ash.Query.select([:id])
-        ]
-        |> Cases.list_cases!()
-        |> length()
-      end
+    archive_count =
+      Case
+      |> Ash.Query.filter(state in ^@archive_states)
+      |> Ash.count!(actor: socket.assigns.current_user)
 
     socket
     |> assign(:archive_published_count, published)
     |> assign(:archive_closed_count, closed)
-    |> assign(:archive_count, published + closed)
-    |> assign(:archive_match_count, archive_match_count)
+    |> assign(:archive_count, archive_count)
+    |> assign(:archive_match_count, published + closed)
   end
 
   # --------------------------------------------------------------- events
@@ -452,13 +444,11 @@ defmodule VarselWeb.CaseManagementLive do
     """
   end
 
-  # A search reaches both faces, so the face you are not looking at reports
-  # how many of its own cases matched rather than how many it holds.
+  # The tint marks the face you are not looking at.
   defp searched_elsewhere?(active?, query), do: query != "" and not active?
 
-  defp face_count(active?, query, total, matched) do
-    if searched_elsewhere?(active?, query), do: matched, else: total
-  end
+  defp face_count(_active?, "", total, _matched), do: total
+  defp face_count(_active?, _query, _total, matched), do: matched
 
   @impl Phoenix.LiveView
   def render(assigns) do
@@ -541,6 +531,7 @@ defmodule VarselWeb.CaseManagementLive do
           published_count={@archive_published_count}
           closed_count={@archive_closed_count}
           archive_count={@archive_count}
+          archive_match_count={@archive_match_count}
           sort={@sort}
         />
       </.page_container>
@@ -736,6 +727,7 @@ defmodule VarselWeb.CaseManagementLive do
   attr :published_count, :integer, required: true
   attr :closed_count, :integer, required: true
   attr :archive_count, :integer, required: true
+  attr :archive_match_count, :integer, required: true
   attr :sort, :atom, required: true
 
   defp archive_face(assigns) do
@@ -746,7 +738,7 @@ defmodule VarselWeb.CaseManagementLive do
           scope={@scope}
           value="all"
           label="All"
-          count={@archive_count}
+          count={@archive_match_count}
           query={@query}
           sort={@sort}
         />
