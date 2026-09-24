@@ -21,7 +21,8 @@ defmodule Varsel.Cases.Proposal do
   Counter-proposals link back via `parent_proposal_id`.
 
   Proposals can be *created* in every case state except `:closed`; they can
-  only be *resolved* while the case content is editable (`:draft`/`:review`).
+  only be *accepted* while the case content is editable (`:draft`/`:review`,
+  and `:approved` for a POC).
   """
 
   use Ash.Resource,
@@ -160,11 +161,6 @@ defmodule Varsel.Cases.Proposal do
       change relate_actor(:resolved_by)
       change set_attribute(:resolved_at, &DateTime.utc_now/0)
 
-      validate {CaseState,
-                states: [:draft, :review],
-                message:
-                  "proposals can only be accepted while the case is editable (currently %{state}); reopen the case first"}
-
       change ApplyToTarget
       change SupersedeCompeting
     end
@@ -236,6 +232,14 @@ defmodule Varsel.Cases.Proposal do
                      ^actor(:role) == :supporter and
                        exists(case.assignments, user_id == ^actor(:id))
                    )
+    end
+
+    # Content freeze, mirroring the case and its child rows: a proposal applies
+    # to content, so it may only be accepted while that content may change.
+    policy action(:accept) do
+      authorize_if expr(case.state in [:draft, :review])
+
+      authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
     end
 
     policy action(:withdraw) do

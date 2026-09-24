@@ -10,7 +10,7 @@ defmodule Varsel.Cases.Case.State do
     values: [
       draft: "Being worked on; content is editable and proposals can be accepted.",
       review: "Ready for POC review; content is still editable.",
-      approved: "POC signed off; content is frozen until published or reopened.",
+      approved: "POC signed off; only a POC may still change content.",
       publishing: "Handed to the CVE record publish machinery; awaiting MITRE.",
       published: "Live at MITRE. Amendments require reopening the case.",
       closed: "Terminal: the case will not (or no longer) result in a published CVE."

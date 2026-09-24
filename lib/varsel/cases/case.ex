@@ -33,11 +33,11 @@ defmodule Varsel.Cases.Case do
     review --> closed : close
   ```
 
-  Content (case fields and all child rows) is editable only in `:draft` and
-  `:review` — enforced by the content-freeze policy on `:edit` /
-  `:apply_proposal`, with the `:version` optimistic lock rejecting writes from
-  stale snapshots. Amending a published case means reopening it; the next
-  publish pushes a MITRE update.
+  Content (case fields and all child rows) is editable in `:draft` and
+  `:review`, and in `:approved` by a POC — enforced by the content-freeze
+  policy on `:edit` / `:apply_proposal`, with the `:version` optimistic lock
+  rejecting writes from stale snapshots. Amending a published case means
+  reopening it; the next publish pushes a MITRE update.
 
   ## Escape hatch
 
@@ -402,9 +402,13 @@ defmodule Varsel.Cases.Case do
                    )
     end
 
-    # Content freeze: case content may only change in :draft or :review.
+    # Content freeze: case content may only change in :draft or :review, or in
+    # :approved by a POC, so late detail lands without a reopen. From
+    # :publishing on the record is MITRE's and an amendment reopens.
     policy action([:edit, :apply_proposal]) do
       authorize_if expr(state in [:draft, :review])
+
+      authorize_if expr(state == :approved and ^actor(:role) == :poc)
     end
 
     # Supporters open their own cases; POCs open any.

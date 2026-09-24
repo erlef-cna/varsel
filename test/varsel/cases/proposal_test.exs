@@ -293,14 +293,85 @@ defmodule Varsel.Cases.ProposalTest do
       assert {:error, _error} = Cases.accept_case_proposal(proposal, %{}, actor: poc)
     end
 
-    test "accept is blocked outside draft/review", %{poc: poc, case: case_record} do
-      proposal = propose_set(poc, case_record, "title", "Later")
+    test "a POC accepts on an approved case", %{
+      poc: poc,
+      supporter: supporter,
+      case: case_record
+    } do
+      Cases.assign_case_user!(
+        %{case_id: case_record.id, user_id: supporter.id},
+        actor: poc
+      )
+
+      proposal = propose_set(supporter, case_record, "title", "Late detail")
+
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      case_record = Cases.approve_case!(case_record, actor: poc)
+
+      # The freeze is a policy, so `can?` sees it before the write.
+      assert Cases.can_accept_case_proposal?(poc, proposal, %{}, validate?: true)
+      refute Cases.can_accept_case_proposal?(supporter, proposal, %{}, validate?: true)
+
+      accepted = Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+      assert accepted.state == :accepted
+
+      reloaded = Cases.get_case!(case_record.id, actor: poc)
+      assert reloaded.title == "Late detail"
+      assert reloaded.state == :approved
+    end
+
+    test "a POC accepts a proposed fix boundary on an approved case", %{
+      poc: poc,
+      supporter: supporter,
+      case: case_record
+    } do
+      Cases.assign_case_user!(
+        %{case_id: case_record.id, user_id: supporter.id},
+        actor: poc
+      )
+
+      package = Fixtures.add_affected_package(poc, case_record)
+
+      proposal =
+        Cases.create_case_proposal!(
+          %{
+            case_id: case_record.id,
+            target: :version_event,
+            operation: :insert,
+            target_id: package.id,
+            proposed_value: %{"value" => %{"event" => "fixed", "version" => "1.2.4"}}
+          },
+          actor: supporter
+        )
+
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      case_record = Cases.approve_case!(case_record, actor: poc)
+
+      accepted = Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      event = Ash.get!(VersionEvent, accepted.applied_target_id, authorize?: false)
+      assert event.version == "1.2.4"
+      assert event.affected_package_id == package.id
+      assert Cases.get_case!(case_record.id, actor: poc).state == :approved
+    end
+
+    test "a supporter cannot accept on an approved case", %{
+      poc: poc,
+      supporter: supporter,
+      case: case_record
+    } do
+      Cases.assign_case_user!(
+        %{case_id: case_record.id, user_id: supporter.id},
+        actor: poc
+      )
+
+      proposal = propose_set(supporter, case_record, "title", "Later")
 
       case_record = Cases.request_case_review!(case_record, actor: poc)
       _case_record = Cases.approve_case!(case_record, actor: poc)
 
-      assert {:error, error} = Cases.accept_case_proposal(proposal, %{}, actor: poc)
-      assert Exception.message(error) =~ "reopen the case"
+      assert {:error, %Forbidden{}} =
+               Cases.accept_case_proposal(proposal, %{}, actor: supporter)
     end
   end
 

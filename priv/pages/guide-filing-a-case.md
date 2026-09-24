@@ -85,7 +85,8 @@ path from there to a published CVE.
 
 ## When Plans Change
 
-A case is editable while it is in draft or review; approval freezes it.
+A case is editable while it is in draft or review. Approval freezes it for
+everyone but a Point of Contact; publishing freezes it for everyone.
 
 - **The published record needs a change?** Reopen the case, edit, publish
   again; the second publish reaches MITRE as an update. Fixes and

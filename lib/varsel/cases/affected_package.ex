@@ -302,13 +302,17 @@ defmodule Varsel.Cases.AffectedPackage do
     end
 
     # Content freeze: child rows may only change while the parent case is
-    # editable.
+    # editable, or when a POC corrects an approved one.
     policy action_type([:create, :destroy]) do
       authorize_if expr(case.state in [:draft, :review])
+
+      authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
     end
 
     policy action([:edit, :apply_proposal]) do
       authorize_if expr(case.state in [:draft, :review])
+
+      authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
     end
 
     policy action(:store_derivation) do

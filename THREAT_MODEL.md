@@ -964,16 +964,18 @@ none of the authorization properties, by construction rather than by defect.
    - (`resolve_oauth_identity.ex`, `user_identity.ex`)
 
 15. **Editorial state binds to the database row, not a caller's snapshot.**
-   Case content may change only in `:draft` and `:review`, and the freeze is a
-   policy that reads the stored state — on the case and on every child row —
-   so what a POC approves is what stays approved until someone reopens it.
+   Case content may change only in `:draft` and `:review`, or in `:approved`
+   by a POC, and the freeze is a policy that reads the stored state — on the
+   case and on every child row — so nothing past `:approved` changes without a
+   reopen.
    Every update on the four state-machine resources carries the optimistic
    lock described in §4: a write from a snapshot the database has moved past
    is refused and rolls back whole, so no lifecycle decision or content edit
    can silently overwrite a newer row. Transitions validate against the
    stored row as well.
-   - *Violation symptom:* case content changes past `:review` without a
-     reopen, or a write from a stale snapshot lands over a newer row.
+   - *Violation symptom:* a non-POC changes an approved case, content changes
+     past `:approved` without a reopen, or a write from a stale snapshot lands
+     over a newer row.
    - *Severity:* `high` (integrity of the record behind a published
      advisory — review evidence and published content must not diverge).
    - *Bound:* enforcement is per-write against the current row. A child-row

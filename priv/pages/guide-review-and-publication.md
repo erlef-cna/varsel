@@ -25,7 +25,9 @@ Cases arrive in review when a supporter considers them ready; the
 ![Cases board with a case in the draft lane and one in review](/images/guide/case-board.png)
 
 Send a case back with your findings in the case comments, or approve it,
-which freezes the content until it is published or reopened.
+which freezes the content for everyone but a Point of Contact. A Point of
+Contact still edits an approved case and accepts suggestions on it, so late
+detail needs no reopen. Publishing freezes the content for everyone.
 
 Approval is judgement, not a second checklist: the record makes sense, the
 [conventions](/guide/record-conventions) were followed, the CVSS holds, the
