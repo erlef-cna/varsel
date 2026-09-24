@@ -109,7 +109,8 @@ defmodule Varsel.Cases.CaseToolTest do
       actor: actor,
       case_record: case_record
     } do
-      [row] = run(:validate_case, %{"filter" => %{"id" => %{"eq" => case_record.id}}}, actor)
+      %{"results" => [row]} =
+        run(:validate_case, %{"filter" => %{"id" => %{"eq" => case_record.id}}}, actor)
 
       assert Enum.sort(Map.keys(row)) == ~w(id validation)
       assert is_map(row["validation"])
@@ -120,7 +121,7 @@ defmodule Varsel.Cases.CaseToolTest do
       actor: actor,
       case_record: case_record
     } do
-      [row] =
+      %{"results" => [row]} =
         run(:render_case_preview, %{"filter" => %{"id" => %{"eq" => case_record.id}}}, actor)
 
       assert Enum.sort(Map.keys(row)) == ~w(id preview)
@@ -131,10 +132,11 @@ defmodule Varsel.Cases.CaseToolTest do
       case_record: case_record
     } do
       for tool <- [:validate_case, :render_case_preview] do
-        row = run(tool, %{"filter" => %{"id" => %{"eq" => case_record.id}}}, actor)
+        %{"results" => [row]} =
+          run(tool, %{"filter" => %{"id" => %{"eq" => case_record.id}}}, actor)
 
         for field <- @case_body do
-          refute Map.has_key?(hd(row), field), "#{tool} echoed #{field}"
+          refute Map.has_key?(row, field), "#{tool} echoed #{field}"
         end
       end
     end
@@ -153,7 +155,7 @@ defmodule Varsel.Cases.CaseToolTest do
   end
 
   test "get_case still carries the case body", %{actor: actor} do
-    [row] = run(:get_case, %{}, actor)
+    %{"results" => [row]} = run(:get_case, %{}, actor)
 
     assert row["description_md"] =~ "description prose"
   end

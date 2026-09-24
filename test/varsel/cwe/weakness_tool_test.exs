@@ -74,7 +74,7 @@ defmodule Varsel.CWE.WeaknessToolTest do
 
   describe "collections" do
     test "list_weaknesses carries only what identifies a weakness", %{actor: actor} do
-      rows = run(:list_weaknesses, %{}, actor)
+      %{"results" => rows, "has_more" => false} = run(:list_weaknesses, %{}, actor)
 
       assert length(rows) == 2
 
@@ -154,7 +154,7 @@ defmodule Varsel.CWE.WeaknessToolTest do
   end
 
   test "a listed weakness is a fraction of the detail payload", %{actor: actor} do
-    [summary | _] = run(:list_weaknesses, %{}, actor)
+    %{"results" => [summary | _]} = run(:list_weaknesses, %{}, actor)
     detail = run(:get_weakness, %{"cwe_id" => 79}, actor)
 
     assert byte_size(Jason.encode!(summary)) * 10 < byte_size(Jason.encode!(detail))
