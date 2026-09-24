@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Varsel.CWE.WeaknessTest do
-  use Varsel.DataCase, async: false
+  use Varsel.DataCase, async: true
 
   alias Ash.Error.Forbidden
   alias Varsel.CWE.CweMetadata
