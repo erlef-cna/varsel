@@ -1244,7 +1244,6 @@ a triager who hits one of those flags sees the justification there.
 | "An avatar URL exposes the MD5 of a user's email." | Known and accepted (§9): the hash confirms a guessed address to someone who can already read that user's row. Reported often because the hash is recognisable. |
 | "A concurrent edit fails with a stale-record error." | The optimistic lock doing its job (§4): the row moved between read and write, the write rolled back whole, and a reload-and-retry succeeds. Not a data race — it is what prevents one. |
 | "Markdown from the JSON API is not escaped." | Sanitization runs at each render sink, not at rest (§9). Escaping is the consumer's obligation (§10). |
-| "A code fence's language makes Lumis download a parser." | A fence is highlighted only in one of the languages listed in `config.exs`, whose parsers `mix release` fetches into the release ahead of time; any other name renders as plain text and Lumis is never asked for it (`markdown.ex`, `mix.exs`). |
 
 **An entry here describes an outcome, not a promise to disregard the
 evidence.** Each says what the code does and why the flag is expected. A

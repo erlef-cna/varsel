@@ -56,7 +56,7 @@ config :logger, :default_formatter,
 # mdex_native reads this at compile time to pick its precompiled NIF variant.
 # Code blocks are highlighted by the `:lumis` package instead
 # (`Varsel.Cases.Markdown`, `VarselWeb.CoreComponents.code_block/1`), so the
-# variant with a second, statically linked Lumis inside the NIF stays out.
+# variant with a second Lumis engine inside the NIF stays out.
 config :mdex_native, syntax_highlighter: nil
 
 # Use Jason for JSON parsing in Phoenix
@@ -199,10 +199,10 @@ config :varsel, VarselWeb.Endpoint,
 # report submissions sent to POCs).
 config :varsel, :cna_email_from, "cna@erlef.org"
 
-# The languages code blocks are highlighted in. Lumis fetches a language's
-# parser the first time it is used; `mix release` caches these into the
-# release (mix.exs) and `Varsel.Cases.Markdown` passes no other name through,
-# so the release never fetches one at runtime.
+# The fence languages code blocks are highlighted in. Any other fence renders
+# as plain text. Lumis loads a parser only from a `lumis_wasm_*` dependency,
+# so each language here needs one in mix.exs, as does each language they
+# inject (comment, css, regex).
 config :varsel,
        :lumis_languages,
        ~w(elixir erlang iex bash json yaml toml diff heex eex html javascript markdown)

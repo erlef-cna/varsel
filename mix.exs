@@ -107,8 +107,24 @@ defmodule Varsel.MixProject do
       {:igniter, "~> 0.6", only: [:dev, :test]},
       {:jason, "~> 1.2"},
       {:lazy_html, ">= 0.1.0", only: :test},
-      {:lumis, "~> 0.8.0"},
-      {:mdex, "~> 0.13"},
+      {:lumis, "~> 0.10.0"},
+      {:lumis_wasm_bash, "~> 0.26"},
+      {:lumis_wasm_comment, "~> 0.26"},
+      {:lumis_wasm_css, "~> 0.26"},
+      {:lumis_wasm_diff, "~> 0.26"},
+      {:lumis_wasm_eex, "~> 0.26"},
+      {:lumis_wasm_elixir, "~> 0.26"},
+      {:lumis_wasm_erlang, "~> 0.26"},
+      {:lumis_wasm_heex, "~> 0.26"},
+      {:lumis_wasm_html, "~> 0.26"},
+      {:lumis_wasm_iex, "~> 0.26"},
+      {:lumis_wasm_javascript, "~> 0.26"},
+      {:lumis_wasm_json, "~> 0.26"},
+      {:lumis_wasm_markdown, "~> 0.26"},
+      {:lumis_wasm_regex, "~> 0.26"},
+      {:lumis_wasm_toml, "~> 0.26"},
+      {:lumis_wasm_yaml, "~> 0.26"},
+      {:mdex, "~> 0.14"},
       {:oban, "~> 2.0"},
       {:oban_web, "~> 2.0", only: [:dev, :test]},
       {:phoenix, "~> 1.8.5"},
@@ -145,33 +161,9 @@ defmodule Varsel.MixProject do
       varsel: [
         include_executables_for: [:unix],
         applications: [runtime_tools: :permanent],
-        steps: [:assemble, &cache_lumis_languages/1, &drop_lumis_theme_css/1]
+        steps: [:assemble, &drop_lumis_theme_css/1]
       ]
     ]
-  end
-
-  # Lumis fetches a language's parser (WASM from its CDN) the first time it is
-  # used and keeps it under the lumis application's priv directory by default.
-  # Fetching the configured languages into that directory of the assembled
-  # release means the release boots with them. Every language is then loaded
-  # and used from there, so a missing or broken parser fails the release.
-  defp cache_lumis_languages(%Mix.Release{} = release) do
-    languages = Application.fetch_env!(:varsel, :lumis_languages)
-    lumis = release.applications[:lumis]
-    data_dir = Path.join([release.path, "lib", "lumis-#{lumis[:vsn]}", "priv", "lumis"])
-
-    File.mkdir_p!(data_dir)
-    Application.put_env(:lumis, :data_dir, data_dir)
-    {:ok, _apps} = Application.ensure_all_started(:lumis)
-    {:ok, _paths} = Lumis.Languages.cache(languages)
-
-    :ok = Lumis.Languages.load(languages)
-
-    for language <- languages do
-      {:ok, _html} = Lumis.highlight("x", formatter: {:html_linked, language: language})
-    end
-
-    release
   end
 
   # Lumis ships a stylesheet per theme for applications to copy; this one
