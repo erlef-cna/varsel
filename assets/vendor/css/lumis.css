@@ -172,6 +172,12 @@
 .l-label-ruby {
   color: #0550ae;
 }
+.l-line-number:not(.l-line-number-highlighted) {
+  color: #6e7781;
+}
+.l-line-number-highlighted {
+  color: #1f2328;
+}
 .l-markup {
   color: #1f2328;
 }
@@ -417,6 +423,24 @@
 .l-variable-sql {
   color: #0550ae;
 }
+@layer lumis {
+  pre.lumis > code {
+    display: block;
+    width: fit-content;
+    min-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  pre.lumis > code > span.l-line {
+    display: inline-block;
+    width: 100%;
+    min-height: 1lh;
+    vertical-align: top;
+  }
+  .l-line-number {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
 
 /* github_dark
  * revision: c106c9472154d6b2c74b74565616b877ae8ed31d
@@ -588,6 +612,12 @@
 }
 [data-theme="dark"] .l-label-ruby {
   color: #79c0ff;
+}
+[data-theme="dark"] .l-line-number:not(.l-line-number-highlighted) {
+  color: #6e7681;
+}
+[data-theme="dark"] .l-line-number-highlighted {
+  color: #e6edf3;
 }
 [data-theme="dark"] .l-markup {
   color: #e6edf3;
@@ -1006,6 +1036,12 @@
 }
 :root:not([data-theme="light"]) .l-label-ruby {
   color: #79c0ff;
+}
+:root:not([data-theme="light"]) .l-line-number:not(.l-line-number-highlighted) {
+  color: #6e7681;
+}
+:root:not([data-theme="light"]) .l-line-number-highlighted {
+  color: #e6edf3;
 }
 :root:not([data-theme="light"]) .l-markup {
   color: #e6edf3;

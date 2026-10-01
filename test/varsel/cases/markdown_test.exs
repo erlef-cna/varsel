@@ -6,6 +6,7 @@ defmodule Varsel.Cases.MarkdownTest do
   use ExUnit.Case, async: true
 
   alias Varsel.Cases.Markdown
+  alias Varsel.Markdown.CodeBlock
 
   test "renders HTML" do
     assert Markdown.to_html("Hello `code` **bold**") ==
@@ -24,11 +25,15 @@ defmodule Varsel.Cases.MarkdownTest do
     assert Regex.scan(~r/data-line="\d+"/, display) == [[~s(data-line="1")]]
   end
 
+  test "every configured language has its parser installed" do
+    assert Lumis.Languages.load(CodeBlock.languages()) == :ok
+  end
+
   test "display HTML leaves code blocks in other languages plain" do
     display = Markdown.to_display_html("```brainfuck\n+++\n```")
 
     assert display =~ ~s(<code class="language-plaintext")
-    refute display =~ ~s(<span class="l-)
+    refute display =~ ~r/<span class="l-(?!line")/
   end
 
   test "display HTML puts a copy button on code blocks, published HTML does not" do
