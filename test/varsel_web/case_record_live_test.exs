@@ -14,7 +14,7 @@ defmodule VarselWeb.CaseRecordLiveTest do
   # Rendering a case loads the markdown and subprocess NIFs and the JSON schema
   # validators, which costs ~40 ms once per VM. Under the parallel suite that
   # lands outside the 100 ms `render_async/1` default.
-  @render_timeout 500
+  @render_timeout 1000
 
   defp log_in(conn, user) do
     conn
