@@ -104,7 +104,8 @@ defmodule VarselWeb.MarkdownInput do
 
   defp tab_class(false), do: "text-base-content/50 hover:text-base-content"
 
-  # sobelow_skip ["XSS.Raw"] - Sanitized by comrak
+  # `to_display_html/1` sanitizes its output.
+  # sobelow_skip ["XSS.Raw"]
   defp preview(value) do
     case value do
       value when value in [nil, ""] ->
@@ -115,7 +116,6 @@ defmodule VarselWeb.MarkdownInput do
         """
 
       markdown ->
-        # `to_display_html/1` returns safe HTML.
         raw(Markdown.to_display_html(to_string(markdown)))
     end
   end

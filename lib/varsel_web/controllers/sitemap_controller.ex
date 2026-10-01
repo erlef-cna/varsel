@@ -38,6 +38,8 @@ defmodule VarselWeb.SitemapController do
   # recompiles this module and stamps a fresh date).
   @compiled_at Date.utc_today()
 
+  # The body is `Saxy.encode!` output, see the moduledoc.
+  # sobelow_skip ["XSS.SendResp"]
   def index(conn, _params) do
     conn
     |> put_resp_content_type("text/xml")

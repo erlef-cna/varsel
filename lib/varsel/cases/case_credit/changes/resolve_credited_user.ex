@@ -44,7 +44,7 @@ defmodule Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser do
       case confirm_handles(changeset, opts[:mode]) do
         {:ok, %{handles: handles, names: names, user_id: user_id}} ->
           changeset
-          |> Changeset.change_attribute(:handles, handles)
+          |> Changeset.force_change_attribute(:handles, handles)
           |> link_user(user_id)
           |> complete(opts[:mode], names)
 
@@ -132,7 +132,7 @@ defmodule Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser do
 
   defp link_user(changeset, user_id) do
     case Changeset.get_attribute(changeset, :user_id) do
-      nil -> Changeset.change_attribute(changeset, :user_id, user_id)
+      nil -> Changeset.force_change_attribute(changeset, :user_id, user_id)
       _user_id -> changeset
     end
   end
@@ -152,7 +152,7 @@ defmodule Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser do
   end
 
   defp complete_from_provider(changeset, :overwrite, [name | _rest]) do
-    Changeset.change_attribute(changeset, :name, name)
+    Changeset.force_change_attribute(changeset, :name, name)
   end
 
   defp complete_from_provider(changeset, :fill, names) do
@@ -177,8 +177,8 @@ defmodule Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser do
 
   defp put_from_user(changeset, :overwrite, user) do
     changeset
-    |> Changeset.change_attribute(:name, user.credit_display_name)
-    |> Changeset.change_attribute(:organization, user.credit_organization)
+    |> Changeset.force_change_attribute(:name, user.credit_display_name)
+    |> Changeset.force_change_attribute(:organization, user.credit_organization)
   end
 
   defp put_from_user(changeset, :fill, user) do
@@ -191,7 +191,7 @@ defmodule Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser do
 
   defp put_if_blank(changeset, attribute, value) do
     if blank?(Changeset.get_attribute(changeset, attribute)),
-      do: Changeset.change_attribute(changeset, attribute, value),
+      do: Changeset.force_change_attribute(changeset, attribute, value),
       else: changeset
   end
 
@@ -207,7 +207,7 @@ defmodule Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser do
         %{strategy: strategy, username: to_string(identity.username)}
       end
 
-    Changeset.change_attribute(changeset, :handles, given ++ from_identities)
+    Changeset.force_change_attribute(changeset, :handles, given ++ from_identities)
   end
 
   defp blank?(nil), do: true

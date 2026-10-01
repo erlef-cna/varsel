@@ -566,6 +566,8 @@ defmodule VarselWeb.CaseComponents do
   attr :content, :string, required: true
   attr :class, :any, default: nil
 
+  # `to_display_html/1` sanitizes its output.
+  # sobelow_skip ["XSS.Raw"]
   def markdown(assigns) do
     ~H"""
     <div class={["prose prose-sm max-w-none", @class]}>{raw(Markdown.to_display_html(@content))}</div>
