@@ -35,9 +35,9 @@ defmodule Varsel.Cases.CaseInvite.Changes.ResolveContact do
         {email, status} = deduplicate(changeset, email, status, context)
 
         changeset
-        |> Changeset.change_attribute(:username, canonical)
-        |> Changeset.change_attribute(:email, email)
-        |> Changeset.change_attribute(:email_status, status)
+        |> Changeset.force_change_attribute(:username, canonical)
+        |> Changeset.force_change_attribute(:email, email)
+        |> Changeset.force_change_attribute(:email_status, status)
       else
         {:error, field, message} -> Changeset.add_error(changeset, field: field, message: message)
       end

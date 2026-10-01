@@ -643,6 +643,8 @@ defmodule VarselWeb.CoreComponents do
   attr :language, :string, default: "json"
   attr :class, :any, default: nil
 
+  # The Lumis HTML formatter escapes the source.
+  # sobelow_skip ["XSS.Raw"]
   def code_block(assigns) do
     ~H"""
     <div class="codebox">

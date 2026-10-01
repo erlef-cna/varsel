@@ -4,3 +4,7 @@
 
 # CSRF not needed for Dev only GraphiQL Playground
 Config.CSRF: Missing CSRF Protections,lib/varsel_web/router.ex:31,49C6A75
+# The page body is HTML compiled from priv/pages at build time.
+XSS.Raw: XSS,lib/varsel_web/controllers/common_weaknesses_html/show.html.heex:18,2FC37BC
+XSS.Raw: XSS,lib/varsel_web/controllers/common_weaknesses_html/view.html.heex:18,5325149
+XSS.Raw: XSS,lib/varsel_web/controllers/page_html/page.html.heex:25,7C71663
