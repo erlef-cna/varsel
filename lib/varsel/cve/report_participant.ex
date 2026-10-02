@@ -23,7 +23,8 @@ defmodule Varsel.CVE.ReportParticipant do
     domain: Varsel.CVE,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshPaperTrail.Resource]
+    extensions: [AshPaperTrail.Resource],
+    notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
   alias Varsel.Cases.CaseInvite.Strategy
@@ -166,6 +167,14 @@ defmodule Varsel.CVE.ReportParticipant do
       access_type :strict
       authorize_if actor_attribute_equals(:system, :hexpm_intake)
     end
+  end
+
+  # The triage page shows participants on the report topic's subscription.
+  pub_sub do
+    module VarselWeb.Endpoint
+    prefix "vulnerability_report"
+
+    publish :erase, ["all"]
   end
 
   attributes do

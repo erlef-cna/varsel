@@ -216,6 +216,7 @@ defmodule Varsel.Cases.CaseInvite do
 
     publish_all :create, [[:case_id]]
     publish_all :destroy, [[:case_id]]
+    publish :erase_email, [[:case_id]]
   end
 
   attributes do
