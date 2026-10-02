@@ -197,6 +197,16 @@ defmodule Varsel.CVE do
 
       define :link_report_participant_user, action: :link_user
       define :spend_report_participant, action: :spend
+
+      define :list_report_participants_for_hex_erasure,
+        action: :for_hex_erasure,
+        args: [:username, {:optional, :email}]
+
+      define :erase_report_participant, action: :erase
+
+      define :erase_hex_report_participants,
+        action: :erase_hex_person,
+        args: [:username, {:optional, :email}]
     end
   end
 end

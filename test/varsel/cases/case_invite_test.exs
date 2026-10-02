@@ -391,6 +391,38 @@ defmodule Varsel.Cases.CaseInviteTest do
     end
   end
 
+  describe "hex.pm erasure" do
+    test "is refused to everyone but the sending system", %{poc: poc, case: case_record} do
+      invite =
+        Cases.invite_to_case!(%{case_id: case_record.id, strategy: :hex, username: "alice"},
+          actor: poc
+        )
+
+      for actor <- [poc, Varsel.Service.identity_claim(), nil] do
+        assert {:error, %Forbidden{}} = Cases.erase_hex_case_invites("alice", nil, actor: actor)
+        assert {:error, %Forbidden{}} = Cases.erase_case_invite_email(invite, actor: actor)
+
+        assert {:error, %Forbidden{}} =
+                 Cases.list_case_invites_for_hex_erasure("alice", nil, actor: actor)
+      end
+
+      assert [%{email: %Ash.CiString{}, email_status: :pending}] =
+               Cases.list_case_invites!(actor: poc)
+    end
+
+    test "grants the sending system nothing else", %{poc: poc, case: case_record} do
+      invite =
+        Cases.invite_to_case!(%{case_id: case_record.id, strategy: :hex, username: "alice"},
+          actor: poc
+        )
+
+      intake = Varsel.Service.hexpm_intake()
+
+      assert Cases.list_case_invites!(actor: intake) == []
+      assert {:error, _error} = Cases.withdraw_case_invite(invite, actor: intake)
+    end
+  end
+
   describe ":grant_access" do
     test "assigns outright when the handle is one we already hold", %{
       poc: poc,

@@ -4,7 +4,7 @@
 
 defmodule VarselWeb.Plugs.HexServiceAuth do
   @moduledoc """
-  Authenticates hex.pm's package-report intake.
+  Authenticates hex.pm's calls to the `/api/hex` routes.
 
   A verified request runs as `Varsel.Service.hexpm_intake/0`. Nothing else
   builds that actor, so holding it means a signature checked out here.
@@ -24,7 +24,8 @@ defmodule VarselWeb.Plugs.HexServiceAuth do
   @impl Plug
   def call(conn, _opts) do
     with {:ok, token} <- bearer(conn),
-         {:ok, _claims} <- ServiceToken.verify(token, audience()) do
+         {:ok, audience} <- audience(conn),
+         {:ok, _claims} <- ServiceToken.verify(token, audience) do
       Ash.PlugHelpers.set_actor(conn, Service.hexpm_intake())
     else
       {:error, reason} -> refuse(conn, reason)
@@ -38,10 +39,20 @@ defmodule VarselWeb.Plugs.HexServiceAuth do
     end
   end
 
-  # The address hex.pm was told to post to. Built from the route rather than
-  # the request, so the caller's Host header cannot decide which audience its
-  # own token has to match.
-  defp audience, do: url(~p"/api/hex/reports")
+  # The address hex.pm was told to post to: the configured endpoint URL and
+  # the pattern of the route the request matched. The caller's Host header
+  # cannot decide which audience its own token has to match.
+  defp audience(conn) do
+    case Phoenix.Router.route_info(
+           conn.private.phoenix_router,
+           conn.method,
+           conn.path_info,
+           conn.host
+         ) do
+      %{route: route} -> {:ok, unverified_url(VarselWeb.Endpoint, route)}
+      :error -> {:error, :unknown_route}
+    end
+  end
 
   defp refuse(conn, _reason) do
     conn

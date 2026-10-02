@@ -12,7 +12,8 @@ defmodule Varsel.Cases.CaseInvite.EmailStatus do
       pending: "The invite email is queued for the stored address.",
       sent: "The invite email went out to the stored address.",
       skipped: "The provider lists no address, and the inviter chose to send no email.",
-      duplicate: "Another invite on the same case already emails this address."
+      duplicate: "Another invite on the same case already emails this address.",
+      erased: "hex.pm erased the account before the invite email went out, and the address with it."
     ]
 
   @doc "The short label the case page shows for a status."
@@ -21,4 +22,5 @@ defmodule Varsel.Cases.CaseInvite.EmailStatus do
   def label(:sent), do: "emailed"
   def label(:skipped), do: "no email, skipped"
   def label(:duplicate), do: "address already emailed"
+  def label(:erased), do: "address erased"
 end

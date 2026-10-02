@@ -16,7 +16,8 @@ defmodule Varsel.Cases.CaseInvite do
 
   The person is told once, by email, at the address their provider reports.
   The email carries no case content, only a sign-in link. The address is a
-  POC-only field and leaves with the invite.
+  POC-only field and leaves with the invite, or before it when hex.pm erases
+  the account.
   """
 
   use Ash.Resource,
@@ -29,6 +30,7 @@ defmodule Varsel.Cases.CaseInvite do
 
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.Case
+  alias Varsel.Cases.CaseInvite.Actions.EraseHexContact
   alias Varsel.Cases.CaseInvite.Changes.DeliverInvite
   alias Varsel.Cases.CaseInvite.Changes.ResolveContact
   alias Varsel.Cases.CaseInvite.EmailStatus
@@ -83,6 +85,9 @@ defmodule Varsel.Cases.CaseInvite do
     end
   end
 
+  # Both updates are single-purpose system writes (the Oban send and hex.pm's
+  # erasure), so neither is a default update to fall back on.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingPrimaryAction
   actions do
     defaults [:read]
 
@@ -120,6 +125,46 @@ defmodule Varsel.Cases.CaseInvite do
       change DeliverInvite
     end
 
+    read :for_hex_erasure do
+      description "Internal: the hex.pm invites naming a username or address hex.pm erased."
+      public? false
+
+      argument :username, :ci_string, allow_nil?: false
+      argument :email, :ci_string
+
+      filter expr(
+               strategy == :hex and
+                 (username == ^arg(:username) or
+                    (not is_nil(^arg(:email)) and email == ^arg(:email)))
+             )
+    end
+
+    update :erase_email do
+      description "Clears the address of someone hex.pm erased, and cancels an invite email still queued for it."
+      accept []
+      require_atomic? false
+
+      change set_attribute(:email, nil)
+
+      change set_attribute(:email_status, :erased),
+        where: [attribute_equals(:email_status, :pending)]
+    end
+
+    action :erase_hex_contact do
+      description """
+      Applies hex.pm's notice that it erased an account (GDPR Article 19):
+      clears the address on every hex.pm invite naming that username or
+      address.
+      """
+
+      transaction? true
+
+      argument :username, :ci_string, allow_nil?: false
+      argument :email, :ci_string
+
+      run EraseHexContact
+    end
+
     read :for_identity do
       description "Internal: unclaimed invites naming a provider handle, for the sign-in claim."
       public? false
@@ -140,6 +185,8 @@ defmodule Varsel.Cases.CaseInvite do
     end
 
     policy action_type([:read, :destroy]) do
+      # Decided by the erasure policy below.
+      authorize_if action(:for_hex_erasure)
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
@@ -154,6 +201,12 @@ defmodule Varsel.Cases.CaseInvite do
     policy action(:send_email) do
       access_type :strict
       authorize_if AshObanInteraction
+    end
+
+    # Only hex.pm says when it erased someone.
+    policy action([:erase_hex_contact, :for_hex_erasure, :erase_email]) do
+      access_type :strict
+      authorize_if actor_attribute_equals(:system, :hexpm_intake)
     end
   end
 

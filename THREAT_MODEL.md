@@ -224,7 +224,9 @@ actor per internal system (`service.ex` lists them). Each is built only by
 the subsystem it names, carries no role, and may do exactly what the policies
 naming its system grant. One of them sits on a request boundary:
 `/api/hex/reports` takes reports from hex.pm, which submits on a reporter's
-behalf and so cannot present that reporter's credential. The token proves
+behalf and so cannot present that reporter's credential, and
+`/api/hex/erasures` takes hex.pm's notice that it erased an account it had
+named to us. The token proves
 which system is calling, and the request then runs as that system. So the
 boundary there is the same one as everywhere else, with a non-human on the
 other side of it. (`router.ex`, `hex_service_auth.ex`, `service.ex`)
@@ -312,6 +314,11 @@ moment. (`socket_disconnect.ex`, `disconnect_sockets.ex`, `graphql_socket.ex`)
    people who never signed up here**: the app's only store of personal data
    about non-users. POC-only (§8 property 10a).
    (`hex_report_controller.ex`, `report_participant.ex`)
+2b. **hex.pm erasure notice** — hex.pm (service token, no actor) →
+   `erase_hex_person` / `erase_hex_contact` → clears the name and address on
+   the hex.pm participants matching the username or address, the names their
+   versions recorded, and the address on matching hex.pm case invites.
+   (`hex_erasure_controller.ex`, `report_participant.ex`, `case_invite.ex`)
 3. **Editorial** — POC/assigned-supporter → case + child rows (facts) →
    **render-time derivation clones `repo_url`** → rendered CNA container
    (`derivation.ex`, `git_repo.ex`).
@@ -348,10 +355,13 @@ claims:
 - **Report intake** — reachable by **any authenticated user**. `report_json`
   is fully attacker-controlled at that privilege; downstream sinks (email,
   triage UI) are the question.
-- **hex.pm report intake** (`POST /api/hex/reports`) — reachable by **anyone
-  holding a signing key from the configured key set**, and by no one else. The
-  ES256 service token is checked by a plug on its own pipeline, which is the
-  only thing that builds the actor `submit_from_hex` demands. A finding
+- **hex.pm report intake and erasure notice** (`POST /api/hex/reports`,
+  `POST /api/hex/erasures`) — reachable by **anyone holding a signing key
+  from the configured key set**, and by no one else. The ES256 service token
+  is checked by a plug on its own pipeline, which is the only thing that
+  builds the actor `submit_from_hex` and the erasure actions demand. Its
+  audience is the configured URL of the route it is posted to, so a token
+  for one route is refused at the other. A finding
   premised on an *unauthenticated* caller reaching it is out of model unless
   the token check itself is defeated; an absent or unparseable key set admits
   nobody. Reaching the action from another surface gains nothing on its own,
@@ -474,6 +484,7 @@ from controlling only its size.
 | `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The resulting notification emails are content-free (link only), so the payload never leaves the authenticated console. |
 | `submit_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free notification emails as a web report. |
 | `submit_from_hex` | `reporter` / `maintainers` (`name`, `username`, `email`) | data | **Yes — same** | `report_participants` rows. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact. A `username` later matches a hex sign-in and grants that account the participant row (§8) |
+| `erase_hex_person` / `erase_hex_contact` (`/api/hex/erasures`) | `username`, `email` | data | **Yes — whoever holds a configured signing key** | Clears `name` and `email` on every hex.pm participant matching either, the names their versions recorded, and `email` on every matching hex.pm invite, cancelling an invite email not yet sent. Nothing else is written and nothing is returned, so a key holder can blank any hex.pm-named person's contact details and learns nothing (§10 7a) |
 | `Case.grant_access` / `CaseInvite.invite` | `email` | data | **Yes — POC / assigned supporter only** | One outbound invite email to that address, accepted only when the handle's provider lists no address for the account and refused when it lists a different one. One email per address per case (`resolve_contact.ex`) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
@@ -1184,7 +1195,7 @@ means the **CNA operator/deployer**, and — for the last item only — anyone
 7a. **Pin `HEX_INTAKE_JWKS` to hex.pm's public keys, and nothing else.** The
    key set is the only thing separating a real submission from a forged one,
    and it is trusted absolutely: any key in it can create reports naming
-   arbitrary people. Unset means the endpoint accepts nothing, which is the
+   arbitrary people, and clear the contact details of anyone hex.pm named. Unset means the endpoint accepts nothing, which is the
    safe failure. Rotation is manual on both sides: hex.pm publishes no
    key-discovery endpoint today, so a key change there is a coordinated
    config change here. hex.pm must also be pointed at the same URL this
