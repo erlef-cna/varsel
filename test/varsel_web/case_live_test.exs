@@ -14,6 +14,7 @@ defmodule VarselWeb.CaseLiveTest do
   alias Varsel.Fixtures
   alias Varsel.HexPm
   alias Varsel.Notifications
+  alias VarselWeb.HexServiceTokenFixture
 
   defp log_in(conn, user) do
     conn
@@ -2187,6 +2188,33 @@ defmodule VarselWeb.CaseLiveTest do
       html = render(lv)
       assert html =~ "email queued"
       assert html =~ "octocat@example.com"
+    end
+
+    test "an open case page drops the address when hex.pm erases the account", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+
+      Cases.invite_to_case!(%{case_id: case_record.id, strategy: :hex, username: "alice"},
+        actor: poc
+      )
+
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      assert html =~ "alice@example.com"
+
+      assert build_conn()
+             |> put_req_header("content-type", "application/json")
+             |> put_req_header(
+               "authorization",
+               "Bearer #{HexServiceTokenFixture.sign(url(~p"/api/hex/erasures"))}"
+             )
+             |> post(~p"/api/hex/erasures", %{"username" => "alice"})
+             |> response(204)
+
+      html = render(lv)
+      refute html =~ "alice@example.com"
+      assert html =~ "address erased"
     end
 
     test "a supporter sees the status but not the address", %{

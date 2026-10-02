@@ -12,6 +12,7 @@ defmodule VarselWeb.ReportTriageLiveTest do
   alias Varsel.CVE
   alias Varsel.Fixtures
   alias Varsel.Notifications
+  alias VarselWeb.HexServiceTokenFixture
 
   defp log_in(conn, user) do
     conn
@@ -290,6 +291,28 @@ defmodule VarselWeb.ReportTriageLiveTest do
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/reports")
 
       assert html =~ "Deleted user"
+    end
+
+    test "an open triage page drops them when hex.pm erases the account", %{
+      conn: conn,
+      poc: poc
+    } do
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/reports")
+      assert html =~ "maintainer@example.com"
+
+      assert build_conn()
+             |> put_req_header("content-type", "application/json")
+             |> put_req_header(
+               "authorization",
+               "Bearer #{HexServiceTokenFixture.sign(url(~p"/api/hex/erasures"))}"
+             )
+             |> post(~p"/api/hex/erasures", %{"username" => "triage_maintainer"})
+             |> response(204)
+
+      html = render(lv)
+      refute html =~ "maintainer@example.com"
+      assert html =~ "triage_maintainer"
+      assert html =~ "reporter@example.com"
     end
 
     test "are listed for a POC", %{conn: conn, poc: poc} do
