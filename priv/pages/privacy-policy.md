@@ -68,6 +68,13 @@ case. Accordingly:
 - **It is deleted as soon as the report is resolved.** When a report becomes a
   case, is rejected, or is withdrawn, the contact details we were given are
   erased. What remains is the case and the people who joined it.
+- **Deleting your hex.pm account erases it here too.** When someone whose
+  details hex.pm sent us deletes their hex.pm account, hex.pm tells us their
+  username and primary email address. We then erase the name and email address
+  from every report and invite that names them, and the name from the audit
+  trail of those reports, keeping only the hex.pm username. An invite that
+  hasn't been emailed yet is not sent. Credits on published CVE records keep
+  the name the person approved.
 - **If you have an account here, it becomes yours.** A forwarded report naming
   your username is linked to your account, and the separately reported contact
   details are dropped. Your account holds them from then on, under your
@@ -137,7 +144,8 @@ has entered into them with us, and they extend to the sub-processors it uses.
 ## How long we keep it
 
 - **Forwarded contact details:** deleted when the report they came with is
-  accepted, rejected or withdrawn.
+  accepted, rejected or withdrawn, or earlier when hex.pm tells us the person
+  deleted their hex.pm account.
 - **Your account:** kept while the account exists. Delete it and it goes, apart
   from the audit-trail entries described below.
 - **Server logs:** kept only as long as running and securing the service
@@ -222,4 +230,4 @@ when. Every previous version is in
 [the page's history](https://github.com/erlef-cna/varsel/commits/main/priv/pages/privacy-policy.md),
 along with what changed and when.
 
-This policy is effective as of 2026-08-12.
+This policy is effective as of 2026-10-03.
