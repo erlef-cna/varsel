@@ -1977,6 +1977,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp invite_status_class(:pending), do: "badge-info badge-outline"
   defp invite_status_class(:duplicate), do: "badge-ghost"
   defp invite_status_class(:skipped), do: "badge-warning badge-outline"
+  defp invite_status_class(:erased), do: "badge-ghost"
 
   # The address is a POC-only field; everyone else gets a forbidden marker.
   defp invite_email(%{email: %Ash.CiString{} = email}), do: to_string(email)

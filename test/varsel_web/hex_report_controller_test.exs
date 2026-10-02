@@ -7,17 +7,10 @@ defmodule VarselWeb.HexReportControllerTest do
 
   alias Varsel.CVE
   alias Varsel.Fixtures
+  alias VarselWeb.HexServiceTokenFixture
 
   # What the plug derives, so the token is addressed where the server listens.
   defp audience, do: url(~p"/api/hex/reports")
-
-  @signing_key %{
-    "crv" => "P-256",
-    "d" => "qgBTDHU-tA41X5luD1wc3vjM40y03pudRLsRVGHsWZA",
-    "kty" => "EC",
-    "x" => "4pRM_ZlHTfTHVvAIxDEBraNmq06ojzDzL2MIHUzkqLk",
-    "y" => "5HMC6Ycg9OjJGFbFs46n8rCTxB6VyGWcsLR3bnNWEtU"
-  }
 
   # Copied from hex.pm's own client test, so a drift there shows up here.
   defp payload(overrides \\ %{}) do
@@ -43,28 +36,7 @@ defmodule VarselWeb.HexReportControllerTest do
     )
   end
 
-  defp token(claims \\ %{}) do
-    now = System.system_time(:second)
-
-    claims =
-      Enum.into(claims, %{
-        "aud" => audience(),
-        "exp" => now + 60,
-        "iat" => now,
-        "iss" => "hexpm",
-        "jti" => Ash.UUID.generate(),
-        "nbf" => now - 5,
-        "sub" => "hexpm"
-      })
-
-    {_meta, token} =
-      @signing_key
-      |> JOSE.JWK.from_map()
-      |> JOSE.JWT.sign(%{"alg" => "ES256", "kid" => "hexpm-test"}, claims)
-      |> JOSE.JWS.compact()
-
-    token
-  end
+  defp token(claims \\ %{}), do: HexServiceTokenFixture.sign(audience(), claims)
 
   defp submit(conn, payload, token) do
     conn

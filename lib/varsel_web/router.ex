@@ -90,7 +90,7 @@ defmodule VarselWeb.Router do
     plug :accepts, ["json"]
   end
 
-  # hex.pm's report intake. Authenticated as a system rather than a person,
+  # hex.pm's calls. Authenticated as a system rather than a person,
   # so no actor is set and the routes behind it carry no user identity.
   pipeline :hex_intake do
     plug :accepts, ["json"]
@@ -344,13 +344,15 @@ defmodule VarselWeb.Router do
     get "/all.json", OsvController, :index
   end
 
-  # hex.pm forwards package reports here. The service token is the whole of
+  # hex.pm forwards package reports here, and tells us when it erases an
+  # account whose holder it named to us. The service token is the whole of
   # the authorization: no actor is resolved, and nothing else may join this
   # pipeline.
   scope "/api/hex", VarselWeb do
     pipe_through :hex_intake
 
     post "/reports", HexReportController, :create
+    post "/erasures", HexErasureController, :create
   end
 
   # Public HTML surface (browser pipeline: session, root layout, navbar).

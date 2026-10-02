@@ -8,6 +8,7 @@ defmodule Varsel.CVE.ReportParticipantTest do
   alias Ash.Error.Forbidden
   alias Varsel.CVE
   alias Varsel.Fixtures
+  alias Varsel.Service
 
   setup do
     poc = Fixtures.register_user("participant_poc", :poc)
@@ -164,6 +165,36 @@ defmodule Varsel.CVE.ReportParticipantTest do
                  },
                  actor: supporter
                )
+    end
+  end
+
+  describe "hex.pm erasure" do
+    test "is refused to everyone but the sending system", %{poc: poc} do
+      [participant | _] = CVE.list_report_participants!(actor: poc)
+
+      for actor <- [poc, Service.identity_claim(), nil] do
+        assert {:error, %Forbidden{}} =
+                 CVE.erase_hex_report_participants("reporter", nil, actor: actor)
+
+        assert {:error, %Forbidden{}} = CVE.erase_report_participant(participant, actor: actor)
+
+        assert {:error, %Forbidden{}} =
+                 CVE.list_report_participants_for_hex_erasure("reporter", nil, actor: actor)
+      end
+
+      assert %{name: "Reporter"} =
+               Ash.get!(CVE.ReportParticipant, participant.id, authorize?: false)
+    end
+
+    test "grants the sending system nothing else", %{poc: poc} do
+      [participant | _] = CVE.list_report_participants!(actor: poc)
+      intake = Service.hexpm_intake()
+
+      assert CVE.list_report_participants!(actor: intake) == []
+      assert {:error, %Forbidden{}} = CVE.spend_report_participant(participant, actor: intake)
+
+      assert {:error, %Forbidden{}} =
+               CVE.link_report_participant_user(participant, %{user_id: poc.id}, actor: intake)
     end
   end
 

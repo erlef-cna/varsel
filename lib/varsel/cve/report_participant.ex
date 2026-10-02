@@ -50,6 +50,9 @@ defmodule Varsel.CVE.ReportParticipant do
     version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
+  # Both updates are single-purpose system writes (the sign-in link and hex.pm's
+  # erasure), so neither is a default update to fall back on.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingPrimaryAction
   actions do
     defaults [:read]
 
@@ -69,6 +72,45 @@ defmodule Varsel.CVE.ReportParticipant do
       argument :username, :ci_string, allow_nil?: false
 
       filter expr(strategy == ^arg(:strategy) and username == ^arg(:username) and is_nil(user_id))
+    end
+
+    read :for_hex_erasure do
+      description "Internal: the hex.pm participants named by a username or address hex.pm erased."
+      public? false
+
+      argument :username, :ci_string, allow_nil?: false
+      argument :email, :string
+
+      filter expr(
+               strategy == :hex and
+                 (username == ^arg(:username) or
+                    (not is_nil(^arg(:email)) and
+                       string_downcase(email) == string_downcase(^arg(:email))))
+             )
+    end
+
+    update :erase do
+      description "Clears the name and address of someone hex.pm erased. The handle and role stay."
+      accept []
+      require_atomic? false
+
+      change set_attribute(:name, nil)
+      change set_attribute(:email, nil)
+    end
+
+    action :erase_hex_person do
+      description """
+      Applies hex.pm's notice that it erased an account (GDPR Article 19):
+      clears the name and address on every participant it named by that
+      username or address, and the names the audit trail recorded for them.
+      """
+
+      transaction? true
+
+      argument :username, :ci_string, allow_nil?: false
+      argument :email, :string
+
+      run Varsel.CVE.ReportParticipant.Actions.EraseHexPerson
     end
 
     update :link_user do
@@ -111,10 +153,18 @@ defmodule Varsel.CVE.ReportParticipant do
     # withdrawing reporter spend their own report's rows without ever being
     # able to read them on a surface.
     policy action_type([:read, :update, :destroy]) do
+      # Decided by the erasure policy below.
+      authorize_if action([:for_hex_erasure, :erase])
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       forbid_unless context_equals([:private, :spend_participants?], true)
       authorize_if relates_to_actor_via([:report, :reporter])
+    end
+
+    # Only hex.pm says when it erased someone it named.
+    policy action([:erase_hex_person, :for_hex_erasure, :erase]) do
+      access_type :strict
+      authorize_if actor_attribute_equals(:system, :hexpm_intake)
     end
   end
 
