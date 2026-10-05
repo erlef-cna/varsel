@@ -23,9 +23,14 @@ defmodule VarselWeb.GraphqlTest do
     put_req_header(conn, "authorization", "Bearer " <> plaintext)
   end
 
-  defp with_oauth_token(conn, user, scope \\ "gql") do
+  defp with_oauth_token(conn, user, scope \\ "gql", resource \\ :gql) do
     {:ok, token, _claims} =
-      Jwt.mint(Varsel.Oauth2Server, sub: user.id, client_id: "test-client", scope: scope)
+      Jwt.mint(Varsel.Oauth2Server,
+        sub: user.id,
+        client_id: "test-client",
+        scope: scope,
+        audience: Varsel.Oauth2Server.resource_url(resource)
+      )
 
     put_req_header(conn, "authorization", "Bearer " <> token)
   end
@@ -36,7 +41,9 @@ defmodule VarselWeb.GraphqlTest do
 
       assert response(conn, 401)
       assert [challenge] = get_resp_header(conn, "www-authenticate")
-      assert challenge =~ "resource_metadata"
+
+      assert challenge =~
+               ~s|resource_metadata="http://localhost:4002/.well-known/oauth-protected-resource/gql"|
     end
 
     test "cannot execute mutations", %{conn: conn} do
@@ -250,6 +257,17 @@ defmodule VarselWeb.GraphqlTest do
       assert [challenge] = get_resp_header(conn, "www-authenticate")
       assert challenge =~ ~s|error="insufficient_scope"|
       assert challenge =~ ~s|scope="gql"|
+    end
+
+    test "a token for the MCP resource is rejected", %{conn: conn} do
+      poc = register_user("poc", :poc)
+
+      conn =
+        conn
+        |> with_oauth_token(poc, "gql", :mcp)
+        |> post("/gql", %{"query" => "{ listAllCves { results { cveId } } }"})
+
+      assert response(conn, 401)
     end
 
     test "an invalid bearer token is rejected", %{conn: conn} do

@@ -486,7 +486,7 @@ from controlling only its size.
 | Account linking | `:strategy` path segment; `linking_from_user_id` **from the session** | data | Any authenticated user | Names the account by id from the signed session, not from `current_user`. Linking an identity another account already owns is refused (`resolve_oauth_identity.ex`) |
 | `/oauth/authorize` | URL-shaped `client_id` (Client ID Metadata Document) | resource name | **Yes — anonymous** | One outbound https GET per authorization request, then an upserted client row keyed on the URL. The fetcher rejects any host that resolves to a non-public address, pins the connection to the checked address, refuses redirects, and caps the body at 5 KiB and each phase at 5 s (`AshAuthentication.Oauth2Server.CIMD.ReqFetcher`, §6b). Rows unused for 30 days are expunged (`oauth_client.ex`) |
 | Sign-in pages (`/sign-in`, `/register`, `/reset`, `/auth/*`) | `return_to` query param | resource name | **Yes — anonymous**; anyone can hand a victim a crafted sign-in link | Parked in the session, spent as a `redirect` target after sign-in. Constrained to a same-site absolute **path** (property 17); a value that fails is dropped, not rewritten (`return_path.ex`) |
-| MCP/GraphQL tool args | per tool | data | scope-gated bearer (mcp/gql) + role policy | Same Ash actions as above; no separate trust level |
+| MCP/GraphQL tool args | per tool | data | audience- and scope-gated bearer (mcp/gql) + role policy | Same Ash actions as above; no separate trust level |
 
 **No caller supplies executable code.** No public action takes a callback,
 template, or expression parameter, and there is no dynamic code loading (§2).
@@ -629,10 +629,10 @@ prioritization of a dependency bump; it does not change the disposition.
   proposing, resolving their own proposal, and reaching any other case.
   **In scope** as a distinct actor.
 - **Byzantine OAuth client (MCP/GraphQL).** A registered OAuth 2.1 client
-  (DCR and CIMD are enabled) presenting a bearer token. Bounded by the token's scope
-  (`mcp` vs `gql`, enforced per surface) and the underlying user's role.
-  Assumed to try: using a token minted for one surface on another (blocked by
-  scope enforcement, `oauth_bearer_auth.ex`), or exceeding the user's role
+  (DCR and CIMD are enabled) presenting a bearer token. Bounded by the token's
+  resource and scope (`mcp` vs `gql`, enforced per surface) and the underlying
+  user's role. Assumed to try: using a token minted for one surface on another
+  (blocked by audience and scope checks, property 6), or exceeding the user's role
   (blocked by Ash policies). **In scope.**
 - **Whoever controls a repository a case names.** A POC or assignee chooses
   the `repo_url`, but the *contents* at that URL belong to whoever runs it,
@@ -772,21 +772,19 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `high` (unpublished advisory content is embargoed).
    - (`case.ex`, `case_assignment.ex`, `proposal.ex`)
 
-6. **OAuth scope separation between surfaces.**
-   An OAuth 2.1 access token carries a scope (`mcp` or `gql`); a token
-   without the required scope for a surface gets `403 insufficient_scope`.
-   API keys are first-party credentials and carry the user's own authority, so
-   the scope check applies to delegated grants alone. This holds on the
-   websocket too: `/ws/gql` refuses a token that lacks the `gql` scope (§4).
-   The property constrains **use per surface, not issuance**: a token may
-   legitimately carry both scopes, and holding both is not a violation. The
-   token never exceeds the underlying user's role either way. Audience does
-   not separate the two surfaces — `resource_url` is the bare host — so the
-   scope check is what divides them.
-   - *Violation symptom:* a `gql`-scoped token invokes an MCP tool, or vice
-     versa.
+6. **OAuth separation between surfaces.**
+   MCP and GraphQL are two protected resources (RFC 8707), `<host>/mcp` and
+   `<host>/gql`. Each scope belongs to one resource, so the server issues no
+   grant that spans both. An access token names its resource in `aud`. A
+   surface refuses a token for the other resource with `401`, and a token
+   without its scope (`mcp` or `gql`) with `403 insufficient_scope`. The
+   websocket `/ws/gql` applies both checks too (§4). API keys are first-party
+   credentials and carry the user's own authority, so these checks apply to
+   delegated grants alone. A token never exceeds the underlying user's role.
+   - *Violation symptom:* a token issued for one surface is accepted on the
+     other, or one grant covers both surfaces.
    - *Severity:* `high`.
-   - (`oauth_bearer_auth.ex`)
+   - (`oauth2_server.ex`, `oauth_bearer_auth.ex`, `graphql_socket.ex`)
 
 7. **API keys and tokens stored hashed / redacted.**
    Only a SHA-256 hash of an API key is persisted; the plaintext is shown
@@ -1240,7 +1238,6 @@ a triager who hits one of those flags sees the justification there.
 | "The `cvelint` call passes user input to an external program." | The binary is executed directly — no shell — with a fixed argument list, and the record reaches it on stdin rather than as an argument (property 13). |
 | "`Exgit.clone(repo_url)` is an SSRF sink." | Constrained to https and a public-resolving host, pinned at connect (property 12). The residual reach to *public* hosts is deliberate (§9) and needs POC/assignee privilege (§4). |
 | "A supporter can resolve proposals like a POC." | Accepting or declining a proposal on an assigned case is intended supporter authority; assignment is the grant (§11). |
-| "A token carries both the `mcp` and `gql` scopes." | Property 6 constrains what a token may *use*, per surface, not what it may be issued. |
 | "An avatar URL exposes the MD5 of a user's email." | Known and accepted (§9): the hash confirms a guessed address to someone who can already read that user's row. Reported often because the hash is recognisable. |
 | "A concurrent edit fails with a stale-record error." | The optimistic lock doing its job (§4): the row moved between read and write, the write rolled back whole, and a reload-and-retry succeeds. Not a data race — it is what prevents one. |
 | "Markdown from the JSON API is not escaped." | Sanitization runs at each render sink, not at rest (§9). Escaping is the consumer's obligation (§10). |

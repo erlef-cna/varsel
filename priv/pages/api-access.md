@@ -45,14 +45,18 @@ or by using the HTTPS URL of a
 [Client ID Metadata Document (CIMD)](https://client.dev/) as their
 `client_id`, and discover the authorization server through the standard
 metadata documents at `/.well-known/oauth-authorization-server`
-and `/.well-known/oauth-protected-resource`. MCP clients do all of this
+and `/.well-known/oauth-protected-resource/mcp` or
+`/.well-known/oauth-protected-resource/gql`. MCP clients do all of this
 automatically starting from the discovery challenge of an unauthenticated
 request — point them at the MCP URL, approve the consent screen in your
 browser, and you are done.
 
-Access tokens are scoped per surface: `mcp` grants the MCP endpoint, `gql`
-grants GraphQL. A token used on a surface whose scope it does not carry is
-rejected with `403 insufficient_scope`.
+Each surface is a separate protected resource, with its own scope: `mcp` for
+the MCP endpoint, `gql` for GraphQL. A token is valid for one surface only.
+Request it with that surface's scope, or with the `resource` parameter set to
+the surface URL (RFC 8707). A token for the other surface is rejected with
+`401`. A token without the surface's scope is rejected with
+`403 insufficient_scope`.
 
 ## Personal API Tokens
 

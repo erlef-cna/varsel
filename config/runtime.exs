@@ -229,9 +229,8 @@ if config_env() == :prod do
 
   config :varsel,
     oauth2_issuer_url: "https://#{host}",
-    # Audience of minted access tokens and the protected-resource identity
-    # (RFC 8707): the bare host, covering every token-consuming surface
-    # (/mcp, /gql); scopes, not audiences, separate the surfaces.
+    # Base of the protected-resource identifiers (RFC 8707). Each surface
+    # appends its path (/mcp, /gql), and that URL is its token audience.
     oauth2_resource_url: "https://#{host}",
     oauth2_signing_secret:
       System.get_env("OAUTH2_SIGNING_SECRET") ||

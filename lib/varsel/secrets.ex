@@ -77,8 +77,10 @@ defmodule Varsel.Secrets do
     Application.fetch_env(:varsel, :oauth2_issuer_url)
   end
 
-  def secret_for([:resource_url], Varsel.Oauth2Server, _opts, _context) do
-    Application.fetch_env(:varsel, :oauth2_resource_url)
+  def secret_for([:resources, name], Varsel.Oauth2Server, _opts, _context) when name in [:mcp, :gql] do
+    with {:ok, base} <- Application.fetch_env(:varsel, :oauth2_resource_url) do
+      {:ok, base <> "/" <> Atom.to_string(name)}
+    end
   end
 
   def secret_for([:signing_secret], Varsel.Oauth2Server, _opts, _context) do

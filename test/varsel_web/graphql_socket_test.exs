@@ -70,7 +70,8 @@ defmodule VarselWeb.GraphqlSocketTest do
       Jwt.mint(Varsel.Oauth2Server,
         sub: user.id,
         client_id: "test-client",
-        scope: "gql"
+        scope: "gql",
+        audience: Varsel.Oauth2Server.resource_url(:gql)
       )
 
     assert {:ok, socket} = connect(%{"token" => token})
@@ -78,7 +79,7 @@ defmodule VarselWeb.GraphqlSocketTest do
   end
 
   # The same rule the HTTP surface enforces: a token minted for MCP is not a
-  # GraphQL credential, even though both surfaces share an audience.
+  # GraphQL credential. Each surface is its own resource with its own audience.
   test "an OAuth token without the gql scope is refused" do
     user = register_user("alice", :poc)
 
@@ -86,7 +87,22 @@ defmodule VarselWeb.GraphqlSocketTest do
       Jwt.mint(Varsel.Oauth2Server,
         sub: user.id,
         client_id: "test-client",
-        scope: "mcp"
+        scope: "mcp",
+        audience: Varsel.Oauth2Server.resource_url(:mcp)
+      )
+
+    assert :error = connect(%{"token" => token})
+  end
+
+  test "an OAuth token for the MCP resource is refused, whatever its scope" do
+    user = register_user("alice", :poc)
+
+    {:ok, token, _claims} =
+      Jwt.mint(Varsel.Oauth2Server,
+        sub: user.id,
+        client_id: "test-client",
+        scope: "gql",
+        audience: Varsel.Oauth2Server.resource_url(:mcp)
       )
 
     assert :error = connect(%{"token" => token})
@@ -106,7 +122,12 @@ defmodule VarselWeb.GraphqlSocketTest do
       user = register_user("alice", :poc)
 
       {:ok, token, _claims} =
-        Jwt.mint(Varsel.Oauth2Server, sub: user.id, client_id: "test-client", scope: "gql")
+        Jwt.mint(Varsel.Oauth2Server,
+          sub: user.id,
+          client_id: "test-client",
+          scope: "gql",
+          audience: Varsel.Oauth2Server.resource_url(:gql)
+        )
 
       assert {:ok, socket} = connect(%{"token" => token})
       assert GraphqlSocket.id(socket) == nil

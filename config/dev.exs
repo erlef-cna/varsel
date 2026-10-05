@@ -127,8 +127,7 @@ config :varsel, VarselWeb.Endpoint,
 config :varsel,
   token_signing_secret: "UEhqsoDaIGLdNpy47qra8ygp/06r0T7F",
   oauth2_issuer_url: "http://localhost:4000",
-  # Audience of minted access tokens and the protected-resource identity
-  # (RFC 8707): the bare host, covering every token-consuming surface
-  # (/mcp, /gql); scopes, not audiences, separate the surfaces.
+  # Base of the protected-resource identifiers (RFC 8707). Each surface
+  # appends its path (/mcp, /gql), and that URL is its token audience.
   oauth2_resource_url: "http://localhost:4000",
   oauth2_signing_secret: "3pTWxv0hnz+fyxgPVN3H4cR4+8yq+Iek0JGFdHw+64o"

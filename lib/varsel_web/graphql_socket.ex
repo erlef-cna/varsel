@@ -116,7 +116,7 @@ defmodule VarselWeb.GraphqlSocket do
   # subject is a bare user id here, not an AshAuthentication subject string,
   # so it is looked up the way `BearerPlug` does.
   defp oauth_token(%{"token" => token}) when is_binary(token) do
-    with {:ok, claims} <- Oauth2Jwt.verify(Varsel.Oauth2Server, token),
+    with {:ok, claims} <- Oauth2Jwt.verify(Varsel.Oauth2Server, token, resource: :gql),
          true <- @scope in scopes(claims),
          %{"sub" => subject} when is_binary(subject) <- claims,
          {:ok, user} <- user_by_id(subject) do

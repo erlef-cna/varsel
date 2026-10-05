@@ -22,7 +22,7 @@ defmodule VarselWeb.Router do
     plug ApiKeyAuth
     plug :load_from_bearer
     plug :set_actor, :user
-    plug OauthBearerAuth, oauth2_server: Varsel.Oauth2Server, scope: "gql"
+    plug OauthBearerAuth, oauth2_server: Varsel.Oauth2Server, scope: "gql", resource: :gql
     plug AshGraphql.Plug
   end
 
@@ -81,7 +81,7 @@ defmodule VarselWeb.Router do
   # token; anonymous requests get the 401 discovery challenge.
   pipeline :mcp do
     plug ApiKeyAuth
-    plug OauthBearerAuth, oauth2_server: Varsel.Oauth2Server, scope: "mcp"
+    plug OauthBearerAuth, oauth2_server: Varsel.Oauth2Server, scope: "mcp", resource: :mcp
   end
 
   # Client-facing OAuth 2.1 protocol endpoints (token, DCR, discovery
