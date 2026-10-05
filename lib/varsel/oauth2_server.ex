@@ -13,13 +13,16 @@ defmodule Varsel.Oauth2Server do
     otp_app: :varsel,
     user_resource: Varsel.Accounts.User,
     issuer_url: {Varsel.Secrets, []},
-    resource_url: {Varsel.Secrets, []},
     signing_secret: {Varsel.Secrets, []},
     client_resource: Varsel.Accounts.OauthClient,
     authorization_code_resource: Varsel.Accounts.OauthAuthorizationCode,
     refresh_token_resource: Varsel.Accounts.OauthRefreshToken,
     consent_resource: Varsel.Accounts.OauthConsent,
     scopes: ["mcp", "gql"],
+    resources: [
+      mcp: [url: {Varsel.Secrets, []}, scopes: ["mcp"]],
+      gql: [url: {Varsel.Secrets, []}, scopes: ["gql"]]
+    ],
     # Dynamic client registration (RFC 7591). The library default is
     # `false` for safety; the installer turns it on because most
     # people setting up an OAuth server today need it for MCP-style

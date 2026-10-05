@@ -74,7 +74,8 @@ defmodule Varsel.MixProject do
       # override: ash_ai pins ash_authentication ~> 4.8 but only touches it in
       # dev-time generators; the OAuth2 server package needs 5.0.
       {:ash_authentication, "~> 5.0-rc", override: true},
-      {:ash_authentication_oauth2_server, "~> 0.2"},
+      # TODO: Use published hex package once the current changes are released
+      {:ash_authentication_oauth2_server, github: "ash-project/ash_authentication_oauth2_server", branch: "main"},
       {:ash_authentication_phoenix, "~> 3.0-rc"},
       {:ash_cloak, "~> 0.2"},
       {:ash_credo, "~> 0.17", only: [:dev, :test], runtime: false},

@@ -20,9 +20,14 @@ defmodule VarselWeb.McpTest do
     |> post("/mcp", Jason.encode!(%{jsonrpc: "2.0", id: 1, method: method, params: params}))
   end
 
-  defp mint_access_token(user, scope \\ "mcp") do
+  defp mint_access_token(user, scope \\ "mcp", resource \\ :mcp) do
     {:ok, token, _claims} =
-      Jwt.mint(Varsel.Oauth2Server, sub: user.id, client_id: "test-client", scope: scope)
+      Jwt.mint(Varsel.Oauth2Server,
+        sub: user.id,
+        client_id: "test-client",
+        scope: scope,
+        audience: Varsel.Oauth2Server.resource_url(resource)
+      )
 
     token
   end
@@ -35,7 +40,7 @@ defmodule VarselWeb.McpTest do
     assert [challenge] = get_resp_header(conn, "www-authenticate")
 
     assert challenge =~
-             ~s|resource_metadata="http://localhost:4002/.well-known/oauth-protected-resource"|
+             ~s|resource_metadata="http://localhost:4002/.well-known/oauth-protected-resource/mcp"|
   end
 
   test "an invalid bearer token is rejected", %{conn: conn} do
@@ -212,5 +217,16 @@ defmodule VarselWeb.McpTest do
     assert [challenge] = get_resp_header(conn, "www-authenticate")
     assert challenge =~ ~s|error="insufficient_scope"|
     assert challenge =~ ~s|scope="mcp"|
+  end
+
+  test "a token for the GraphQL resource is rejected", %{conn: conn} do
+    poc = register_user("poc", :poc)
+
+    conn =
+      conn
+      |> put_req_header("authorization", "Bearer " <> mint_access_token(poc, "mcp", :gql))
+      |> mcp("tools/list")
+
+    assert response(conn, 401)
   end
 end
