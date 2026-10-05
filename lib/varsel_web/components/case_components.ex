@@ -14,9 +14,9 @@ defmodule VarselWeb.CaseComponents do
   import Phoenix.HTML, only: [raw: 1]
 
   import VarselWeb.CoreComponents,
-    only: [code_block: 1, copy_button: 1, mono_chip: 1, page_header: 1, scope_tab: 1]
+    only: [code_block: 1, copy_button: 1, mono_chip: 1, page_header: 1, scope_tab: 1, state: 1]
 
-  import VarselWeb.UserComponents, only: [avatar_disc: 1, user_name: 1]
+  import VarselWeb.UserComponents, only: [avatar_disc: 1, user_badge: 1, user_name: 1]
 
   alias Phoenix.LiveView.JS
   alias Varsel.Cases.Markdown
@@ -39,7 +39,7 @@ defmodule VarselWeb.CaseComponents do
 
   attr :tabs, :list,
     required: true,
-    doc: "maps of `:id`, `:label` and `:navigate`, in display order"
+    doc: "maps of `:id`, `:label`, `:navigate` and an optional `:count`, in display order"
 
   attr :active, :atom, required: true, doc: "the `:id` of the tab this page is"
 
@@ -76,7 +76,7 @@ defmodule VarselWeb.CaseComponents do
         <.lifecycle_stepper state={@case_record.state} />
         <div class="flex items-center gap-4 text-sm mt-3">
           <.link :for={tab <- @tabs} navigate={tab.navigate}>
-            <.scope_tab active?={tab.id == @active} label={tab.label} />
+            <.scope_tab active?={tab.id == @active} label={tab.label} count={tab[:count]} />
           </.link>
         </div>
       </:meta>
@@ -586,8 +586,7 @@ defmodule VarselWeb.CaseComponents do
 
   The caller owns the disclosure: pass `toggle` to drive it from a LiveView
   (`expanded?` then says whether it is open), or leave it `nil` for a plain
-  `<details>` that needs no state. `body_class` is the clamp, which differs
-  between the queue and the narrower case rail.
+  `<details>` that needs no state. `body_class` is the clamp.
   """
   attr :payload, :any, required: true
   attr :report_id, :string, required: true, doc: ~s(not `id` — storybook eats an `id` attr)
@@ -632,6 +631,95 @@ defmodule VarselWeb.CaseComponents do
     </div>
     """
   end
+
+  @doc """
+  Renders one vulnerability report as a row of a `list_card`: who said what
+  and when, its state, the body they wrote, and the triage notes.
+
+  The caller adds what its audience may do with the report: `actions` beside
+  the state, and the inner block at the foot of the row.
+  """
+  attr :report, :map,
+    required: true,
+    doc: "needs `:summary`, `:state`, `:inserted_at`, `:triage_notes` and `:report_json`"
+
+  attr :reporter?, :boolean, default: true, doc: "whether to name the reporter, from `:reporter`"
+  attr :payload?, :boolean, default: true
+  attr :payload_open?, :boolean, default: false
+  attr :toggle, :string, default: nil, doc: "the event a click on the payload disclosure pushes"
+  attr :rest, :global
+
+  slot :actions, doc: "controls beside the state"
+  slot :inner_block, doc: "content at the foot of the row"
+
+  def report_row(assigns) do
+    assigns = assign(assigns, :open?, assigns.report.state in [:submitted, :triaged])
+
+    ~H"""
+    <article
+      class={["border-b border-base-300 last:border-0 px-4 py-3.5", not @open? && "bg-base-300/20"]}
+      {@rest}
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
+          <h3 class={["font-semibold leading-snug", not @open? && "text-base-content/70"]}>
+            {@report.summary}
+          </h3>
+          <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-base-content/60">
+            <.user_badge
+              :if={@reporter?}
+              user={@report.reporter}
+              class="items-center"
+              name_class="text-base-content/60"
+            />
+            <span :if={@reporter?}>·</span>
+            <.relative_timestamp at={@report.inserted_at} />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 shrink-0">
+          <.state
+            dot={report_dot_class(@report.state)}
+            class={["text-sm", report_text_class(@report.state)]}
+          >
+            {Phoenix.Naming.humanize(@report.state)}
+          </.state>
+          {render_slot(@actions)}
+        </div>
+      </div>
+
+      <%!-- Scroll-capped: one verbose report must not push every other row
+            off the list. --%>
+      <div :if={@payload?} class="mt-2.5">
+        <.report_payload
+          payload={@report.report_json}
+          report_id={@report.id}
+          expanded?={@payload_open?}
+          toggle={@toggle}
+          body_class="max-h-112 overflow-y-auto"
+        />
+      </div>
+
+      <p :if={@report.triage_notes} class="mt-2 text-sm text-base-content/70 italic">
+        {@report.triage_notes}
+      </p>
+
+      {render_slot(@inner_block)}
+    </article>
+    """
+  end
+
+  defp report_dot_class(:submitted), do: "bg-warning"
+  defp report_dot_class(:triaged), do: "bg-info"
+  defp report_dot_class(:accepted), do: "bg-success"
+  defp report_dot_class(:rejected), do: "bg-error"
+  defp report_dot_class(_other), do: "bg-base-content/30"
+
+  defp report_text_class(:submitted), do: "text-warning"
+  defp report_text_class(:triaged), do: "text-info"
+  defp report_text_class(:accepted), do: "text-success"
+  defp report_text_class(:rejected), do: "text-base-content/50"
+  defp report_text_class(_other), do: "text-base-content/60"
 
   defp report_body(%{"report" => body}) when is_binary(body), do: body
   defp report_body(_payload), do: nil

@@ -60,7 +60,7 @@ defmodule VarselWeb.Storybook.Case.ReportPayload do
       },
       %Variation{
         id: :clamped,
-        description: "`body_class` is the clamp — tighter in the case rail than in the queue.",
+        description: "`body_class` is the clamp.",
         attributes: %{
           payload: %{"report" => @body},
           report_id: "story-clamped",

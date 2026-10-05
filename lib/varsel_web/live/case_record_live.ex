@@ -195,7 +195,7 @@ defmodule VarselWeb.CaseRecordLive do
       <.case_header
         case_record={@case_record}
         public_href={CaseLifecycle.public_cve_href(@case_record)}
-        tabs={CaseLifecycle.tabs(@case_record.id)}
+        tabs={CaseLifecycle.tabs(@case_record)}
         active={@live_action}
       >
         <:actions>
