@@ -23,8 +23,7 @@ defmodule VarselWeb.ReportTriageLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
-  import VarselWeb.CaseComponents, only: [relative_timestamp: 1, report_payload: 1]
-  import VarselWeb.UserComponents, only: [user_badge: 1]
+  import VarselWeb.CaseComponents, only: [report_row: 1]
 
   alias Varsel.Cases
   alias Varsel.CVE
@@ -162,18 +161,6 @@ defmodule VarselWeb.ReportTriageLive do
 
   defp presence(value) when is_binary(value), do: if(String.trim(value) == "", do: nil, else: value)
 
-  defp state_dot_class(:submitted), do: "bg-warning"
-  defp state_dot_class(:triaged), do: "bg-info"
-  defp state_dot_class(:accepted), do: "bg-success"
-  defp state_dot_class(:rejected), do: "bg-error"
-  defp state_dot_class(_other), do: "bg-base-content/30"
-
-  defp state_text_class(:submitted), do: "text-warning"
-  defp state_text_class(:triaged), do: "text-info"
-  defp state_text_class(:accepted), do: "text-success"
-  defp state_text_class(:rejected), do: "text-base-content/50"
-  defp state_text_class(_other), do: "text-base-content/60"
-
   defp actionable?(state), do: state in [:submitted, :triaged]
 
   # A participant naming the reporter means they have not signed in yet.
@@ -264,7 +251,7 @@ defmodule VarselWeb.ReportTriageLive do
           </:note>
           <:empty>{empty_sentence(@triage?, @reports, @filter)}</:empty>
 
-          <.report_row
+          <.queue_row
             :for={report <- visible_reports(@reports, active_filter(@triage?, @filter))}
             report={report}
             triage?={@triage?}
@@ -316,66 +303,29 @@ defmodule VarselWeb.ReportTriageLive do
   attr :current_user, :any, required: true
   attr :payload_open?, :boolean, required: true
 
-  # One report as a row of the list card: who said what and when, the body
-  # they wrote, and — for whoever may act on it — the decision bar at its
-  # foot. Resolved rows quiet down; only the open ones carry weight.
-  defp report_row(assigns) do
+  # The shared report row, with what a triager or the reporter may do with
+  # it: withdraw, see the named participants, follow the case, decide.
+  defp queue_row(assigns) do
     ~H"""
-    <article class={[
-      "border-b border-base-300 last:border-0 px-4 py-3.5",
-      not actionable?(@report.state) && "bg-base-300/20"
-    ]}>
-      <div class="flex items-start justify-between gap-4">
-        <div class="min-w-0">
-          <h3 class={[
-            "font-semibold leading-snug",
-            not actionable?(@report.state) && "text-base-content/70"
-          ]}>
-            {@report.summary}
-          </h3>
-          <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-base-content/60">
-            <.user_badge
-              :if={@triage? and reporter_known?(@report)}
-              user={@report.reporter}
-              class="items-center"
-              name_class="text-base-content/60"
-            />
-            <span :if={@triage? and reporter_known?(@report)}>·</span>
-            <.relative_timestamp at={@report.inserted_at} />
-          </div>
-        </div>
-
-        <div class="flex items-center gap-3 shrink-0">
-          <.state
-            dot={state_dot_class(@report.state)}
-            class={["text-sm", state_text_class(@report.state)]}
-          >
-            {Phoenix.Naming.humanize(@report.state)}
-          </.state>
-          <button
-            :if={CVE.can_withdraw_vulnerability_report?(@current_user, @report, %{}, validate?: true)}
-            type="button"
-            phx-click="withdraw"
-            phx-value-report_id={@report.id}
-            class="btn btn-outline btn-error btn-xs"
-            data-confirm="Withdraw this report? The CNA team will stop triaging it."
-          >
-            Withdraw
-          </button>
-        </div>
-      </div>
-
-      <%!-- Scroll-capped: one verbose report must not push every other row
-            off the queue. --%>
-      <div :if={@triage?} class="mt-2.5">
-        <.report_payload
-          payload={@report.report_json}
-          report_id={@report.id}
-          expanded?={@payload_open?}
-          toggle="toggle_payload"
-          body_class="max-h-56 overflow-y-auto"
-        />
-      </div>
+    <.report_row
+      report={@report}
+      reporter?={@triage? and reporter_known?(@report)}
+      payload?={@triage?}
+      payload_open?={@payload_open?}
+      toggle="toggle_payload"
+    >
+      <:actions>
+        <button
+          :if={CVE.can_withdraw_vulnerability_report?(@current_user, @report, %{}, validate?: true)}
+          type="button"
+          phx-click="withdraw"
+          phx-value-report_id={@report.id}
+          class="btn btn-outline btn-error btn-xs"
+          data-confirm="Withdraw this report? The CNA team will stop triaging it."
+        >
+          Withdraw
+        </button>
+      </:actions>
 
       <div :if={@triage? and @report.participants != []} class="mt-2.5">
         <p class="text-xs font-semibold text-base-content/60">
@@ -393,10 +343,6 @@ defmodule VarselWeb.ReportTriageLive do
         </ul>
       </div>
 
-      <p :if={@report.triage_notes} class="mt-2 text-sm text-base-content/70 italic">
-        {@report.triage_notes}
-      </p>
-
       <.link
         :if={@triage? and @report.case_id}
         navigate={~p"/cases/#{@report.case_id}"}
@@ -410,7 +356,7 @@ defmodule VarselWeb.ReportTriageLive do
         report={@report}
         current_user={@current_user}
       />
-    </article>
+    </.report_row>
     """
   end
 

@@ -37,7 +37,6 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Proposal.Build
   alias Varsel.Cases.Readiness
   alias Varsel.Cases.VersionEvent
-  alias Varsel.CVE
   alias Varsel.Types.CVSS
   alias VarselWeb.AffectedComponents
   alias VarselWeb.CaseLifecycle
@@ -60,8 +59,7 @@ defmodule VarselWeb.CaseDetailLive do
     impacts: [attack_pattern: [:capec_id, :name]],
     proposals: [author: [:avatar_url, :display_name], resolved_by: [:display_name]],
     affected_packages: [:derivation_state, channels: [:purl], version_events: []],
-    comments: [author: [:display_name]],
-    vulnerability_reports: [reporter: [:avatar_url, :display_name]]
+    comments: [author: [:display_name]]
   ]
 
   # Modal child-form registry: UI type -> resource + labels. Every resource
@@ -142,8 +140,7 @@ defmodule VarselWeb.CaseDetailLive do
         people_picker?: false,
         grant_form: nil,
         users: nil,
-        catalog_options: nil,
-        expanded_payloads: MapSet.new()
+        catalog_options: nil
       )
       |> CaseLifecycle.mount(id,
         load: @case_loads,
@@ -164,19 +161,6 @@ defmodule VarselWeb.CaseDetailLive do
   def handle_event("toggle_suggest", _params, socket) do
     socket = assign(socket, suggest?: not socket.assigns.suggest?)
     {:noreply, assign_case(socket, socket.assigns.case_record)}
-  end
-
-  def handle_event("toggle_payload", %{"report_id" => report_id}, socket) do
-    expanded = socket.assigns.expanded_payloads
-
-    expanded =
-      if MapSet.member?(expanded, report_id) do
-        MapSet.delete(expanded, report_id)
-      else
-        MapSet.put(expanded, report_id)
-      end
-
-    {:noreply, assign(socket, expanded_payloads: expanded)}
   end
 
   def handle_event("edit_section", %{"section" => section}, socket) when section in ["summary", "severity"] do
@@ -874,7 +858,7 @@ defmodule VarselWeb.CaseDetailLive do
       <.case_header
         case_record={@case_record}
         public_href={CaseLifecycle.public_cve_href(@case_record)}
-        tabs={CaseLifecycle.tabs(@case_record.id)}
+        tabs={CaseLifecycle.tabs(@case_record)}
         active={:workspace}
       >
         <:actions>
@@ -1105,12 +1089,6 @@ defmodule VarselWeb.CaseDetailLive do
             <.activity_feed entries={activity_entries(@case_record)} />
           </.panel>
           <.assignments_section case_record={@case_record} current_user={@current_user} />
-          <.reports_section
-            :if={@case_record.vulnerability_reports != []}
-            case_record={@case_record}
-            triage?={CVE.can_list_vulnerability_reports?(@current_user)}
-            expanded_payloads={@expanded_payloads}
-          />
           <CaseLifecycle.close_link
             :if={Cases.can_close_case?(@current_user, @case_record, validate?: true)}
             case_record={@case_record}
@@ -1901,78 +1879,6 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
-  defp reports_section(assigns) do
-    ~H"""
-    <.panel>
-      <:title>Reports ({length(@case_record.vulnerability_reports)})</:title>
-      <:actions>
-        <.link :if={@triage?} navigate={~p"/reports"} class="link link-hover text-primary">
-          Report triage
-        </.link>
-      </:actions>
-
-      <%!-- The queue's row, at rail width: same state vocabulary and payload
-            treatment, with the body clamped tighter and no decision bar —
-            reports are acted on in triage, read here. --%>
-      <div
-        :for={report <- Enum.sort_by(@case_record.vulnerability_reports, & &1.inserted_at, DateTime)}
-        class="rounded-lg border border-base-300 bg-base-300/30 p-3 text-sm mb-2 last:mb-0"
-      >
-        <div class="flex items-start justify-between gap-2">
-          <span class="font-semibold">{report.summary}</span>
-          <.state
-            dot={report_dot_class(report.state)}
-            class={["text-xs shrink-0", report_text_class(report.state)]}
-          >
-            {Phoenix.Naming.humanize(report.state)}
-          </.state>
-        </div>
-
-        <div class="flex items-center gap-1.5 text-xs text-base-content/60">
-          <.user_badge
-            user={report.reporter}
-            class="items-center"
-            name_class="text-base-content/60"
-          />
-          <span>· {relative_time(report.inserted_at)}</span>
-        </div>
-
-        <p :if={report.triage_notes} class="text-xs text-base-content/70 italic">
-          {report.triage_notes}
-        </p>
-
-        <div class="mt-2">
-          <.report_payload
-            payload={report.report_json}
-            report_id={report.id}
-            expanded?={MapSet.member?(@expanded_payloads, report.id)}
-            toggle="toggle_payload"
-            body_class="max-h-24 overflow-y-auto"
-            json_class="max-h-60"
-          />
-        </div>
-      </div>
-    </.panel>
-    """
-  end
-
-  defp report_dot_class(:submitted), do: "bg-warning"
-  defp report_dot_class(:triaged), do: "bg-info"
-  defp report_dot_class(:accepted), do: "bg-success"
-  defp report_dot_class(:rejected), do: "bg-error"
-  defp report_dot_class(_other), do: "bg-base-content/30"
-
-  defp report_text_class(:submitted), do: "text-warning"
-  defp report_text_class(:triaged), do: "text-info"
-  defp report_text_class(:accepted), do: "text-success"
-  defp report_text_class(:rejected), do: "text-base-content/50"
-  defp report_text_class(_other), do: "text-base-content/60"
-
-  # The User read policy is self-or-POC: a supporter sees the report through
-  # their case assignment but not the reporter account behind it.
-  # The User read policy allows loads through case-scoped relationships, but
-  # field policies hide everything except :name from non-POC viewers - and
-  # a forbidden email is an Ash.ForbiddenField struct, not nil.
   # Resolved suggestions (accepted, declined, superseded, withdrawn) are not
   # in the mock; kept reachable via one collapsed, quiet disclosure at the
   # bottom of the center column, out of the way — an interim placement

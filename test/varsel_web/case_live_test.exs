@@ -2859,16 +2859,23 @@ defmodule VarselWeb.CaseLiveTest do
       %{report: report, case_id: report.case_id}
     end
 
-    test "the case page lists attached reports in a collapsible section", %{
+    test "the workspace links a Reports tab that lists the attached reports", %{
       conn: conn,
       poc: poc,
+      report: report,
       case_id: case_id
     } do
-      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_id}")
+      conn = log_in(conn, poc)
+      {:ok, workspace, _html} = live(conn, ~p"/cases/#{case_id}")
 
-      assert html =~ "Reports (1)"
-      assert html =~ "acme_lib leaks secrets"
-      assert html =~ "case_report_reporter"
+      refute has_element?(workspace, "#case-report-#{report.id}")
+      assert has_element?(workspace, ~s(a[href="/cases/#{case_id}/reports"]), "Reports")
+
+      {:ok, lv, _html} = live(conn, ~p"/cases/#{case_id}/reports")
+
+      assert has_element?(lv, "#case-report-#{report.id}", "acme_lib leaks secrets")
+      assert has_element?(lv, "#case-report-#{report.id}", "case_report_reporter")
+      assert has_element?(lv, ~s(a[href="/reports"]), "Report triage")
     end
 
     test "an assigned supporter sees the report through the case, but not directly", %{
@@ -2880,14 +2887,19 @@ defmodule VarselWeb.CaseLiveTest do
     } do
       Cases.assign_case_user!(%{case_id: case_id, user_id: supporter.id}, actor: poc)
 
-      {:ok, _lv, html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_id}")
+      conn = log_in(conn, supporter)
+      {:ok, workspace, _html} = live(conn, ~p"/cases/#{case_id}")
+      assert has_element?(workspace, ~s(a[href="/cases/#{case_id}/reports"]), "Reports")
+
+      {:ok, lv, html} = live(conn, ~p"/cases/#{case_id}/reports")
 
       # Visible through the case relationship (accessing_from) …
-      assert html =~ "Reports (1)"
-      assert html =~ "acme_lib leaks secrets"
+      assert has_element?(lv, "#case-report-#{report.id}", "acme_lib leaks secrets")
       # … including the reporter's name, while field policies hide the rest.
-      assert html =~ "case_report_reporter name"
+      assert has_element?(lv, "#case-report-#{report.id}", "case_report_reporter name")
       refute html =~ "case_report_reporter@example.com"
+      # The triage queue is not theirs to work.
+      refute has_element?(lv, ~s(a[href="/reports"]), "Report triage")
 
       # … and direct report reads/lists stay POC-only.
       assert Varsel.CVE.list_vulnerability_reports!(actor: supporter) == []
@@ -2904,11 +2916,11 @@ defmodule VarselWeb.CaseLiveTest do
       assert %Ash.ForbiddenField{} = loaded_report.reporter.notification_email
     end
 
-    test "a case without reports shows no reports section", %{conn: conn, poc: poc} do
+    test "a case without reports has no Reports tab", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc, %{title: "No reports"})
 
-      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
-      refute html =~ "Reports ("
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      refute has_element?(lv, ~s(a[href="/cases/#{case_record.id}/reports"]))
     end
   end
 

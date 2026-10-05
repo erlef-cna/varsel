@@ -921,6 +921,10 @@ defmodule Varsel.Cases.Case do
     max :derivation_cached_at, :affected_packages, :derivation_cached_at do
       description "When any of this case's products last derived."
     end
+
+    count :report_count, :vulnerability_reports do
+      description "How many vulnerability reports were consolidated into this case."
+    end
   end
 
   identities do

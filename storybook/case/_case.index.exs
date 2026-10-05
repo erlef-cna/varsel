@@ -45,6 +45,8 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("reference_form"), do: [name: "Reference form", icon: {:local, "hero-link"}]
 
+  def entry("report_row"), do: [name: "Report row", icon: {:local, "hero-inbox"}]
+
   def entry("resolved_proposal_card"), do: [name: "Resolved proposal card", icon: {:local, "hero-check-badge"}]
 
   def entry("proposal_marks"), do: [name: "Proposal marks", icon: {:local, "hero-flag"}]

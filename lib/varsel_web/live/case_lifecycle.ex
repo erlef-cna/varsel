@@ -35,7 +35,7 @@ defmodule VarselWeb.CaseLifecycle do
   @spec mount(Socket.t(), String.t(), load: list(), after_fetch: fun()) ::
           Socket.t()
   def mount(socket, case_id, opts) do
-    load = Keyword.fetch!(opts, :load)
+    load = [:report_count | Keyword.fetch!(opts, :load)]
     after_fetch = Keyword.fetch!(opts, :after_fetch)
 
     socket
@@ -47,15 +47,28 @@ defmodule VarselWeb.CaseLifecycle do
     )
   end
 
-  @doc "The tabs of a case, in display order."
-  def tabs(case_id) do
-    [
-      %{id: :workspace, label: "Workspace", navigate: ~p"/cases/#{case_id}"},
-      %{id: :cve, label: "CVE", navigate: ~p"/cases/#{case_id}/cve"},
-      %{id: :osv, label: "OSV", navigate: ~p"/cases/#{case_id}/osv"},
-      %{id: :advisory, label: "Advisory", navigate: ~p"/cases/#{case_id}/advisory"},
-      %{id: :publication, label: "Publication", navigate: ~p"/cases/#{case_id}/publication"}
-    ]
+  @doc """
+  The tabs of a case, in display order. The Reports tab shows only when
+  reports led to the case.
+  """
+  def tabs(%{id: case_id, report_count: report_count}) do
+    Enum.filter(
+      [
+        %{id: :workspace, label: "Workspace", navigate: ~p"/cases/#{case_id}"},
+        report_count > 0 &&
+          %{
+            id: :reports,
+            label: "Reports",
+            count: report_count,
+            navigate: ~p"/cases/#{case_id}/reports"
+          },
+        %{id: :cve, label: "CVE", navigate: ~p"/cases/#{case_id}/cve"},
+        %{id: :osv, label: "OSV", navigate: ~p"/cases/#{case_id}/osv"},
+        %{id: :advisory, label: "Advisory", navigate: ~p"/cases/#{case_id}/advisory"},
+        %{id: :publication, label: "Publication", navigate: ~p"/cases/#{case_id}/publication"}
+      ],
+      & &1
+    )
   end
 
   # The public page serves `:published` records only, so a link for any other
