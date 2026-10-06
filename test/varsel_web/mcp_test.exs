@@ -71,32 +71,26 @@ defmodule VarselWeb.McpTest do
     refute body =~ "set_user_role"
   end
 
-  # Presence in tools/list doubles as a regression test for the empty-input
+  # The router serves only the tools it lists, so a tool a domain defines but
+  # the router omits is silently missing. Presence also guards the empty-input
   # permission probe: when an action's validation crashes on it, AshAi
-  # swallows the error and silently hides the tool.
-  test "a POC's tools/list includes every registered tool", %{conn: conn} do
+  # swallows the error and hides the tool.
+  test "a POC's tools/list includes every tool the domains define", %{conn: conn} do
     poc = register_user("poc", :poc)
     {_api_key, plaintext} = create_api_key(poc)
 
-    body =
+    %{"result" => %{"tools" => tools}} =
       conn
       |> put_req_header("authorization", "Bearer " <> plaintext)
       |> mcp("tools/list")
-      |> response(200)
+      |> json_response(200)
 
-    for tool <- ~w(list_all_cves available_cve_ids assign_cve update_cve validate_cve
-                   request_publish_cve reject_cve list_users update_user set_user_role
-                   submit_vulnerability_report list_cases get_case render_case_preview
-                   validate_case
-                   refresh_case_derivation list_case_proposals list_open_case_proposals
-                   propose_title propose_credit propose_weakness propose_reference
-                   propose_internal_notes propose_technical_analysis propose_proof_of_concept
-                   propose_impact propose_impact_description
-                   propose_otp_affected_package propose_version_event propose_delete
-                   withdraw_case_proposal list_case_comments
-                   grant_case_access) do
-      assert body =~ tool
-    end
+    defined =
+      for domain <- Application.fetch_env!(:varsel, :ash_domains),
+          tool <- AshAi.Info.tools(domain),
+          do: Atom.to_string(tool.name)
+
+    assert defined -- Enum.map(tools, & &1["name"]) == []
   end
 
   test "public tools work with an API key", %{conn: conn} do
