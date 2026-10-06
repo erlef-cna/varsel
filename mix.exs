@@ -29,6 +29,10 @@ defmodule Varsel.MixProject do
         # Mix for the tasks under lib/mix/tasks.
         plt_add_apps: [:ex_unit, :mix]
       ],
+      hex: [
+        # Affects Cloak.Ciphers.AES.CTR only. Varsel.Vault uses AES.GCM.
+        ignore_advisories: ["EEF-CVE-2026-95105"]
+      ],
       usage_rules: usage_rules()
     ]
   end
