@@ -146,6 +146,27 @@ defmodule VarselWeb.HexErasureControllerTest do
       end
     end
 
+    test "clears the name in the versions of spent participants under a handle matched by address",
+         %{conn: conn} do
+      report!([person("renamed", %{email: "gone@example.com"})])
+
+      [spent] =
+        [person("renamed", %{role: :reporter})]
+        |> report!()
+        |> Ash.load!([:participants], authorize?: false)
+        |> Map.fetch!(:participants)
+
+      CVE.spend_report_participant!(spent, authorize?: false)
+
+      assert length(versions_naming("renamed name")) == 2
+
+      assert conn
+             |> erase(%{"username" => "gone", "email" => "gone@example.com"})
+             |> response(204)
+
+      assert versions_naming("renamed name") == []
+    end
+
     test "clears the address on hex.pm invites and cancels a queued invite email", %{conn: conn} do
       poc = Fixtures.register_user("erasure_poc", :poc)
       queued = Fixtures.open_case(poc)
