@@ -25,9 +25,11 @@ defmodule Varsel.CVE.ReportParticipant.Actions.EraseHexPerson do
 
     Enum.each(participants, &CVE.erase_report_participant!(&1, opts))
 
+    handles = Enum.uniq_by([username | Enum.map(participants, & &1.username)], &handle/1)
+
     participants
     |> Enum.map(& &1.id)
-    |> Enum.concat(spent_ids(username))
+    |> Enum.concat(Enum.flat_map(handles, &spent_ids/1))
     |> Enum.uniq()
     |> scrub_versions()
 
@@ -35,9 +37,11 @@ defmodule Varsel.CVE.ReportParticipant.Actions.EraseHexPerson do
   end
 
   # A spent participant survives only in its versions, and only the version
-  # that created it carries the handle that finds it.
+  # that created it carries the handle that finds it. A participant matched by
+  # address can carry another handle than the one hex.pm sent, so the spent
+  # participants under that handle are found too.
   defp spent_ids(username) do
-    handle = username |> to_string() |> String.downcase()
+    handle = handle(username)
 
     Version
     |> Ash.Query.filter(
@@ -48,6 +52,8 @@ defmodule Varsel.CVE.ReportParticipant.Actions.EraseHexPerson do
     |> Ash.read!()
     |> Enum.map(& &1.version_source_id)
   end
+
+  defp handle(username), do: username |> to_string() |> String.downcase()
 
   defp scrub_versions(ids) do
     Version
