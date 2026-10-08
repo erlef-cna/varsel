@@ -19,6 +19,17 @@ defmodule Varsel.Test.StubGitBackend do
   any extra tags declared with `stub_all_tags/1` for versions that contain
   neither the intro nor a fix (and so appear in no commit's list).
 
+  Ancestry between commits is declared separately with `stub_commits/1`, the
+  commits whose history contains each one:
+
+      StubGitBackend.stub_commits(%{
+        {"https://github.com/acme/pkg", "aaaa..."} => ["bbbb...", "cccc..."]
+      })
+
+  A commit with no declaration answers `commits_containing/3` with
+  `{:error, :commit_not_found}`, which derivation reads as a commit it cannot
+  place.
+
   ## Ownership
 
   A stub belongs to the test that declared it, so `async: true` tests cannot
@@ -36,12 +47,17 @@ defmodule Varsel.Test.StubGitBackend do
   alias Varsel.Cases.Derivation.GitBackend
 
   @tags_key {__MODULE__, :tags}
+  @commits_key {__MODULE__, :commits}
   @universe_key {__MODULE__, :universe}
   @refreshed_key {__MODULE__, :refreshed}
 
   @doc "Declares, per `{repo, sha}`, the tags whose commit contains that sha."
   @spec stub_tags(%{{String.t(), String.t()} => [String.t()]}) :: :ok
   def stub_tags(tags), do: put(@tags_key, tags)
+
+  @doc "Declares, per `{repo, sha}`, the commits whose history contains that sha."
+  @spec stub_commits(%{{String.t(), String.t()} => [String.t()]}) :: :ok
+  def stub_commits(commits), do: put(@commits_key, commits)
 
   @doc "Extra tags to include in `all_tags/1` for a repo (unaffected-everywhere tags)."
   @spec stub_all_tags(%{String.t() => [String.t()]}) :: :ok
@@ -51,6 +67,14 @@ defmodule Varsel.Test.StubGitBackend do
   def tags_containing(repo_url, sha) do
     case Map.fetch(get(@tags_key), {repo_url, sha}) do
       {:ok, tags} -> {:ok, tags}
+      :error -> {:error, :commit_not_found}
+    end
+  end
+
+  @impl GitBackend
+  def commits_containing(repo_url, sha, candidates) do
+    case Map.fetch(get(@commits_key), {repo_url, sha}) do
+      {:ok, containing} -> {:ok, Enum.filter(candidates, &(&1 == sha or &1 in containing))}
       :error -> {:error, :commit_not_found}
     end
   end

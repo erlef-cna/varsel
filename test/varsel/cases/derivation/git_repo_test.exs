@@ -110,6 +110,15 @@ defmodule Varsel.Cases.Derivation.GitRepoTest do
     assert {:error, :commit_not_found} = GitRepo.tags_containing(url, String.duplicate("f", 40))
   end
 
+  test "commits_containing/3 keeps the candidates descending from the commit", %{
+    url: url,
+    c2: c2,
+    b1: b1,
+    c4: c4
+  } do
+    assert GitRepo.commits_containing(url, c2, [b1, c4, c2]) == {:ok, [c4, c2]}
+  end
+
   # `NormalizeRepoUrl` lowercases the scheme on write, so a mixed-case value
   # should no longer reach here — but rows stored before that existed still
   # can, and the dispatch is the control that must not be spelling-sensitive.

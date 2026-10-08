@@ -143,6 +143,22 @@ defmodule Varsel.Cases.ReachabilityTest do
     end
   end
 
+  describe "OTP boundaries" do
+    # The open form would apply 27.1's transition to 27.2 and read it fixed.
+    test "are not published open when a fixed line is affected again" do
+      result =
+        Reachability.deduce(
+          ["26.2.5", "26.2.5.1", "27.0", "27.1", "27.2"],
+          MapSet.new(["26.2.5", "27.0", "27.2"]),
+          comparator: :otp,
+          include_prereleases: false,
+          fixed: MapSet.new(["26.2.5.1", "27.1"])
+        )
+
+      refute result.boundaries.open?
+    end
+  end
+
   describe "OTP R-series tags" do
     # R tags are not versions, so they drop out with `nightly` and the topic
     # tags rather than bounding a range below the numeric ones.
@@ -268,6 +284,17 @@ defmodule Varsel.Cases.ReachabilityTest do
 
       assert versions(derive(repo, [@intro], [@fix], [{:introduced, "2.0.1"}])) ==
                [{"1.0.0", "1.0.1"}, {"2.0.1", :unbounded}]
+    end
+
+    # Every release from 1.1.0 on carries the fix, so 1.3.1 does too.
+    test "an explicit intro after a fix's release stays open", %{repo: repo} do
+      StubGitBackend.stub_tags(%{
+        {repo, @intro} => ["1.0.0", "1.1.0", "1.3.0", "1.3.1"],
+        {repo, @fix} => ["1.1.0", "1.3.0", "1.3.1"]
+      })
+
+      assert versions(derive(repo, [@intro], [@fix], [{:introduced, "1.3.0"}])) ==
+               [{"1.0.0", "1.1.0"}, {"1.3.0", :unbounded}]
     end
 
     test "an explicit version overrides its own containment label", %{repo: repo} do

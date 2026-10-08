@@ -434,7 +434,7 @@ defmodule Varsel.CVE.OsvConverterTest do
              ]
     end
 
-    test "drops last_affected when a fixed event lands in the same range" do
+    test "each git row is its own range" do
       affected =
         Map.put(@git_affected, "versions", [
           %{
@@ -455,13 +455,11 @@ defmodule Varsel.CVE.OsvConverterTest do
 
       assert {:ok, osv} = OsvConverter.convert(cve_json)
 
-      assert [%{"ranges" => [%{"type" => "GIT", "events" => events}]}] = osv["affected"]
+      assert [%{"ranges" => ranges}] = osv["affected"]
 
-      # fixed and last_affected are mutually exclusive within a range
-      assert events == [
-               %{"introduced" => "aaa"},
-               %{"introduced" => "ccc"},
-               %{"fixed" => "ddd"}
+      assert Enum.map(ranges, & &1["events"]) == [
+               [%{"introduced" => "aaa"}, %{"last_affected" => "bbb"}],
+               [%{"introduced" => "ccc"}, %{"fixed" => "ddd"}]
              ]
     end
 
