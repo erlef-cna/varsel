@@ -10,14 +10,15 @@ defmodule Varsel.Cases.Reachability do
   ## Model
 
   A release tag is **affected** iff its commit contains *some* introducing commit
-  and *no* fixing commit. Expressed as set algebra over the tags each commit is
-  contained by:
+  that *no* fixing commit it contains descends from, as OSV evaluates a commit
+  graph. Expressed as set algebra over the tags each commit is contained by:
 
-      affected = (⋃ intro → tags_containing(intro)) \\ (⋃ fix → tags_containing(fix))
+      affected = ⋃ intro → (tags_containing(intro) \\ ⋃ fix closing intro → tags_containing(fix))
 
   `derive/4` gathers those sets from the `Varsel.Cases.Derivation.GitBackend`
-  (one `tags_containing/2` per commit plus `all_tags/1` for the full version
-  universe) and hands the pure `deduce/3` the tag universe and the affected set.
+  (one `tags_containing/2` and one `commits_containing/3` per commit plus
+  `all_tags/1` for the full version universe) and hands the pure `deduce/3` the
+  tag universe and the affected set.
 
   ## Flattening
 
@@ -69,8 +70,15 @@ defmodule Varsel.Cases.Reachability do
           open?: boolean(),
           pending_fixes: [String.t()],
           unreleased_intros: [String.t()],
+          descendants: descendants(),
           issues: [String.t()]
         }
+
+  @typedoc """
+  For each boundary commit the repository could place, the other boundary
+  commits descending from it.
+  """
+  @type descendants :: %{String.t() => [String.t()]}
 
   @typedoc """
   The vulnerability's boundaries as the version scheme sees them, rather than as
@@ -104,12 +112,12 @@ defmodule Varsel.Cases.Reachability do
   tagged (`boruta_auth` shipped 2.3.0/2.3.1 to Hex with no matching tag), or a
   boundary on a package whose releases are not tagged at all. Each is injected
   into the tag universe as if the tag existed, then labelled: an `:introduced`
-  version marks itself *and every later release* affected up to the next explicit
-  fix — the same forward propagation a real introducing commit gets from
-  containment — while a `:fixed` version marks only itself safe. From there they
-  flow through the normal run-cutting, so they bound ranges exactly like tags —
-  which is what makes them work for a missing fix tag or a later range's intro,
-  not just the earliest bound.
+  version marks itself *and every later release* affected up to the next fix
+  released after it — the same forward propagation a real introducing commit
+  gets from containment — while a `:fixed` version marks only itself safe. From
+  there they flow through the normal run-cutting, so they bound ranges exactly
+  like tags — which is what makes them work for a missing fix tag or a later
+  range's intro, not just the earliest bound.
 
   An explicit version that *does* exist as a tag wins over its containment label:
   the human asserted it, so it is not second-guessed.
@@ -133,8 +141,15 @@ defmodule Varsel.Cases.Reachability do
 
       intro_tags = union_containing(repo_url, intros)
       {fix_tags, pending} = fix_containment(repo_url, fixes)
+      descendants = descendants(repo_url, Enum.uniq(intros ++ fixes))
 
-      derived_affected = MapSet.difference(intro_tags, fix_tags)
+      derived_affected =
+        intros
+        |> Enum.map(fn intro ->
+          closing = closing(descendants, intro, fixes)
+          MapSet.difference(tags_containing(repo_url, intro), union_containing(repo_url, closing))
+        end)
+        |> Enum.reduce(MapSet.new(), &MapSet.union/2)
 
       # A commit-derived intro is only unreleased when no explicit version
       # supplies the boundary either.
@@ -152,8 +167,13 @@ defmodule Varsel.Cases.Reachability do
         |> Enum.uniq()
         |> Enum.filter(&VersionComparator.release?(kind, &1))
 
+      fix_releases =
+        for fix <- fixes do
+          repo_url |> tags_containing(fix) |> MapSet.filter(&VersionComparator.release?(kind, &1))
+        end
+
       affected =
-        apply_explicit(derived_affected, explicit, universe, kind, derived_safe: fix_tags)
+        apply_explicit(derived_affected, explicit, universe, kind, fix_releases: fix_releases)
 
       fixed =
         fix_tags
@@ -167,9 +187,35 @@ defmodule Varsel.Cases.Reachability do
          result
          | pending_fixes: pending,
            unreleased_intros: unreleased_intros,
+           descendants: descendants,
            issues: result.issues ++ unusable_explicit_issues(unusable_explicit)
        }}
     end
+  end
+
+  @doc """
+  The fixes that close what `intro` opened: each is the intro or descends from
+  it, and none descends from another. A commit missing from `descendants` could
+  not be placed in the repository and is taken to close it.
+  """
+  @spec closing(descendants(), String.t(), [String.t()]) :: [String.t()]
+  def closing(descendants, intro, fixes) do
+    closing = Enum.filter(fixes, &closes?(descendants, intro, &1))
+    Enum.reject(closing, fn fix -> Enum.any?(closing, &(fix in Map.get(descendants, &1, []))) end)
+  end
+
+  defp closes?(descendants, intro, fix) do
+    case descendants do
+      %{^intro => below, ^fix => _below_fix} -> fix == intro or fix in below
+      _unplaced -> true
+    end
+  end
+
+  defp descendants(repo_url, shas) do
+    for sha <- shas,
+        {:ok, below} <- [GitBackend.commits_containing(repo_url, sha, List.delete(shas, sha))],
+        into: %{},
+        do: {sha, below}
   end
 
   defp explicit_intros(explicit), do: for({:introduced, version} <- explicit, do: version)
@@ -192,17 +238,18 @@ defmodule Varsel.Cases.Reachability do
   defp apply_explicit(affected, explicit, universe, kind, opts) do
     fixes = for {:fixed, version} <- explicit, do: version
 
-    # A release git already knows carries the fix stays fixed — containment saw
-    # the fix commit in it, a stronger fact than propagating an earlier intro
-    # forward. Re-introduction is the exception: an explicit intro *newer* than
-    # the fixed release is asserting the vulnerability came back, so it wins.
-    derived_safe = Keyword.fetch!(opts, :derived_safe)
-
+    # A fix commit closes an explicit intro only if no release at or below the
+    # intro carries it already; otherwise the intro is a re-introduction after
+    # that fix.
     intro_affected =
       for {:introduced, intro} <- explicit,
+          closing =
+            Enum.reject(Keyword.fetch!(opts, :fix_releases), fn releases ->
+              Enum.any?(releases, &VersionComparator.implies?(kind, &1, intro))
+            end),
           version <- universe,
           at_or_after?(kind, version, intro),
-          not shadowed_by_derived_fix?(kind, derived_safe, version, intro),
+          not Enum.any?(closing, &MapSet.member?(&1, version)),
           not fixed_between?(kind, fixes, intro, version),
           do: version
 
@@ -213,13 +260,6 @@ defmodule Varsel.Cases.Reachability do
 
   defp at_or_after?(kind, version, boundary) do
     VersionComparator.compare(kind, version, boundary) != :lt
-  end
-
-  # Whether git's own "this release carries the fix" beats propagating `intro`
-  # onto `version`. It does unless the intro is the newer fact — an explicit
-  # intro at or after a fixed release is asserting a re-introduction.
-  defp shadowed_by_derived_fix?(kind, derived_safe, version, intro) do
-    MapSet.member?(derived_safe, version) and not at_or_after?(kind, intro, version)
   end
 
   # Whether an explicit fix lands in `(intro, version]` — i.e. the affected span
@@ -275,6 +315,7 @@ defmodule Varsel.Cases.Reachability do
       open?: has_open?,
       pending_fixes: [],
       unreleased_intros: [],
+      descendants: %{},
       issues: []
     }
   end
@@ -342,14 +383,17 @@ defmodule Varsel.Cases.Reachability do
   # matches `lessThan: "*"` on one line, so the entry claims every release above
   # its lower bound; a fix closes one only where the scheme orders the two. A
   # flaw confined to the 17.0.0 branch therefore claims 18.0 and cannot close
-  # it, and must not be published open.
+  # it, and must not be published open. A fix's transition also applies to a
+  # release affected again above it, which would then read fixed.
   defp fully_covered?(_kind, _sorted, nil, _fixed), do: false
 
   defp fully_covered?(kind, sorted, introduced, fixed) do
     Enum.all?(sorted, fn entry ->
-      entry.status == :affected or
-        VersionComparator.compare(kind, entry.version, introduced) == :lt or
-        Enum.any?(fixed, &VersionComparator.implies?(kind, &1, entry.version))
+      reached_by_fix? = Enum.any?(fixed, &VersionComparator.implies?(kind, &1, entry.version))
+
+      if entry.status == :affected,
+        do: not reached_by_fix?,
+        else: VersionComparator.compare(kind, entry.version, introduced) == :lt or reached_by_fix?
     end)
   end
 

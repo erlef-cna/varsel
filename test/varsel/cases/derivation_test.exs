@@ -176,6 +176,54 @@ defmodule Varsel.Cases.DerivationTest do
            ]
   end
 
+  # One line of history: the fix lands in v1.1.0, the flaw comes back in v1.3.0
+  # and is fixed again in v2.0.0, so every later release also carries the older
+  # fix.
+  test "a fix older than a re-introduction does not close it", %{poc: poc, case: case_record} do
+    reintro_sha = String.duplicate("4", 40)
+    refix_sha = String.duplicate("5", 40)
+
+    StubGitBackend.stub_tags(%{
+      {@repo, @intro_sha} => ["v1.0.0", "v1.1.0", "v1.2.0", "v1.3.0", "v2.0.0"],
+      {@repo, @fix_sha} => ["v1.1.0", "v1.2.0", "v1.3.0", "v2.0.0"],
+      {@repo, reintro_sha} => ["v1.3.0", "v2.0.0"],
+      {@repo, refix_sha} => ["v2.0.0"]
+    })
+
+    StubGitBackend.stub_commits(%{
+      {@repo, @intro_sha} => [@fix_sha, reintro_sha, refix_sha],
+      {@repo, @fix_sha} => [reintro_sha, refix_sha],
+      {@repo, reintro_sha} => [refix_sha],
+      {@repo, refix_sha} => []
+    })
+
+    {package, channels} =
+      package_with_channels(poc, case_record, [{:hex, %{name: "acme_lib"}}], [
+        %{event: :introduced, commit_sha: @intro_sha},
+        %{event: :fixed, commit_sha: @fix_sha},
+        %{event: :introduced, commit_sha: reintro_sha},
+        %{event: :fixed, commit_sha: refix_sha}
+      ])
+
+    assert {:ok, derivation} = Derivation.derive(package)
+
+    assert [
+             %{"version" => "1.0.0", "lessThan" => "1.1.0"},
+             %{"version" => "1.3.0", "lessThan" => "2.0.0"}
+           ] = derivation["channels"][channels[:hex].id]["versions"]
+
+    assert [
+             %{"version" => @intro_sha, "lessThan" => @fix_sha},
+             %{"version" => ^reintro_sha, "lessThan" => ^refix_sha}
+           ] = derivation["channels"][channels[:git].id]["versions"]
+
+    assert [
+             %{"versionEndExcluding" => "1.1.0"},
+             %{"versionStartIncluding" => "1.3.0", "versionEndExcluding" => "2.0.0"}
+           ] =
+             derivation["cpe_matches"]
+  end
+
   test "a fix with no containing release is pending", %{poc: poc, case: case_record} do
     StubGitBackend.stub_tags(%{
       {@repo, @intro_sha} => ["v1.0.0"],

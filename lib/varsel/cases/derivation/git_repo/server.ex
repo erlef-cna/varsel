@@ -111,9 +111,15 @@ defmodule Varsel.Cases.Derivation.GitRepo.Server do
         {:reply, answer, state, remaining(state)}
 
       :error ->
-        {answer, state} = compute(state, sha)
+        {answer, state} = compute(state, sha, &tags_with_descendant/2)
         {:reply, answer, memoize(state, sha, answer), remaining(state)}
     end
+  end
+
+  @impl GenServer
+  def handle_call({:commits_containing, sha, candidates}, _from, state) do
+    {answer, state} = compute(state, sha, &commits_with_descendant(&1, &2, candidates))
+    {:reply, answer, state, remaining(state)}
   end
 
   @impl GenServer
@@ -146,11 +152,11 @@ defmodule Varsel.Cases.Derivation.GitRepo.Server do
     end
   end
 
-  defp compute(state, sha) do
+  defp compute(state, sha, containing) do
     case decode_sha(sha) do
       {:ok, target} ->
         case graph_containing(state, target) do
-          {:ok, graph, state} -> {{:ok, tags_with_descendant(graph, target)}, state}
+          {:ok, graph, state} -> {{:ok, containing.(graph, target)}, state}
           {:error, reason, state} -> {{:error, reason}, state}
         end
 
@@ -238,6 +244,16 @@ defmodule Varsel.Cases.Derivation.GitRepo.Server do
         {:ok, commit_sha} <- [peel(graph.store, tip)],
         MapSet.member?(descendants, commit_sha) do
       name
+    end
+  end
+
+  defp commits_with_descendant(graph, target, candidates) do
+    descendants = descendants(graph.children, target)
+
+    for candidate <- candidates,
+        {:ok, commit_sha} <- [decode_sha(candidate)],
+        MapSet.member?(descendants, commit_sha) do
+      candidate
     end
   end
 

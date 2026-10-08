@@ -32,6 +32,9 @@ defmodule Varsel.Cases.Derivation.GitRepo do
   def tags_containing(repo_url, sha), do: call(repo_url, {:tags_containing, sha})
 
   @impl GitBackend
+  def commits_containing(repo_url, sha, candidates), do: call(repo_url, {:commits_containing, sha, candidates})
+
+  @impl GitBackend
   def all_tags(repo_url), do: call(repo_url, :all_tags)
 
   @impl GitBackend

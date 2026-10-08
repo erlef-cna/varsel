@@ -279,22 +279,21 @@ defmodule Varsel.CVE.OsvConverter do
     affected
     |> Enum.filter(&git_affected?/1)
     |> Enum.map(fn item ->
-      repo = item["repo"]
-
-      events =
-        if item["defaultStatus"] == "affected" do
-          default_affected_events(item, "git", :git)
-        else
-          item
-          |> Map.get("versions", [])
-          |> Enum.filter(&affected_of_type?(&1, "git"))
-          |> Enum.flat_map(&convert_version_events(&1, :git))
-          |> Enum.uniq()
-          |> finalize_events()
-        end
-
-      %{"ranges" => [%{"type" => "GIT", "repo" => repo, "events" => events}]}
+      %{
+        "ranges" => Enum.map(git_events(item), &%{"type" => "GIT", "repo" => item["repo"], "events" => &1})
+      }
     end)
+  end
+
+  defp git_events(%{"defaultStatus" => "affected"} = item), do: [default_affected_events(item, "git", :git)]
+
+  # A version is affected when any range says so, so each affected row is a
+  # range of its own. Merged into one, the events would have to be ordered by
+  # ancestry across rows, which the record does not state.
+  defp git_events(item) do
+    for row <- Map.get(item, "versions", []),
+        affected_of_type?(row, "git"),
+        do: row |> convert_version_events(:git) |> finalize_events()
   end
 
   # Converts one CVE version entry into OSV range events.

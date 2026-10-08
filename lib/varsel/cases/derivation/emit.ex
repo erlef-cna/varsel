@@ -18,8 +18,9 @@ defmodule Varsel.Cases.Derivation.Emit do
       naming a single OTP application (`pkg:otp/<app>`) has each bound
       translated to that application's own version through
       `Varsel.Cases.Derivation.OtpVersionsTable`.
-    * **git** — a commit-SHA range per fix commit, from the raw boundary facts:
-      commit SHAs are opaque, so no release version appears here.
+    * **git** — a commit-SHA range per introducing commit, bounded by the fix
+      commits descending from it: commit SHAs are opaque, so no release version
+      appears here.
     * **date** / **other** — the bounds verbatim.
 
   Every channel then applies its tag decoration: `tag_prefix` prepended and one
@@ -71,6 +72,7 @@ defmodule Varsel.Cases.Derivation.Emit do
     git(
       Keyword.get(opts, :intro_shas, []),
       Keyword.get(opts, :fix_shas, []),
+      Keyword.get(opts, :descendants, %{}),
       Keyword.get(opts, :default_status)
     )
   end
@@ -320,27 +322,34 @@ defmodule Varsel.Cases.Derivation.Emit do
   # The git-SHA ranges. Commit SHAs have no linear order, so a single fix renders
   # a bounded range and several a `changes[]` chain off the introducing commit.
   # Unreleased fixes still bound a git channel: the commit exists whether or not
-  # a release contains it.
+  # a release contains it. Only a fix descending from the intro closes it, and
+  # the entry stops at the first such fix on a line: a CVE consumer takes the
+  # first entry that matches, so one running past a re-introduction hides it.
   #
   # A change backported to several branches introduces the flaw once per branch,
   # and a consumer walking the commit graph reaches only the commits descending
   # from the intro it was given. Each therefore states its own entry, or the
   # commits below the ones left out read as safe.
-  defp git([], _fix_shas, _default_status),
+  defp git([], _fix_shas, _descendants, _default_status),
     do: %{"versions" => [], "issues" => ["the introduced boundary has no commit SHA"]}
 
-  defp git(intro_shas, fix_shas, default_status) do
+  defp git(intro_shas, fix_shas, descendants, default_status) do
     %{
-      "versions" => git_affected(intro_shas, fix_shas, default_status) ++ git_fixed(fix_shas, default_status),
+      "versions" =>
+        git_affected(intro_shas, fix_shas, descendants, default_status) ++
+          git_fixed(fix_shas, default_status),
       "issues" => []
     }
   end
 
   # Each status is stated only where the default does not already say it, as
   # `statused_ranges/2` does for the orderable types.
-  defp git_affected(_intro_shas, _fix_shas, :affected), do: []
+  defp git_affected(_intro_shas, _fix_shas, _descendants, :affected), do: []
 
-  defp git_affected(intro_shas, fix_shas, _default_status), do: Enum.map(intro_shas, &git_entry(&1, fix_shas))
+  defp git_affected(intro_shas, fix_shas, descendants, _default_status) do
+    for intro <- intro_shas,
+        do: git_entry(intro, Reachability.closing(descendants, intro, fix_shas))
+  end
 
   defp git_entry(intro, []), do: version_object(intro, "*", "git", "affected")
   defp git_entry(intro, [fix]), do: version_object(intro, fix, "git", "affected")

@@ -4,8 +4,8 @@
 
 defmodule Varsel.Cases.Derivation.GitBackend do
   @moduledoc """
-  The single question derivation asks a git repository: which release tags
-  contain a given commit?
+  The questions derivation asks a git repository: which release tags contain
+  a given commit, and which of the other boundary commits do.
 
   The default implementation is `Varsel.Cases.Derivation.GitRepo` (pure-Elixir
   git via `exgit`); tests configure a stub via
@@ -18,6 +18,18 @@ defmodule Varsel.Cases.Derivation.GitBackend do
   does not exist in the repository.
   """
   @callback tags_containing(repo_url :: String.t(), sha :: String.t()) ::
+              {:ok, [String.t()]} | {:error, term()}
+
+  @doc """
+  Those of `candidates` whose commit has `sha` as an ancestor (inclusive), in
+  the order given. `{:error, :commit_not_found}` when `sha` does not exist in
+  the repository; a candidate that does not exist contains nothing.
+  """
+  @callback commits_containing(
+              repo_url :: String.t(),
+              sha :: String.t(),
+              candidates :: [String.t()]
+            ) ::
               {:ok, [String.t()]} | {:error, term()}
 
   @doc """
@@ -40,6 +52,10 @@ defmodule Varsel.Cases.Derivation.GitBackend do
 
   @spec tags_containing(String.t(), String.t()) :: {:ok, [String.t()]} | {:error, term()}
   def tags_containing(repo_url, sha), do: impl().tags_containing(repo_url, sha)
+
+  @spec commits_containing(String.t(), String.t(), [String.t()]) ::
+          {:ok, [String.t()]} | {:error, term()}
+  def commits_containing(repo_url, sha, candidates), do: impl().commits_containing(repo_url, sha, candidates)
 
   @spec all_tags(String.t()) :: {:ok, [String.t()]} | {:error, term()}
   def all_tags(repo_url), do: impl().all_tags(repo_url)

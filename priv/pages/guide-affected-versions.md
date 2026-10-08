@@ -8,9 +8,10 @@ A case never stores version ranges. It stores **facts**: the commit that
 introduced the vulnerability and the commit or commits that fixed it.
 Everything version-shaped in the published record is derived from those
 facts and the package's git repository. A release is affected exactly when
-it contains an introducing commit and no fixing commit. A vulnerability
-fixed and later reintroduced yields a second range; one without a released
-fix yields an open-ended one.
+it contains an introducing commit and no fixing commit that descends from
+it. A vulnerability fixed and later reintroduced is recorded with a second
+introducing commit and yields a second range; one without a released fix
+yields an open-ended one.
 
 Because everything is derived from them, the facts must be right:
 

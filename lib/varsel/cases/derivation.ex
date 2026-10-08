@@ -69,6 +69,7 @@ defmodule Varsel.Cases.Derivation do
     emit_opts = [
       intro_shas: intro_shas,
       fix_shas: fix_shas,
+      descendants: reach.descendants,
       boundaries: reach.boundaries,
       default_status: package.default_status,
       fixed_ranges: reach.fixed_ranges
@@ -121,6 +122,7 @@ defmodule Varsel.Cases.Derivation do
       open?: false,
       pending_fixes: [],
       unreleased_intros: [],
+      descendants: %{},
       issues: []
     }
   end
