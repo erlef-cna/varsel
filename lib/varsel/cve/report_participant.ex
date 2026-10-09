@@ -44,7 +44,7 @@ defmodule Varsel.CVE.ReportParticipant do
   paper_trail do
     change_tracking_mode :changes_only
     reference_source? false
-    ignore_attributes [:inserted_at, :updated_at, :email]
+    ignore_attributes [:inserted_at, :updated_at, :name, :email]
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, User, domain: Varsel.Accounts
@@ -103,7 +103,7 @@ defmodule Varsel.CVE.ReportParticipant do
       description """
       Applies hex.pm's notice that it erased an account (GDPR Article 19):
       clears the name and address on every participant it named by that
-      username or address, and the names the audit trail recorded for them.
+      username or address.
       """
 
       transaction? true

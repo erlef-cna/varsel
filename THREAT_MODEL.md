@@ -316,8 +316,8 @@ moment. (`socket_disconnect.ex`, `disconnect_sockets.ex`, `graphql_socket.ex`)
    (`hex_report_controller.ex`, `report_participant.ex`)
 2b. **hex.pm erasure notice** — hex.pm (service token, no actor) →
    `erase_hex_person` / `erase_hex_contact` → clears the name and address on
-   the hex.pm participants matching the username or address, the names their
-   versions recorded, and the address on matching hex.pm case invites.
+   the hex.pm participants matching the username or address, and the address
+   on matching hex.pm case invites.
    (`hex_erasure_controller.ex`, `report_participant.ex`, `case_invite.ex`)
 3. **Editorial** — POC/assigned-supporter → case + child rows (facts) →
    **render-time derivation clones `repo_url`** → rendered CNA container
@@ -484,7 +484,7 @@ from controlling only its size.
 | `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The resulting notification emails are content-free (link only), so the payload never leaves the authenticated console. |
 | `submit_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free notification emails as a web report. |
 | `submit_from_hex` | `reporter` / `maintainers` (`name`, `username`, `email`) | data | **Yes — same** | `report_participants` rows. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact. A `username` later matches a hex sign-in and grants that account the participant row (§8) |
-| `erase_hex_person` / `erase_hex_contact` (`/api/hex/erasures`) | `username`, `email` | data | **Yes — whoever holds a configured signing key** | Clears `name` and `email` on every hex.pm participant matching either, the names their versions recorded, and `email` on every matching hex.pm invite, cancelling an invite email not yet sent. Nothing else is written and nothing is returned, so a key holder can blank any hex.pm-named person's contact details and learns nothing (§10 7a) |
+| `erase_hex_person` / `erase_hex_contact` (`/api/hex/erasures`) | `username`, `email` | data | **Yes — whoever holds a configured signing key** | Clears `name` and `email` on every hex.pm participant matching either and `email` on every matching hex.pm invite, cancelling an invite email not yet sent. Nothing else is written and nothing is returned, so a key holder can blank any hex.pm-named person's contact details and learns nothing (§10 7a) |
 | `Case.grant_access` / `CaseInvite.invite` | `email` | data | **Yes — POC / assigned supporter only** | One outbound invite email to that address, accepted only when the handle's provider lists no address for the account and refused when it lists a different one. One email per address per case (`resolve_contact.ex`) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |

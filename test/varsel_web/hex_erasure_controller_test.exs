@@ -79,10 +79,6 @@ defmodule VarselWeb.HexErasureControllerTest do
     |> Map.new(&{{&1.strategy, to_string(&1.username), &1.role}, &1})
   end
 
-  defp versions_naming(name) do
-    Enum.filter(Ash.read!(CVE.ReportParticipant.Version), &(&1.changes["name"] == name))
-  end
-
   describe "an erasure hex.pm sends" do
     test "clears the name and address on the participants hex.pm named", %{conn: conn} do
       report!([
@@ -122,7 +118,7 @@ defmodule VarselWeb.HexErasureControllerTest do
       assert to_string(username) == "renamed"
     end
 
-    test "leaves the name in no version, including those of spent participants", %{conn: conn} do
+    test "has no name to clear in any version, including those of spent participants" do
       report!([person("gone"), person("kept")])
 
       [spent] =
@@ -133,38 +129,13 @@ defmodule VarselWeb.HexErasureControllerTest do
 
       CVE.spend_report_participant!(spent, authorize?: false)
 
-      assert length(versions_naming("gone name")) == 2
+      versions = Ash.read!(CVE.ReportParticipant.Version)
+      assert Enum.any?(versions, &(&1.version_source_id == spent.id))
 
-      assert conn |> erase(%{"username" => "gone"}) |> response(204)
-
-      assert versions_naming("gone name") == []
-      assert [_kept] = versions_naming("kept name")
-
-      for version <- Ash.read!(CVE.ReportParticipant.Version),
-          {_field, value} <- version.changes do
-        refute value == "gone name"
+      for version <- versions do
+        refute Map.has_key?(version.changes, "name")
+        refute Map.has_key?(version.changes, "email")
       end
-    end
-
-    test "clears the name in the versions of spent participants under a handle matched by address",
-         %{conn: conn} do
-      report!([person("renamed", %{email: "gone@example.com"})])
-
-      [spent] =
-        [person("renamed", %{role: :reporter})]
-        |> report!()
-        |> Ash.load!([:participants], authorize?: false)
-        |> Map.fetch!(:participants)
-
-      CVE.spend_report_participant!(spent, authorize?: false)
-
-      assert length(versions_naming("renamed name")) == 2
-
-      assert conn
-             |> erase(%{"username" => "gone", "email" => "gone@example.com"})
-             |> response(204)
-
-      assert versions_naming("renamed name") == []
     end
 
     test "clears the address on hex.pm invites and cancels a queued invite email", %{conn: conn} do
