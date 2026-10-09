@@ -173,13 +173,8 @@ defmodule Varsel.CVE.ReportParticipantTest do
       [participant | _] = CVE.list_report_participants!(actor: poc)
 
       for actor <- [poc, Service.identity_claim(), nil] do
-        assert {:error, %Forbidden{}} =
+        assert %Ash.BulkResult{status: :error, errors: [%Forbidden{}]} =
                  CVE.erase_hex_report_participants("reporter", nil, actor: actor)
-
-        assert {:error, %Forbidden{}} = CVE.erase_report_participant(participant, actor: actor)
-
-        assert {:error, %Forbidden{}} =
-                 CVE.list_report_participants_for_hex_erasure("reporter", nil, actor: actor)
       end
 
       assert %{name: "Reporter"} =

@@ -30,7 +30,6 @@ defmodule Varsel.Cases.CaseInvite do
 
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.Case
-  alias Varsel.Cases.CaseInvite.Actions.EraseHexContact
   alias Varsel.Cases.CaseInvite.Changes.DeliverInvite
   alias Varsel.Cases.CaseInvite.Changes.ResolveContact
   alias Varsel.Cases.CaseInvite.EmailStatus
@@ -125,44 +124,30 @@ defmodule Varsel.Cases.CaseInvite do
       change DeliverInvite
     end
 
-    read :for_hex_erasure do
-      description "Internal: the hex.pm invites naming a username or address hex.pm erased."
-      public? false
+    update :erase_hex_contact do
+      description """
+      Applies hex.pm's notice that it erased an account (GDPR Article 19):
+      clears the address on every hex.pm invite naming that username or
+      address, and cancels an invite email still queued for it.
+      """
+
+      accept []
 
       argument :username, :ci_string, allow_nil?: false
       argument :email, :ci_string
 
-      filter expr(
-               strategy == :hex and
-                 (username == ^arg(:username) or
-                    (not is_nil(^arg(:email)) and email == ^arg(:email)))
+      change filter(
+               expr(
+                 strategy == :hex and
+                   (username == ^arg(:username) or
+                      (not is_nil(^arg(:email)) and email == ^arg(:email)))
+               )
              )
-    end
-
-    update :erase_email do
-      description "Clears the address of someone hex.pm erased, and cancels an invite email still queued for it."
-      accept []
-      require_atomic? false
 
       change set_attribute(:email, nil)
 
       change set_attribute(:email_status, :erased),
         where: [attribute_equals(:email_status, :pending)]
-    end
-
-    action :erase_hex_contact do
-      description """
-      Applies hex.pm's notice that it erased an account (GDPR Article 19):
-      clears the address on every hex.pm invite naming that username or
-      address.
-      """
-
-      transaction? true
-
-      argument :username, :ci_string, allow_nil?: false
-      argument :email, :ci_string
-
-      run EraseHexContact
     end
 
     read :for_identity do
@@ -185,8 +170,6 @@ defmodule Varsel.Cases.CaseInvite do
     end
 
     policy action_type([:read, :destroy]) do
-      # Decided by the erasure policy below.
-      authorize_if action(:for_hex_erasure)
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
@@ -204,7 +187,7 @@ defmodule Varsel.Cases.CaseInvite do
     end
 
     # Only hex.pm says when it erased someone.
-    policy action([:erase_hex_contact, :for_hex_erasure, :erase_email]) do
+    policy action(:erase_hex_contact) do
       access_type :strict
       authorize_if actor_attribute_equals(:system, :hexpm_intake)
     end
@@ -216,7 +199,7 @@ defmodule Varsel.Cases.CaseInvite do
 
     publish_all :create, [[:case_id]]
     publish_all :destroy, [[:case_id]]
-    publish :erase_email, [[:case_id]]
+    publish :erase_hex_contact, [[:case_id]]
   end
 
   attributes do

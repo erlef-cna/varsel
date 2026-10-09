@@ -264,15 +264,18 @@ defmodule Varsel.Cases do
       define :send_case_invite_email, action: :send_email
       define :list_case_invites_for_identity, action: :for_identity, args: [:strategy, :username]
 
-      define :list_case_invites_for_hex_erasure,
-        action: :for_hex_erasure,
-        args: [:username, {:optional, :email}]
-
-      define :erase_case_invite_email, action: :erase_email
-
       define :erase_hex_case_invites,
         action: :erase_hex_contact,
-        args: [:username, {:optional, :email}]
+        args: [:username, {:optional, :email}],
+        require_reference?: false,
+        default_options: [
+          bulk_options: [
+            authorize_query?: false,
+            notify?: true,
+            return_errors?: true,
+            strategy: :atomic
+          ]
+        ]
     end
 
     resource AffectedPackage do
