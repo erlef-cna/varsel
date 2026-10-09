@@ -75,43 +75,29 @@ defmodule Varsel.CVE.ReportParticipant do
       filter expr(strategy == ^arg(:strategy) and username == ^arg(:username) and is_nil(user_id))
     end
 
-    read :for_hex_erasure do
-      description "Internal: the hex.pm participants named by a username or address hex.pm erased."
-      public? false
-
-      argument :username, :ci_string, allow_nil?: false
-      argument :email, :string
-
-      filter expr(
-               strategy == :hex and
-                 (username == ^arg(:username) or
-                    (not is_nil(^arg(:email)) and
-                       string_downcase(email) == string_downcase(^arg(:email))))
-             )
-    end
-
-    update :erase do
-      description "Clears the name and address of someone hex.pm erased. The handle and role stay."
-      accept []
-      require_atomic? false
-
-      change set_attribute(:name, nil)
-      change set_attribute(:email, nil)
-    end
-
-    action :erase_hex_person do
+    update :erase_hex_person do
       description """
       Applies hex.pm's notice that it erased an account (GDPR Article 19):
       clears the name and address on every participant it named by that
-      username or address.
+      username or address. The handle and role stay.
       """
 
-      transaction? true
+      accept []
 
       argument :username, :ci_string, allow_nil?: false
       argument :email, :string
 
-      run Varsel.CVE.ReportParticipant.Actions.EraseHexPerson
+      change filter(
+               expr(
+                 strategy == :hex and
+                   (username == ^arg(:username) or
+                      (not is_nil(^arg(:email)) and
+                         string_downcase(email) == string_downcase(^arg(:email))))
+               )
+             )
+
+      change set_attribute(:name, nil)
+      change set_attribute(:email, nil)
     end
 
     update :link_user do
@@ -153,9 +139,7 @@ defmodule Varsel.CVE.ReportParticipant do
     # Stamped by VulnerabilityReport.Changes.SpendParticipants, which lets a
     # withdrawing reporter spend their own report's rows without ever being
     # able to read them on a surface.
-    policy action_type([:read, :update, :destroy]) do
-      # Decided by the erasure policy below.
-      authorize_if action([:for_hex_erasure, :erase])
+    policy action([:read, :for_identity, :link_user, :spend]) do
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       forbid_unless context_equals([:private, :spend_participants?], true)
@@ -163,7 +147,7 @@ defmodule Varsel.CVE.ReportParticipant do
     end
 
     # Only hex.pm says when it erased someone it named.
-    policy action([:erase_hex_person, :for_hex_erasure, :erase]) do
+    policy action(:erase_hex_person) do
       access_type :strict
       authorize_if actor_attribute_equals(:system, :hexpm_intake)
     end
@@ -174,7 +158,7 @@ defmodule Varsel.CVE.ReportParticipant do
     module VarselWeb.Endpoint
     prefix "vulnerability_report"
 
-    publish :erase, ["all"]
+    publish :erase_hex_person, ["all"]
   end
 
   attributes do
