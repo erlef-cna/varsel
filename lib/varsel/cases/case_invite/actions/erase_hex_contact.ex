@@ -17,7 +17,15 @@ defmodule Varsel.Cases.CaseInvite.Actions.EraseHexContact do
     opts = Ash.Context.to_opts(context)
 
     input.arguments.username
-    |> Cases.list_case_invites_for_hex_erasure!(input.arguments[:email], opts)
-    |> Enum.each(&Cases.erase_case_invite_email!(&1, opts))
+    |> Cases.query_to_list_case_invites_for_hex_erasure(input.arguments[:email], opts)
+    |> Cases.erase_case_invite_email!(
+      Keyword.put(opts, :bulk_options,
+        strategy: :stream,
+        allow_stream_with: :full_read,
+        notify?: true
+      )
+    )
+
+    :ok
   end
 end
