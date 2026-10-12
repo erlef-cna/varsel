@@ -9,6 +9,10 @@ defmodule VarselWeb.UserComponents do
 
   use Phoenix.Component
 
+  import VarselWeb.CoreComponents, only: [icon: 1]
+
+  alias Varsel.Accounts.User.Role
+
   @doc """
   Renders the name a user goes by, including when there is no user.
 
@@ -54,6 +58,83 @@ defmodule VarselWeb.UserComponents do
       <.user_name user={@user} class={@name_class} />
     </span>
     """
+  end
+
+  @doc """
+  Renders a search box over the accounts it matched, one radio per account,
+  for a form that acts on the chosen one.
+
+  The caller owns the search: the box is named `query`, so the form's
+  `phx-change` receives each keystroke, and `users` is what the caller found
+  for it. Each match shows the name, the provider handles and, when the
+  viewer may read it, the role. Callers must load `:display_name`,
+  `:avatar_url`, `:github_username`, `:hex_username` and `:role`.
+  """
+  attr :id, :string, required: true
+  attr :name, :string, default: "user_id", doc: "the param the chosen id is submitted under"
+  attr :query, :string, required: true
+  attr :users, :list, required: true, doc: "the accounts the query matched"
+  attr :selected, :string, default: nil, doc: "the id of the chosen account, if any"
+  attr :more?, :boolean, default: false, doc: "whether more accounts matched than are listed"
+  attr :placeholder, :string, default: "Search by name or handle…"
+
+  def user_picker(assigns) do
+    ~H"""
+    <div id={@id} class="space-y-2">
+      <label class="input input-sm input-bordered flex w-full items-center gap-2">
+        <.icon name="hero-magnifying-glass-mini" class="size-4 shrink-0 text-base-content/40" />
+        <input
+          type="search"
+          name="query"
+          value={@query}
+          placeholder={@placeholder}
+          autocomplete="off"
+          phx-debounce="200"
+          class="min-w-0 grow bg-transparent focus:outline-none"
+        />
+      </label>
+      <p :if={@users == []} class="px-1 text-xs text-base-content/60">No account matches.</p>
+      <ul
+        :if={@users != []}
+        class="lane-card max-h-56 divide-y divide-base-300 overflow-y-auto rounded-md border border-base-300"
+      >
+        <li :for={user <- @users}>
+          <label class="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm hover:bg-base-300/40 has-[:checked]:bg-base-300/60">
+            <input
+              type="radio"
+              name={@name}
+              value={user.id}
+              checked={user.id == @selected}
+              required
+              class="radio radio-xs"
+            />
+            <.avatar_disc user={user} />
+            <.user_name user={user} class="min-w-0 flex-1 truncate" />
+            <span :if={role_label(user)} class="badge badge-outline badge-xs shrink-0">
+              {role_label(user)}
+            </span>
+            <span :if={handles(user) != []} class="shrink-0 font-mono text-xs text-base-content/60">
+              {Enum.join(handles(user), " · ")}
+            </span>
+          </label>
+        </li>
+      </ul>
+      <p :if={@more?} class="px-1 text-xs text-base-content/60">
+        More accounts match. Keep typing to narrow the list.
+      </p>
+    </div>
+    """
+  end
+
+  # A role the viewer may not read arrives as a forbidden field, not an atom.
+  defp role_label(%{role: role}) when is_atom(role), do: Role.label(role)
+  defp role_label(_user), do: nil
+
+  defp handles(user) do
+    for {provider, key} <- [github: :github_username, hex: :hex_username],
+        username = Map.get(user, key),
+        is_binary(username),
+        do: "#{provider}/#{username}"
   end
 
   @doc """

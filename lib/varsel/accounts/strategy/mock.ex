@@ -23,11 +23,10 @@ defmodule Varsel.Accounts.Strategy.Mock do
 
   use AshAuthentication.Strategy.Custom, entity: __MODULE__.Dsl.dsl()
 
-  @roles [
-    {"poc", "POC", :poc},
-    {"supporter", "Supporter", :supporter},
-    {"none", "No role", nil}
-  ]
+  alias Varsel.Accounts.User.Role
+
+  @roles Enum.map(Role.values(), &{to_string(&1), Role.label(&1), &1}) ++
+           [{"none", "No role", nil}]
 
   @doc "The roles offered, as `{uid, label, role}`."
   @spec roles() :: [{String.t(), String.t(), atom | nil}]

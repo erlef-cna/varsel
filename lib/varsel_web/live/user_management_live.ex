@@ -14,12 +14,9 @@ defmodule VarselWeb.UserManagementLive do
 
   alias Varsel.Accounts
   alias Varsel.Accounts.User
+  alias Varsel.Accounts.User.Role
 
-  @roles [
-    {"POC", :poc},
-    {"Supporter", :supporter},
-    {"None", nil}
-  ]
+  @roles Enum.map(Role.values(), &{Role.label(&1), &1}) ++ [{"None", nil}]
 
   @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
@@ -91,13 +88,13 @@ defmodule VarselWeb.UserManagementLive do
 
   # The keep_live callback: page_opts is nil on the first run and the stored
   # page's options on a refetch, so a role change keeps the page the user is
-  # on. Points of contact lead the list, then everyone by display name —
-  # sorted in the query, so a page is ordered against the whole table rather
-  # than only the rows it happens to hold.
+  # on. Points of contact lead the list, then supporters, then everyone by
+  # display name — sorted in the query, so a page is ordered against the whole
+  # table rather than only the rows it happens to hold.
   defp list_users(socket, page_opts) do
     Accounts.list_users!(
       actor: socket.assigns.current_user,
-      query: Ash.Query.sort(User, poc_first: :asc, display_name: :asc),
+      query: Ash.Query.sort(User, role_rank: :asc, display_name: :asc),
       page: page_opts || [count: true, offset: 0],
       load: [:display_name, :github_username, :hex_username, :avatar_url]
     )

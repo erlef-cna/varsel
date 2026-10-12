@@ -1639,9 +1639,26 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/edit")
       lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
 
-      assert has_element?(lv, ~s{#credit-user-form option[value="#{supporter.id}"]})
-      refute has_element?(lv, ~s{#credit-user-form option[value="#{poc.id}"]})
+      assert has_element?(lv, ~s{#credit-user-form input[name=user_id][value="#{supporter.id}"]})
+      refute has_element?(lv, ~s{#credit-user-form input[name=user_id][value="#{poc.id}"]})
       assert has_element?(lv, "#credit-handle-form")
+    end
+
+    test "the credit picker narrows the accounts by name or handle", %{conn: conn, poc: poc} do
+      member = Fixtures.register_user("creditable_octocat")
+      other = Fixtures.register_user("someone_else")
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+      lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
+
+      lv
+      |> form("#credit-user-form", %{"query" => "OCTOCAT", "credit_type" => "finder"})
+      |> render_change()
+
+      assert has_element?(lv, ~s{#credit-user-form input[name=user_id][value="#{member.id}"]})
+      refute has_element?(lv, ~s{#credit-user-form input[name=user_id][value="#{other.id}"]})
+      assert has_element?(lv, ~s{#credit-user-form option[value=finder][selected]})
     end
 
     test "a proposed credit carries its handles", %{conn: conn, poc: poc, supporter: supporter} do
@@ -2076,7 +2093,7 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
       assert html =~ "POC"
-      assert html =~ "supporter"
+      assert html =~ "Supporter"
       assert html =~ poc.name
       assert html =~ supporter.name
     end
@@ -2131,11 +2148,54 @@ defmodule VarselWeb.CaseLiveTest do
       assert lv |> element("#people-picker-modal") |> render() =~ supporter.name
 
       lv
-      |> element("#people-picker-modal form[phx-submit='assign_user']")
-      |> render_submit(%{"user_id" => supporter.id})
+      |> form("#assign-user-form", %{"user_id" => supporter.id})
+      |> render_submit()
 
       assert render(lv) =~ supporter.name
       assert [_poc_assignment, _supporter] = assignments(case_record, poc)
+    end
+
+    # Role first, then name, so the people usually picked lead the list; the
+    # ones already on the case are not offered again.
+    test "the user list leads with the roles and leaves out the assigned", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      aaron = Fixtures.register_user("aaron_member")
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      ids =
+        lv
+        |> element("#assignee-picker")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("input[name=user_id]")
+        |> LazyHTML.attribute("value")
+
+      refute poc.id in ids
+      assert [supporter.id, aaron.id] == Enum.filter(ids, &(&1 in [supporter.id, aaron.id]))
+    end
+
+    test "the user list narrows to the typed name or handle", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      hexer = Fixtures.sign_in_with_hex("search_hexer", System.unique_integer([:positive]))
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      lv |> form("#assign-user-form", %{"query" => "search_HEX"}) |> render_change()
+
+      assert has_element?(lv, ~s{#assignee-picker input[name=user_id][value="#{hexer.id}"]})
+      refute has_element?(lv, ~s{#assignee-picker input[name=user_id][value="#{supporter.id}"]})
+      assert lv |> element("#assignee-picker") |> render() =~ "hex/search_hexer"
+
+      lv |> form("#assign-user-form", %{"query" => "nobody_at_all"}) |> render_change()
+
+      assert lv |> element("#assignee-picker") |> render() =~ "No account matches."
     end
 
     test "a supporter never sees the user list", %{conn: conn, poc: poc, supporter: supporter} do
@@ -2145,7 +2205,7 @@ defmodule VarselWeb.CaseLiveTest do
       lv = open_picker(conn, supporter, case_record)
       modal = lv |> element("#people-picker-modal") |> render()
 
-      refute modal =~ "Pick a user…"
+      refute modal =~ "Someone with an account"
       assert modal =~ "Someone by their handle"
     end
 

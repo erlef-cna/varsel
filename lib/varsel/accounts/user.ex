@@ -177,6 +177,32 @@ defmodule Varsel.Accounts.User do
                  required?: false
     end
 
+    read :search do
+      description "Lists the users whose name or provider handle contains the query."
+
+      argument :query, :ci_string, allow_nil?: true
+
+      argument :exclude_ids, {:array, :uuid} do
+        allow_nil? false
+        default []
+      end
+
+      # Only fields every reader of the row may see take part in the match, so
+      # a hit never discloses a field the field policies withhold.
+      prepare build(
+                filter:
+                  expr(
+                    contains(name, ^arg(:query)) or
+                      contains(github_username, ^arg(:query)) or
+                      contains(hex_username, ^arg(:query))
+                  )
+              ),
+              where: [present(:query)]
+
+      filter expr(id not in ^arg(:exclude_ids))
+      prepare build(sort: [role_rank: :asc, display_name: :asc])
+    end
+
     read :get_by_subject do
       description "Get a user by the subject claim in a JWT"
       argument :subject, :string, allow_nil?: false
@@ -500,7 +526,16 @@ defmodule Varsel.Accounts.User do
       public? true
     end
 
-    calculate :poc_first, :integer, expr(if role == :poc, do: 0, else: 1)
+    # Points of contact lead a list, then supporters, then everyone else.
+    calculate :role_rank,
+              :integer,
+              expr(
+                cond do
+                  role == :poc -> 0
+                  role == :supporter -> 1
+                  true -> 2
+                end
+              )
 
     calculate :hex_username,
               :string,

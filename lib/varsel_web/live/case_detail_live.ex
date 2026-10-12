@@ -19,10 +19,13 @@ defmodule VarselWeb.CaseDetailLive do
 
   import VarselWeb.CaseComponents
   import VarselWeb.CaseFormComponents
-  import VarselWeb.UserComponents, only: [avatar_disc: 1, user_badge: 1, user_name: 1]
+
+  import VarselWeb.UserComponents,
+    only: [avatar_disc: 1, user_badge: 1, user_name: 1, user_picker: 1]
 
   alias Phoenix.HTML.Form
   alias Varsel.Accounts
+  alias Varsel.Accounts.User.Role
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.CaseCredit
@@ -137,9 +140,8 @@ defmodule VarselWeb.CaseDetailLive do
         refreshing: false,
         child_form: nil,
         credit_picker: nil,
-        people_picker?: false,
+        people_picker: nil,
         grant_form: nil,
-        users: nil,
         catalog_options: nil
       )
       |> CaseLifecycle.mount(id,
@@ -217,7 +219,12 @@ defmodule VarselWeb.CaseDetailLive do
   # A proposal carries a name, so proposing keeps the plain credit form;
   # editing adds the credit by the person instead, by account or by handle.
   def handle_event("new_child", %{"type" => "credit"}, %{assigns: %{mode: :edit}} = socket) do
-    {:noreply, assign(socket, :credit_picker, %{form: credit_picker_form(socket)})}
+    {:noreply,
+     assign(socket, :credit_picker, %{
+       form: credit_picker_form(socket),
+       search: account_search(socket, nil),
+       credit_type: nil
+     })}
   end
 
   def handle_event("new_child", %{"type" => type} = params, socket) do
@@ -365,6 +372,16 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, assign(socket, :credit_picker, nil)}
   end
 
+  def handle_event("search_credit_account", params, socket) do
+    picker = %{
+      socket.assigns.credit_picker
+      | search: account_search(socket, params["query"], params["user_id"]),
+        credit_type: params["credit_type"]
+    }
+
+    {:noreply, assign(socket, :credit_picker, picker)}
+  end
+
   def handle_event("credit_user", %{"user_id" => user_id, "credit_type" => credit_type}, socket) do
     params =
       %{"user_id" => user_id, "credit_type" => credit_type}
@@ -420,11 +437,15 @@ defmodule VarselWeb.CaseDetailLive do
   ## ------------------------------------------------------------- assignments
 
   def handle_event("open_people_picker", _params, socket) do
-    {:noreply, socket |> assign(:people_picker?, true) |> assign(:grant_form, grant_form(socket))}
+    {:noreply, assign(socket, people_picker: assignee_search(socket, nil), grant_form: grant_form(socket))}
   end
 
   def handle_event("cancel_people_picker", _params, socket) do
-    {:noreply, assign(socket, :people_picker?, false)}
+    {:noreply, assign(socket, :people_picker, nil)}
+  end
+
+  def handle_event("search_assignee", params, socket) do
+    {:noreply, assign(socket, :people_picker, assignee_search(socket, params["query"], params["user_id"]))}
   end
 
   def handle_event("assign_user", %{"user_id" => user_id}, socket) do
@@ -434,7 +455,7 @@ defmodule VarselWeb.CaseDetailLive do
              actor: socket.assigns.current_user
            ) do
         {:ok, _assignment} ->
-          assign(socket, :people_picker?, false)
+          assign(socket, :people_picker, nil)
 
         {:error, error} ->
           put_flash(socket, :error, errors_to_string(error))
@@ -451,7 +472,7 @@ defmodule VarselWeb.CaseDetailLive do
     socket =
       case AshPhoenix.Form.submit(socket.assigns.grant_form, params: params) do
         {:ok, _case_record} ->
-          assign(socket, :people_picker?, false)
+          assign(socket, :people_picker, nil)
 
         {:error, form} ->
           assign(socket, :grant_form, form)
@@ -632,11 +653,6 @@ defmodule VarselWeb.CaseDetailLive do
         |> to_form()
       end
 
-    users =
-      if Accounts.can_list_users?(actor),
-        do: Accounts.list_users!(actor: actor, load: [:display_name]),
-        else: []
-
     assign(socket,
       case_record: case_record,
       display_case: display_case,
@@ -645,7 +661,6 @@ defmodule VarselWeb.CaseDetailLive do
       content_form: content_form,
       can_comment: can_comment?(case_record, actor),
       can_refresh: Cases.can_refresh_case_derivation?(actor, case_record, validate?: true),
-      users: users,
       page_title: case_record.title || "Case"
     )
   end
@@ -1103,15 +1118,12 @@ defmodule VarselWeb.CaseDetailLive do
         />
       </.page_container>
 
-      <.people_picker_modal
-        :if={@people_picker?}
-        assignable_users={assignable_users(@users, @case_record)}
-        grant_form={@grant_form}
-      />
+      <.people_picker_modal :if={@people_picker} search={@people_picker} grant_form={@grant_form} />
 
       <.credit_picker_modal
         :if={@credit_picker}
-        users={@users}
+        search={@credit_picker.search}
+        credit_type={@credit_picker.credit_type}
         credit_form={@credit_picker.form}
       />
 
@@ -1983,13 +1995,41 @@ defmodule VarselWeb.CaseDetailLive do
   defp invite_email(%{email: %Ash.CiString{} = email}), do: to_string(email)
   defp invite_email(_invite), do: nil
 
-  defp assignable_users(users, case_record) do
-    Enum.reject(users, fn user ->
-      Enum.any?(case_record.assignments, &(&1.user_id == user.id))
-    end)
+  @picker_limit 8
+
+  # The accounts a picker offers for a query: the ones the actor may see,
+  # points of contact and supporters first. One past the limit is fetched so
+  # the picker can say the list is cut, without counting the rest.
+  defp account_search(socket, query, selected \\ nil, exclude_ids \\ []) do
+    query = String.trim(query || "")
+
+    {users, rest} =
+      query
+      |> Accounts.search_users!(%{exclude_ids: exclude_ids},
+        actor: socket.assigns.current_user,
+        query: [limit: @picker_limit + 1],
+        load: [:display_name, :avatar_url, :github_username, :hex_username, :role]
+      )
+      |> Enum.split(@picker_limit)
+
+    %{
+      query: query,
+      users: users,
+      more?: rest != [],
+      selected: Enum.find_value(users, &(&1.id == selected && selected))
+    }
   end
 
-  attr :assignable_users, :list, required: true
+  defp assignee_search(socket, query, selected \\ nil) do
+    assigned_ids = Enum.map(socket.assigns.case_record.assignments, & &1.user_id)
+    account_search(socket, query, selected, assigned_ids)
+  end
+
+  # A picker shows its account form while there is anyone to offer: the
+  # untyped search found someone, or a typed one is being narrowed.
+  defp offers_accounts?(%{query: query, users: users}), do: query != "" or users != []
+
+  attr :search, :map, required: true
   attr :grant_form, Form, required: true
 
   defp people_picker_modal(assigns) do
@@ -1997,18 +2037,21 @@ defmodule VarselWeb.CaseDetailLive do
     <.modal id="people-picker-modal" title="Add someone to the case" on_cancel="cancel_people_picker">
       <div class="space-y-4">
         <form
-          :if={@assignable_users != []}
+          :if={offers_accounts?(@search)}
+          id="assign-user-form"
+          phx-change="search_assignee"
           phx-submit="assign_user"
           class="rounded-lg border border-base-300 bg-base-200 p-3"
         >
-          <p class="text-sm font-semibold">Someone with an account</p>
-          <div class="mt-2 flex items-center gap-2">
-            <select name="user_id" required class="select select-bordered select-sm flex-1">
-              <option value="">Pick a user…</option>
-              <option :for={user <- @assignable_users} value={user.id}>
-                <.user_name user={user} />
-              </option>
-            </select>
+          <p class="mb-2 text-sm font-semibold">Someone with an account</p>
+          <.user_picker
+            id="assignee-picker"
+            query={@search.query}
+            users={@search.users}
+            selected={@search.selected}
+            more?={@search.more?}
+          />
+          <div class="mt-2 flex justify-end">
             <button type="submit" class="btn btn-eef btn-sm">Add</button>
           </div>
         </form>
@@ -2078,7 +2121,8 @@ defmodule VarselWeb.CaseDetailLive do
     |> to_form()
   end
 
-  attr :users, :list, required: true, doc: "the accounts the actor may list, or [] when none"
+  attr :search, :map, required: true
+  attr :credit_type, :string, required: true, doc: "the chosen credit type, nil before any choice"
   attr :credit_form, Form, required: true
 
   defp credit_picker_modal(assigns) do
@@ -2086,8 +2130,9 @@ defmodule VarselWeb.CaseDetailLive do
     <.modal id="credit-picker-modal" title="Add a credit" on_cancel="cancel_credit_picker">
       <div class="space-y-4">
         <form
-          :if={@users != []}
+          :if={offers_accounts?(@search)}
           id="credit-user-form"
+          phx-change="search_credit_account"
           phx-submit="credit_user"
           class="rounded-lg border border-base-300 bg-base-200 p-3"
         >
@@ -2095,15 +2140,22 @@ defmodule VarselWeb.CaseDetailLive do
           <p class="mb-2 text-xs text-base-content/60">
             Credited as they asked to be on their account page.
           </p>
-          <div class="grid grid-cols-[1fr_auto_auto] items-center gap-2">
-            <select name="user_id" required class="select select-bordered select-sm">
-              <option value="">Pick a user…</option>
-              <option :for={user <- @users} value={user.id}>
-                <.user_name user={user} />
-              </option>
-            </select>
+          <.user_picker
+            id="credit-account-picker"
+            query={@search.query}
+            users={@search.users}
+            selected={@search.selected}
+            more?={@search.more?}
+          />
+          <div class="mt-2 flex items-center justify-end gap-2">
             <select name="credit_type" class="select select-bordered select-sm">
-              <option :for={{label, value} <- credit_type_options()} value={value}>{label}</option>
+              <option
+                :for={{label, value} <- credit_type_options()}
+                value={value}
+                selected={to_string(value) == @credit_type}
+              >
+                {label}
+              </option>
             </select>
             <button type="submit" class="btn btn-eef btn-sm">Add</button>
           </div>
@@ -2218,8 +2270,7 @@ defmodule VarselWeb.CaseDetailLive do
     if Enum.at(case_record.assignments, 0) == assignment, do: :a, else: :b
   end
 
-  defp person_role(%{role: :poc}), do: "POC"
-  defp person_role(%{role: :supporter}), do: "supporter"
+  defp person_role(%{role: role}) when is_atom(role), do: Role.label(role)
   defp person_role(_user), do: nil
 
   defp child_modal(assigns) do

@@ -86,6 +86,78 @@ defmodule Varsel.Accounts.UserTest do
     end
   end
 
+  describe ":search" do
+    setup do
+      # The test database is seeded, so the handles carry a tag no seed shares.
+      tag = "s#{System.unique_integer([:positive])}"
+
+      poc = register_poc("#{tag}poc")
+      supporter = "#{tag}supporter" |> register_user() |> set_role(:supporter)
+
+      member =
+        "#{tag}member"
+        |> register_user()
+        |> Ash.update!(%{name: "#{tag} Named Member"}, action: :update, authorize?: false)
+
+      hex_user =
+        Varsel.Fixtures.sign_in_with_hex("#{tag}hexer", System.unique_integer([:positive]))
+
+      %{tag: tag, poc: poc, supporter: supporter, member: member, hex_user: hex_user}
+    end
+
+    test "with no query lists everyone, points of contact and supporters first", ctx do
+      ids = ctx.tag |> search(ctx.poc) |> Enum.map(& &1.id)
+
+      assert [ctx.poc.id, ctx.supporter.id] == Enum.take(ids, 2)
+
+      assert Enum.sort(ids) ==
+               Enum.sort([ctx.poc.id, ctx.supporter.id, ctx.member.id, ctx.hex_user.id])
+
+      assert length(Accounts.search_users!(nil, actor: ctx.poc)) ==
+               Ash.count!(User, authorize?: false)
+    end
+
+    test "matches the name and either provider handle, ignoring case", ctx do
+      assert [found] = search("#{ctx.tag}HEX", ctx.poc)
+      assert found.id == ctx.hex_user.id
+
+      assert [found] = search("#{ctx.tag}MEMBER", ctx.poc)
+      assert found.id == ctx.member.id
+
+      assert [found] = search("named member", ctx.poc)
+      assert found.id == ctx.member.id
+    end
+
+    test "leaves out the excluded ids", ctx do
+      ids =
+        ctx.tag
+        |> Accounts.search_users!(%{exclude_ids: [ctx.poc.id, ctx.member.id]},
+          actor: ctx.poc
+        )
+        |> Enum.map(& &1.id)
+
+      assert Enum.sort(ids) == Enum.sort([ctx.supporter.id, ctx.hex_user.id])
+    end
+
+    test "escapes the pattern characters a query may contain", ctx do
+      assert [] = Accounts.search_users!("%#{ctx.tag}_", actor: ctx.poc)
+    end
+
+    test "a non-POC finds only themselves", ctx do
+      assert [only] = search(ctx.tag, ctx.supporter)
+      assert only.id == ctx.supporter.id
+      assert [] = search("#{ctx.tag}member", ctx.supporter)
+    end
+
+    defp search(query, actor) do
+      Accounts.search_users!(query, actor: actor, load: [:display_name])
+    end
+
+    defp set_role(user, role) do
+      Ash.update!(user, %{role: role}, action: :set_role, authorize?: false)
+    end
+  end
+
   describe "avatar_url" do
     test "prefers the linked GitHub account's picture" do
       user = "octocat" |> register_user() |> Ash.load!([:avatar_url], authorize?: false)

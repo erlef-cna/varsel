@@ -13,4 +13,5 @@ defmodule VarselWeb.Storybook.User do
   def entry("avatar_disc"), do: [name: "Avatar disc", icon: {:local, "hero-user-circle"}]
   def entry("user_badge"), do: [name: "User badge", icon: {:local, "hero-identification"}]
   def entry("user_name"), do: [name: "User name", icon: {:local, "hero-at-symbol"}]
+  def entry("user_picker"), do: [name: "User picker", icon: {:local, "hero-magnifying-glass"}]
 end

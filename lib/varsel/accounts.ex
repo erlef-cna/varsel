@@ -48,6 +48,7 @@ defmodule Varsel.Accounts do
 
     resource User do
       define :list_users, action: :read
+      define :search_users, action: :search, args: [:query]
       define :update_user, action: :update
       define :set_user_role, action: :set_role, args: [:role]
       define :get_user_by_subject, action: :get_by_subject, args: [:subject]
