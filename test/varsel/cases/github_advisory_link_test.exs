@@ -279,9 +279,17 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
     end
 
     test "a frozen case takes nothing", %{poc: poc, case: case_record, link: link} do
-      approve!(case_record, poc)
+      supporter = Fixtures.register_user("pull_frozen_supporter", :supporter)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+      Cases.edit_case!(case_record, %{title: "Working title"}, actor: poc)
+      approve!(Cases.get_case!(case_record.id, actor: poc), poc)
 
-      assert {:error, %Forbidden{}} = Cases.pull_github_advisory(link, [:title], actor: poc)
+      assert {:error, %Forbidden{}} =
+               Cases.pull_github_advisory(link, [:title], actor: supporter)
+
+      assert reload(case_record, poc).title == "Working title"
+
+      assert {:ok, _link} = Cases.pull_github_advisory(link, [:title], actor: poc)
       assert reload(case_record, poc).title == "Header injection in acme_lib"
     end
 
@@ -725,19 +733,22 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
       link = link!(case_record, poc)
       approve!(case_record, poc)
 
-      assert {:error, %Forbidden{}} = Cases.unlink_github_advisory(link, actor: poc)
       assert {:error, %Forbidden{}} = Cases.unlink_github_advisory(link, actor: supporter)
       assert %GitHubAdvisoryLink{} = Cases.refresh_github_advisory_link!(link, actor: poc)
       assert %GitHubAdvisoryLink{} = Cases.refresh_github_advisory_link!(link, actor: supporter)
+      assert :ok = Cases.unlink_github_advisory(link, actor: poc)
     end
 
-    test "an approved case takes no link", %{poc: poc} do
+    test "an approved case takes a link from a POC only", %{poc: poc, supporter: supporter} do
       other = Fixtures.open_case(poc, %{title: "Approved case"})
+      Cases.assign_case_user!(%{case_id: other.id, user_id: supporter.id}, actor: poc)
       approve!(other, poc)
       GitHubApi.stub_advisory(hex_advisory())
 
-      assert {:error, %Forbidden{}} = link(other, poc)
+      assert {:error, %Forbidden{}} = link(other, supporter)
       assert Ash.read!(GitHubAdvisoryLink, authorize?: false) == []
+
+      assert {:ok, %GitHubAdvisoryLink{}} = link(other, poc)
     end
   end
 end

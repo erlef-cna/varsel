@@ -510,10 +510,12 @@ defmodule VarselWeb.CaseGitHubLiveTest do
 
     refute has_element?(lv, "#report-advisory")
 
+    supporter = Fixtures.register_user("advisory_live_supporter", :supporter)
+    assign!(case_record, supporter, poc)
     Fixtures.add_affected_package(poc, case_record)
     approve!(Cases.get_case!(case_record.id, actor: poc), poc)
 
-    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+    {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/github")
     render_async(lv)
 
     refute has_element?(lv, "#report-advisory")
@@ -621,11 +623,13 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     poc: poc,
     case: case_record
   } do
+    supporter = Fixtures.register_user("advisory_live_supporter", :supporter)
+    assign!(case_record, supporter, poc)
     Cases.edit_case!(case_record, %{title: "Working title"}, actor: poc)
     link!(case_record, poc)
     approve!(Cases.get_case!(case_record.id, actor: poc), poc)
 
-    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+    {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/github")
 
     assert has_element?(lv, "#github-advisory button", "Refresh")
     refute has_element?(lv, "#github-advisory button", "Unlink")
@@ -634,11 +638,34 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     refute has_element?(lv, "#advisory-diff button", "Pull all")
 
     other = Fixtures.open_case(poc, %{title: "Approved case"})
+    assign!(other, supporter, poc)
+    approve!(other, poc)
+
+    {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{other.id}/github")
+
+    refute has_element?(lv, "#link-advisory-form")
+    assert has_element?(lv, "#link-advisory", "No advisory is linked to this case.")
+  end
+
+  test "a POC still links, pulls and unlinks on an approved case", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    Cases.edit_case!(case_record, %{title: "Working title"}, actor: poc)
+    link!(case_record, poc)
+    approve!(Cases.get_case!(case_record.id, actor: poc), poc)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+
+    assert has_element?(lv, "#github-advisory button", "Unlink")
+    assert has_element?(lv, "#diff-title button", "Pull")
+
+    other = Fixtures.open_case(poc, %{title: "Approved case"})
     approve!(other, poc)
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{other.id}/github")
 
-    refute has_element?(lv, "#link-advisory-form")
-    assert has_element?(lv, "#link-advisory", "No advisory is linked to this case.")
+    assert has_element?(lv, "#link-advisory-form")
   end
 end

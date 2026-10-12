@@ -87,7 +87,8 @@ path from there to a published CVE.
    reads the advisory again after it changed on GitHub. The linked advisory
    leads the published references as the vendor advisory, and no stored
    reference is needed for it. Unlink takes it out again. Linking, pulling
-   and unlinking are edits and stop once the case is approved. Draft
+   and unlinking are edits and follow the same freeze as the case content:
+   approval stops them for everyone but a Point of Contact. Draft
    advisories are read and written with your GitHub account. When none is
    linked to yours, the tab says so and holds Refresh, Push and Report until
    you [link GitHub in account settings](/settings/account).

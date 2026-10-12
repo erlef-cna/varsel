@@ -234,13 +234,18 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
   end
 
   test "a frozen case is refused before GitHub is asked", %{poc: poc, case: case_record} do
+    supporter = Fixtures.register_user("report_frozen_supporter", :supporter)
+    Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
     approved =
       case_record |> Cases.request_case_review!(actor: poc) |> Cases.approve_case!(actor: poc)
 
     stub_github_unreachable()
 
-    refute Cases.can_report_case_to_github?(poc, approved, @report)
-    assert {:error, %Forbidden{}} = report(approved, poc)
+    assert Cases.can_report_case_to_github?(poc, approved, @report)
+    refute Cases.can_report_case_to_github?(poc, %{approved | state: :publishing}, @report)
+    refute Cases.can_report_case_to_github?(supporter, approved, @report)
+    assert {:error, %Forbidden{}} = report(approved, supporter)
     assert_unlinked(case_record, poc)
   end
 

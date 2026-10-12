@@ -33,7 +33,7 @@ defmodule VarselWeb.HexErasureControllerTest do
       end
     end)
 
-    Req.Test.stub(Varsel.Accounts.GitHub, fn conn ->
+    Req.Test.stub(Varsel.GitHub.Client, fn conn ->
       Req.Test.json(conn, %{"login" => "gone_on_github", "email" => "gone@example.com"})
     end)
 

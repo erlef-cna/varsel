@@ -171,9 +171,11 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
     end
 
     # Content freeze: the link and the case may only change while the case is
-    # editable.
+    # editable, or when a POC corrects an approved one.
     policy action([:link, :unlink, :pull]) do
       authorize_if expr(case.state in [:draft, :review])
+
+      authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
     end
 
     policy action(:record) do
