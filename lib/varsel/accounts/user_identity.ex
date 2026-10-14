@@ -21,7 +21,7 @@ defmodule Varsel.Accounts.UserIdentity do
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
     notifiers: [Ash.Notifier.PubSub],
-    extensions: [AshAuthentication.UserIdentity, AshPaperTrail.Resource]
+    extensions: [AshAuthentication.UserIdentity, AshCloak, AshPaperTrail.Resource]
 
   alias Ash.Type.CiString
   alias Varsel.Accounts.User
@@ -29,6 +29,7 @@ defmodule Varsel.Accounts.UserIdentity do
   alias Varsel.Accounts.UserIdentity.Changes.ClaimCaseInvites
   alias Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants
   alias Varsel.Accounts.UserIdentity.Changes.ReconcileUserNotificationEmail
+  alias Varsel.Accounts.UserIdentity.Changes.RefreshAccessToken
 
   user_identity do
     user_resource User
@@ -70,12 +71,23 @@ defmodule Varsel.Accounts.UserIdentity do
     end
   end
 
+  cloak do
+    vault Varsel.Vault
+    attributes [:access_token, :refresh_token]
+  end
+
   paper_trail do
     change_tracking_mode :changes_only
     # OAuth tokens (and their expiry, which changes on every login) are
     # deliberately not versioned. Nor is the email: an audit trail records who
     # changed what, and does not need to outlive the address itself.
-    ignore_attributes [:access_token, :access_token_expires_at, :refresh_token, :email]
+    ignore_attributes [
+      :encrypted_access_token,
+      :access_token_expires_at,
+      :encrypted_refresh_token,
+      :email
+    ]
+
     only_when_changed? true
     store_action_name? true
     # Identities are hard-deleted when a user disconnects a provider
@@ -99,7 +111,15 @@ defmodule Varsel.Accounts.UserIdentity do
       description "Creates or refreshes the identity row for an OAuth sign-in."
       upsert? true
       upsert_identity :unique_on_strategy_and_uid
-      upsert_fields [:access_token, :access_token_expires_at, :refresh_token, :email, :username]
+
+      upsert_fields [
+        :encrypted_access_token,
+        :access_token_expires_at,
+        :encrypted_refresh_token,
+        :email,
+        :username
+      ]
+
       accept [:strategy]
 
       argument :user_info, :map, allow_nil?: false
@@ -112,6 +132,17 @@ defmodule Varsel.Accounts.UserIdentity do
       change ClaimCaseInvites
       change ClaimCaseCredits
       change ClaimReportParticipants
+    end
+
+    update :refresh_access_token do
+      description "Exchanges a GitHub identity's refresh token for a new access token when the stored one is about to expire."
+      require_atomic? false
+      accept []
+
+      validate attribute_equals(:strategy, "github")
+
+      change get_and_lock_for_update()
+      change RefreshAccessToken
     end
 
     destroy :destroy do
@@ -131,11 +162,14 @@ defmodule Varsel.Accounts.UserIdentity do
 
     # People read identities through the user they belong to, whose own
     # policy already decided whether that row is visible. The OAuth tokens
-    # stay private attributes, so they are never readable through the API at
-    # all.
+    # are private fields, so they are never readable through the API at all.
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if accessing_from(User, :identities)
+    end
+
+    policy action(:refresh_access_token) do
+      authorize_if expr(user_id == ^actor(:id))
     end
 
     # Your own providers, and nobody else's — a POC has no more business

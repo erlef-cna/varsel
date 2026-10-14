@@ -15,6 +15,7 @@
     :ash_state_machine,
     :ash_authentication_phoenix,
     :ash_authentication,
+    :ash_cloak,
     :ash_postgres,
     :ash_rate_limiter,
     :ash_phoenix,

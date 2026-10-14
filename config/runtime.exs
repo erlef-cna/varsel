@@ -88,7 +88,7 @@ if config_env() != :test do
   # set, local development falls back to the mock login. The callback URI is
   # not among them — `Varsel.Secrets` builds it from the endpoint.
   #
-  # The GitHub OAuth app's client credentials also authenticate Varsel's own
+  # The GitHub App's client credentials also authenticate Varsel's own
   # profile lookups (`Varsel.Accounts.GitHub`).
   config :varsel, :github, oauth_provider_config.("GITHUB", [])
 

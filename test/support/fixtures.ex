@@ -38,7 +38,7 @@ defmodule Varsel.Fixtures do
     )
   end
 
-  def sign_in_with_github(handle, sub) do
+  def sign_in_with_github(handle, sub, oauth_tokens \\ %{"access_token" => "gho_token"}) do
     Ash.create!(
       User,
       %{
@@ -48,7 +48,7 @@ defmodule Varsel.Fixtures do
           "name" => "#{handle} name",
           "email" => "#{handle}@example.com"
         },
-        oauth_tokens: %{"access_token" => "gho_token"}
+        oauth_tokens: oauth_tokens
       },
       action: :register_with_github,
       authorize?: false

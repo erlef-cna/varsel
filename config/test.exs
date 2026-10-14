@@ -6,6 +6,10 @@ import Config
 
 config :ash, policies: [show_policy_breakdowns?: true], disable_async?: true
 
+config :ash_authentication,
+       :http_adapter,
+       {Assent.HTTPAdapter.Req, plug: {Req.Test, Varsel.GitHub.UserToken}}
+
 config :bcrypt_elixir, log_rounds: 1
 
 # Print only warnings and errors during test

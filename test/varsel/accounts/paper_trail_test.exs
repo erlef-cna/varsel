@@ -70,6 +70,10 @@ defmodule Varsel.Accounts.PaperTrailTest do
       refute Map.has_key?(version.changes, "access_token")
       refute Map.has_key?(version.changes, "access_token_expires_at")
       refute Map.has_key?(version.changes, "refresh_token")
+      refute Map.has_key?(version.changes, "encrypted_access_token")
+      refute Map.has_key?(version.changes, "encrypted_refresh_token")
+      refute "gho_secret_token" in Map.values(version.changes)
+      refute "ghr_secret" in Map.values(version.changes)
     end
   end
 end

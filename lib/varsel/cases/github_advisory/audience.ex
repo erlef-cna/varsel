@@ -9,8 +9,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Audience do
   the owners of the organization its repository lives under.
 
   GitHub lists a team's members and an organization's owners to a member of
-  the organization whose token carries the `read:org` scope. A group the
-  viewer cannot list is `:unknown`.
+  the organization whose token can read the organization's members. A group
+  the viewer cannot list is `:unknown`.
   """
 
   alias Varsel.Accounts.User

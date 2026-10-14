@@ -415,24 +415,26 @@ claims:
 - **Time/clock:** the git-derivation cache and OAuth token expiry rely on a
   monotonic and wall clock respectively; no assumption beyond a
   correctly-set host clock.
-- **Secrets at rest:** OAuth client secrets, GitHub tokens, and the
-  `report`/case data are protected by DB access control; a Cloak/AES-GCM
-  vault (`CLOAK_KEY`) is configured for `ash_cloak`-encrypted fields
-  (`runtime.exs`). `HEX_SIGNING_KEY` is the private key that signs Varsel's
+- **Secrets at rest:** OAuth client secrets and the `report`/case data are
+  protected by DB access control. The access and refresh tokens that a
+  provider sign-in stores on its identity are encrypted with the
+  Cloak/AES-GCM vault (`CLOAK_KEY`, `runtime.exs`, `user_identity.ex`).
+  `HEX_SIGNING_KEY` is the private key that signs Varsel's
   own requests to hex.pm and is held by the environment only
   (`service_token.ex`). A user's GitHub token is the one their sign-in
-  stored. It carries the `repo` and `read:org` scopes, so it reaches every
-  repository and organization the person can, and it is used only as that
+  stored. It is a GitHub App user token, so it reaches only what both the
+  person and the App can reach. It expires after eight hours, and the
+  refresh token stored with it renews it before use. It is used only as that
   person, for advisory reads and writes and for listing an organization's
-  owners and team members (`user_token.ex`, `advisories.ex`,
-  `organizations.ex`).
+  owners and team members (`user_token.ex`, `refresh_access_token.ex`,
+  `advisories.ex`, `organizations.ex`).
 
 **What the app does to its host (side-effect inventory):**
 
 - **Opens outbound network connections** — yes: to MITRE (`cveawg`,
   `cwe.mitre.org`, `capec.mitre.org`), to `raw.githubusercontent.com` for the
   OTP versions table, to GitHub and hex.pm as OAuth IdPs and for handle
-  lookups, GitHub's carrying the OAuth app's client credentials, to GitHub
+  lookups, GitHub's carrying the GitHub App's client credentials, to GitHub
   for organization owner and team member listings and repository
   permission reads as the acting user, advisory reads, as the acting user
   or anonymously, and writes as the acting user (`client.ex`), to

@@ -75,12 +75,16 @@ defmodule Varsel.MixProject do
       {:ash, "~> 3.0"},
       {:ash_admin, "~> 1.0", runtime: Mix.env() in [:dev, :test]},
       {:ash_ai, "~> 1.0"},
-      # override: ash_ai pins ash_authentication ~> 4.8 but only touches it in
-      # dev-time generators; the OAuth2 server package needs 5.0.
-      {:ash_authentication, "~> 5.0-rc", override: true},
+      # The ref is 5.0.0-rc.14 plus team-alembic/ash_authentication#1241, which
+      # writes AshCloak-encrypted identity tokens. Move back to the hex release
+      # that contains it. override: ash_ai, ash_authentication_phoenix and
+      # ash_authentication_oauth2_server require the hex package, and a git
+      # dependency satisfies none of them.
+      {:ash_authentication,
+       github: "maennchen/ash_authentication", ref: "9510533dddc960194ec5261566a1deea3c010529", override: true},
       {:ash_authentication_oauth2_server, "~> 0.4.0"},
       {:ash_authentication_phoenix, "~> 3.0-rc"},
-      {:ash_cloak, "~> 0.2"},
+      {:ash_cloak, "~> 0.4"},
       {:ash_credo, "~> 0.17", only: [:dev, :test], runtime: false},
       {:ash_graphql, "~> 1.10"},
       {:ash_oban, "~> 0.8"},

@@ -75,6 +75,7 @@ defmodule Varsel.Accounts do
 
     resource Varsel.Accounts.UserIdentity do
       define :unlink_provider, action: :destroy
+      define :refresh_github_access_token, action: :refresh_access_token
     end
 
     resource Varsel.Accounts.OauthClient

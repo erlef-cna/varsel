@@ -27,6 +27,13 @@ config :ash,
   custom_expressions: [Varsel.Expr.Coalesce, Varsel.Expr.Md5],
   default_string_length_count: :codepoints
 
+# The OAuth sign-in and the GitHub token refresh
+# (`Varsel.Accounts.UserIdentity.Changes.RefreshAccessToken`) both reach the
+# provider through this Assent adapter.
+config :ash_authentication,
+       :http_adapter,
+       {Assent.HTTPAdapter.Finch, supervisor: AshAuthentication.Finch}
+
 config :ash_graphql, authorize_update_destroy_with_error?: true, json_type: :json
 
 config :ash_oban, pro?: false

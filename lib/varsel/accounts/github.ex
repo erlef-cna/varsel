@@ -6,7 +6,7 @@ defmodule Varsel.Accounts.GitHub do
   @moduledoc """
   Thin client for checking that a GitHub account exists.
 
-  Asks with the OAuth app's client credentials from `config :varsel, :github`
+  Asks with the GitHub App's client credentials from `config :varsel, :github`
   when they are set: GitHub shows a profile's public email address to
   authenticated requests only, and grants them the authenticated rate limit.
   Without them the lookup confirms the login and never returns an address.

@@ -50,7 +50,7 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHub do
 
     opts = Ash.Context.to_opts(context)
 
-    with {:ok, token} <- UserToken.fetch(context.actor),
+    with {:ok, token} <- token(context.actor),
          {:ok, case_record} <-
            Cases.get_case(changeset.data.id, Keyword.put(opts, :load, Export.load())),
          {:ok, admin?} <- admin?(owner, repo, token),
@@ -60,9 +60,6 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHub do
       |> Changeset.put_context(:github_advisory, advisory)
       |> Changeset.put_context(:github_report, kind)
     else
-      {:error, :no_github_identity = reason} ->
-        Changeset.add_error(changeset, field: :repo, message: UserToken.message(reason))
-
       {:error, message} when is_binary(message) ->
         Changeset.add_error(changeset, field: :repo, message: message)
 
@@ -81,6 +78,13 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHub do
       type: :create,
       on_no_match: {:create, :record}
     )
+  end
+
+  defp token(actor) do
+    case UserToken.fetch(actor) do
+      {:ok, token} -> {:ok, token}
+      {:error, reason} -> {:error, UserToken.message(reason)}
+    end
   end
 
   defp admin?(owner, repo, token) do
