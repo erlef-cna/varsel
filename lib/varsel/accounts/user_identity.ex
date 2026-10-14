@@ -85,7 +85,10 @@ defmodule Varsel.Accounts.UserIdentity do
   end
 
   actions do
-    defaults [:read]
+    read :read do
+      description "Lists the provider identities linked to accounts."
+      primary? true
+    end
 
     # Mirrors the action AshAuthentication would generate (see
     # `AshAuthentication.UserIdentity.Transformer`), with the provider's email
