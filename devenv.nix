@@ -81,7 +81,11 @@ in
   git-hooks.hooks = {
     shellcheck.enable = true;
     credo.enable = true;
-    detect-private-keys.enable = true;
+    # config/test.exs holds the throwaway key that signs the GitHub App JWT in tests.
+    detect-private-keys = {
+      enable = true;
+      excludes = [ "config/test.exs" ];
+    };
     dialyzer.enable = true;
     reuse.enable = true;
     zizmor.enable = true;

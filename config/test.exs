@@ -71,7 +71,42 @@ config :varsel,
     repo_verify_origin: false
   },
   github_api: [plug: {Req.Test, Varsel.GitHub.Client}],
-  github: [client_id: "Ov23liTestApp", client_secret: "test-secret"],
+  github: [
+    client_id: "Ov23liTestApp",
+    client_secret: "test-secret",
+    app_id: "424242",
+    # A throwaway key that signs the App's JWT in tests only.
+    private_key: """
+    -----BEGIN RSA PRIVATE KEY-----
+    MIIEpAIBAAKCAQEAt0H8ihX6iifyQJBJXim8DMJqhPbeTNfZz18DbWZQsg1GnQTs
+    tNZAZGqA7UsFGG87CWEdCXGWFSq8XOncynE+5HV4DN8GDfHndNyqVedh8U2wj5qo
+    FTWZ++nfJVDJbK4SPeVHSsFTGTrm6BLglUCAXtnRO9TXzNk3RhNQQZgI+LvqV9Cw
+    Neirf/qTGMllqI+JROjdQ0wOlmvEWXytq3L/3+7uv6hdIvGgtLWOZGgJBSF0KIpf
+    EJfpfG5yUuKO5LygxfO857fOfRgZZxJf6jm6qFIBznAfNuYFDabpBz7EzHWChXf3
+    tu2UHeEBWw9k2TBXlyvcFZ/y5jKYfO2O/AH2CwIDAQABAoIBAQC121nNfnoeV/3j
+    bEwika/3yYcDZCi+gQW48ETqb7pstxf4AkcUPfmwrLA8y1HHKbqgWCsEkB+r6bj7
+    S2i7zR3ogVodC8VqWUCji8fNb8yWNc6c85ERWxvwDepPkZgRrbyUh87ztF3Oj9FN
+    RE5yTowVlHo6scFlm7lqZQgjz8g3bDV+V9AAVP9G41rSZUv/L1Enmlg0rgSiM869
+    SBZbyyj7mNJ6fpAS7YCZYMIeqTAaeCYDTWbIzW00nRfUMJ3U+HjBFUPPbfRwrPgR
+    4zondisMfTWz+TnbMouQQdeS3EswqkZvf3wp/DodoKvGm/RgOIr+MkTlyhHQK9bj
+    0Etnro/BAoGBAON7B8mbKJkqBXWjpv55xefEflZ9ZYtYG81kj2R2BLLcL0rc0iSS
+    9V9o+/6UH0uBg3TWTySpMNy82R9CMd27m90W9sMeE7XsbblvX+yYugK8sYNP438O
+    HQaywNFNJTJeGC+qLHaFmqd8+eXZ9cSKb7tOjQ/vAKa2ahXj9qGPf6BTAoGBAM47
+    oNYCMRt/+IpwPLgwhbR+l3a7jBFHgXq5Mctfx35xiEGjobt6MBsKIBSMHEfqRj90
+    CdfcvACp8MEygkyG/cmlE5kUD67Tg4dZwq77Vx4cj8+4AetrWpv//yTS+ktKdbtt
+    w6g0C9m2Gbj1WPD8JlvL7f+/Vpqas67bwjM423xpAoGASl+oLScYf/M4M70c1SiV
+    JvCcacS31XYqKN4O78aSRLQulihaYHDX3qjhctuU28ftZd7Ho3HZsuHfjxPCX/99
+    tyxR43tK8HjrauxaDW3lqw1scEVHWPwRS2ZYGlZBqhUPjU3zGZEW/lmjDp5Tdz3X
+    yAKnpiT7LoaHar7MnQfgr1cCgYEAlZSuLUrdr2J8NHz/rWCUObvvw9B34TiJ8ydL
+    tIS9vzo9Z851SfNv3MzVQ9Hz2T1UwkU5tnWFbr3Tv20REMyAWrb+pfLlBRqotY0n
+    JZ9rKo3wyOpfig8NY0SkHGNh4yYYil8soF1PkxL/SSW64t8gO0iIUQzIlc5LMTJ3
+    gotktrECgYBarJctcJDcp7sTU0gSnKFaoYkMaMX8A+X/lmaep0ZwEowsl+D0AcD7
+    xkFoJOfnfubi4GkGWP/AMWuU/s75kTXbImiyNgcn/S9J66ffLp96GZxmmBh21QP1
+    +LdAlcHpBG7F7ZS0YuUqMZJd9EyfRQ0fxZg2QpQPrg9kw7fBqZPVkw==
+    -----END RSA PRIVATE KEY-----
+    """,
+    home_org: "erlef-cna"
+  ],
   hex_api: [plug: {Req.Test, Varsel.HexPm}],
   # hexpm's dev fixture key, which its test config pins under this kid.
   hex_signing_key:

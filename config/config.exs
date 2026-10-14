@@ -239,6 +239,7 @@ config :varsel,
     Varsel.CVE,
     Varsel.Cases,
     Varsel.Accounts,
+    Varsel.GitHub,
     Varsel.Notifications
   ]
 

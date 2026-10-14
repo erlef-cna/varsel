@@ -190,6 +190,7 @@ jobs:
           OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
           OAUTH_HEX_CLIENT_SECRET: ${{ secrets.OAUTH_HEX_CLIENT_SECRET }}
           HEX_SIGNING_KEY: ${{ secrets.HEX_SIGNING_KEY }}
+          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           TOKEN_SIGNING_SECRET: ${{ secrets.TOKEN_SIGNING_SECRET }}
@@ -207,6 +208,7 @@ jobs:
           add GITHUB_CLIENT_SECRET "${OAUTH_GITHUB_CLIENT_SECRET}"
           add HEX_CLIENT_SECRET "${OAUTH_HEX_CLIENT_SECRET}"
           add HEX_SIGNING_KEY "${HEX_SIGNING_KEY}"
+          add GITHUB_APP_PRIVATE_KEY "${GH_APP_PRIVATE_KEY}"
           add SMTP_USER "${SMTP_USER}"
           add SMTP_PASSWORD "${SMTP_PASSWORD}"
           if [ "${#pairs[@]}" -gt 0 ]; then
@@ -220,6 +222,8 @@ jobs:
           MITRE_CVE_API_ORG: ${{ vars.MITRE_CVE_API_ORG }}
           MITRE_CVE_API_USER: ${{ vars.MITRE_CVE_API_USER }}
           OAUTH_GITHUB_CLIENT_ID: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}
+          GH_APP_ID: ${{ vars.GH_APP_ID }}
+          GH_APP_HOME_ORG: ${{ vars.GH_APP_HOME_ORG }}
           OAUTH_HEX_CLIENT_ID: ${{ vars.OAUTH_HEX_CLIENT_ID }}
           OAUTH_HEX_BASE_URL: ${{ vars.OAUTH_HEX_BASE_URL }}
           HEX_INTAKE_JWKS: ${{ vars.HEX_INTAKE_JWKS }}
@@ -237,6 +241,8 @@ jobs:
           add MITRE_CVE_API_ORG "${MITRE_CVE_API_ORG}"
           add MITRE_CVE_API_USER "${MITRE_CVE_API_USER}"
           add GITHUB_CLIENT_ID "${OAUTH_GITHUB_CLIENT_ID}"
+          add GITHUB_APP_ID "${GH_APP_ID}"
+          add GITHUB_APP_HOME_ORG "${GH_APP_HOME_ORG}"
           add HEX_CLIENT_ID "${OAUTH_HEX_CLIENT_ID}"
           add HEX_BASE_URL "${OAUTH_HEX_BASE_URL}"
           add HEX_INTAKE_JWKS "${HEX_INTAKE_JWKS}"

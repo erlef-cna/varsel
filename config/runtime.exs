@@ -89,8 +89,19 @@ if config_env() != :test do
   # not among them — `Varsel.Secrets` builds it from the endpoint.
   #
   # The GitHub App's client credentials also authenticate Varsel's own
-  # profile lookups (`Varsel.Accounts.GitHub`).
-  config :varsel, :github, oauth_provider_config.("GITHUB", [])
+  # profile lookups (`Varsel.Accounts.GitHub`). The App also acts as itself
+  # with its id and private key. The key signs the JWT that finds the App's
+  # installations and mints their tokens. The installation on the home
+  # organization acts for requests about no particular repository. Without
+  # the key the App is inert, and without a home organization nothing acts
+  # for those requests. Production requires neither.
+  config :varsel,
+         :github,
+         oauth_provider_config.("GITHUB",
+           app_id: {"APP_ID", nil},
+           private_key: {"APP_PRIVATE_KEY", nil},
+           home_org: {"APP_HOME_ORG", nil}
+         )
 
   # Hex.pm is self-hostable, so the base URL can be pointed at a local hexpm
   # for development; it defaults to the public one.

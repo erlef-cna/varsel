@@ -421,13 +421,17 @@ claims:
   Cloak/AES-GCM vault (`CLOAK_KEY`, `runtime.exs`, `user_identity.ex`).
   `HEX_SIGNING_KEY` is the private key that signs Varsel's
   own requests to hex.pm and is held by the environment only
-  (`service_token.ex`). A user's GitHub token is the one their sign-in
-  stored. It is a GitHub App user token, so it reaches only what both the
-  person and the App can reach. It expires after eight hours, and the
-  refresh token stored with it renews it before use. It is used only as that
-  person, for advisory reads and writes and for listing an organization's
-  owners and team members (`user_token.ex`, `refresh_access_token.ex`,
-  `advisories.ex`, `organizations.ex`).
+  (`service_token.ex`). `GITHUB_APP_PRIVATE_KEY` is the GitHub App's
+  private key. It is held by the environment only and signs the App's JWT.
+  The installation tokens that the JWT mints are cached in memory on each
+  node, and only a POC or the home organization's public-read path may get
+  one. Nothing uses them yet (`app.ex`, `installation.ex`). A user's GitHub
+  token is the one their sign-in stored. It is a GitHub App user token, so it
+  reaches only what both the person and the App can reach. It expires after
+  eight hours, and the refresh token stored with it renews it before use. It is
+  used only as that person, for advisory reads and writes and for listing an
+  organization's owners and team members (`user_token.ex`,
+  `refresh_access_token.ex`, `advisories.ex`, `organizations.ex`).
 
 **What the app does to its host (side-effect inventory):**
 
@@ -437,7 +441,10 @@ claims:
   lookups, GitHub's carrying the GitHub App's client credentials, to GitHub
   for organization owner and team member listings and repository
   permission reads as the acting user, advisory reads, as the acting user
-  or anonymously, and writes as the acting user (`client.ex`), to
+  or anonymously, and writes as the acting user, to GitHub with the App's
+  JWT to find its installations and mint installation tokens, and with the
+  acting user's token to list the installations it reaches (`client.ex`,
+  `app.ex`), to
   `repo.hex.pm` for the package registry, to
   the SMTP relay,
   **to the public https URL an anonymous caller hands `/oauth/authorize` as
