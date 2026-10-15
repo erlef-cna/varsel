@@ -26,7 +26,6 @@ defmodule Varsel.Accounts.UserIdentity do
   alias Ash.Type.CiString
   alias Varsel.Accounts.Signals
   alias Varsel.Accounts.User
-  alias Varsel.Accounts.UserIdentity.Changes.ClaimCaseCredits
   alias Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants
   alias Varsel.Accounts.UserIdentity.Changes.ReconcileUserNotificationEmail
   alias Varsel.Accounts.UserIdentity.Changes.RefreshAccessToken
@@ -129,7 +128,6 @@ defmodule Varsel.Accounts.UserIdentity do
       change AshAuthentication.UserIdentity.UpsertIdentityChange
       change Varsel.Accounts.UserIdentity.Changes.ApplyProviderFields
       change ReconcileUserNotificationEmail
-      change ClaimCaseCredits
       change ClaimReportParticipants
 
       emit Signals, :github_identity_linked, where: [attribute_equals(:strategy, "github")]

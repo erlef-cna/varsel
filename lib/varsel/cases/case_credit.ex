@@ -115,6 +115,8 @@ defmodule Varsel.Cases.CaseCredit do
                    ^arg(:username)
                  )
              )
+
+      pagination keyset?: true, required?: false
     end
 
     destroy :remove do
@@ -160,10 +162,12 @@ defmodule Varsel.Cases.CaseCredit do
     # Linking an account changes nothing the record publishes, so a sign-in
     # claims a credit whatever state its case is in.
     bypass action(:claim) do
+      authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
       authorize_if actor_attribute_equals(:system, :identity_claim)
     end
 
     policy action_type(:read) do
+      authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
@@ -247,6 +251,15 @@ defmodule Varsel.Cases.CaseCredit do
       allow_nil? true
       public? true
       attribute_writable? true
+    end
+  end
+
+  signals_in do
+    from Varsel.Accounts.Signals do
+      on :identity_linked, :claim,
+        read_action: :for_identity,
+        args: [:strategy, :username],
+        inputs: [user_id: :user_id]
     end
   end
 end
