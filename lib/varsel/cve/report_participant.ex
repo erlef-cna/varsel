@@ -28,6 +28,7 @@ defmodule Varsel.CVE.ReportParticipant do
 
   alias Varsel.Accounts.User
   alias Varsel.Cases.CaseInvite.Strategy
+  alias Varsel.CVE.ReportParticipant.Changes.ClaimForIdentity
   alias Varsel.CVE.ReportParticipant.Role
   alias Varsel.CVE.Signals
   alias Varsel.CVE.VulnerabilityReport
@@ -88,6 +89,14 @@ defmodule Varsel.CVE.ReportParticipant do
       filter expr(report_id == ^arg(:report_id))
 
       pagination keyset?: true, required?: false
+    end
+
+    action :claim_for_identity do
+      description "Internal: points the participants naming a freshly vouched-for handle at the account."
+
+      argument :signal, Varsel.Accounts.Signals.IdentityLinked, allow_nil?: false
+
+      run ClaimForIdentity
     end
 
     update :erase_hex_person do
@@ -158,8 +167,13 @@ defmodule Varsel.CVE.ReportParticipant do
       authorize_if signal_in(Signals, :report_resolved)
     end
 
+    policy action(:claim_for_identity) do
+      authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
+    end
+
     policy action([:read, :for_identity, :link_user, :spend]) do
       authorize_if signal_in(Signals, :report_resolved)
+      authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
     end
@@ -232,6 +246,10 @@ defmodule Varsel.CVE.ReportParticipant do
   signals_in do
     from Signals do
       on :report_resolved, :spend, read_action: :for_report, args: [:report_id]
+    end
+
+    from Varsel.Accounts.Signals do
+      on :identity_linked, :claim_for_identity
     end
   end
 
