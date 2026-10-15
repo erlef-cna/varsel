@@ -8,10 +8,12 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Push do
   actor, before the link's `:push` update, and leaves what GitHub answered in
   the changeset context for `StoreAdvisory`.
 
-  The write carries the actor's own GitHub token. GitHub attributes the
-  change to them and decides whether they may make it. A person credited on
-  the case without a linked GitHub account cannot be stated on the advisory
-  and comes back on the link's `skipped_credits` metadata.
+  The write carries the credential `Varsel.GitHub.Credentials` gives the
+  actor for the advisory's repository. With the actor's own token GitHub
+  attributes the change to them and decides whether they may make it. With
+  the installation token GitHub attributes it to the App. A person credited
+  on the case without a linked GitHub account cannot be stated on the
+  advisory and comes back on the link's `skipped_credits` metadata.
   """
 
   use Ash.Resource.Change
@@ -21,7 +23,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Push do
   alias Varsel.Cases.GitHubAdvisory.Export
   alias Varsel.Cases.GitHubAdvisory.Refusal
   alias Varsel.GitHub.Advisories
-  alias Varsel.GitHub.UserToken
+  alias Varsel.GitHub.Credentials
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
@@ -42,11 +44,10 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Push do
     opts = Ash.Context.to_opts(context)
 
     with {:ok, {owner, repo}} <- repository(link),
-         {:ok, token} <- token(context.actor),
          {:ok, case_record} <-
            Cases.get_case(link.case_id, Keyword.put(opts, :load, Export.load())),
          %{body: body, skipped_credits: skipped} = Export.body(case_record, fields, link.advisory),
-         {:ok, advisory} <- update(owner, repo, link.ghsa_id, body, token) do
+         {:ok, advisory} <- update(context.actor, owner, repo, link.ghsa_id, body) do
       changeset
       |> Changeset.put_context(:github_advisory, advisory)
       |> Changeset.put_context(:skipped_credits, skipped)
@@ -63,19 +64,20 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Push do
 
   defp repository(_global_entry), do: {:error, "cannot be pushed: the advisory is a global database entry"}
 
-  defp token(actor) do
-    case UserToken.fetch(actor) do
-      {:ok, token} -> {:ok, token}
-      {:error, reason} -> {:error, UserToken.message(reason)}
-    end
-  end
-
-  defp update(owner, repo, ghsa_id, body, token) do
-    case Advisories.update(owner, repo, ghsa_id, body, token: token) do
-      {:ok, advisory} ->
+  defp update(actor, owner, repo, ghsa_id, body) do
+    case Credentials.run(
+           actor,
+           owner,
+           repo,
+           &Advisories.update(owner, repo, ghsa_id, body, token: &1.token)
+         ) do
+      {_kind, {:ok, advisory}} ->
         {:ok, advisory}
 
-      answer ->
+      {:no_credential, reason} ->
+        {:error, Credentials.message(reason)}
+
+      {_kind, answer} ->
         {:error, Refusal.message(answer, "was refused: GitHub shows you no such advisory")}
     end
   end

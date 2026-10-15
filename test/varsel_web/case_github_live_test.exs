@@ -10,10 +10,14 @@ defmodule VarselWeb.CaseGitHubLiveTest do
 
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Cases
+  alias Varsel.Cases.GitHubAdvisoryLink
   alias Varsel.Fixtures
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   @hex_url "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+  @acme_lib 7
+  @installation "Bearer ghs_acme_lib"
 
   defp log_in(conn, user) do
     conn
@@ -43,8 +47,35 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     end)
   end
 
+  # A link to an advisory on acme/other_lib, which no installation of the App
+  # covers, so linking it through GitHub is not possible.
+  defp seed_uninstalled_link!(case_record) do
+    advisory = Map.put(hex_advisory(), "ghsa_id", "GHSA-4v2x-7mq8-w3rf")
+
+    Ash.Seed.seed!(GitHubAdvisoryLink, %{
+      case_id: case_record.id,
+      ghsa_id: advisory["ghsa_id"],
+      owner: "acme",
+      repo: "other_lib",
+      html_url: "https://github.com/acme/other_lib/security/advisories/#{advisory["ghsa_id"]}",
+      state: :draft,
+      title: advisory["summary"],
+      advisory: advisory,
+      fetched_at: DateTime.truncate(DateTime.utc_now(), :second)
+    })
+  end
+
   setup %{conn: conn} do
+    GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
+    GitHubApp.seed_installation(
+      %{id: @acme_lib, account: "acme", repository_selection: :selected},
+      repositories: ["acme/acme_lib"],
+      token: "ghs_acme_lib"
+    )
+
     poc = Fixtures.register_user("advisory_live_poc", :poc)
+    GitHubApp.seed_user_installations(poc, [@acme_lib])
     GitHubApi.stub_advisory(hex_advisory())
 
     %{
@@ -109,6 +140,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     GitHubApi.stub(&Req.Test.json(&1, Map.put(hex_advisory(), "summary", "Header injection, revised")))
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+    render_async(lv)
 
     lv |> element("#github-advisory button", "Refresh") |> render_click()
     render_async(lv)
@@ -177,6 +209,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     stub_patch(Map.put(hex_advisory(), "summary", "Header injection in acme_lib, revised"))
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+    render_async(lv)
 
     assert has_element?(lv, "#advisory-diff button", "Push all")
 
@@ -210,6 +243,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     stub_patch(hex_advisory())
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+    render_async(lv)
 
     lv |> element("#diff-credits button", "Push") |> render_click()
     render_async(lv)
@@ -237,6 +271,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     end)
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+    render_async(lv)
 
     lv |> element("#diff-title button", "Push") |> render_click()
     render_async(lv)
@@ -267,6 +302,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     case: case_record
   } do
     collaborator = Fixtures.register_user("advisory_live_collaborator")
+    GitHubApp.seed_user_installations(collaborator, [@acme_lib])
     assign!(case_record, collaborator, poc)
     Cases.edit_case!(case_record, %{title: "Working title"}, actor: poc)
 
@@ -278,6 +314,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     link!(case_record, poc)
 
     {:ok, lv, _html} = conn |> log_in(collaborator) |> live(~p"/cases/#{case_record.id}/github")
+    render_async(lv)
 
     assert has_element?(lv, "#github-advisory", "GHSA-2cfg-hjmp-qrvw")
     assert has_element?(lv, "#github-advisory button", "Refresh")
@@ -286,7 +323,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     refute has_element?(lv, "#advisory-diff button")
   end
 
-  test "a viewer without a GitHub identity is told, and neither refreshes nor pushes", %{
+  test "a POC without a GitHub identity acts as the App where it is installed", %{
     conn: conn,
     poc: poc,
     case: case_record
@@ -303,18 +340,22 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     link!(case_record, poc)
 
     {:ok, lv, _html} = conn |> log_in(hex_poc) |> live(~p"/cases/#{case_record.id}/github")
-
-    assert has_element?(lv, "#github-advisory")
-    refute has_element?(lv, "#github-advisory button", "Refresh")
-    assert has_element?(lv, "#diff-title button", "Pull")
-    refute has_element?(lv, "#diff-title button", "Push")
-    refute has_element?(lv, "#advisory-diff button", "Push all")
-
-    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+    render_async(lv)
 
     refute has_element?(lv, "#github-identity-notice")
     assert has_element?(lv, "#github-advisory button", "Refresh")
+    assert has_element?(lv, "#diff-title button", "Pull")
     assert has_element?(lv, "#diff-title button", "Push")
+
+    uninstalled = Fixtures.open_case(poc, %{title: "Header injection in other_lib"})
+    seed_uninstalled_link!(uninstalled)
+
+    {:ok, lv, _html} = conn |> log_in(hex_poc) |> live(~p"/cases/#{uninstalled.id}/github")
+    render_async(lv)
+
+    assert has_element?(lv, "#github-identity-notice")
+    refute has_element?(lv, "#github-advisory button", "Refresh")
+    refute has_element?(lv, "#diff-title button", "Push")
   end
 
   defp stub_reporting(enabled?) do
@@ -458,7 +499,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
 
     render_async(lv)
 
-    assert has_element?(lv, "#flash-info", "Opened a draft advisory on GitHub in your name.")
+    assert has_element?(lv, "#flash-info", "Opened a draft advisory on GitHub.")
     assert has_element?(lv, "#github-advisory", "GHSA-2cfg-hjmp-qrvw")
   end
 
@@ -532,7 +573,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     refute has_element?(lv, "#report-advisory")
   end
 
-  test "a viewer without a GitHub identity is offered no report", %{
+  test "a POC without a GitHub identity reports as the App where it is installed", %{
     conn: conn,
     poc: poc,
     case: case_record
@@ -540,13 +581,26 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     hex_poc = Fixtures.sign_in_with_hex("advisory_live_hex", "advisory_live_hex")
     hex_poc = Ash.update!(hex_poc, %{role: :poc}, action: :set_role, authorize?: false)
     Fixtures.add_affected_package(poc, case_record)
-    GitHubApi.stub(fn _conn -> flunk("GitHub was asked about a repository") end)
+    stub_reporting(true)
 
     {:ok, lv, _html} = conn |> log_in(hex_poc) |> live(~p"/cases/#{case_record.id}/github")
     render_async(lv)
 
     assert has_element?(lv, "#github-identity-notice")
-    refute has_element?(lv, "#report-advisory")
+    assert has_element?(lv, "#report-advisory button", "Open a draft advisory")
+    assert has_element?(lv, "#report-as-app")
+
+    uninstalled = Fixtures.open_case(poc, %{title: "Header injection in other_lib"})
+
+    Fixtures.add_affected_package(poc, uninstalled, %{
+      repo_url: "https://github.com/acme/other_lib"
+    })
+
+    {:ok, lv, _html} = conn |> log_in(hex_poc) |> live(~p"/cases/#{uninstalled.id}/github")
+    render_async(lv)
+
+    assert has_element?(lv, "#report-reach-notice", "This cannot be done from here")
+    assert has_element?(lv, "#report-advisory button[disabled]")
   end
 
   test "who sees the advisory is resolved to people, marked against the case", %{
@@ -606,6 +660,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     case: case_record
   } do
     collaborator = Fixtures.register_user("advisory_live_collaborator")
+    GitHubApp.seed_user_installations(collaborator, [@acme_lib])
     assign!(case_record, collaborator, poc)
     stub_audience(advisory_with_audience())
     link!(case_record, poc)
@@ -624,12 +679,14 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     case: case_record
   } do
     supporter = Fixtures.register_user("advisory_live_supporter", :supporter)
+    GitHubApp.seed_user_installations(supporter, [@acme_lib])
     assign!(case_record, supporter, poc)
     Cases.edit_case!(case_record, %{title: "Working title"}, actor: poc)
     link!(case_record, poc)
     approve!(Cases.get_case!(case_record.id, actor: poc), poc)
 
     {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/github")
+    render_async(lv)
 
     assert has_element?(lv, "#github-advisory button", "Refresh")
     refute has_element?(lv, "#github-advisory button", "Unlink")
@@ -667,5 +724,176 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{other.id}/github")
 
     assert has_element?(lv, "#link-advisory-form")
+  end
+
+  describe "what the viewer's GitHub login reaches" do
+    setup %{poc: poc, case: case_record} do
+      Cases.edit_case!(case_record, %{title: "Header injection in acme_lib, revised"}, actor: poc)
+      link!(case_record, poc)
+      :ok
+    end
+
+    test "a supporter whose login does not reach the repository is told and offered neither", %{
+      conn: conn,
+      poc: poc,
+      case: case_record
+    } do
+      supporter = Fixtures.register_user("advisory_live_unreached", :supporter)
+      assign!(case_record, supporter, poc)
+      GitHubApi.stub(fn _conn -> flunk("GitHub was asked about a repository") end)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/github")
+      render_async(lv)
+
+      assert has_element?(
+               lv,
+               "#github-reach-notice",
+               "Your GitHub login cannot act on this repository."
+             )
+
+      assert has_element?(
+               lv,
+               "#github-reach-notice a[href='/settings/account']",
+               "Account settings"
+             )
+
+      assert has_element?(lv, "#github-reach-notice", "show where the app can act for you")
+      refute has_element?(lv, "#github-identity-notice")
+      refute has_element?(lv, "#github-advisory button", "Refresh")
+      refute has_element?(lv, "#diff-title button", "Push")
+    end
+
+    test "a GitHub access that does not renew is reported, and offers neither", %{
+      conn: conn,
+      poc: poc,
+      case: case_record
+    } do
+      supporter =
+        "advisory_live_expired"
+        |> Fixtures.sign_in_with_github(System.unique_integer([:positive]), %{
+          "access_token" => "ghu_expiring",
+          "expires_in" => 60
+        })
+        |> Ash.update!(%{role: :supporter}, action: :set_role, authorize?: false)
+
+      GitHubApp.seed_user_installations(supporter, [@acme_lib])
+      assign!(case_record, supporter, poc)
+      GitHubApi.stub(fn _conn -> flunk("GitHub was asked about a repository") end)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/github")
+      render_async(lv)
+
+      assert has_element?(
+               lv,
+               "#github-reach-notice",
+               "This page needs you to sign in with GitHub again."
+             )
+
+      refute has_element?(lv, "#github-advisory button", "Refresh")
+      refute has_element?(lv, "#diff-title button", "Push")
+    end
+
+    test "a POC is told when the App is not on the repository", %{conn: conn, poc: poc} do
+      uninstalled = Fixtures.open_case(poc, %{title: "Header injection in other_lib"})
+      seed_uninstalled_link!(uninstalled)
+      GitHubApi.stub(fn _conn -> flunk("GitHub was asked about a repository") end)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{uninstalled.id}/github")
+      render_async(lv)
+
+      assert has_element?(lv, "#github-reach-notice", "This cannot be done from here")
+      refute has_element?(lv, "#github-advisory button", "Refresh")
+      refute has_element?(lv, "#diff-title button", "Push")
+    end
+
+    test "a POC whose login does not reach the repository pushes as the App", %{
+      conn: conn,
+      case: case_record
+    } do
+      poc = Fixtures.register_user("advisory_live_unreached_poc", :poc)
+      test_pid = self()
+
+      GitHubApi.stub(fn conn ->
+        send(test_pid, {:github, conn.method, Plug.Conn.get_req_header(conn, "authorization")})
+
+        Req.Test.json(
+          conn,
+          Map.put(hex_advisory(), "summary", "Header injection in acme_lib, revised")
+        )
+      end)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+      render_async(lv)
+
+      refute has_element?(lv, "#github-reach-notice")
+      lv |> element("#diff-title button", "Push") |> render_click()
+      render_async(lv)
+
+      assert_received {:github, "PATCH", [@installation]}
+      assert has_element?(lv, "#flash-info", "Pushed to the advisory.")
+      assert has_element?(lv, "#diff-title", "same")
+    end
+  end
+
+  test "a POC whose login does not reach the repository opens a draft as the App", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    unreached_poc = Fixtures.register_user("advisory_live_report_unreached_poc", :poc)
+    Fixtures.add_affected_package(poc, case_record)
+    test_pid = self()
+
+    GitHubApi.stub(fn conn ->
+      case conn.path_info do
+        ["repos", "acme", "acme_lib", "private-vulnerability-reporting"] ->
+          Req.Test.json(conn, %{"enabled" => false})
+
+        ["repos", "acme", "acme_lib", "security-advisories"] ->
+          send(test_pid, {:github, :draft, Plug.Conn.get_req_header(conn, "authorization")})
+          conn |> Plug.Conn.put_status(201) |> Req.Test.json(hex_advisory())
+      end
+    end)
+
+    {:ok, lv, _html} = conn |> log_in(unreached_poc) |> live(~p"/cases/#{case_record.id}/github")
+    render_async(lv)
+
+    assert has_element?(lv, "#report-as-app")
+    refute has_element?(lv, "#reporting-disabled")
+
+    lv
+    |> form("#report-advisory-form", %{
+      "repository" => "acme/acme_lib",
+      "report" => %{"description" => "For the maintainers."}
+    })
+    |> render_submit()
+
+    render_async(lv)
+
+    assert_received {:github, :draft, [@installation]}
+    assert has_element?(lv, "#flash-info", "Opened a draft advisory on GitHub.")
+    assert has_element?(lv, "#github-advisory", "GHSA-2cfg-hjmp-qrvw")
+  end
+
+  test "a supporter is told a repository their login cannot report to", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    supporter = Fixtures.register_user("advisory_live_report_unreached", :supporter)
+    assign!(case_record, supporter, poc)
+    Fixtures.add_affected_package(poc, case_record)
+    GitHubApi.stub(fn _conn -> flunk("GitHub was asked about a repository") end)
+
+    {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/github")
+    render_async(lv)
+
+    assert has_element?(
+             lv,
+             "#report-reach-notice",
+             "Your GitHub login cannot act on this repository."
+           )
+
+    assert has_element?(lv, "#report-advisory-form button[disabled]", "Report privately")
   end
 end

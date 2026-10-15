@@ -13,6 +13,7 @@ defmodule VarselWeb.McpTest do
   alias Varsel.Cases.GitHubAdvisoryLink
   alias Varsel.CVE.CveRecord
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   @year Date.utc_today().year
   @hex_url "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
@@ -129,7 +130,15 @@ defmodule VarselWeb.McpTest do
   describe "the advisory tools" do
     setup do
       GitHubApi.stub_advisory(hex_advisory())
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
+      GitHubApp.seed_installation(%{id: 7, account: "acme", repository_selection: :selected},
+        repositories: ["acme/acme_lib"],
+        token: "ghs_acme_lib"
+      )
+
       poc = register_user("poc", :poc)
+      GitHubApp.seed_user_installations(poc, [7])
       {_api_key, plaintext} = create_api_key(poc)
 
       %{poc: poc, plaintext: plaintext}
@@ -222,6 +231,7 @@ defmodule VarselWeb.McpTest do
     } do
       case_record = open_case(poc)
       supporter = register_user("supporter", :supporter)
+      GitHubApp.seed_user_installations(supporter, [7])
       {_api_key, plaintext} = create_api_key(supporter)
       GitHubApi.stub_advisory(hex_advisory())
 
@@ -301,6 +311,8 @@ defmodule VarselWeb.McpTest do
   end
 
   test "grant_case_access replies with the case's membership, not its body", %{conn: conn} do
+    GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
     GitHubApi.stub(fn conn ->
       Req.Test.json(conn, %{"login" => "octocat", "email" => "octocat@example.com"})
     end)

@@ -9,8 +9,9 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
 
   A case has one advisory and an advisory one case. The copy is what the
   case's GitHub tab sets the case against (`diff`). It is read again on
-  request, as the person asking, so a draft is visible here exactly when
-  GitHub shows it to them.
+  request, with the credential `Varsel.GitHub.Credentials` gives the person
+  asking, so a draft is visible here exactly when GitHub shows it to that
+  credential.
   """
 
   use Ash.Resource,

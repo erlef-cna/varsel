@@ -8,13 +8,13 @@ defmodule Varsel.GitHub.Advisories do
   advisory or the global database entry, updating one, reporting one
   privately, and the forms a GHSA is pasted in.
 
-  A read runs as the acting user when their token is given. That is what lets
-  GitHub decide whether a draft is theirs to see: a draft they may not see
-  answers 404, the same as an advisory that does not exist. Without a token
-  only published advisories on public repositories answer. Writes always
-  carry the acting user's token: GitHub attributes them to that person and
-  decides whether they may. A token GitHub no longer accepts answers
-  `{:error, :unauthorized}`.
+  A read runs as the holder of the token given, a person or the App. That is
+  what lets GitHub decide whether a draft is theirs to see: a draft they may
+  not see answers 404, the same as an advisory that does not exist. Without
+  a token only published advisories on public repositories answer. Writes
+  always carry a token: GitHub attributes them to its holder and decides
+  whether they may. `Varsel.GitHub.Credentials` decides which token. A token
+  GitHub no longer accepts answers `{:error, :unauthorized}`.
   """
 
   alias Varsel.GitHub.Client
@@ -83,7 +83,7 @@ defmodule Varsel.GitHub.Advisories do
 
   @doc """
   Updates the advisory `ghsa_id` of `owner/repo` with `body`, the fields of
-  GitHub's update request, as the user whose token is given. Answers the
+  GitHub's update request, as the holder of the token given. Answers the
   advisory as it now stands.
   """
   @spec update(String.t(), String.t(), String.t(), map(), token: String.t()) :: result()
@@ -98,8 +98,9 @@ defmodule Varsel.GitHub.Advisories do
   end
 
   @doc """
-  Opens a draft advisory on `owner/repo`, as the user whose token is given,
-  who has to administer the repository. Answers the draft.
+  Opens a draft advisory on `owner/repo` with the token given: one of a
+  person who administers the repository, or the App's installation token on
+  it. Answers the draft.
   """
   @spec create(String.t(), String.t(), map(), token: String.t()) :: result()
   def create(owner, repo, body, opts) when is_binary(owner) and is_binary(repo) and is_map(body) do

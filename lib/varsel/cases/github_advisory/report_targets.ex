@@ -5,19 +5,29 @@
 defmodule Varsel.Cases.GitHubAdvisory.ReportTargets do
   @moduledoc """
   The repositories a case can be reported to on GitHub: those of its
-  affected packages that live on github.com, each with whether it takes
-  private vulnerability reports, asked of GitHub as the person looking.
+  affected packages that live on github.com, each with what the person
+  looking can do there (`Varsel.GitHub.Credentials.reach/3`) and whether it
+  takes private vulnerability reports, asked of GitHub with their
+  credential for it.
   """
 
   alias Varsel.Accounts.User
   alias Varsel.Cases.Case
   alias Varsel.GitHub.Advisories
-  alias Varsel.GitHub.UserToken
+  alias Varsel.GitHub.Credentials
 
   @type repository :: %{owner: String.t(), repo: String.t()}
 
-  @typedoc "A repository and whether it takes private reports, or `:unknown` when GitHub did not say."
-  @type target :: %{owner: String.t(), repo: String.t(), private_reporting: boolean() | :unknown}
+  @typedoc """
+  A repository, what the viewer can do there, and whether it takes private
+  reports, or `:unknown` when GitHub did not say.
+  """
+  @type target :: %{
+          owner: String.t(),
+          repo: String.t(),
+          reach: Credentials.reach(),
+          private_reporting: boolean() | :unknown
+        }
 
   @doc """
   The GitHub repositories of the case's loaded affected packages, in package
@@ -39,16 +49,28 @@ defmodule Varsel.Cases.GitHubAdvisory.ReportTargets do
 
   defp repository(_package), do: []
 
-  @doc "Each of `repositories` with whether it takes private reports, asked of GitHub as `actor`."
+  @doc """
+  Each of `repositories` with what `actor` can do there and whether it
+  takes private reports, asked of GitHub with their credential for it.
+  """
   @spec list([repository()], User.t() | nil) :: [target()]
   def list(repositories, actor) do
-    token = UserToken.available(actor)
-    Enum.map(repositories, &Map.put(&1, :private_reporting, private_reporting(&1, token)))
+    Enum.map(repositories, fn %{owner: owner, repo: repo} = repository ->
+      Map.merge(repository, %{
+        reach: Credentials.reach(actor, owner, repo),
+        private_reporting: private_reporting(repository, actor)
+      })
+    end)
   end
 
-  defp private_reporting(%{owner: owner, repo: repo}, token) do
-    case Advisories.private_reporting_enabled?(owner, repo, token: token) do
-      {:ok, enabled?} -> enabled?
+  defp private_reporting(%{owner: owner, repo: repo}, actor) do
+    case Credentials.run(
+           actor,
+           owner,
+           repo,
+           &Advisories.private_reporting_enabled?(owner, repo, token: &1.token)
+         ) do
+      {_kind, {:ok, enabled?}} -> enabled?
       _unknown -> :unknown
     end
   end

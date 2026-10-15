@@ -425,13 +425,17 @@ claims:
   private key. It is held by the environment only and signs the App's JWT.
   The installation tokens that the JWT mints are stored on their
   installation's row, encrypted with the same Cloak vault. Only a POC or the
-  home organization's public-read path may get one. The installation sync
-  uses a token to list its installation's repositories, and nothing else
-  uses them yet (`app.ex`, `installation.ex`). A user's GitHub
+  home organization's public-read path may get one. A POC's repository
+  request uses its repository's token (§6). The public-read path uses the
+  home organization's token for the global advisory database, handle lookups
+  and the OTP versions table. The installation sync uses a token to list its
+  installation's repositories (`app.ex`, `installation.ex`,
+  `credentials.ex`). A user's GitHub
   token is the one their sign-in stored. It is a GitHub App user token, so it
   reaches only what both the person and the App can reach. It expires after
   eight hours, and the refresh token stored with it renews it before use. It is
-  used only as that person, for advisory reads and writes, for listing an
+  used only as that person, on a repository only when their login reaches the
+  App's installation there, for advisory reads and writes, for listing an
   organization's owners and team members, and for listing the App's
   installations that the person reaches and the repositories of each that
   the person can access. That listing runs as an Oban job
@@ -443,21 +447,26 @@ claims:
 **What the app does to its host (side-effect inventory):**
 
 - **Opens outbound network connections** — yes: to MITRE (`cveawg`,
-  `cwe.mitre.org`, `capec.mitre.org`), to `raw.githubusercontent.com` for the
-  OTP versions table, to GitHub and hex.pm as OAuth IdPs and for handle
-  lookups, GitHub's carrying the GitHub App's client credentials, to GitHub
-  for organization owner and team member listings and repository
-  permission reads as the acting user, advisory reads, as the acting user
-  or anonymously, and writes as the acting user, to GitHub with the App's
-  JWT to list its installations and mint installation tokens, with an
-  installation token to list the repositories its installation covers, and
-  with each GitHub user's own token to list the installations and
-  repositories it reaches (`client.ex`, `app.ex`), to
-  `repo.hex.pm` for the package registry, to
+  `cwe.mitre.org`, `capec.mitre.org`), to GitHub and hex.pm as OAuth IdPs
+  and for handle lookups, to the GitHub API for the OTP versions table,
+  organization owner and team member listings, repository permission reads,
+  advisory reads and writes, and the App's installation syncs (`client.ex`,
+  `app.ex`), to `repo.hex.pm` for the package registry, to
   the SMTP relay,
   **to the public https URL an anonymous caller hands `/oauth/authorize` as
   a CIMD `client_id`** (see §6), and — critically — **to the public https
-  host a case's `repo_url` names** during derivation (see §6).
+  host a case's `repo_url` names** during derivation (see §6). A GitHub API
+  request carries one of three credentials. The App's JWT lists its
+  installations and mints installation tokens. An installation token is
+  that of the home organization for the global advisory database, handle
+  lookups and the OTP versions table, that of a repository for a POC (§6),
+  or that of an installation to list the repositories it covers. A person's
+  own App user token carries everything else, including the listing of the
+  installations and repositories it reaches. Which installation covers a
+  repository, and which logins reach it, come from the synced rows, so a
+  request finds them without asking GitHub. With the App configured nothing goes
+  anonymously. Without it, handle lookups and the OTP versions table do
+  (`credentials.ex`).
 - **Spawns a subprocess** — yes: the `cvelint` binary, run directly with a
   fixed argument list and fed the CVE JSON on its stdin (`cvelint.ex`).
 - **Sends email** — yes, to any user's `notification_email` via SMTP, gated by
@@ -518,8 +527,8 @@ from controlling only its size.
 | `Case.grant_access` / `CaseInvite.invite` | `email` | data | **Yes — POC / assigned supporter only** | One outbound invite email to that address, accepted only when the handle's provider lists no address for the account and refused when it lists a different one. One email per address per case (`resolve_contact.ex`) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
-| `Case.report_to_github` | `owner`, `repo`, `description` | resource name + data | **Yes — POC / assigned supporter only**, on an unlinked case in `:draft` or `:review`, decided before the write (`case.ex`) | `owner` and `repo` become path segments of one `api.github.com` read and one write, encoded; the host is fixed. The read asks whether the caller administers the repository. The write then carries the description and the case's content to that repository's maintainers as a private vulnerability report, or opens a draft advisory there when the caller administers it. Both are made with the caller's own GitHub token (`report_to_github.ex`, `repositories.ex`, `advisories.ex`) |
-| `Case.open_from_github_advisory` / `GitHubAdvisoryLink.link` | `advisory_url` | resource name | **Yes — POC / supporter** (open) or **POC / assigned supporter** (link) (`case.ex`, `github_advisory_link.ex`) | Parsed into the owner, repository and GHSA id of one `api.github.com` read, path-encoded, made with the caller's own GitHub token or anonymously; the host is fixed. The answer is stored whole on the link and compared as data (`fetch.ex`, `advisories.ex`, `store_advisory.ex`). Opening a case from it writes the advisory's prose into the case markdown, which renders through the sanitizing sinks of §6a like prose imported from a CVE record, and its logins into credit handles confirmed at GitHub like hand-entered ones (`import.ex`, `resolve_credited_user.ex`) |
+| `Case.report_to_github` | `owner`, `repo`, `description` | resource name + data | **Yes — POC / assigned supporter only**, on an unlinked case in `:draft` or `:review`, decided before the write (`case.ex`) | `owner` and `repo` become path segments of one `api.github.com` read and one write, encoded; the host is fixed. The read asks whether the caller administers the repository. The write then carries the description and the case's content to that repository's maintainers as a private vulnerability report, or opens a draft advisory there when the caller administers it. Both are made with the caller's own GitHub token, and only when the caller's login reaches the App's installation on the repository, as the synced rows record it. A POC with no GitHub identity, a POC whose login does not reach it, and a POC whose request GitHub answers with 404 or 403 open a draft advisory directly with the App's installation token on that repository (`report_to_github.ex`, `credentials.ex`, `repositories.ex`, `advisories.ex`) |
+| `Case.open_from_github_advisory` / `GitHubAdvisoryLink.link` | `advisory_url` | resource name | **Yes — POC / supporter** (open) or **POC / assigned supporter** (link) (`case.ex`, `github_advisory_link.ex`) | Parsed into the owner, repository and GHSA id of one `api.github.com` read, path-encoded; the host is fixed. A repository advisory is read with the caller's own GitHub token when their login reaches the App's installation on the repository. A POC with no GitHub identity, a POC whose login does not reach it, and a POC whose read GitHub answers with 404 or 403 read it with that installation's token. A global database entry is read with the home organization's installation token (`credentials.ex`). The answer is stored whole on the link and compared as data (`fetch.ex`, `advisories.ex`, `store_advisory.ex`). Opening a case from it writes the advisory's prose into the case markdown, which renders through the sanitizing sinks of §6a like prose imported from a CVE record, and its logins into credit handles confirmed at GitHub like hand-entered ones (`import.ex`, `resolve_credited_user.ex`) |
 | `VersionEvent` | `commit_sha` | data | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
 | `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | data | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
 | `CveValidation.validate*` | `cve_json` | data | **Yes — any authenticated user** | **cvelint subprocess** (piped to stdin; argv, not shell) and **hex.pm lookups** keyed on package names taken from the JSON. No policy authorizer on this resource; the login gate is the control (§4) |
@@ -605,7 +614,7 @@ a trusted integration partner.
 | Notification emails (immediate + digest) | Plain-text mail | Yes — `text_body`, fixed headers, and **content-free**: each carries only the event kind and a link to the authenticated console, never case or report content, since email offers no encryption we can rely on end to end (`emails.ex`) | — |
 | Case invite email | Plain-text mail to a person with no account | Yes — same shape: the provider handle the invite names and a sign-in link, no case content and no inviter (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
-| Case fields → the linked GitHub advisory (`GitHubAdvisoryLink.push`), or a new private report or draft advisory on a repository (`Case.report_to_github`) | GitHub, as the acting user | JSON body of typed fields and the advisory description rendered from the case's own sections as markdown (`export.ex`). Written with the caller's own GitHub token, so GitHub attributes it to them and decides whether they may (`push.ex`, `report_to_github.ex`, `advisories.ex`) | — |
+| Case fields → the linked GitHub advisory (`GitHubAdvisoryLink.push`), or a new private report or draft advisory on a repository (`Case.report_to_github`) | GitHub, as the acting user or as the App | JSON body of typed fields and the advisory description rendered from the case's own sections as markdown (`export.ex`). Written with the caller's own GitHub token, so GitHub attributes it to them and decides whether they may. A POC's write that their own token cannot make, or a write by a POC with no GitHub identity, goes with the App's installation token on that repository and GitHub attributes it to the App (`push.ex`, `report_to_github.ex`, `credentials.ex`, `advisories.ex`) | — |
 
 Every markdown/HTML render sink sanitizes (ammonia allow-list) before `raw/1`,
 so injected script/handlers are stripped at the source. The app-wide

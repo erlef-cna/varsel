@@ -304,8 +304,7 @@ instead of `open_case`. It opens the case, links it to the advisory, and fills i
 advisory states: title, description, CVSS v4 vector, publication date, CWEs, credits by GitHub
 login, and each affected package with its channels. All of that is written directly, with no
 proposal, so say in the summary that the case was opened from the advisory and what it took
-over. The linked advisory renders its own reference (Step 6). A draft advisory is read with
-your own GitHub account.
+over. The linked advisory renders its own reference (Step 6).
 
 For a case that already exists and is not yet linked, `link_github_advisory` links it, then
 `get_case_github_advisory` shows the diff of the case against the advisory, one row per field

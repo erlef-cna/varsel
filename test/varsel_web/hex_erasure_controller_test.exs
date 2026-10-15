@@ -9,6 +9,7 @@ defmodule VarselWeb.HexErasureControllerTest do
   alias Varsel.CVE
   alias Varsel.Fixtures
   alias Varsel.HexPm
+  alias Varsel.Test.GitHubApp
   alias VarselWeb.HexServiceTokenFixture
 
   setup do
@@ -32,6 +33,8 @@ defmodule VarselWeb.HexErasureControllerTest do
           Plug.Conn.send_resp(conn, 404, "{}")
       end
     end)
+
+    GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
 
     Req.Test.stub(Varsel.GitHub.Client, fn conn ->
       Req.Test.json(conn, %{"login" => "gone_on_github", "email" => "gone@example.com"})

@@ -249,7 +249,7 @@ defmodule Varsel.Cases.Case do
       `Varsel.Cases.GitHubAdvisory.Import`.
 
       The advisory is read as the caller, so a draft has to be one they can
-      see on GitHub. A published advisory needs no GitHub account.
+      see on GitHub. A global database entry needs no GitHub account.
       """
 
       accept []

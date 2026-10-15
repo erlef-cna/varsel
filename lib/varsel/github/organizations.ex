@@ -5,9 +5,10 @@
 defmodule Varsel.GitHub.Organizations do
   @moduledoc """
   Who is who in a GitHub organization: its owners and a team's members, by
-  login, as the user whose token is given. GitHub answers for a member of
-  the organization whose token can read the organization's members. A token
-  GitHub no longer accepts answers `{:error, :unauthorized}`.
+  login, as the holder of the token given. GitHub answers to a token that
+  can read the organization's members: a member's own token, or the App's
+  installation token on the organization. A token GitHub no longer accepts
+  answers `{:error, :unauthorized}`.
   """
 
   alias Varsel.GitHub.Client

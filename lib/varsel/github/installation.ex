@@ -283,4 +283,13 @@ defmodule Varsel.GitHub.Installation do
       public? false
     end
   end
+
+  calculations do
+    calculate :reached_by_actor?,
+              :boolean,
+              expr(exists(user_installations, user_id == ^actor(:id))) do
+      description "Whether the actor's own GitHub token reaches the installation."
+      public? false
+    end
+  end
 end

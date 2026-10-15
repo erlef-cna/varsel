@@ -7,11 +7,12 @@ defmodule Varsel.GitHub.UserToken do
   The GitHub access token to act as a user with, and the sentence an action
   answers with when there is none.
 
-  Varsel acts on GitHub only as the person asking, so the token is the one
-  their own GitHub sign-in stored on their identity, read with them as the
-  actor. GitHub expires that token after eight hours. A token that is about
-  to expire is first exchanged for a new one with the refresh token the
-  sign-in stored (`Varsel.Accounts.UserIdentity.Changes.RefreshAccessToken`).
+  The token is the one the person's own GitHub sign-in stored on their
+  identity, read with them as the actor. `Varsel.GitHub.Credentials` decides
+  when a request runs with it. GitHub expires that token after eight hours.
+  A token that is about to expire is first exchanged for a new one with the
+  refresh token the sign-in stored
+  (`Varsel.Accounts.UserIdentity.Changes.RefreshAccessToken`).
   """
 
   alias Varsel.Accounts
@@ -62,20 +63,6 @@ defmodule Varsel.GitHub.UserToken do
   @spec linked?(User.t() | nil) :: boolean()
   def linked?(nil), do: false
   def linked?(%User{} = user), do: identity(user) != nil
-
-  @doc """
-  The GitHub access token of `user`, or nil when there is none, for a read
-  that runs anonymously without one.
-  """
-  @spec available(User.t() | nil) :: String.t() | nil
-  def available(%User{} = user) do
-    case fetch(user) do
-      {:ok, token} -> token
-      {:error, _reason} -> nil
-    end
-  end
-
-  def available(_user), do: nil
 
   @doc """
   The sentence an action states, after its subject, when it has no token to

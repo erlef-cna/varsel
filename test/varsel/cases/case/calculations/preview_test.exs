@@ -19,6 +19,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
   alias Varsel.Fixtures
   alias Varsel.Test.GitHubAdvisoryFixtures
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
   alias Varsel.Test.StubGitBackend
 
   @repo "https://github.com/team-alembic/ash_authentication_phoenix"
@@ -448,6 +449,14 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
 
     defp link!(case_record, poc, url) do
       advisory = Map.put(GitHubAdvisoryFixtures.hex_advisory(), "html_url", url)
+
+      GitHubApp.seed_installation(
+        %{id: 7, account: "team-alembic", repository_selection: :selected},
+        repositories: ["team-alembic/ash_authentication_phoenix"],
+        token: "ghs_ash_authentication_phoenix"
+      )
+
+      GitHubApp.seed_user_installations(poc, [7])
       GitHubApi.stub(&Req.Test.json(&1, advisory))
       Cases.link_github_advisory!(%{case_id: case_record.id, advisory_url: url}, actor: poc)
     end

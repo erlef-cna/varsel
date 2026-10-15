@@ -10,11 +10,16 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   channel boundaries from OTP release tags.
 
   The table covers OTP-17.0 and later, which is every release
-  `Varsel.Cases.Reachability.OTPVersion` treats as a version. It is fetched from
-  the configured URL and cached in `:persistent_term` for an hour.
+  `Varsel.Cases.Reachability.OTPVersion` treats as a version. It is fetched
+  from the erlang/otp default branch through the GitHub contents API, with
+  the home organization's installation token
+  (`Varsel.GitHub.Credentials.public_read_or_anonymous/0`), and cached in
+  `:persistent_term` for an hour.
   """
 
   alias Varsel.Cases.Reachability.OTPVersion
+  alias Varsel.GitHub.Client
+  alias Varsel.GitHub.Credentials
 
   @cache_key {__MODULE__, :table}
   @cache_ttl_seconds 3600
@@ -90,16 +95,15 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
   end
 
   defp fetch_and_parse do
-    options =
-      Keyword.merge(
-        [
-          url: "https://raw.githubusercontent.com/erlang/otp/master/otp_versions.table",
-          retry: :transient
-        ],
-        Application.get_env(:varsel, :otp_versions_table, [])
-      )
+    {:ok, token} = Credentials.public_read_or_anonymous()
 
-    %{status: 200, body: body} = Req.get!(options)
+    %{status: 200, body: body} =
+      (token && [auth: {:bearer, token}])
+      |> List.wrap()
+      |> Client.api()
+      |> Req.merge(retry: :transient, headers: [accept: "application/vnd.github.raw+json"])
+      |> Req.merge(Application.get_env(:varsel, :otp_versions_table, []))
+      |> Req.get!(url: "/repos/erlang/otp/contents/otp_versions.table")
 
     body
     |> String.split("\n", trim: true)

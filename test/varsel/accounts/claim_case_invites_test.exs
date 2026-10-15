@@ -9,6 +9,7 @@ defmodule Varsel.Accounts.ClaimCaseInvitesTest do
   alias Varsel.Fixtures
   alias Varsel.HexPm
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   setup do
     Req.Test.stub(HexPm, fn conn ->
@@ -24,6 +25,8 @@ defmodule Varsel.Accounts.ClaimCaseInvitesTest do
           Plug.Conn.send_resp(conn, 404, "{}")
       end
     end)
+
+    GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
 
     GitHubApi.stub(fn conn ->
       login = conn.request_path |> Path.basename() |> URI.decode() |> String.downcase()

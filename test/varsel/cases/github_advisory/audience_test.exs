@@ -11,11 +11,20 @@ defmodule Varsel.Cases.GitHubAdvisory.AudienceTest do
   alias Varsel.Cases.GitHubAdvisory.Audience
   alias Varsel.Fixtures
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   @hex_url "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
 
   setup do
     poc = Fixtures.register_user("audience_poc", :poc)
+    GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
+    GitHubApp.seed_installation(%{id: 7, account: "acme", repository_selection: :selected},
+      repositories: ["acme/acme_lib"],
+      token: "ghs_acme_lib"
+    )
+
+    GitHubApp.seed_user_installations(poc, [7])
     GitHubApi.stub_advisory(advisory_with_audience())
     case_record = Fixtures.open_case(poc, %{title: "Header injection in acme_lib"})
 
@@ -91,7 +100,62 @@ defmodule Varsel.Cases.GitHubAdvisory.AudienceTest do
            }
   end
 
-  test "a viewer without a GitHub account learns only the collaborators, and GitHub is not asked",
+  test "a POC whose login GitHub refuses lists with the App's installation token", %{
+    poc: poc,
+    link: link
+  } do
+    stub_organization(fn conn ->
+      case Plug.Conn.get_req_header(conn, "authorization") do
+        ["Bearer gho_token"] ->
+          conn |> Plug.Conn.put_status(403) |> Req.Test.json(%{"message" => "No"})
+
+        ["Bearer ghs_acme_lib"] ->
+          Req.Test.json(conn, [%{"login" => "bob"}])
+      end
+    end)
+
+    assert %{owners: ["bob"], teams: [%{members: ["bob"]}]} = Audience.resolve(link, poc)
+  end
+
+  test "a supporter whose login does not reach the repository learns only the collaborators", %{
+    poc: poc,
+    link: link
+  } do
+    GitHubApi.stub(fn _conn -> flunk("GitHub was asked for a viewer who cannot act there") end)
+    supporter = Fixtures.register_user("audience_supporter", :supporter)
+    Cases.assign_case_user!(%{case_id: link.case_id, user_id: supporter.id}, actor: poc)
+
+    assert Audience.resolve(link, supporter) == %{
+             users: ["alice"],
+             teams: [%{slug: "security", members: :unknown}],
+             owners: :unknown
+           }
+  end
+
+  test "a POC without a GitHub account lists with the App's installation token", %{link: link} do
+    hex_poc = Fixtures.sign_in_with_hex("audience_hex", System.unique_integer([:positive]))
+    hex_poc = Ash.update!(hex_poc, %{role: :poc}, action: :set_role, authorize?: false)
+
+    stub_organization(fn conn ->
+      case conn.path_info do
+        ["orgs", "acme", "members"] ->
+          Req.Test.json(conn, [%{"login" => "bob"}])
+
+        ["orgs", "acme", "teams", "security", "members"] ->
+          Req.Test.json(conn, [%{"login" => "carol"}])
+      end
+    end)
+
+    assert Audience.resolve(link, hex_poc) == %{
+             users: ["alice"],
+             teams: [%{slug: "security", members: ["carol"]}],
+             owners: ["bob"]
+           }
+
+    assert_received {:github, ["orgs", "acme", "members"], ["Bearer ghs_acme_lib"]}
+  end
+
+  test "a viewer without a GitHub account who is no POC, or nobody, learns only the collaborators, and GitHub is not asked",
        %{
          link: link
        } do

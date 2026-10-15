@@ -17,6 +17,7 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisoryTest do
   alias Varsel.Cases
   alias Varsel.Fixtures
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   @hex_url "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
   @otp_url "https://github.com/erlang/otp/security/advisories/GHSA-pwvh-c689-f8q5"
@@ -32,11 +33,26 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisoryTest do
 
   setup do
     Fixtures.seed_weakness(113, "Improper Neutralization of CRLF Sequences in HTTP Headers")
+    poc = Fixtures.register_user("advisory_poc", :poc)
+    supporter = Fixtures.register_user("advisory_supporter", :supporter)
 
-    %{
-      poc: Fixtures.register_user("advisory_poc", :poc),
-      supporter: Fixtures.register_user("advisory_supporter", :supporter)
-    }
+    GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
+    for {id, owner, repo} <- [
+          {7, "acme", "acme_lib"},
+          {8, "erlang", "otp"},
+          {9, "elixir-lang", "elixir"}
+        ] do
+      GitHubApp.seed_installation(%{id: id, account: owner, repository_selection: :selected},
+        repositories: ["#{owner}/#{repo}"],
+        token: "ghs_#{repo}"
+      )
+    end
+
+    GitHubApp.seed_user_installations(poc, [7, 8, 9])
+    GitHubApp.seed_user_installations(supporter, [7, 8, 9])
+
+    %{poc: poc, supporter: supporter}
   end
 
   # GitHub answering the advisory read at `path` with `advisory`, telling
@@ -195,6 +211,7 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisoryTest do
 
     {:ok, case_record} = open(poc, "GHSA-2cfg-hjmp-qrvw")
 
+    assert_received {:github, _path, ["Bearer ghs_erlef_cna"]}
     assert [%{repo_url: repo_url, vendor: "acme"}] = case_record.affected_packages
     assert to_string(repo_url) == "https://github.com/acme/acme_lib"
 

@@ -88,12 +88,20 @@ path from there to a published CVE.
    leads the published references as the vendor advisory, and no stored
    reference is needed for it. Unlink takes it out again. Linking, pulling
    and unlinking are edits and follow the same freeze as the case content:
-   approval stops them for everyone but a Point of Contact. Draft
-   advisories are read and written with your GitHub account. When none is
-   linked to yours, the tab says so and holds Refresh, Push and Report until
-   you [link GitHub in account settings](/settings/account). The settings
-   page then shows where the app can act for you and links to GitHub to
-   change it.
+   approval stops them for everyone but a Point of Contact. Advisories are
+   read and written with your GitHub account, on repositories where the
+   repository's owner installed the EEF CNA app and your account is an
+   owner, collaborator or member. When your account cannot act on the
+   repository, the tab says so and holds Refresh, Push and Report, and its
+   owner needs to install the EEF CNA app. When no GitHub account is linked
+   to yours, the tab holds them until you
+   [link GitHub in account settings](/settings/account). The settings page
+   then shows where the app can act for you and links to GitHub to change
+   it. A Point of Contact without a linked GitHub account, or whose account
+   cannot act on a repository with the app installed, or whose request
+   GitHub refuses there, acts through the app instead, and GitHub shows the
+   app as the author. Where the app is not installed, a Point of Contact
+   cannot do it from here.
 
    A case that has no advisory yet is reported from the same tab to the
    maintainers of one of its GitHub repositories, as a private vulnerability
@@ -103,6 +111,8 @@ path from there to a published CVE.
    with the [maintainer process](/maintainer-process) to point its
    maintainers at. Where you administer the repository, GitHub takes no
    report from you and the case opens a draft advisory in your name instead.
+   A report a Point of Contact makes through the app opens a draft advisory
+   as the app.
    A linked advisory also lists who sees it on GitHub, its collaborators,
    its teams and the organization's owners, marks who is on the case, and
    gives the rest access with one click, as an assignment or an invite. The

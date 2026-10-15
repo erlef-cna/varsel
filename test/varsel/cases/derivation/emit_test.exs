@@ -3,12 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Varsel.Cases.Derivation.EmitTest do
-  use ExUnit.Case, async: true
+  use Varsel.DataCase, async: true
 
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Derivation.Emit
   alias Varsel.Cases.Derivation.OtpVersionsTable
   alias Varsel.Cases.PackageChannel
+  alias Varsel.Test.GitHubApp
 
   defp range(from, until), do: %{from: from, until: until}
 
@@ -170,6 +171,8 @@ defmodule Varsel.Cases.Derivation.EmitTest do
 
   describe "channel/3 otp app translation" do
     setup do
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
       Req.Test.stub(OtpVersionsTable, fn conn ->
         Plug.Conn.send_resp(conn, 200, """
         OTP-27.3.4.3 : ssh-5.2.3.4 stdlib-6.2.2.1 tftp-1.2.1 :
@@ -635,6 +638,8 @@ defmodule Varsel.Cases.Derivation.EmitTest do
 
   describe "github/3 otp app translation" do
     setup do
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
       Req.Test.stub(OtpVersionsTable, fn conn ->
         Plug.Conn.send_resp(conn, 200, """
         OTP-27.3.4.3 : ssh-5.2.3.4 stdlib-6.2.2.1 tftp-1.2.1 :

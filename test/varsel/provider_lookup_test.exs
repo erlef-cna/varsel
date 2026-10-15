@@ -3,13 +3,19 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Varsel.Accounts.ProviderLookupTest do
-  use ExUnit.Case, async: false
+  use Varsel.DataCase, async: false
 
   alias Varsel.Accounts.GitHub
   alias Varsel.HexPm
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   describe "GitHub.user/1" do
+    setup do
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+      :ok
+    end
+
     test "returns the login as GitHub spells it, with the name and public address" do
       GitHubApi.stub(fn conn ->
         assert conn.request_path == "/users/AliCe"
@@ -45,11 +51,9 @@ defmodule Varsel.Accounts.ProviderLookupTest do
       assert GitHub.user("alice") == {:error, {:http, 403, %{"message" => "rate limited"}}}
     end
 
-    test "asks with the OAuth app's client credentials when they are set" do
+    test "asks with the public read token" do
       GitHubApi.stub(fn conn ->
-        assert Plug.Conn.get_req_header(conn, "authorization") == [
-                 "Basic #{Base.encode64("Ov23liTestApp:test-secret")}"
-               ]
+        assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer ghs_erlef_cna"]
 
         Req.Test.json(conn, %{"login" => "alice", "email" => "alice@example.com"})
       end)
@@ -57,7 +61,7 @@ defmodule Varsel.Accounts.ProviderLookupTest do
       assert {:ok, %{email: "alice@example.com"}} = GitHub.user("alice")
     end
 
-    test "asks anonymously when the OAuth app is not configured" do
+    test "asks anonymously when the App is not configured" do
       config = Application.get_env(:varsel, :github)
       Application.delete_env(:varsel, :github)
       on_exit(fn -> Application.put_env(:varsel, :github, config) end)

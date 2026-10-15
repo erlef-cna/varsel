@@ -19,12 +19,21 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
   alias Varsel.Cases.GitHubAdvisoryLink
   alias Varsel.Fixtures
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   @hex_url "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
   @vector "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
 
   setup do
     poc = Fixtures.register_user("link_poc", :poc)
+    GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
+    GitHubApp.seed_installation(%{id: 7, account: "acme", repository_selection: :selected},
+      repositories: ["acme/acme_lib"],
+      token: "ghs_acme_lib"
+    )
+
+    GitHubApp.seed_user_installations(poc, [7])
     GitHubApi.stub_advisory(hex_advisory())
 
     %{poc: poc, case: Fixtures.open_case(poc, %{title: "Header injection in acme_lib"})}
@@ -106,7 +115,10 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
     test_pid = self()
 
     GitHubApi.stub(fn conn ->
-      send(test_pid, {:github, conn.request_path})
+      send(
+        test_pid,
+        {:github, conn.request_path, Plug.Conn.get_req_header(conn, "authorization")}
+      )
 
       Req.Test.json(
         conn,
@@ -116,12 +128,12 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
 
     link = link!(case_record, poc, "GHSA-2cfg-hjmp-qrvw")
 
-    assert_received {:github, "/advisories/GHSA-2cfg-hjmp-qrvw"}
+    assert_received {:github, "/advisories/GHSA-2cfg-hjmp-qrvw", ["Bearer ghs_erlef_cna"]}
     assert {link.owner, link.repo} == {nil, nil}
     assert to_string(link.html_url) == "https://github.com/advisories/GHSA-2cfg-hjmp-qrvw"
 
     assert %GitHubAdvisoryLink{} = Cases.refresh_github_advisory_link!(link, actor: poc)
-    assert_received {:github, "/advisories/GHSA-2cfg-hjmp-qrvw"}
+    assert_received {:github, "/advisories/GHSA-2cfg-hjmp-qrvw", ["Bearer ghs_erlef_cna"]}
   end
 
   test "an address GitHub does not answer links nothing", %{poc: poc, case: case_record} do
@@ -555,15 +567,13 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
       assert message == "was refused: GitHub shows you no such advisory"
     end
 
-    test "needs the caller's GitHub account, before GitHub is asked", %{link: link} do
-      stub_github_unreachable()
+    test "a POC without a GitHub account pushes as the App", %{link: link} do
       hex_poc = Fixtures.sign_in_with_hex("push_hex", "push_hex")
       hex_poc = Ash.update!(hex_poc, %{role: :poc}, action: :set_role, authorize?: false)
+      stub_update(hex_advisory())
 
-      assert {:error, %Invalid{errors: [%{field: :fields, message: message}]}} =
-               Cases.push_github_advisory(link, [:title], actor: hex_poc)
-
-      assert message == "needs your GitHub account linked"
+      assert {:ok, _pushed} = Cases.push_github_advisory(link, [:title], actor: hex_poc)
+      assert_received {:github, "PATCH", _path, ["Bearer ghs_acme_lib"], _body}
     end
 
     test "a global database entry is not pushed", %{poc: poc} do
@@ -585,6 +595,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
 
     test "an assigned supporter pushes", %{poc: poc, case: case_record, link: link} do
       supporter = Fixtures.register_user("push_supporter", :supporter)
+      GitHubApp.seed_user_installations(supporter, [7])
       Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
       stub_update(hex_advisory())
 
@@ -638,6 +649,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
 
       for user <- [supporter, collaborator] do
         Cases.assign_case_user!(%{case_id: case_record.id, user_id: user.id}, actor: poc)
+        GitHubApp.seed_user_installations(user, [7])
       end
 
       %{supporter: supporter, collaborator: collaborator}
@@ -714,6 +726,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
     test "a supporter off the case sees and does nothing", %{poc: poc, case: case_record} do
       GitHubApi.stub_advisory(hex_advisory())
       stranger = Fixtures.register_user("link_stranger", :supporter)
+      GitHubApp.seed_user_installations(stranger, [7])
 
       assert {:error, %Forbidden{}} = link(case_record, stranger)
       assert Ash.read!(GitHubAdvisoryLink, authorize?: false) == []

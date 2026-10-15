@@ -9,6 +9,7 @@ defmodule Varsel.Cases.DerivationTest do
   alias Varsel.Cases.Derivation
   alias Varsel.Cases.Derivation.OtpVersionsTable
   alias Varsel.Fixtures
+  alias Varsel.Test.GitHubApp
   alias Varsel.Test.StubGitBackend
 
   @repo "https://github.com/acme/acme_lib"
@@ -352,6 +353,8 @@ defmodule Varsel.Cases.DerivationTest do
   } do
     otp_repo = "https://github.com/erlang/otp"
 
+    GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
     Req.Test.stub(OtpVersionsTable, fn conn ->
       Plug.Conn.send_resp(conn, 200, """
       OTP-27.3.4.1 : ssh-5.2.3.4 stdlib-6.2.2.1 # erts-15.2.7 :
@@ -461,6 +464,8 @@ defmodule Varsel.Cases.DerivationTest do
          %{poc: poc, case: case_record} do
       otp_repo = "https://github.com/erlang/otp"
       explicit_version = unquote(explicit_version)
+
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
 
       Req.Test.stub(OtpVersionsTable, fn conn ->
         Plug.Conn.send_resp(conn, 200, """

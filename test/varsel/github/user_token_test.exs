@@ -92,7 +92,6 @@ defmodule Varsel.GitHub.UserTokenTest do
 
       assert UserToken.fetch(user) == {:error, :unauthorized}
       assert UserToken.message(:unauthorized) == "needs you to sign in with GitHub again"
-      assert UserToken.available(user) == nil
 
       identity = github_identity(user)
       assert identity.access_token == before.access_token

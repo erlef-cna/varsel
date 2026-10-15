@@ -15,6 +15,7 @@ defmodule VarselWeb.CaseLiveTest do
   alias Varsel.Notifications
   alias Varsel.Test.GitHubAdvisoryFixtures
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
   alias VarselWeb.HexServiceTokenFixture
 
   defp log_in(conn, user) do
@@ -100,6 +101,14 @@ defmodule VarselWeb.CaseLiveTest do
     end
 
     test "the popover also opens a case from a GitHub advisory", %{conn: conn, poc: poc} do
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
+      GitHubApp.seed_installation(%{id: 7, account: "acme", repository_selection: :selected},
+        repositories: ["acme/acme_lib"],
+        token: "ghs_acme_lib"
+      )
+
+      GitHubApp.seed_user_installations(poc, [7])
       GitHubApi.stub_advisory(GitHubAdvisoryFixtures.hex_advisory())
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
@@ -1730,6 +1739,8 @@ defmodule VarselWeb.CaseLiveTest do
     end
 
     test "the credit picker confirms a handle at its provider", %{conn: conn, poc: poc} do
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
       GitHubApi.stub(fn conn ->
         case conn.request_path |> Path.basename() |> String.downcase() do
           "octocat" -> Req.Test.json(conn, %{"login" => "octocat", "name" => "The Octocat"})
@@ -2146,6 +2157,8 @@ defmodule VarselWeb.CaseLiveTest do
             Plug.Conn.send_resp(conn, 404, "{}")
         end
       end)
+
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
 
       GitHubApi.stub(fn conn ->
         case conn.request_path |> Path.basename() |> URI.decode() |> String.downcase() do

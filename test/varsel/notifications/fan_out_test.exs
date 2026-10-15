@@ -19,6 +19,7 @@ defmodule Varsel.Notifications.FanOutTest do
   alias Varsel.Notifications.Notification
   alias Varsel.Service
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   require Ash.Query
 
@@ -200,6 +201,8 @@ defmodule Varsel.Notifications.FanOutTest do
     end
 
     test "the invite-claim path notifies the claimer" do
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
       GitHubApi.stub(fn conn ->
         login = conn.request_path |> Path.basename() |> URI.decode() |> String.downcase()
         Req.Test.json(conn, %{"login" => login, "email" => "#{login}@example.com"})

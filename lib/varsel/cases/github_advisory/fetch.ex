@@ -6,15 +6,17 @@ defmodule Varsel.Cases.GitHubAdvisory.Fetch do
   @moduledoc """
   Reads an advisory from GitHub for an action, as the person asking.
 
-  The actor's own GitHub token goes with the request when they have one, so
-  a draft answers exactly when GitHub shows it to them. Without one the read
-  is anonymous and only published advisories answer. Failures come back as
-  the sentence an action puts on its `advisory_url` field.
+  A repository advisory is read with the credential
+  `Varsel.GitHub.Credentials` gives the actor for its repository, so a draft
+  answers exactly when GitHub shows it to that credential. A global
+  database entry is read with the home organization's installation token.
+  Failures come back as the sentence an action puts on its `advisory_url`
+  field.
   """
 
   alias Varsel.Accounts.User
   alias Varsel.GitHub.Advisories
-  alias Varsel.GitHub.UserToken
+  alias Varsel.GitHub.Credentials
 
   @type result :: {:ok, map()} | {:error, String.t()}
 
@@ -32,11 +34,25 @@ defmodule Varsel.Cases.GitHubAdvisory.Fetch do
   @doc "The advisory a parsed reference names: on its repository, or the global database entry."
   @spec fetch_ref(Advisories.ref(), User.t() | nil) :: result()
   def fetch_ref(%{owner: owner, repo: repo, ghsa_id: ghsa_id}, actor) when is_binary(owner) and is_binary(repo) do
-    owner |> Advisories.fetch(repo, ghsa_id, token: UserToken.available(actor)) |> fetched()
+    case Credentials.run(
+           actor,
+           owner,
+           repo,
+           &Advisories.fetch(owner, repo, ghsa_id, token: &1.token)
+         ) do
+      {:no_credential, reason} -> {:error, Credentials.message(reason)}
+      {_kind, answer} -> fetched(answer)
+    end
   end
 
-  def fetch_ref(%{ghsa_id: ghsa_id}, actor) do
-    ghsa_id |> Advisories.fetch_global(token: UserToken.available(actor)) |> fetched()
+  def fetch_ref(%{ghsa_id: ghsa_id}, _actor) do
+    case Credentials.public_read() do
+      {:ok, credential} ->
+        ghsa_id |> Advisories.fetch_global(token: credential.token) |> fetched()
+
+      {:error, reason} ->
+        {:error, Credentials.message(reason)}
+    end
   end
 
   defp fetched({:ok, advisory}), do: {:ok, advisory}

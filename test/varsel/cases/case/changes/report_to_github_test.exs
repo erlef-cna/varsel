@@ -17,6 +17,7 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
   alias Varsel.Cases
   alias Varsel.Fixtures
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   @hex_url "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
   @report %{owner: "acme", repo: "acme_lib", description: "Written for the maintainers."}
@@ -24,17 +25,30 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
   @repository_path ["repos", "acme", "acme_lib"]
   @report_path "/repos/acme/acme_lib/security-advisories/reports"
   @draft_path "/repos/acme/acme_lib/security-advisories"
+  @own "Bearer gho_token"
+  @installation "Bearer ghs_acme_lib"
 
   setup do
     poc = Fixtures.register_user("report_poc", :poc)
+    supporter = Fixtures.register_user("report_supporter", :supporter)
     Fixtures.seed_weakness(113, "Improper Neutralization of CRLF Sequences in HTTP Headers")
 
     case_record = Fixtures.open_case(poc, %{title: "Header injection in acme_lib"})
     Cases.add_case_weakness!(%{case_id: case_record.id, cwe_id: 113}, actor: poc)
+    Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
     Fixtures.add_affected_package(poc, case_record)
 
-    %{poc: poc, case: Cases.get_case!(case_record.id, actor: poc)}
+    %{poc: poc, supporter: supporter, case: Cases.get_case!(case_record.id, actor: poc)}
   end
+
+  defp install_acme_lib do
+    GitHubApp.seed_installation(%{id: 7, account: "acme", repository_selection: :selected},
+      repositories: ["acme/acme_lib"],
+      token: "ghs_acme_lib"
+    )
+  end
+
+  defp reach_acme_lib(user), do: GitHubApp.seed_user_installations(user, [7])
 
   defp report(case_record, actor, opts \\ []) do
     Cases.report_case_to_github(case_record, @report, Keyword.put(opts, :actor, actor))
@@ -46,6 +60,7 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     GitHubApi.stub(fn conn ->
       case conn.path_info do
         @repository_path ->
+          send(test_pid, {:github, :admin?, Plug.Conn.get_req_header(conn, "authorization")})
           Req.Test.json(conn, %{"permissions" => %{"admin" => admin?}})
 
         _write ->
@@ -81,6 +96,8 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     poc: poc,
     case: case_record
   } do
+    install_acme_lib()
+    reach_acme_lib(poc)
     stub_report()
 
     {:ok, reported} = report(case_record, poc, load: @loads)
@@ -110,6 +127,8 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     poc: poc,
     case: case_record
   } do
+    install_acme_lib()
+    reach_acme_lib(poc)
     Cases.edit_case!(case_record, %{title: "Header injection in acme_lib, revised"}, actor: poc)
     stub_report()
 
@@ -122,6 +141,8 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     poc: poc,
     case: case_record
   } do
+    install_acme_lib()
+    reach_acme_lib(poc)
     stub_report(true)
 
     {:ok, reported} = report(case_record, poc, load: @loads)
@@ -135,6 +156,8 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
   end
 
   test "the draft carries the assigned CVE ID", %{poc: poc, case: case_record} do
+    install_acme_lib()
+    reach_acme_lib(poc)
     record = Fixtures.reserved_cve_record("CVE-2026-48858")
     assigned = Cases.assign_case_cve_id!(case_record, %{cve_record_id: record.id}, actor: poc)
     stub_report(true)
@@ -144,11 +167,17 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     assert_received {:github, "POST", @draft_path, _auth, %{"cve_id" => "CVE-2026-48858"}}
   end
 
-  test "a refusal from GitHub reports nothing and links nothing", %{poc: poc, case: case_record} do
+  test "a refusal from GitHub reports nothing and links nothing", %{
+    poc: poc,
+    supporter: supporter,
+    case: case_record
+  } do
+    install_acme_lib()
+    reach_acme_lib(supporter)
     stub_refusal(false, 403, %{"message" => "Private vulnerability reporting is disabled"})
 
     assert {:error, %Invalid{errors: [%{field: :repo, message: message}]}} =
-             report(case_record, poc)
+             report(case_record, supporter)
 
     assert message == "was refused by GitHub: Private vulnerability reporting is disabled"
     assert_unlinked(case_record, poc)
@@ -156,12 +185,15 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
 
   test "a refusal of an administrator's draft reports nothing and links nothing", %{
     poc: poc,
+    supporter: supporter,
     case: case_record
   } do
+    install_acme_lib()
+    reach_acme_lib(supporter)
     stub_refusal(true, 403, %{"message" => "Resource not accessible by integration"})
 
     assert {:error, %Invalid{errors: [%{field: :repo, message: message}]}} =
-             report(case_record, poc)
+             report(case_record, supporter)
 
     assert_received {:github, "POST", @draft_path, _auth, _body}
     assert message == "was refused by GitHub: Resource not accessible by integration"
@@ -170,8 +202,12 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
 
   test "a repository GitHub does not show the caller takes no report", %{
     poc: poc,
+    supporter: supporter,
     case: case_record
   } do
+    install_acme_lib()
+    reach_acme_lib(supporter)
+
     GitHubApi.stub(fn conn ->
       assert conn.method == "GET"
       assert conn.path_info == @repository_path
@@ -179,7 +215,7 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     end)
 
     assert {:error, %Invalid{errors: [%{field: :repo, message: message}]}} =
-             report(case_record, poc)
+             report(case_record, supporter)
 
     assert message == "is not a repository you can report to on GitHub"
     assert_unlinked(case_record, poc)
@@ -187,18 +223,24 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
 
   test "a repository the administrator cannot open an advisory on takes no draft", %{
     poc: poc,
+    supporter: supporter,
     case: case_record
   } do
+    install_acme_lib()
+    reach_acme_lib(supporter)
     stub_refusal(true, 404, %{"message" => "Not Found"})
 
     assert {:error, %Invalid{errors: [%{field: :repo, message: message}]}} =
-             report(case_record, poc)
+             report(case_record, supporter)
 
     assert message == "is not a repository where you can open an advisory on GitHub"
     assert_unlinked(case_record, poc)
   end
 
   test "a token GitHub no longer accepts sends nothing", %{poc: poc, case: case_record} do
+    install_acme_lib()
+    reach_acme_lib(poc)
+
     GitHubApi.stub(fn conn ->
       assert conn.path_info == @repository_path
       conn |> Plug.Conn.put_status(401) |> Req.Test.json(%{"message" => "Bad credentials"})
@@ -211,20 +253,95 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     assert_unlinked(case_record, poc)
   end
 
-  test "needs the caller's GitHub account, before GitHub is asked", %{case: case_record} do
+  test "a POC's report GitHub refuses opens a draft as the App instead", %{
+    poc: poc,
+    case: case_record
+  } do
+    install_acme_lib()
+    reach_acme_lib(poc)
+
+    stub_github(false, fn conn ->
+      case Plug.Conn.get_req_header(conn, "authorization") do
+        [@own] -> conn |> Plug.Conn.put_status(403) |> Req.Test.json(%{"message" => "Disabled"})
+        [@installation] -> conn |> Plug.Conn.put_status(201) |> Req.Test.json(hex_advisory())
+      end
+    end)
+
+    {:ok, reported} = report(case_record, poc, load: @loads)
+
+    assert_received {:github, "POST", @report_path, [@own], _body}
+    assert_received {:github, "POST", @draft_path, [@installation], draft}
+    assert draft["description"] == "Written for the maintainers."
+    assert reported.__metadata__.github_report == :draft
+    assert %{ghsa_id: "GHSA-2cfg-hjmp-qrvw"} = reported.github_advisory_link
+  end
+
+  test "a POC whose login does not reach the repository opens a draft as the App directly", %{
+    poc: poc,
+    case: case_record
+  } do
+    install_acme_lib()
+    stub_report()
+
+    {:ok, reported} = report(case_record, poc, load: @loads)
+
+    refute_received {:github, :admin?, _auth}
+    assert_received {:github, "POST", @draft_path, [@installation], _draft}
+    refute_received {:github, "POST", @report_path, _auth, _body}
+    assert reported.__metadata__.github_report == :draft
+  end
+
+  test "a supporter whose login does not reach the repository is refused before GitHub is asked",
+       %{
+         poc: poc,
+         supporter: supporter,
+         case: case_record
+       } do
+    install_acme_lib()
     stub_github_unreachable()
-    hex_poc = Fixtures.sign_in_with_hex("report_hex", "report_hex")
-    hex_poc = Ash.update!(hex_poc, %{role: :poc}, action: :set_role, authorize?: false)
 
     assert {:error, %Invalid{errors: [%{field: :repo, message: message}]}} =
-             report(case_record, hex_poc)
+             report(case_record, supporter)
 
-    assert message == "needs your GitHub account linked"
+    assert message ==
+             "is on a repository your GitHub login cannot act on. The repository's owner needs to install the EEF CNA app"
+
+    assert_unlinked(case_record, poc)
+  end
+
+  test "a POC cannot report to a repository without the App", %{poc: poc, case: case_record} do
+    stub_github_unreachable()
+
+    assert {:error, %Invalid{errors: [%{field: :repo, message: message}]}} =
+             report(case_record, poc)
+
+    assert message ==
+             "cannot be done from here: the EEF CNA app is not installed on the repository"
+
+    assert_unlinked(case_record, poc)
+  end
+
+  test "a POC without a GitHub account opens a draft as the App where it is installed", %{
+    case: case_record
+  } do
+    install_acme_lib()
+    hex_poc = Fixtures.sign_in_with_hex("report_hex", "report_hex")
+    hex_poc = Ash.update!(hex_poc, %{role: :poc}, action: :set_role, authorize?: false)
+    stub_report()
+
+    {:ok, reported} = report(case_record, hex_poc, load: @loads)
+
+    refute_received {:github, :admin?, _auth}
+    assert_received {:github, "POST", @draft_path, [@installation], _draft}
+    assert reported.__metadata__.github_report == :draft
   end
 
   test "a linked case is refused before GitHub is asked", %{poc: poc, case: case_record} do
     assert Cases.can_report_case_to_github?(poc, case_record, @report)
 
+    GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+    install_acme_lib()
+    reach_acme_lib(poc)
     GitHubApi.stub_advisory(hex_advisory())
     Cases.link_github_advisory!(%{case_id: case_record.id, advisory_url: @hex_url}, actor: poc)
     stub_github_unreachable()
@@ -233,10 +350,11 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     assert {:error, %Forbidden{}} = report(case_record, poc)
   end
 
-  test "a frozen case is refused before GitHub is asked", %{poc: poc, case: case_record} do
-    supporter = Fixtures.register_user("report_frozen_supporter", :supporter)
-    Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
-
+  test "a frozen case is refused before GitHub is asked", %{
+    poc: poc,
+    supporter: supporter,
+    case: case_record
+  } do
     approved =
       case_record |> Cases.request_case_review!(actor: poc) |> Cases.approve_case!(actor: poc)
 
@@ -249,9 +367,9 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     assert_unlinked(case_record, poc)
   end
 
-  test "an assigned supporter reports", %{poc: poc, case: case_record} do
-    supporter = Fixtures.register_user("report_supporter", :supporter)
-    Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+  test "an assigned supporter reports", %{supporter: supporter, case: case_record} do
+    install_acme_lib()
+    reach_acme_lib(supporter)
     stub_report()
 
     assert {:ok, reported} = report(case_record, supporter, load: @loads)

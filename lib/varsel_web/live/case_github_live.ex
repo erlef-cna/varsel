@@ -8,6 +8,10 @@ defmodule VarselWeb.CaseGitHubLive do
   the person looking, who sees it on GitHub, and the case set against it
   field by field. A case without an advisory reports itself to a
   repository's maintainers from here.
+
+  What the viewer can do on the advisory's repository
+  (`Varsel.GitHub.Credentials.reach/3`) is asked once per repository, off
+  the render path, and decides whether Refresh and Push are offered.
   """
   use VarselWeb, :live_view
 
@@ -19,6 +23,7 @@ defmodule VarselWeb.CaseGitHubLive do
   alias Varsel.Cases.GitHubAdvisory.Export
   alias Varsel.Cases.GitHubAdvisory.ReportTargets
   alias Varsel.Cases.GitHubAdvisoryLink
+  alias Varsel.GitHub.Credentials
   alias Varsel.GitHub.UserToken
   alias VarselWeb.CaseLifecycle
 
@@ -26,11 +31,16 @@ defmodule VarselWeb.CaseGitHubLive do
 
   @impl Phoenix.LiveView
   def mount(%{"id" => id}, _session, socket) do
+    actor = socket.assigns.current_user
+
     socket =
       socket
       |> assign(
         busy?: false,
-        github_identity?: UserToken.linked?(socket.assigns.current_user),
+        github_identity?: UserToken.linked?(actor),
+        may_try?: Credentials.may_try?(actor),
+        reach: nil,
+        reach_for: nil,
         audience: nil,
         audience_for: nil,
         report_targets: [],
@@ -64,8 +74,30 @@ defmodule VarselWeb.CaseGitHubLive do
     |> assign_form(link)
     |> assign_report_form(case_record, link)
     |> resolve_audience(link)
+    |> check_reach(link)
     |> check_report_targets(case_record)
   end
+
+  defp check_reach(socket, %GitHubAdvisoryLink{owner: owner, repo: repo}) when is_binary(owner) and is_binary(repo) do
+    cond do
+      socket.assigns.reach_for == {owner, repo} ->
+        socket
+
+      connected?(socket) ->
+        actor = socket.assigns.current_user
+
+        socket
+        |> assign(reach: nil, reach_for: {owner, repo})
+        |> start_async(:reach, fn -> Credentials.reach(actor, owner, repo) end)
+
+      true ->
+        socket
+    end
+  end
+
+  defp check_reach(socket, %GitHubAdvisoryLink{}), do: assign(socket, reach: :public_read, reach_for: :global)
+
+  defp check_reach(socket, nil), do: assign(socket, reach: nil, reach_for: nil)
 
   # A create cannot be asked about before its row exists, so the case's own
   # edit action, which the link's create defers to, answers for linking.
@@ -165,7 +197,7 @@ defmodule VarselWeb.CaseGitHubLive do
     else
       socket
       |> assign(
-        report_targets: Enum.map(repositories, &Map.put(&1, :private_reporting, :unknown)),
+        report_targets: Enum.map(repositories, &Map.merge(&1, %{reach: nil, private_reporting: :unknown})),
         report_targets_for: repositories
       )
       |> select_repository(socket.assigns.repository)
@@ -174,7 +206,7 @@ defmodule VarselWeb.CaseGitHubLive do
   end
 
   defp report_offered?(socket) do
-    connected?(socket) and socket.assigns.github_identity? and socket.assigns.can_report?
+    connected?(socket) and socket.assigns.can_report?
   end
 
   defp ask_report_targets(socket, []), do: socket
@@ -334,7 +366,7 @@ defmodule VarselWeb.CaseGitHubLive do
     socket =
       case result do
         {:ok, %{__metadata__: %{github_report: :draft}}} ->
-          put_flash(socket, :info, "Opened a draft advisory on GitHub in your name.")
+          put_flash(socket, :info, "Opened a draft advisory on GitHub.")
 
         {:ok, _case_record} ->
           put_flash(socket, :info, "Reported to the maintainers on GitHub.")
@@ -344,6 +376,12 @@ defmodule VarselWeb.CaseGitHubLive do
       end
 
     {:noreply, assign(socket, busy?: false)}
+  end
+
+  def handle_async(:reach, {:ok, reach}, socket), do: {:noreply, assign(socket, reach: reach)}
+
+  def handle_async(:reach, {:exit, _reason}, socket) do
+    {:noreply, assign(socket, reach: :github_unreachable)}
   end
 
   def handle_async(:audience, {:ok, audience}, socket) do
@@ -392,7 +430,11 @@ defmodule VarselWeb.CaseGitHubLive do
       </.case_header>
 
       <.page_container width={:wide} class="space-y-4">
-        <div :if={!@github_identity?} id="github-identity-notice" class="alert alert-info text-sm">
+        <div
+          :if={!@github_identity? and not Credentials.acts?(@reach)}
+          id="github-identity-notice"
+          class="alert alert-info text-sm"
+        >
           <.icon name="hero-information-circle" class="size-5 shrink-0" />
           <span>
             Draft advisories are read and written with your GitHub account, and none is linked
@@ -405,9 +447,10 @@ defmodule VarselWeb.CaseGitHubLive do
         </div>
 
         <%= if @link do %>
+          <.reach_notice :if={@github_identity?} id="github-reach-notice" reach={@reach} />
           <.advisory_card
             link={@link}
-            can_refresh={@github_identity? and @can_refresh?}
+            can_refresh={Credentials.acts?(@reach) and @can_refresh?}
             can_unlink={@can_unlink?}
             busy={@busy?}
           />
@@ -421,13 +464,13 @@ defmodule VarselWeb.CaseGitHubLive do
           <.advisory_diff
             rows={@link.diff}
             can_pull={@can_pull?}
-            can_push={@github_identity? and @can_push?}
+            can_push={Credentials.acts?(@reach) and @can_push?}
             busy={@busy?}
           />
         <% else %>
           <.panel id="link-advisory">
             <:title>GitHub advisory</:title>
-            <div :if={@can_link?}>
+            <div :if={@can_link? and @may_try?}>
               <p class="text-sm text-base-content/60 mb-3">
                 Link the GitHub security advisory this case is about. It leads the published
                 references as the vendor advisory, and this tab sets the case against it.
@@ -449,13 +492,13 @@ defmodule VarselWeb.CaseGitHubLive do
                 <button type="submit" class="btn btn-sm btn-eef">Link</button>
               </.form>
             </div>
-            <.empty_state :if={!@can_link?} class="py-4">
+            <.empty_state :if={!(@can_link? and @may_try?)} class="py-4">
               No advisory is linked to this case.
             </.empty_state>
           </.panel>
 
           <.report_panel
-            :if={@github_identity? and @can_report? and @report_targets != []}
+            :if={@can_report? and @report_targets != []}
             form={@report_form}
             targets={@report_targets}
             target={@report_target}
@@ -480,10 +523,14 @@ defmodule VarselWeb.CaseGitHubLive do
   attr :busy, :boolean, required: true
 
   defp report_panel(assigns) do
+    %{reach: reach, private_reporting: private_reporting} = assigns.target
+
     assigns =
       assign(assigns,
         options: Enum.map(assigns.targets, &{repository_name(&1), repository_name(&1)}),
-        disabled: assigns.target.private_reporting == false
+        app?: reach == :installation,
+        reporting_off?: reach == :user and private_reporting == false,
+        disabled: not Credentials.acts?(reach) or (reach == :user and private_reporting == false)
       )
 
     ~H"""
@@ -513,7 +560,12 @@ defmodule VarselWeb.CaseGitHubLive do
         >
           <:label>Repository</:label>
         </.input>
-        <div :if={@disabled} id="reporting-disabled" class="alert alert-warning text-sm">
+        <.reach_notice id="report-reach-notice" reach={@target.reach} />
+        <p :if={@app?} id="report-as-app" class="text-sm text-base-content/60">
+          Your GitHub login cannot report to {repository_name(@target)}, so the EEF CNA app
+          opens a draft advisory there instead, which the repository's maintainers see.
+        </p>
+        <div :if={@reporting_off?} id="reporting-disabled" class="alert alert-warning text-sm">
           <.icon name="hero-exclamation-triangle" class="size-5 shrink-0" />
           <span>
             {repository_name(@target)} does not accept private vulnerability reports. Ask the
@@ -541,12 +593,62 @@ defmodule VarselWeb.CaseGitHubLive do
           type="submit"
           class="btn btn-sm btn-eef"
           disabled={@busy or @disabled}
-          data-confirm="Send this report to the maintainers on GitHub as you?"
+          data-confirm={
+            if(@app?,
+              do: "Open this draft advisory on GitHub as the EEF CNA app?",
+              else: "Send this report to the maintainers on GitHub as you?"
+            )
+          }
         >
-          Report privately
+          {if(@app?, do: "Open a draft advisory", else: "Report privately")}
         </button>
       </.form>
     </.panel>
+    """
+  end
+
+  attr :id, :string, required: true
+
+  attr :reach, :any,
+    required: true,
+    doc: "a `Varsel.GitHub.Credentials.reach/3` answer, or nil while unknown"
+
+  defp reach_notice(%{reach: :not_reachable} = assigns) do
+    ~H"""
+    <div id={@id} class="alert alert-info text-sm">
+      <.icon name="hero-information-circle" class="size-5 shrink-0" />
+      <span>
+        Your GitHub login cannot act on this repository. The repository's owner needs to
+        install the EEF CNA app.
+        <.link navigate={~p"/settings/account"} class="link link-hover font-semibold">
+          Account settings
+        </.link>
+        show where the app can act for you, with a Refresh for after an install.
+      </span>
+    </div>
+    """
+  end
+
+  defp reach_notice(%{reach: :not_installed} = assigns) do
+    ~H"""
+    <div id={@id} class="alert alert-info text-sm">
+      <.icon name="hero-information-circle" class="size-5 shrink-0" />
+      <span>
+        This cannot be done from here: the EEF CNA app is not installed on this repository.
+      </span>
+    </div>
+    """
+  end
+
+  defp reach_notice(%{reach: reach} = assigns)
+       when reach in [nil, :user, :installation, :public_read, :no_github_identity], do: ~H""
+
+  defp reach_notice(assigns) do
+    ~H"""
+    <div id={@id} class="alert alert-warning text-sm">
+      <.icon name="hero-exclamation-triangle" class="size-5 shrink-0" />
+      <span>This page {Credentials.message(@reach)}.</span>
+    </div>
     """
   end
 end

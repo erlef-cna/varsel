@@ -11,12 +11,20 @@ defmodule Varsel.Cases.GitHubAdvisory.ReportTargetsTest do
   alias Varsel.Cases.GitHubAdvisory.ReportTargets
   alias Varsel.Fixtures
   alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   setup do
     poc = Fixtures.register_user("targets_poc", :poc)
     case_record = Fixtures.open_case(poc, %{title: "Header injection in acme_lib"})
 
     %{poc: poc, case: case_record}
+  end
+
+  defp install(id, owner, repo) do
+    GitHubApp.seed_installation(%{id: id, account: owner, repository_selection: :selected},
+      repositories: ["#{owner}/#{repo}"],
+      token: "ghs_#{repo}"
+    )
   end
 
   defp package(repo_url), do: %AffectedPackage{repo_url: repo_url && URI.new!(repo_url)}
@@ -56,6 +64,9 @@ defmodule Varsel.Cases.GitHubAdvisory.ReportTargetsTest do
         position: 1
       })
 
+      install(7, "acme", "acme_lib")
+      install(8, "erlang", "otp")
+      GitHubApp.seed_user_installations(poc, [7, 8])
       test_pid = self()
 
       GitHubApi.stub(fn conn ->
@@ -76,18 +87,43 @@ defmodule Varsel.Cases.GitHubAdvisory.ReportTargetsTest do
         |> ReportTargets.repositories()
 
       assert ReportTargets.list(repositories, poc) == [
-               %{owner: "acme", repo: "acme_lib", private_reporting: false},
-               %{owner: "erlang", repo: "otp", private_reporting: true}
+               %{owner: "acme", repo: "acme_lib", reach: :user, private_reporting: false},
+               %{owner: "erlang", repo: "otp", reach: :user, private_reporting: true}
              ]
 
       assert_received {:github, ["repos", "acme", "acme_lib", "private-vulnerability-reporting"], ["Bearer gho_token"]}
     end
 
     test "a repository GitHub does not answer for is unknown", %{poc: poc} do
+      install(7, "acme", "acme_lib")
+      GitHubApp.seed_user_installations(poc, [7])
       GitHubApi.stub(&Plug.Conn.send_resp(&1, 404, "{}"))
 
       assert ReportTargets.list([%{owner: "acme", repo: "acme_lib"}], poc) == [
-               %{owner: "acme", repo: "acme_lib", private_reporting: :unknown}
+               %{owner: "acme", repo: "acme_lib", reach: :user, private_reporting: :unknown}
+             ]
+    end
+
+    test "a repository the viewer cannot act on is not asked about", %{poc: poc} do
+      supporter = Fixtures.register_user("targets_supporter", :supporter)
+      install(7, "acme", "acme_lib")
+      GitHubApp.seed_user_installations(poc, [7])
+
+      GitHubApi.stub(fn _conn ->
+        flunk("GitHub was asked about a repository the viewer cannot act on")
+      end)
+
+      assert ReportTargets.list([%{owner: "acme", repo: "acme_lib"}], supporter) == [
+               %{
+                 owner: "acme",
+                 repo: "acme_lib",
+                 reach: :not_reachable,
+                 private_reporting: :unknown
+               }
+             ]
+
+      assert ReportTargets.list([%{owner: "erlang", repo: "otp"}], poc) == [
+               %{owner: "erlang", repo: "otp", reach: :not_installed, private_reporting: :unknown}
              ]
     end
 
