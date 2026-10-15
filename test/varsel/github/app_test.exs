@@ -26,8 +26,7 @@ defmodule Varsel.GitHub.AppTest do
   describe "the JWT" do
     test "is signed by the App's key and is valid from one minute ago for ten minutes" do
       Req.Test.stub(Client, fn conn ->
-        assert conn.method == "GET"
-        assert conn.request_path == "/orgs/erlef-cna/installation"
+        assert {conn.method, conn.request_path} == {"GET", "/app/installations"}
 
         now = System.system_time(:second)
         claims = claims(conn)
@@ -36,16 +35,10 @@ defmodule Varsel.GitHub.AppTest do
         assert_in_delta claims["iat"], now - 60, 2
         assert_in_delta claims["exp"], now + 600, 2
 
-        Req.Test.json(conn, %{
-          "id" => 11,
-          "account" => %{"login" => "erlef-cna"},
-          "target_type" => "Organization",
-          "repository_selection" => "all"
-        })
+        Req.Test.json(conn, [])
       end)
 
-      assert App.org_installation("erlef-cna") ==
-               {:ok, %{id: 11, account: "erlef-cna", kind: :organization, repository_selection: :all}}
+      assert App.installations() == {:ok, []}
     end
 
     test "is read from a key with escaped newlines" do
@@ -59,32 +52,89 @@ defmodule Varsel.GitHub.AppTest do
     end
   end
 
-  describe "repository_installation/2" do
-    test "describes a user's installation that covers selected repositories" do
+  describe "installations/0" do
+    test "describes every installation from all pages" do
       Req.Test.stub(Client, fn conn ->
-        assert conn.method == "GET"
-        assert conn.request_path == "/repos/jdoe/lib/installation"
+        conn = Plug.Conn.fetch_query_params(conn)
+        assert {conn.method, conn.request_path} == {"GET", "/app/installations"}
         assert claims(conn)["iss"] == "424242"
+        assert conn.query_params["per_page"] == "100"
+
+        case conn.query_params["page"] do
+          "1" ->
+            conn
+            |> Plug.Conn.put_resp_header(
+              "link",
+              ~s(<https://api.github.com/app/installations?per_page=100&page=2>; rel="next", ) <>
+                ~s(<https://api.github.com/app/installations?per_page=100&page=2>; rel="last")
+            )
+            |> Req.Test.json([
+              %{
+                "id" => 11,
+                "account" => %{"login" => "erlef-cna"},
+                "target_type" => "Organization",
+                "repository_selection" => "all",
+                "suspended_at" => nil
+              }
+            ])
+
+          "2" ->
+            Req.Test.json(conn, [
+              %{
+                "id" => 12,
+                "account" => %{"login" => "jdoe"},
+                "target_type" => "User",
+                "repository_selection" => "selected",
+                "suspended_at" => "2026-10-01T12:00:00Z"
+              }
+            ])
+        end
+      end)
+
+      assert App.installations() ==
+               {:ok,
+                [
+                  %{
+                    id: 11,
+                    account: "erlef-cna",
+                    kind: :organization,
+                    repository_selection: :all,
+                    suspended_at: nil
+                  },
+                  %{
+                    id: 12,
+                    account: "jdoe",
+                    kind: :user,
+                    repository_selection: :selected,
+                    suspended_at: ~U[2026-10-01 12:00:00Z]
+                  }
+                ]}
+    end
+
+    test "answers :unauthorized when GitHub refuses the JWT" do
+      Req.Test.stub(Client, fn conn ->
+        assert conn.request_path == "/app/installations"
+        conn |> Plug.Conn.put_status(401) |> Req.Test.json(%{"message" => "Bad credentials"})
+      end)
+
+      assert App.installations() == {:error, :unauthorized}
+    end
+  end
+
+  describe "installation_repositories/1" do
+    test "lists the repositories the installation token reaches" do
+      Req.Test.stub(Client, fn conn ->
+        assert {conn.method, conn.request_path} == {"GET", "/installation/repositories"}
+        assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer ghs_installation"]
 
         Req.Test.json(conn, %{
-          "id" => 12,
-          "account" => %{"login" => "jdoe"},
-          "target_type" => "User",
-          "repository_selection" => "selected"
+          "total_count" => 1,
+          "repositories" => [%{"name" => "lib", "owner" => %{"login" => "jdoe"}}]
         })
       end)
 
-      assert App.repository_installation("jdoe", "lib") ==
-               {:ok, %{id: 12, account: "jdoe", kind: :user, repository_selection: :selected}}
-    end
-
-    test "answers :not_installed when GitHub answers 404" do
-      Req.Test.stub(Client, fn conn ->
-        assert conn.request_path == "/repos/acme/lib/installation"
-        conn |> Plug.Conn.put_status(404) |> Req.Test.json(%{"message" => "Not Found"})
-      end)
-
-      assert App.repository_installation("acme", "lib") == :not_installed
+      assert App.installation_repositories("ghs_installation") ==
+               {:ok, [%{owner: "jdoe", repo: "lib"}]}
     end
   end
 
@@ -112,12 +162,30 @@ defmodule Varsel.GitHub.AppTest do
         assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer gho_user"]
 
         Req.Test.json(conn, %{
-          "total_count" => 2,
-          "installations" => [%{"id" => 11}, %{"id" => 12}]
+          "total_count" => 1,
+          "installations" => [
+            %{
+              "id" => 12,
+              "account" => %{"login" => "jdoe"},
+              "target_type" => "User",
+              "repository_selection" => "selected",
+              "suspended_at" => nil
+            }
+          ]
         })
       end)
 
-      assert App.user_installations("gho_user") == {:ok, [11, 12]}
+      assert App.user_installations("gho_user") ==
+               {:ok,
+                [
+                  %{
+                    id: 12,
+                    account: "jdoe",
+                    kind: :user,
+                    repository_selection: :selected,
+                    suspended_at: nil
+                  }
+                ]}
     end
 
     test "answers :unauthorized when GitHub refuses the token" do
@@ -127,6 +195,23 @@ defmodule Varsel.GitHub.AppTest do
       end)
 
       assert App.user_installations("gho_expired") == {:error, :unauthorized}
+    end
+  end
+
+  describe "user_installation_repositories/2" do
+    test "lists the repositories of the installation that the user's token reaches" do
+      Req.Test.stub(Client, fn conn ->
+        assert {conn.method, conn.request_path} == {"GET", "/user/installations/12/repositories"}
+        assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer gho_user"]
+
+        Req.Test.json(conn, %{
+          "total_count" => 1,
+          "repositories" => [%{"name" => "lib", "owner" => %{"login" => "jdoe"}}]
+        })
+      end)
+
+      assert App.user_installation_repositories("gho_user", 12) ==
+               {:ok, [%{owner: "jdoe", repo: "lib"}]}
     end
   end
 
@@ -141,8 +226,7 @@ defmodule Varsel.GitHub.AppTest do
       Req.Test.stub(Client, fn _conn -> flunk("the App sent a request") end)
 
       refute App.configured?()
-      assert App.repository_installation("acme", "lib") == :not_installed
-      assert App.org_installation("acme") == :not_installed
+      assert App.installations() == {:error, :not_configured}
       assert App.mint(11) == {:error, :not_configured}
     end
   end

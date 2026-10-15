@@ -70,6 +70,7 @@ defmodule Varsel.Accounts do
       define :update_user_notification_settings, action: :update_notification_settings
       define :set_user_credit, action: :set_credit
       define :delete_user, action: :destroy
+      define :sync_github_installations, action: :sync_github_installations
       define :log_out_user_everywhere, action: :log_out_everywhere
     end
 

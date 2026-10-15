@@ -4,15 +4,18 @@
 
 defmodule Varsel.GitHub.App do
   @moduledoc """
-  The requests Varsel sends to GitHub as the GitHub App itself.
+  The requests Varsel sends to GitHub about the GitHub App's installations.
 
   The App authenticates with a JSON Web Token that its private key signs.
-  The JWT finds the App's installations and mints their installation tokens.
-  `app_id` and `private_key` in `config :varsel, :github` configure the App.
-  Without them the App is inert: every lookup answers `:not_installed` and
-  every mint answers `{:error, :not_configured}`.
+  The JWT lists the App's installations and mints their installation
+  tokens. An installation token lists the repositories of a selective
+  installation. A person's own token lists the installations that the
+  person reaches and the repositories of each that the person can access.
+  `app_id` and `private_key` in `config :varsel, :github`
+  configure the App. Without them the App is inert: every request that
+  needs the JWT answers `{:error, :not_configured}` and sends nothing.
 
-  `Varsel.GitHub.Installation` and `Varsel.GitHub.UserInstallation` cache
+  `Varsel.GitHub.Installation` and `Varsel.GitHub.UserInstallation` store
   what these requests answer.
   """
 
@@ -26,10 +29,12 @@ defmodule Varsel.GitHub.App do
           id: pos_integer(),
           account: String.t(),
           kind: :organization | :user,
-          repository_selection: :all | :selected
+          repository_selection: :all | :selected,
+          suspended_at: DateTime.t() | nil
         }
 
-  @type lookup :: {:ok, installation()} | :not_installed | {:error, term()}
+  @typedoc "A repository that an installation token reaches."
+  @type repository :: %{owner: String.t(), repo: String.t()}
 
   @doc "Whether the App has an id and a private key to act as itself with."
   @spec configured?() :: boolean()
@@ -47,16 +52,64 @@ defmodule Varsel.GitHub.App do
     end
   end
 
-  @doc "The installation of the App on the repository `owner/repo`."
-  @spec repository_installation(String.t(), String.t()) :: lookup()
-  def repository_installation(owner, repo) when is_binary(owner) and is_binary(repo) do
-    installation("/repos/:owner/:repo/installation", owner: owner, repo: repo)
+  @doc "Every installation of the App, from all pages of GitHub's answer."
+  @spec installations() ::
+          {:ok, [installation()]} | {:error, :not_configured | :unauthorized | term()}
+  def installations do
+    with {:ok, jwt} <- jwt() do
+      paginate([auth: {:bearer, jwt}], "/app/installations", fn
+        installations when is_list(installations) -> describe_all(installations)
+        body -> {:error, {:unexpected_body, body}}
+      end)
+    end
   end
 
-  @doc "The installation of the App on the organization `account`."
-  @spec org_installation(String.t()) :: lookup()
-  def org_installation(account) when is_binary(account) do
-    installation("/orgs/:org/installation", org: account)
+  @doc """
+  The repositories that the installation token `token` reaches, from all
+  pages of GitHub's answer.
+  """
+  @spec installation_repositories(String.t()) ::
+          {:ok, [repository()]} | {:error, :unauthorized | term()}
+  def installation_repositories(token) when is_binary(token) do
+    paginate([auth: {:bearer, token}], "/installation/repositories", &repositories/1)
+  end
+
+  defp repositories(%{"repositories" => repositories}) when is_list(repositories),
+    do: {:ok, for(%{"name" => repo, "owner" => %{"login" => owner}} <- repositories, do: %{owner: owner, repo: repo})}
+
+  defp repositories(body), do: {:error, {:unexpected_body, body}}
+
+  @doc """
+  The App's installations that the user access token `user_token`
+  reaches, from all pages of GitHub's answer.
+  """
+  @spec user_installations(String.t()) ::
+          {:ok, [installation()]} | {:error, :unauthorized | term()}
+  def user_installations(user_token) when is_binary(user_token) do
+    paginate([auth: {:bearer, user_token}], "/user/installations", fn
+      %{"installations" => installations} when is_list(installations) ->
+        describe_all(installations)
+
+      body ->
+        {:error, {:unexpected_body, body}}
+    end)
+  end
+
+  @doc """
+  The repositories of the installation `installation_id` that the user
+  access token `user_token` reaches, from all pages of GitHub's answer.
+  GitHub lists only the repositories the person can access, so the list
+  can be shorter than the installation's own.
+  """
+  @spec user_installation_repositories(String.t(), pos_integer()) ::
+          {:ok, [repository()]} | {:error, :unauthorized | term()}
+  def user_installation_repositories(user_token, installation_id)
+      when is_binary(user_token) and is_integer(installation_id) do
+    paginate(
+      [auth: {:bearer, user_token}],
+      "/user/installations/#{installation_id}/repositories",
+      &repositories/1
+    )
   end
 
   @doc """
@@ -83,26 +136,6 @@ defmodule Varsel.GitHub.App do
 
   defp minted(other), do: error(other)
 
-  @doc """
-  The ids of the App's installations that the user access token
-  `user_token` reaches.
-  """
-  @spec user_installations(String.t()) ::
-          {:ok, [pos_integer()]} | {:error, :unauthorized | term()}
-  def user_installations(user_token) when is_binary(user_token) do
-    [auth: {:bearer, user_token}]
-    |> Client.api()
-    |> Req.get(url: "/user/installations", params: [per_page: 100])
-    |> case do
-      {:ok, %Req.Response{status: 200, body: %{"installations" => installations}}}
-      when is_list(installations) ->
-        {:ok, for(%{"id" => id} <- installations, is_integer(id), do: id)}
-
-      other ->
-        error(other)
-    end
-  end
-
   @doc false
   @spec jwt() :: {:ok, String.t()} | {:error, :not_configured}
   def jwt do
@@ -117,34 +150,79 @@ defmodule Varsel.GitHub.App do
     end
   end
 
-  defp installation(url, path_params) do
-    case jwt() do
-      {:ok, jwt} ->
-        [auth: {:bearer, jwt}]
-        |> Client.api()
-        |> Req.get(url: url, path_params: path_params)
-        |> case do
-          {:ok, %Req.Response{status: 200, body: %{} = body}} -> describe(body)
-          {:ok, %Req.Response{status: 404}} -> :not_installed
-          other -> error(other)
+  defp paginate(auth, url, items, page \\ 1, found \\ []) do
+    auth
+    |> Client.api()
+    |> Req.get(url: url, params: [per_page: 100, page: page])
+    |> case do
+      {:ok, %Req.Response{status: 200, body: body} = response} ->
+        with {:ok, page_items} <- items.(body) do
+          continue(auth, url, items, next_page(response), [page_items | found])
         end
 
-      {:error, :not_configured} ->
-        :not_installed
+      other ->
+        error(other)
+    end
+  end
+
+  defp continue(_auth, _url, _items, nil, found), do: {:ok, found |> Enum.reverse() |> Enum.concat()}
+
+  defp continue(auth, url, items, next, found), do: paginate(auth, url, items, next, found)
+
+  # GitHub names the next page in a `Link` header. Only its `page` number is
+  # taken, so the next request goes to the same path on the same host.
+  defp next_page(response) do
+    response
+    |> Req.Response.get_header("link")
+    |> Enum.flat_map(&String.split(&1, ","))
+    |> Enum.find_value(fn link ->
+      with [_link, target] <- Regex.run(~r/<([^>]+)>\s*;\s*rel="next"/, link),
+           %URI{query: query} when is_binary(query) <- URI.parse(target),
+           {page, ""} <- query |> URI.decode_query() |> Map.get("page", "") |> Integer.parse() do
+        page
+      else
+        _other -> nil
+      end
+    end)
+  end
+
+  defp describe_all(installations) do
+    installations
+    |> Enum.reduce_while({:ok, []}, fn body, {:ok, described} ->
+      case describe(body) do
+        {:ok, installation} -> {:cont, {:ok, [installation | described]}}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+    |> case do
+      {:ok, described} -> {:ok, Enum.reverse(described)}
+      error -> error
     end
   end
 
   defp describe(%{"id" => id, "account" => %{"login" => login}} = body) when is_integer(id) do
-    {:ok,
-     %{
-       id: id,
-       account: login,
-       kind: if(body["target_type"] == "User", do: :user, else: :organization),
-       repository_selection: if(body["repository_selection"] == "selected", do: :selected, else: :all)
-     }}
+    with {:ok, suspended_at} <- suspended_at(body["suspended_at"]) do
+      {:ok,
+       %{
+         id: id,
+         account: login,
+         kind: if(body["target_type"] == "User", do: :user, else: :organization),
+         repository_selection: if(body["repository_selection"] == "selected", do: :selected, else: :all),
+         suspended_at: suspended_at
+       }}
+    end
   end
 
   defp describe(body), do: {:error, {:unexpected_body, body}}
+
+  defp suspended_at(nil), do: {:ok, nil}
+
+  defp suspended_at(timestamp) when is_binary(timestamp) do
+    case DateTime.from_iso8601(timestamp) do
+      {:ok, suspended_at, _offset} -> {:ok, suspended_at}
+      {:error, reason} -> {:error, {:unexpected_suspended_at, reason}}
+    end
+  end
 
   defp error({:ok, %Req.Response{status: 401}}), do: {:error, :unauthorized}
 

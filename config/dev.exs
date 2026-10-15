@@ -76,6 +76,7 @@ config :varsel, VarselWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}],
   check_origin: false,
   code_reloader: true,
+  reloadable_compilers: [:ash_signals, :phoenix_live_view, :gettext, :elixir, :app],
   debug_errors: true,
   secret_key_base: "03e4VyftWvYtYjGop9u2I8Gqe+vY/d5WJxFc41MiX7SRqh7UVgNaE3aAt0Ta1QRS",
   watchers: [

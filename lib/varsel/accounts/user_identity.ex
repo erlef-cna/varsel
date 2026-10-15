@@ -132,6 +132,8 @@ defmodule Varsel.Accounts.UserIdentity do
       change ClaimCaseInvites
       change ClaimCaseCredits
       change ClaimReportParticipants
+
+      emit Varsel.Accounts.Signals, :github_identity_linked, where: [attribute_equals(:strategy, "github")]
     end
 
     update :refresh_access_token do

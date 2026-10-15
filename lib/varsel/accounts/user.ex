@@ -20,13 +20,15 @@ defmodule Varsel.Accounts.User do
       Varsel.Accounts.Strategy.Mock,
       AshPaperTrail.Resource,
       AshGraphql.Resource,
-      AshAdmin.Resource
+      AshAdmin.Resource,
+      AshOban
     ]
 
   alias AshAuthentication.Checks.AshAuthenticationInteraction
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Accounts.User.Changes.ApplyProviderProfile
   alias Varsel.Accounts.User.Changes.ResolveOauthIdentity
+  alias Varsel.Accounts.User.Changes.SyncGitHubInstallations
   alias Varsel.Accounts.User.Role
   alias Varsel.Accounts.UserIdentity
   alias Varsel.Cases.Proposal
@@ -156,6 +158,8 @@ defmodule Varsel.Accounts.User do
   paper_trail do
     change_tracking_mode :changes_only
     ignore_attributes [:inserted_at, :updated_at, :notification_email]
+    ignore_actions [:sync_github_installations]
+
     only_when_changed? true
     store_action_name? true
     # Accounts are really deleted, so a version cannot point at its source row.
@@ -163,6 +167,27 @@ defmodule Varsel.Accounts.User do
     reference_source? false
     belongs_to_actor :user, __MODULE__, domain: Varsel.Accounts
     version_extensions extensions: [Varsel.Accounts.VersionActorReference]
+  end
+
+  oban do
+    triggers do
+      trigger :sync_github_installations do
+        action :sync_github_installations
+
+        where expr(
+                exists(identities, strategy == "github") and
+                  (is_nil(github_installations_synced_at) or
+                     github_installations_synced_at < ago(1, :hour))
+              )
+
+        worker_module_name Varsel.Accounts.User.SyncGitHubInstallationsWorker
+        scheduler_module_name Varsel.Accounts.User.SyncGitHubInstallationsScheduler
+        queue :github_sync
+        max_attempts 3
+        scheduler_cron "*/15 * * * *"
+        worker_opts unique: [period: :infinity, states: :incomplete, keys: [:primary_key]]
+      end
+    end
   end
 
   actions do
@@ -313,6 +338,22 @@ defmodule Varsel.Accounts.User do
       change Varsel.Accounts.User.Changes.RevokeTokens
     end
 
+    update :sync_github_installations do
+      description """
+      Replaces the installations of the GitHub App that the account's own
+      GitHub token reaches with the ones GitHub lists now. Stores each of
+      those installations, and adds the repositories of a selective one that
+      the token lists. It never removes a repository: the token lists only
+      the repositories the person can access, so only the App's own sync
+      removes them.
+      """
+
+      accept []
+      require_atomic? false
+
+      change SyncGitHubInstallations
+    end
+
     if @mock_login? do
       create :register_with_mock do
         description "Dev-only: registers or signs in the dummy account for a role."
@@ -339,8 +380,9 @@ defmodule Varsel.Accounts.User do
     end
 
     # The notification fan-out worker lists POCs and assigned users to notify
-    # them, and the email/digest workers read a recipient's address and
-    # preferences; none of these have an actor, so they authorize through
+    # them, the email/digest workers read a recipient's address and
+    # preferences, and the GitHub installation sync reads and stamps the
+    # person it syncs; none of these have an actor, so they authorize through
     # this bypass.
     bypass AshObanInteraction do
       authorize_if always()
@@ -433,7 +475,7 @@ defmodule Varsel.Accounts.User do
     # re-runs its list query. Actor-scoped topics aren't needed: only POCs
     # can view the list, and the query itself re-applies authorization.
     publish_all :create, ["all"]
-    publish_all :update, ["all"]
+    publish_all :update, ["all"], except: [:sync_github_installations]
     publish_all :destroy, ["all"]
   end
 
@@ -491,6 +533,12 @@ defmodule Varsel.Accounts.User do
       public? true
     end
 
+    attribute :github_installations_synced_at, :utc_datetime_usec do
+      description "When the installations of the GitHub App that the account's GitHub token reaches were last synced."
+      allow_nil? true
+      public? false
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
   end
@@ -509,6 +557,15 @@ defmodule Varsel.Accounts.User do
     has_many :identities, UserIdentity do
       public? false
       destination_attribute :user_id
+    end
+  end
+
+  signals_in do
+    from Varsel.Accounts.Signals do
+      # Unique by person, so a second sign-in adds no job while one is pending.
+      on :github_identity_linked, :sync_github_installations,
+        get_by: [id: :user_id],
+        delivery: {AshOban.Signals, queue: :github_sync, unique: [keys: [:user_id]]}
     end
   end
 

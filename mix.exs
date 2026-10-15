@@ -16,7 +16,7 @@ defmodule Varsel.MixProject do
       aliases: aliases(),
       deps: deps(),
       releases: releases(),
-      compilers: [:phoenix_live_view] ++ Mix.compilers(),
+      compilers: [:ash_signals, :phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader],
       consolidate_protocols: Mix.env() != :dev,
       dialyzer: [
