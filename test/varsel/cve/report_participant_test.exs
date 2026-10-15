@@ -168,6 +168,28 @@ defmodule Varsel.CVE.ReportParticipantTest do
     end
   end
 
+  describe "the spend on resolution" do
+    test "a POC rejecting a report spends its participants", %{poc: poc, report: report} do
+      CVE.reject_vulnerability_report!(report, %{}, actor: poc)
+
+      assert participants_of(report, poc) == []
+    end
+
+    # The reporter is admitted by the signal, not by a role: they spend their
+    # own report's rows while still unable to read them.
+    test "a reporter withdrawing their own report spends its participants", %{
+      poc: poc,
+      report: report
+    } do
+      reporter = Fixtures.register_user("withdrawing_reporter")
+      report = Ash.Seed.update!(report, %{reporter_id: reporter.id})
+
+      CVE.withdraw_vulnerability_report!(report, actor: reporter)
+
+      assert participants_of(report, poc) == []
+    end
+  end
+
   describe "hex.pm erasure" do
     test "is refused to everyone but the sending system", %{poc: poc} do
       [participant | _] = CVE.list_report_participants!(actor: poc)

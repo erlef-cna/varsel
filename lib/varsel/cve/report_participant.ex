@@ -29,6 +29,7 @@ defmodule Varsel.CVE.ReportParticipant do
   alias Varsel.Accounts.User
   alias Varsel.Cases.CaseInvite.Strategy
   alias Varsel.CVE.ReportParticipant.Role
+  alias Varsel.CVE.Signals
   alias Varsel.CVE.VulnerabilityReport
 
   postgres do
@@ -53,7 +54,10 @@ defmodule Varsel.CVE.ReportParticipant do
 
   # Both updates are single-purpose system writes (the sign-in link and hex.pm's
   # erasure), so neither is a default update to fall back on.
-  # credo:disable-for-next-line AshCredo.Check.Design.MissingPrimaryAction
+  #
+  # `:for_report` selects the rows the `:report_resolved` listener spends, and
+  # nothing else reads it.
+  # credo:disable-for-next-line /AshCredo.Check.Design.Missing(PrimaryAction|CodeInterface)/
   actions do
     defaults [:read]
 
@@ -73,6 +77,17 @@ defmodule Varsel.CVE.ReportParticipant do
       argument :username, :ci_string, allow_nil?: false
 
       filter expr(strategy == ^arg(:strategy) and username == ^arg(:username) and is_nil(user_id))
+    end
+
+    read :for_report do
+      description "Internal: the participants a report still holds, for the spend on resolution."
+      public? false
+
+      argument :report_id, :uuid, allow_nil?: false
+
+      filter expr(report_id == ^arg(:report_id))
+
+      pagination keyset?: true, required?: false
     end
 
     update :erase_hex_person do
@@ -136,14 +151,17 @@ defmodule Varsel.CVE.ReportParticipant do
       authorize_if actor_attribute_equals(:role, :poc)
     end
 
-    # Stamped by VulnerabilityReport.Changes.SpendParticipants, which lets a
-    # withdrawing reporter spend their own report's rows without ever being
-    # able to read them on a surface.
+    # The spend on resolution runs as whoever resolved the report, which for a
+    # withdrawal is its reporter. The signal is what admits them, so they
+    # never read these rows on a surface.
+    policy action(:for_report) do
+      authorize_if signal_in(Signals, :report_resolved)
+    end
+
     policy action([:read, :for_identity, :link_user, :spend]) do
+      authorize_if signal_in(Signals, :report_resolved)
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
-      forbid_unless context_equals([:private, :spend_participants?], true)
-      authorize_if relates_to_actor_via([:report, :reporter])
     end
 
     # Only hex.pm says when it erased someone it named.
@@ -208,6 +226,12 @@ defmodule Varsel.CVE.ReportParticipant do
       allow_nil? true
       public? true
       attribute_writable? true
+    end
+  end
+
+  signals_in do
+    from Signals do
+      on :report_resolved, :spend, read_action: :for_report, args: [:report_id]
     end
   end
 
