@@ -95,15 +95,15 @@ defmodule Varsel.Cases.CaseAssignment do
       authorize_if signal_in(Signals, :identity_linked)
     end
 
+    # A supporter reaches this only through `Varsel.Cases.Case`'s
+    # `:grant_access`, whose own policy decides on the case row that they work
+    # it. Asking here instead would be a filter check on a create, which the
+    # row being inserted answers.
     policy action_type(:create) do
       authorize_if signal_in(Signals, :identity_linked)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if accessing_from(Case, :assignments)
-
-      authorize_if expr(
-                     ^actor(:role) == :supporter and
-                       exists(case.assignments, user_id == ^actor(:id))
-                   )
+      authorize_if context_equals([:private, :granting_case_access?], true)
     end
 
     policy action_type(:destroy) do

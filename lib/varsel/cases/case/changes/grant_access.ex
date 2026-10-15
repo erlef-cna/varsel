@@ -18,6 +18,8 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
 
   require Ash.Query
 
+  @stamp %{private: %{granting_case_access?: true}}
+
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
     Changeset.before_action(changeset, fn changeset ->
@@ -32,7 +34,13 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
     strategy = Changeset.get_argument(changeset, :strategy)
     username = changeset |> Changeset.get_argument(:username) |> to_string() |> String.trim()
     case_id = changeset.data.id
-    opts = Ash.Context.to_opts(context)
+
+    # `:grant_access`'s own policy decided, on the case row, that the actor
+    # works it. The assignment's create policy admits them by that decision.
+    opts =
+      context
+      |> Ash.Context.to_opts()
+      |> Keyword.update(:context, @stamp, &Ash.Helpers.deep_merge_maps(&1, @stamp))
 
     case owner(strategy, username) do
       nil -> invite(changeset, case_id, strategy, username, opts)

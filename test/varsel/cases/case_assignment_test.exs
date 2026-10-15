@@ -5,6 +5,8 @@
 defmodule Varsel.Cases.CaseAssignmentTest do
   use Varsel.DataCase, async: true
 
+  alias Ash.Error.Forbidden
+  alias Varsel.Accounts.User
   alias Varsel.Cases
   alias Varsel.Cases.CaseAssignment
   alias Varsel.Fixtures
@@ -55,6 +57,45 @@ defmodule Varsel.Cases.CaseAssignmentTest do
         |> Enum.filter(&(&1.version_source_id == assignment.id))
 
       assert length(versions) == 1
+    end
+
+    test "a supporter who does not work the case cannot put themselves on it", %{
+      supporter: supporter,
+      case: case_record
+    } do
+      assert {:error, %Forbidden{}} =
+               Cases.assign_case_user(
+                 %{case_id: case_record.id, user_id: supporter.id},
+                 actor: supporter
+               )
+    end
+
+    test "a supporter who does not work the case cannot put anybody else on it", %{
+      supporter: supporter,
+      case: case_record
+    } do
+      stranger = Fixtures.register_user("assign_stranger", :supporter)
+
+      assert {:error, %Forbidden{}} =
+               Cases.assign_case_user(
+                 %{case_id: case_record.id, user_id: stranger.id},
+                 actor: supporter
+               )
+    end
+
+    test "a supporter who works the case grants access through the case", %{
+      poc: poc,
+      supporter: supporter,
+      case: case_record
+    } do
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      assert Cases.can_grant_case_access?(
+               Ash.get!(User, supporter.id, authorize?: false),
+               case_record,
+               :github,
+               "newcomer"
+             )
     end
   end
 end
