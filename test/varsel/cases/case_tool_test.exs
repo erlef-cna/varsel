@@ -73,7 +73,8 @@ defmodule Varsel.Cases.CaseToolTest do
       actor: actor,
       case_record: case_record
     } do
-      [row] = run(:list_open_case_proposals, %{"input" => %{"case_id" => case_record.id}}, actor)
+      %{"results" => [row]} =
+        run(:list_open_case_proposals, %{"input" => %{"case_id" => case_record.id}}, actor)
 
       refute Map.has_key?(row, "reasoning")
       assert row["state"] == "open"

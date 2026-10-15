@@ -481,7 +481,8 @@ defmodule Varsel.Cases.Case do
 
       change transition_state(:closed)
       change Varsel.Cases.Case.Changes.HandleCveRecordOnClose
-      change Varsel.Cases.Case.Changes.SweepOpenProposals
+
+      emit Varsel.Cases.Signals, :case_closed, fields: [case_id: :id]
     end
   end
 

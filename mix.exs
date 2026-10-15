@@ -72,7 +72,9 @@ defmodule Varsel.MixProject do
     # styler:sort
     [
       {:absinthe_phoenix, "~> 2.0"},
-      {:ash, "~> 3.0"},
+      # TODO: back to a released `~> 3.0` before merge. Pinned for the
+      # `signal_in/2` policy check, unreleased as of 2026-10-15.
+      {:ash, github: "ash-project/ash", ref: "b329b100cd6d2942fba7552e29de4ecda45e1efa", override: true},
       {:ash_admin, "~> 1.0", runtime: Mix.env() in [:dev, :test]},
       {:ash_ai, "~> 1.0"},
       # The ref is 5.0.0-rc.14 plus team-alembic/ash_authentication#1241, which

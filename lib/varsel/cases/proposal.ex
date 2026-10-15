@@ -37,12 +37,14 @@ defmodule Varsel.Cases.Proposal do
   alias Varsel.Accounts.User
   alias Varsel.Cases.Proposal.Changes.ApplyToTarget
   alias Varsel.Cases.Proposal.Changes.EnsureOpen
+  alias Varsel.Cases.Proposal.Changes.NoteSweepReason
   alias Varsel.Cases.Proposal.Changes.SupersedeCompeting
   alias Varsel.Cases.Proposal.Operation
   alias Varsel.Cases.Proposal.State
   alias Varsel.Cases.Proposal.Target
   alias Varsel.Cases.Proposal.Validations.CaseState
   alias Varsel.Cases.Proposal.Validations.ValidTarget
+  alias Varsel.Cases.Signals
 
   graphql do
     type :case_proposal
@@ -109,6 +111,7 @@ defmodule Varsel.Cases.Proposal do
       argument :case_id, :uuid, allow_nil?: false
       filter expr(case_id == ^arg(:case_id) and state == :open)
       prepare build(sort: [inserted_at: :asc])
+      pagination keyset?: true, required?: false
     end
 
     create :propose do
@@ -197,6 +200,7 @@ defmodule Varsel.Cases.Proposal do
       change EnsureOpen
       change transition_state(:superseded)
       change set_attribute(:resolved_at, &DateTime.utc_now/0)
+      change NoteSweepReason
     end
   end
 
@@ -248,6 +252,8 @@ defmodule Varsel.Cases.Proposal do
     end
 
     policy action(:supersede) do
+      authorize_if signal_in(Signals, :case_closed)
+
       forbid_unless context_equals([:private, :proposal_sweep?], true)
       authorize_if actor_attribute_equals(:role, :poc)
 
@@ -392,6 +398,12 @@ defmodule Varsel.Cases.Proposal do
     has_many :comments, Varsel.Cases.Comment do
       public? true
       destination_attribute :proposal_id
+    end
+  end
+
+  signals_in do
+    from Signals do
+      on :case_closed, :supersede, read_action: :list_open_for_case, args: [:case_id]
     end
   end
 end
