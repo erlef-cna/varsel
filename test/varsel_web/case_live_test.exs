@@ -70,37 +70,53 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Archive"
     end
 
-    test "a POC opens a case through the band's on-demand title popover", %{conn: conn, poc: poc} do
+    test "a POC opens a case through the band's menu", %{conn: conn, poc: poc} do
       Fixtures.open_case(poc, %{title: "Existing case"})
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
       assert html =~ "Existing case"
-      # The band holds only search + the "Open case" button at rest; the
-      # title input is revealed on demand.
-      refute html =~ "Working title"
+      # The band holds only search + the "Open case" button at rest; the menu
+      # and its dialogs are revealed on demand.
+      refute has_element?(lv, "#open-case-form")
 
       html = lv |> element("button", "Open case") |> render_click()
-      assert html =~ "Working title"
+      assert html =~ "Blank case"
+      assert html =~ "From a GitHub advisory"
 
-      # Escape closes the popover without opening anything.
-      html =
-        lv
-        |> element("div[phx-window-keydown=close_open_case]")
-        |> render_keydown(%{"key" => "escape"})
+      # Escape closes the menu without opening a dialog.
+      lv
+      |> element("ul[phx-window-keydown=close_open_case]")
+      |> render_keydown(%{"key" => "escape"})
 
-      refute html =~ "Working title"
+      refute has_element?(lv, "#open-case-form")
 
       lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=blank]") |> render_click()
+      assert has_element?(lv, "#open-case-form")
 
       lv
-      |> form("form[phx-submit=open_case]", %{"title" => "Fresh case"})
+      |> form("#open-case-form", %{"form" => %{"title" => "Fresh case"}})
       |> render_submit()
 
       assert {path, _flash} = assert_redirect(lv)
       assert path =~ ~r{^/cases/}
     end
 
-    test "the popover also opens a case from a GitHub advisory", %{conn: conn, poc: poc} do
+    test "escape closes the blank-case dialog without opening anything", %{conn: conn, poc: poc} do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=blank]") |> render_click()
+
+      lv
+      |> element("#open-case-blank[phx-window-keydown=close_open_case_dialog]")
+      |> render_keydown(%{"key" => "escape"})
+
+      refute has_element?(lv, "#open-case-form")
+      assert Cases.list_cases!(actor: poc) == []
+    end
+
+    test "the menu also opens a case from a GitHub advisory", %{conn: conn, poc: poc} do
       GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
 
       GitHubApp.seed_installation(%{id: 7, account: "acme", repository_selection: :selected},
@@ -113,10 +129,13 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
       lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
 
       lv
       |> form("#open-case-advisory-form", %{
-        "advisory_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+        "form" => %{
+          "advisory_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+        }
       })
       |> render_submit()
 
@@ -126,17 +145,113 @@ defmodule VarselWeb.CaseLiveTest do
       assert [%{title: "Header injection in acme_lib"}] = Cases.list_cases!(actor: poc)
     end
 
-    test "an address that is no advisory keeps the viewer on the list", %{conn: conn, poc: poc} do
+    test "the advisory dialog says when the app cannot reach the repository", %{
+      conn: conn,
+      poc: poc
+    } do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
       lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
+
+      html =
+        lv
+        |> form("#open-case-advisory-form", %{
+          "form" => %{
+            "advisory_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+          }
+        })
+        |> render_change()
+
+      assert html =~ "EEF CNA app"
+    end
+
+    test "the dialog disables submit when the app cannot reach the repository", %{
+      conn: conn,
+      poc: poc
+    } do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
+
+      refute has_element?(lv, "#open-case-advisory-form button[type=submit][disabled]")
 
       lv
-      |> form("#open-case-advisory-form", %{"advisory_url" => "https://github.com/acme"})
+      |> form("#open-case-advisory-form", %{
+        "form" => %{
+          "advisory_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+        }
+      })
+      |> render_change()
+
+      assert has_element?(lv, "#open-case-advisory-form button[type=submit][disabled]")
+    end
+
+    test "a submit that bypasses the disabled button is still refused", %{conn: conn, poc: poc} do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
+
+      lv
+      |> form("#open-case-advisory-form", %{
+        "form" => %{
+          "advisory_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+        }
+      })
       |> render_submit()
 
-      assert has_element?(lv, "#flash-error", "Could not open case:")
-      assert has_element?(lv, "#flash-error", "is not a GitHub advisory URL or GHSA id")
+      assert Cases.list_cases!(actor: poc) == []
+
+      assert lv
+             |> element("#open-case-advisory-form")
+             |> render() =~ "EEF CNA app is not installed"
+    end
+
+    test "an address that is no advisory is refused on the field", %{conn: conn, poc: poc} do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
+
+      lv
+      |> form("#open-case-advisory-form", %{
+        "form" => %{"advisory_url" => "https://github.com/acme"}
+      })
+      |> render_submit()
+
+      refute has_element?(lv, "#flash-error")
       assert has_element?(lv, "#open-case-advisory-form")
+
+      assert lv
+             |> element("#open-case-advisory-form")
+             |> render() =~ "is not a GitHub advisory URL or GHSA id"
+    end
+
+    test "an advisory already linked to a case is refused on the field", %{conn: conn, poc: poc} do
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
+      GitHubApp.seed_installation(%{id: 7, account: "acme", repository_selection: :selected},
+        repositories: ["acme/acme_lib"],
+        token: "ghs_acme_lib"
+      )
+
+      GitHubApp.seed_user_installations(poc, [7])
+      GitHubApi.stub_advisory(GitHubAdvisoryFixtures.hex_advisory())
+      url = "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+
+      Cases.open_case_from_github_advisory!(%{advisory_url: url}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
+
+      lv
+      |> form("#open-case-advisory-form", %{"form" => %{"advisory_url" => url}})
+      |> render_submit()
+
+      refute has_element?(lv, "#flash-error")
+
+      assert lv
+             |> element("#open-case-advisory-form")
+             |> render() =~ "is already linked to another case"
     end
 
     test "pipeline cards show one package chip per affected package", %{conn: conn, poc: poc} do

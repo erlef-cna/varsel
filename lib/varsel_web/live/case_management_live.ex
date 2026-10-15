@@ -25,10 +25,13 @@ defmodule VarselWeb.CaseManagementLive do
   import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
   import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
+  alias AshPhoenix.Form
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.Case
   alias Varsel.CVE
+  alias Varsel.GitHub.Advisories
+  alias Varsel.GitHub.Credentials
   alias VarselWeb.BoardComponents
   alias VarselWeb.CaseManagementLive.LaneSort
 
@@ -49,7 +52,16 @@ defmodule VarselWeb.CaseManagementLive do
 
   @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, page_title: "Cases", expanded_lanes: MapSet.new(), open_case_open?: false)}
+    {:ok,
+     assign(socket,
+       page_title: "Cases",
+       expanded_lanes: MapSet.new(),
+       open_case_open?: false,
+       open_case_dialog: nil,
+       advisory_reach: nil,
+       open_case_form: nil,
+       advisory_form: nil
+     )}
   end
 
   @impl Phoenix.LiveView
@@ -264,35 +276,58 @@ defmodule VarselWeb.CaseManagementLive do
     |> assign(:archive_match_count, published + closed)
   end
 
+  defp assign_dialog_form(socket, :blank) do
+    form =
+      Case
+      |> Form.for_create(:open, as: "form", actor: socket.assigns.current_user)
+      |> to_form()
+
+    assign(socket, :open_case_form, form)
+  end
+
+  defp assign_dialog_form(socket, :advisory) do
+    form =
+      Case
+      |> Form.for_create(:open_from_github_advisory,
+        as: "form",
+        actor: socket.assigns.current_user
+      )
+      |> to_form()
+
+    assign(socket, :advisory_form, form)
+  end
+
+  # A global database entry belongs to no repository, so no credential of
+  # ours reads it and there is nothing to warn about.
+  defp advisory_reach(url, actor) do
+    case Advisories.parse(url) do
+      {:ok, %{owner: owner, repo: repo}} -> Credentials.reach(actor, owner, repo)
+      {:ok, _global_entry} -> :global
+      :error -> nil
+    end
+  end
+
   # --------------------------------------------------------------- events
 
   @impl Phoenix.LiveView
-  def handle_event("open_case", %{"title" => title}, socket) do
-    socket =
-      case Cases.open_case(%{title: title}, actor: socket.assigns.current_user) do
-        {:ok, case_record} ->
-          push_navigate(socket, to: ~p"/cases/#{case_record.id}")
+  def handle_event("open_case", %{"form" => params}, socket) do
+    case Form.submit(socket.assigns.open_case_form, params: params) do
+      {:ok, case_record} ->
+        {:noreply, push_navigate(socket, to: ~p"/cases/#{case_record.id}")}
 
-        {:error, error} ->
-          put_flash(socket, :error, "Could not open case: #{errors_to_string(error)}")
-      end
-
-    {:noreply, socket}
+      {:error, form} ->
+        {:noreply, assign(socket, :open_case_form, form)}
+    end
   end
 
-  def handle_event("open_case_from_advisory", %{"advisory_url" => url}, socket) do
-    socket =
-      case Cases.open_case_from_github_advisory(%{advisory_url: url},
-             actor: socket.assigns.current_user
-           ) do
-        {:ok, case_record} ->
-          push_navigate(socket, to: ~p"/cases/#{case_record.id}/github")
+  def handle_event("open_case_from_advisory", %{"form" => params}, socket) do
+    case Form.submit(socket.assigns.advisory_form, params: params) do
+      {:ok, case_record} ->
+        {:noreply, push_navigate(socket, to: ~p"/cases/#{case_record.id}/github")}
 
-        {:error, error} ->
-          put_flash(socket, :error, "Could not open case: #{errors_to_string(error)}")
-      end
-
-    {:noreply, socket}
+      {:error, form} ->
+        {:noreply, assign(socket, :advisory_form, form)}
+    end
   end
 
   def handle_event("search", %{"query" => query}, socket) do
@@ -330,6 +365,35 @@ defmodule VarselWeb.CaseManagementLive do
 
   def handle_event("close_open_case", _params, socket) do
     {:noreply, assign(socket, :open_case_open?, false)}
+  end
+
+  def handle_event("open_case_dialog", %{"choice" => choice}, socket) do
+    dialog = if choice == "advisory", do: :advisory, else: :blank
+
+    {:noreply,
+     socket
+     |> assign(:open_case_open?, false)
+     |> assign(:open_case_dialog, dialog)
+     |> assign(:advisory_reach, nil)
+     |> assign_dialog_form(dialog)}
+  end
+
+  def handle_event("close_open_case_dialog", _params, socket) do
+    {:noreply, socket |> assign(:open_case_dialog, nil) |> assign(:advisory_reach, nil)}
+  end
+
+  def handle_event("validate_open_case", %{"form" => params}, socket) do
+    {:noreply, assign(socket, :open_case_form, Form.validate(socket.assigns.open_case_form, params))}
+  end
+
+  def handle_event("validate_advisory", %{"form" => params}, socket) do
+    {:noreply,
+     socket
+     |> assign(:advisory_form, Form.validate(socket.assigns.advisory_form, params))
+     |> assign(
+       :advisory_reach,
+       advisory_reach(params["advisory_url"] || "", socket.assigns.current_user)
+     )}
   end
 
   def handle_event("toggle_lane", %{"lane" => lane}, socket) do
@@ -503,46 +567,32 @@ defmodule VarselWeb.CaseManagementLive do
             <button type="button" class="btn btn-sm btn-eef" phx-click="toggle_open_case">
               Open case
             </button>
-            <div
+            <ul
               :if={@open_case_open?}
-              class="absolute right-0 top-full mt-2 z-20 rounded-box border border-base-300 bg-base-200 p-3 shadow-lg"
+              class="menu menu-sm absolute right-0 top-full mt-2 z-20 w-64 rounded-box border border-base-300 bg-base-200 p-1.5 shadow-lg"
               phx-click-away="close_open_case"
               phx-window-keydown="close_open_case"
               phx-key="escape"
             >
-              <form phx-submit="open_case" class="flex items-center gap-2">
-                <input
-                  id="open-case-title"
-                  type="text"
-                  name="title"
-                  placeholder="Working title"
-                  required
-                  class="input input-bordered input-sm w-56"
-                  phx-mounted={JS.focus()}
-                />
-                <button type="submit" class="btn btn-sm btn-eef">Open</button>
-              </form>
-              <%= if Cases.can_open_case_from_github_advisory?(@current_user, %{}) do %>
-                <p class="mt-3 mb-1 text-[0.66rem] font-semibold uppercase tracking-wider text-base-content/50">
-                  or from a GitHub advisory
-                </p>
-                <form
-                  id="open-case-advisory-form"
-                  phx-submit="open_case_from_advisory"
-                  class="flex items-center gap-2"
-                >
-                  <input
-                    id="open-case-advisory"
-                    type="text"
-                    name="advisory_url"
-                    placeholder="GHSA-… or advisory URL"
-                    required
-                    class="input input-bordered input-sm w-56"
-                  />
-                  <button type="submit" class="btn btn-sm btn-eef-quiet">Open</button>
-                </form>
-              <% end %>
-            </div>
+              <li>
+                <button type="button" phx-click="open_case_dialog" phx-value-choice="blank">
+                  <.icon name="hero-document-plus" class="size-4 shrink-0" />
+                  <span class="flex flex-col items-start gap-0.5">
+                    <span>Blank case</span>
+                    <span class="text-xs text-base-content/60">Start from a working title</span>
+                  </span>
+                </button>
+              </li>
+              <li :if={Cases.can_open_case_from_github_advisory?(@current_user, %{})}>
+                <button type="button" phx-click="open_case_dialog" phx-value-choice="advisory">
+                  <.icon name="hero-shield-exclamation" class="size-4 shrink-0" />
+                  <span class="flex flex-col items-start gap-0.5">
+                    <span>From a GitHub advisory</span>
+                    <span class="text-xs text-base-content/60">Fill it in from GHSA content</span>
+                  </span>
+                </button>
+              </li>
+            </ul>
           </div>
         </:actions>
       </.page_header>
@@ -570,7 +620,112 @@ defmodule VarselWeb.CaseManagementLive do
           sort={@sort}
         />
       </.page_container>
+
+      <.modal
+        :if={@open_case_dialog == :blank}
+        id="open-case-blank"
+        title="Open a blank case"
+        on_cancel="close_open_case_dialog"
+      >
+        <.form
+          for={@open_case_form}
+          id="open-case-form"
+          phx-submit="open_case"
+          phx-change="validate_open_case"
+          class="space-y-4"
+        >
+          <div>
+            <.input
+              field={@open_case_form[:title]}
+              type="text"
+              placeholder="What the case is about"
+              required
+              phx-mounted={JS.focus()}
+            >
+              <:label>Working title</:label>
+            </.input>
+            <p class="mt-1.5 text-xs text-base-content/60">
+              A draft opens with you assigned. You can rename it later.
+            </p>
+          </div>
+          <div class="modal-action">
+            <button type="button" phx-click="close_open_case_dialog" class="btn btn-sm btn-ghost">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-sm btn-eef">Open case</button>
+          </div>
+        </.form>
+      </.modal>
+
+      <.modal
+        :if={@open_case_dialog == :advisory}
+        id="open-case-advisory-modal"
+        title="Open a case from a GitHub advisory"
+        on_cancel="close_open_case_dialog"
+      >
+        <.form
+          for={@advisory_form}
+          id="open-case-advisory-form"
+          phx-submit="open_case_from_advisory"
+          phx-change="validate_advisory"
+          class="space-y-4"
+        >
+          <div>
+            <.input
+              field={@advisory_form[:advisory_url]}
+              type="text"
+              placeholder="https://github.com/owner/repo/security/advisories/GHSA-…"
+              required
+              autocomplete="off"
+              class="input input-bordered w-full font-mono text-sm"
+              phx-mounted={JS.focus()}
+            >
+              <:label>Advisory</:label>
+            </.input>
+            <p class="mt-1.5 text-xs text-base-content/60">
+              The case takes its title, description, CVSS v4, CWEs, credits and affected
+              packages from the advisory. A GHSA id on its own reads the global database
+              entry.
+            </p>
+          </div>
+          <.advisory_reach_notice reach={@advisory_reach} />
+          <div class="modal-action">
+            <button type="button" phx-click="close_open_case_dialog" class="btn btn-sm btn-ghost">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="btn btn-sm btn-eef"
+              disabled={not submittable_reach?(@advisory_reach)}
+            >
+              Open case
+            </button>
+          </div>
+        </.form>
+      </.modal>
     </Layouts.app>
+    """
+  end
+
+  # Every other reach is a reason that makes `Credentials.run/5` answer
+  # `{:no_credential, _}`, which `GitHubAdvisory.Fetch` turns into the same
+  # message the notice shows. nil is an input that names no repository yet.
+  defp submittable_reach?(reach), do: reach in [nil, :user, :installation, :global]
+
+  # Reach comes from the synced installation rows, so this says nothing about
+  # whether GitHub will answer the read itself.
+  attr :reach, :atom, required: true
+
+  defp advisory_reach_notice(%{reach: reach} = assigns) do
+    if submittable_reach?(reach), do: ~H"", else: refused_reach(assigns)
+  end
+
+  defp refused_reach(assigns) do
+    ~H"""
+    <div class="alert alert-info text-sm">
+      <.icon name="hero-information-circle" class="size-5 shrink-0" />
+      <span>This {Credentials.message(@reach)}.</span>
+    </div>
     """
   end
 
@@ -624,7 +779,12 @@ defmodule VarselWeb.CaseManagementLive do
       class="text-center text-sm text-base-content/60 mt-4"
     >
       No active cases.
-      <button type="button" class="link text-primary" phx-click="toggle_open_case">
+      <button
+        type="button"
+        class="link text-primary"
+        phx-click="open_case_dialog"
+        phx-value-choice="blank"
+      >
         Open a case
       </button>
       to start one, or browse the <.link

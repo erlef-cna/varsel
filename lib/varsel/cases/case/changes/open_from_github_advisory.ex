@@ -52,7 +52,11 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory do
     |> Changeset.force_change_attributes(Import.case_params(advisory))
     |> Changeset.manage_relationship(:github_advisory_link, %{advisory: advisory},
       type: :create,
-      on_no_match: {:create, :record}
+      on_no_match: {:create, :record},
+      # The link's identities report against :advisory_url, this action's own
+      # argument. A path would make AshPhoenix look for a nested form of that
+      # name, so the error has to carry none to reach the field.
+      error_path: []
     )
   end
 
