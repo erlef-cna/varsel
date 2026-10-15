@@ -52,6 +52,18 @@ defmodule Varsel.GitHub.App do
     end
   end
 
+  @doc """
+  The App's URL name on GitHub, as in `https://github.com/apps/<slug>`, or
+  nil when none is configured.
+  """
+  @spec slug() :: String.t() | nil
+  def slug do
+    case Application.get_env(:varsel, :github, [])[:app_slug] do
+      slug when is_binary(slug) and slug != "" -> slug
+      _none -> nil
+    end
+  end
+
   @doc "Every installation of the App, from all pages of GitHub's answer."
   @spec installations() ::
           {:ok, [installation()]} | {:error, :not_configured | :unauthorized | term()}

@@ -91,7 +91,9 @@ path from there to a published CVE.
    approval stops them for everyone but a Point of Contact. Draft
    advisories are read and written with your GitHub account. When none is
    linked to yours, the tab says so and holds Refresh, Push and Report until
-   you [link GitHub in account settings](/settings/account).
+   you [link GitHub in account settings](/settings/account). The settings
+   page then shows where the app can act for you and links to GitHub to
+   change it.
 
    A case that has no advisory yet is reported from the same tab to the
    maintainers of one of its GitHub repositories, as a private vulnerability

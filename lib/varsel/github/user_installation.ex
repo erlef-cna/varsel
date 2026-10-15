@@ -38,6 +38,18 @@ defmodule Varsel.GitHub.UserInstallation do
       public? false
     end
 
+    read :mine do
+      description """
+      Lists the installations of the GitHub App that the actor's own GitHub
+      token reaches, with their repositories. A POC gets only their own too.
+      """
+
+      public? false
+
+      filter expr(user_id == ^actor(:id))
+      prepare build(load: [installation: [:repositories]])
+    end
+
     create :sync do
       description "Stores that a person's GitHub token reaches an installation."
       public? false
@@ -71,6 +83,17 @@ defmodule Varsel.GitHub.UserInstallation do
 
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if expr(user_id == ^actor(:id))
+    end
+
+    # The person's own `:sync_github_installations` replaces their rows.
+    policy action(:sync) do
+      forbid_unless context_equals([:private, :github_sync], true)
+      authorize_if relating_to_actor(:user)
+    end
+
+    policy action(:forget) do
+      forbid_unless context_equals([:private, :github_sync], true)
       authorize_if expr(user_id == ^actor(:id))
     end
   end

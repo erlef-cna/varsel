@@ -451,6 +451,11 @@ defmodule Varsel.Accounts.User do
       authorize_if expr(id == ^actor(:id))
     end
 
+    # A person may refresh where the app can act for them.
+    policy action(:sync_github_installations) do
+      authorize_if expr(id == ^actor(:id))
+    end
+
     # Written only by the reconcile that follows an identity upsert or unlink
     # (`Varsel.Accounts.UserIdentity.Changes.ReconcileUserNotificationEmail`),
     # which stamps this provenance itself. No caller reaches it directly.
@@ -477,6 +482,10 @@ defmodule Varsel.Accounts.User do
     publish_all :create, ["all"]
     publish_all :update, ["all"], except: [:sync_github_installations]
     publish_all :destroy, ["all"]
+
+    # The person's own account settings show what the sync found, whichever
+    # run of it found it.
+    publish :sync_github_installations, ["github_installations", :id]
   end
 
   attributes do

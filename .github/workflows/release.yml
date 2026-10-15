@@ -224,6 +224,7 @@ jobs:
           OAUTH_GITHUB_CLIENT_ID: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}
           GH_APP_ID: ${{ vars.GH_APP_ID }}
           GH_APP_HOME_ORG: ${{ vars.GH_APP_HOME_ORG }}
+          GH_APP_SLUG: ${{ vars.GH_APP_SLUG }}
           OAUTH_HEX_CLIENT_ID: ${{ vars.OAUTH_HEX_CLIENT_ID }}
           OAUTH_HEX_BASE_URL: ${{ vars.OAUTH_HEX_BASE_URL }}
           HEX_INTAKE_JWKS: ${{ vars.HEX_INTAKE_JWKS }}
@@ -243,6 +244,7 @@ jobs:
           add GITHUB_CLIENT_ID "${OAUTH_GITHUB_CLIENT_ID}"
           add GITHUB_APP_ID "${GH_APP_ID}"
           add GITHUB_APP_HOME_ORG "${GH_APP_HOME_ORG}"
+          add GITHUB_APP_SLUG "${GH_APP_SLUG}"
           add HEX_CLIENT_ID "${OAUTH_HEX_CLIENT_ID}"
           add HEX_BASE_URL "${OAUTH_HEX_BASE_URL}"
           add HEX_INTAKE_JWKS "${HEX_INTAKE_JWKS}"

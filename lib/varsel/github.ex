@@ -56,6 +56,7 @@ defmodule Varsel.GitHub do
 
     resource UserInstallation do
       define :list_user_installations, action: :read
+      define :list_my_user_installations, action: :mine
       define :sync_user_installation, action: :sync
       define :forget_user_installation, action: :forget
     end

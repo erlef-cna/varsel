@@ -113,14 +113,17 @@ defmodule Varsel.GitHub.InstallationTest do
   end
 
   describe "writes" do
-    test "are refused to a POC outside the syncs", %{poc: poc} do
+    test "are refused to a POC outside the syncs", %{poc: poc, supporter: supporter} do
       installation = GitHubApp.seed_installation(%{id: 7, account: "acme"})
+      [link] = GitHubApp.seed_user_installations(supporter, [7])
       attrs = %{id: 9, account: "acme", kind: :organization, repository_selection: :all}
       stamp = %{private: %{github_sync: true}}
 
       assert {:error, %Forbidden{}} = GitHub.sync_installation(attrs, actor: poc)
-      assert {:error, %Forbidden{}} = GitHub.sync_installation(attrs, actor: poc, context: stamp)
       assert {:error, %Forbidden{}} = GitHub.forget_installation(installation, actor: poc)
+
+      assert {:error, %Forbidden{}} =
+               GitHub.forget_installation(installation, actor: poc, context: stamp)
 
       assert {:error, %Forbidden{}} =
                GitHub.store_installation_token(installation, %{token: "ghs_forged"}, actor: poc)
@@ -128,20 +131,22 @@ defmodule Varsel.GitHub.InstallationTest do
       assert {:error, %Forbidden{}} =
                GitHub.sync_installation_repository(
                  %{installation_id: 7, owner: "acme", repo: "lib"},
+                 actor: poc
+               )
+
+      assert {:error, %Forbidden{}} =
+               GitHub.sync_user_installation(%{user_id: supporter.id, installation_id: 7},
                  actor: poc,
                  context: stamp
                )
 
       assert {:error, %Forbidden{}} =
-               GitHub.sync_user_installation(%{user_id: poc.id, installation_id: 7},
-                 actor: poc,
-                 context: stamp
-               )
+               GitHub.forget_user_installation(link, actor: poc, context: stamp)
 
       assert {:error, %Forbidden{}} = GitHub.sync_installations(actor: poc)
 
       assert {:error, %Forbidden{}} =
-               Varsel.Accounts.sync_github_installations(poc, actor: poc)
+               Varsel.Accounts.sync_github_installations(supporter, actor: poc)
     end
   end
 

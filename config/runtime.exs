@@ -94,13 +94,16 @@ if config_env() != :test do
   # installations and mints their tokens. The installation on the home
   # organization acts for requests about no particular repository. Without
   # the key the App is inert, and without a home organization nothing acts
-  # for those requests. Production requires neither.
+  # for those requests. The slug names the App's page on GitHub, which the
+  # account settings link to for installing it. Production requires none of
+  # them.
   config :varsel,
          :github,
          oauth_provider_config.("GITHUB",
            app_id: {"APP_ID", nil},
            private_key: {"APP_PRIVATE_KEY", nil},
-           home_org: {"APP_HOME_ORG", nil}
+           home_org: {"APP_HOME_ORG", nil},
+           app_slug: {"APP_SLUG", nil}
          )
 
   # Hex.pm is self-hostable, so the base URL can be pointed at a local hexpm

@@ -199,6 +199,13 @@ defmodule Varsel.GitHub.Installation do
       authorize_if expr(exists(user_installations, user_id == ^actor(:id)))
     end
 
+    # Stamped by the person's own `Varsel.Accounts.User`
+    # `:sync_github_installations`, which stores what their token lists.
+    policy action(:sync) do
+      forbid_unless context_equals([:private, :github_sync], true)
+      authorize_if actor_present()
+    end
+
     # Stamped by Varsel.GitHub.Installation.Mint.
     policy action(:store_token) do
       forbid_unless context_equals([:private, :github_sync], true)

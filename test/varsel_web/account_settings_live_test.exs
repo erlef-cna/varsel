@@ -12,6 +12,8 @@ defmodule VarselWeb.AccountSettingsLiveTest do
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Accounts
   alias Varsel.Accounts.User
+  alias Varsel.GitHub
+  alias Varsel.Test.GitHubApp
 
   defp log_in(conn, user) do
     conn
@@ -302,6 +304,198 @@ defmodule VarselWeb.AccountSettingsLiveTest do
       {:ok, _lv, html} = conn |> log_in(user) |> live(~p"/settings/account")
 
       refute html =~ theirs
+    end
+  end
+
+  describe "where the app can act for you" do
+    defp unique(handle), do: "#{handle}#{System.unique_integer([:positive])}"
+
+    defp github_user(handle, token),
+      do: sign_in_with_github(unique(handle), System.unique_integer([:positive]), %{"access_token" => token})
+
+    defp installation_json(id, login, selection, extra \\ %{}) do
+      Map.merge(
+        %{
+          "id" => id,
+          "account" => %{"login" => login},
+          "target_type" => "Organization",
+          "repository_selection" => selection,
+          "suspended_at" => nil
+        },
+        extra
+      )
+    end
+
+    defp seed_reach(user) do
+      GitHubApp.seed_installation(%{id: 7, account: "acme"})
+
+      GitHubApp.seed_installation(
+        %{id: 8, account: "jdoe", kind: :user, repository_selection: :selected},
+        repositories: ["jdoe/lib", "jdoe/app"]
+      )
+
+      GitHubApp.seed_installation(%{id: 9, account: "bare", repository_selection: :selected})
+
+      GitHubApp.seed_installation(%{
+        id: 10,
+        account: "frozen",
+        suspended_at: DateTime.shift(DateTime.utc_now(), day: -1)
+      })
+
+      GitHubApp.seed_installation(%{id: 11, account: "elsewhere"})
+      GitHubApp.seed_user_installations(user, [7, 8, 9, 10])
+    end
+
+    defp row(lv, id, text), do: has_element?(lv, "#github-installation-#{id}", text)
+
+    defp text_of(document, selector), do: document |> LazyHTML.query(selector) |> LazyHTML.text()
+
+    test "lists each installation the person's login reaches", %{conn: conn} do
+      user = github_user("jdoe", "gho_jdoe")
+      seed_reach(user)
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      assert row(lv, 7, "acme")
+      assert row(lv, 7, "organization")
+      assert row(lv, 7, "All repositories")
+      assert row(lv, 8, "user")
+      assert row(lv, 8, "jdoe/app")
+      assert row(lv, 8, "jdoe/lib")
+      assert row(lv, 9, "No repositories yet")
+      assert has_element?(lv, "#github-installation-10 .badge", "suspended")
+      refute has_element?(lv, "#github-installation-7 .badge", "suspended")
+      refute has_element?(lv, "#github-installation-11")
+
+      assert has_element?(
+               lv,
+               ~s{#github-installation-7 a[href="https://github.com/organizations/acme/settings/installations/7"][target="_blank"][rel="noopener"]}
+             )
+
+      assert has_element?(
+               lv,
+               ~s{#github-installation-8 a[href="https://github.com/settings/installations/8"][target="_blank"][rel="noopener"]}
+             )
+
+      assert has_element?(lv, "#github-installations-checked", "not checked yet")
+      assert has_element?(lv, "#github-installations-refresh")
+    end
+
+    test "shows a POC only the installations their own login reaches", %{conn: conn} do
+      poc = register_user(unique("poc"), :poc)
+      other = github_user("other", "gho_other")
+      seed_reach(other)
+      GitHubApp.seed_user_installations(poc, [11])
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/settings/account")
+
+      assert row(lv, 11, "elsewhere")
+      refute has_element?(lv, "#github-installation-7")
+    end
+
+    test "says so when the app is installed on nothing the login reaches", %{conn: conn} do
+      user = github_user("jdoe", "gho_jdoe")
+      GitHubApp.seed_installation(%{id: 11, account: "elsewhere"})
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      assert has_element?(lv, "#github-installations", "installed on none of the accounts")
+      refute has_element?(lv, "#github-installation-11")
+    end
+
+    test "is replaced by a hint in the GitHub row without a GitHub identity", %{conn: conn} do
+      user = sign_in_with_hex(unique("hexonly"), System.unique_integer([:positive]))
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      refute has_element?(lv, "#github-installations")
+
+      assert has_element?(
+               lv,
+               "#github-link-hint",
+               "Linking GitHub shows where the app can act for you."
+             )
+    end
+
+    test "links to installing the app on another account", %{conn: conn} do
+      user = github_user("jdoe", "gho_jdoe")
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      assert has_element?(
+               lv,
+               ~s{#github-app-install[href="https://github.com/apps/eef-cna/installations/new"][rel="noopener"]}
+             )
+    end
+
+    test "offers no install link without the app's slug", %{conn: conn} do
+      original = Application.fetch_env!(:varsel, :github)
+      Application.put_env(:varsel, :github, Keyword.delete(original, :app_slug))
+      on_exit(fn -> Application.put_env(:varsel, :github, original) end)
+      user = github_user("jdoe", "gho_jdoe")
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      assert has_element?(lv, "#github-installations")
+      refute has_element?(lv, "#github-app-install")
+    end
+
+    test "refresh lists the installations again with the person's own token", %{conn: conn} do
+      test_pid = self()
+      user = github_user("jdoe", "gho_jdoe")
+      GitHubApp.seed_installation(%{id: 7, account: "acme"})
+      GitHubApp.seed_user_installations(user, [7])
+
+      Req.Test.stub(GitHub.Client, fn conn ->
+        send(test_pid, {:github, conn.method, conn.request_path})
+        assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer gho_jdoe"]
+
+        case {conn.method, conn.request_path} do
+          {"GET", "/user/installations"} ->
+            Req.Test.json(conn, %{
+              "installations" => [installation_json(12, "newco", "selected")]
+            })
+
+          {"GET", "/user/installations/12/repositories"} ->
+            Req.Test.json(conn, %{
+              "total_count" => 1,
+              "repositories" => [%{"name" => "api", "owner" => %{"login" => "newco"}}]
+            })
+        end
+      end)
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+      assert row(lv, 7, "acme")
+
+      lv |> element("#github-installations-refresh") |> render_click()
+
+      assert_received {:github, "GET", "/user/installations"}
+      assert_received {:github, "GET", "/user/installations/12/repositories"}
+
+      document = lv |> render() |> LazyHTML.from_fragment()
+      assert document |> LazyHTML.query("#github-installation-7") |> Enum.empty?()
+      assert text_of(document, "#github-installation-12") =~ "newco/api"
+      assert text_of(document, "#github-installations-checked") =~ "just now"
+    end
+
+    test "refresh says why when GitHub fails, and keeps the rows", %{conn: conn} do
+      user = github_user("jdoe", "gho_jdoe")
+      GitHubApp.seed_installation(%{id: 7, account: "acme"})
+      GitHubApp.seed_user_installations(user, [7])
+
+      Req.Test.stub(GitHub.Client, fn conn ->
+        assert {conn.method, conn.request_path} == {"GET", "/user/installations"}
+        conn |> Plug.Conn.put_status(502) |> Req.Test.json(%{"message" => "Bad Gateway"})
+      end)
+
+      {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
+
+      lv |> element("#github-installations-refresh") |> render_click()
+
+      document = lv |> render() |> LazyHTML.from_fragment()
+      assert text_of(document, "#flash-error") =~ "Could not check GitHub."
+      assert text_of(document, "#github-installation-7") =~ "acme"
+      assert text_of(document, "#github-installations-checked") =~ "not checked yet"
     end
   end
 

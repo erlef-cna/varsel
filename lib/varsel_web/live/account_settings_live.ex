@@ -12,11 +12,16 @@ defmodule VarselWeb.AccountSettingsLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
+  import VarselWeb.CaseComponents, only: [relative_timestamp: 1]
+  import VarselWeb.GitHubComponents, only: [github_installation_list: 1]
   import VarselWeb.UserComponents, only: [avatar_disc: 1]
 
   alias AshAuthentication.TokenResource.Actions, as: TokenActions
   alias Varsel.Accounts
   alias Varsel.Accounts.Token
+  alias Varsel.GitHub
+  alias Varsel.GitHub.App
+  alias Varsel.GitHub.UserToken
   alias VarselWeb.UserAgent
 
   @account_loads [:avatar_url, :display_name, :credit_display_name, :identity_emails, :identities]
@@ -25,10 +30,16 @@ defmodule VarselWeb.AccountSettingsLive do
   def mount(_params, _session, %{assigns: %{current_user: nil}}), do: raise(VarselWeb.UnauthorizedError)
 
   def mount(_params, session, socket) do
+    topics = ["user:all", "user:github_installations:#{socket.assigns.current_user.id}"]
+
     {:ok,
      socket
-     |> assign(page_title: "Account", current_session_jti: session["current_session_jti"])
-     |> keep_live(:account, &load_account/1, subscribe: ["user:all"], after_fetch: &fetched/2)
+     |> assign(
+       page_title: "Account",
+       current_session_jti: session["current_session_jti"],
+       github_app_slug: App.slug()
+     )
+     |> keep_live(:account, &load_account/1, subscribe: topics, after_fetch: &fetched/2)
      |> assign_sessions()}
   end
 
@@ -99,6 +110,22 @@ defmodule VarselWeb.AccountSettingsLive do
 
         {:error, _error} ->
           put_flash(socket, :error, "Could not unlink that provider.")
+      end
+
+    {:noreply, socket}
+  end
+
+  @impl Phoenix.LiveView
+  def handle_event("refresh_github_installations", _params, socket) do
+    actor = socket.assigns.current_user
+
+    socket =
+      case Accounts.sync_github_installations(socket.assigns.account, actor: actor) do
+        {:ok, _user} ->
+          socket
+
+        {:error, error} ->
+          put_flash(socket, :error, "Could not check GitHub. #{errors_to_string(error)}")
       end
 
     {:noreply, socket}
@@ -184,8 +211,12 @@ defmodule VarselWeb.AccountSettingsLive do
   defp fetched(account, socket) do
     actor = socket.assigns.current_user
     linked = Map.new(account.identities, &{to_string(&1.strategy), &1})
+    github_linked? = UserToken.linked?(account)
 
     assign(socket,
+      github_linked?: github_linked?,
+      github_installations: github_installations(actor, github_linked?),
+      github_refreshable?: github_linked? and Accounts.can_sync_github_installations?(actor, account),
       credit_form:
         account
         |> AshPhoenix.Form.for_update(:set_credit, as: "credit", actor: actor)
@@ -206,6 +237,15 @@ defmodule VarselWeb.AccountSettingsLive do
           }
         end)
     )
+  end
+
+  defp github_installations(_actor, false), do: []
+
+  defp github_installations(actor, true) do
+    [actor: actor]
+    |> GitHub.list_my_user_installations!()
+    |> Enum.map(& &1.installation)
+    |> Enum.sort_by(&String.downcase(to_string(&1.account)))
   end
 
   # The addresses to choose between, each flagged if it is the one in use.
@@ -315,6 +355,13 @@ defmodule VarselWeb.AccountSettingsLive do
             <li :for={provider <- @providers} class="flex items-center gap-3 py-2">
               <span class="font-medium">{provider.label}</span>
               <.state :if={provider.identity_id} dot="bg-success" class="shrink-0">Linked</.state>
+              <span
+                :if={provider.name == :github and is_nil(provider.identity_id)}
+                id="github-link-hint"
+                class="text-sm text-base-content/60"
+              >
+                Linking GitHub shows where the app can act for you.
+              </span>
               <.link
                 :if={is_nil(provider.identity_id)}
                 href={~p"/settings/account/link/start/#{provider.name}"}
@@ -334,6 +381,47 @@ defmodule VarselWeb.AccountSettingsLive do
               </button>
             </li>
           </ul>
+        </.panel>
+
+        <.panel :if={@github_linked?} id="github-installations">
+          <:title>Where the EEF CNA app can act for you</:title>
+          <p class="text-sm text-base-content/60 mb-3">
+            The accounts your GitHub login reaches that have the app installed.
+            Each installation's settings on GitHub decide which repositories the
+            app covers there.
+          </p>
+
+          <.github_installation_list installations={@github_installations} />
+
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-xs text-base-content/60">
+            <.link
+              :if={@github_app_slug}
+              id="github-app-install"
+              href={"https://github.com/apps/#{@github_app_slug}/installations/new"}
+              target="_blank"
+              rel="noopener"
+              class="link link-hover text-primary"
+            >
+              Install the app on another account
+            </.link>
+            <span id="github-installations-checked">
+              <%= if @account.github_installations_synced_at do %>
+                checked <.relative_timestamp at={@account.github_installations_synced_at} />
+              <% else %>
+                not checked yet
+              <% end %>
+            </span>
+            <button
+              :if={@github_refreshable?}
+              id="github-installations-refresh"
+              type="button"
+              phx-click="refresh_github_installations"
+              phx-disable-with="Checking…"
+              class="btn btn-xs btn-ghost ml-auto"
+            >
+              Refresh
+            </button>
+          </div>
         </.panel>
 
         <.panel>

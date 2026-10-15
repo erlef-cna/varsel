@@ -105,7 +105,8 @@ config :varsel,
     +LdAlcHpBG7F7ZS0YuUqMZJd9EyfRQ0fxZg2QpQPrg9kw7fBqZPVkw==
     -----END RSA PRIVATE KEY-----
     """,
-    home_org: "erlef-cna"
+    home_org: "erlef-cna",
+    app_slug: "eef-cna"
   ],
   hex_api: [plug: {Req.Test, Varsel.HexPm}],
   # hexpm's dev fixture key, which its test config pins under this kid.

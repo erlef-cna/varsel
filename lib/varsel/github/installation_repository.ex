@@ -69,6 +69,13 @@ defmodule Varsel.GitHub.InstallationRepository do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(exists(installation.user_installations, user_id == ^actor(:id)))
     end
+
+    # Stamped by the person's own `Varsel.Accounts.User`
+    # `:sync_github_installations`, which adds what their token lists.
+    policy action(:sync) do
+      forbid_unless context_equals([:private, :github_sync], true)
+      authorize_if actor_present()
+    end
   end
 
   attributes do

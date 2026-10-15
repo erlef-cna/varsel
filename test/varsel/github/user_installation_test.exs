@@ -7,6 +7,7 @@ defmodule Varsel.GitHub.UserInstallationTest do
 
   import Varsel.Fixtures
 
+  alias Ash.Error.Forbidden
   alias Varsel.GitHub
   alias Varsel.GitHub.Client
   alias Varsel.GitHub.Installation
@@ -63,7 +64,7 @@ defmodule Varsel.GitHub.UserInstallationTest do
     poc = register_user(unique("poc"), :poc)
     GitHubApp.seed_user_installations(jdoe, [7])
 
-    assert {:error, %Ash.Error.Forbidden{}} = GitHub.list_user_installations(actor: nil)
+    assert {:error, %Forbidden{}} = GitHub.list_user_installations(actor: nil)
     assert reached(jdoe) == [7]
     assert reached(other) == []
     assert reached(poc) == [7]
@@ -286,6 +287,56 @@ defmodule Varsel.GitHub.UserInstallationTest do
 
       assert %{success: 0, failure: 1} = sync()
       assert reached(user) == [7]
+      assert synced_at(user) == nil
+    end
+  end
+
+  describe ":sync_github_installations run by the person" do
+    test "stores what GitHub lists for their own token" do
+      poc = register_user(unique("poc"), :poc)
+      GitHubApp.seed_installation(%{id: 7, account: "gone"})
+      user = sign_in("jdoe", "gho_jdoe")
+      GitHubApp.seed_user_installations(user, [7])
+
+      Req.Test.stub(Client, fn conn ->
+        assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer gho_jdoe"]
+
+        case {conn.method, conn.request_path} do
+          {"GET", "/user/installations"} ->
+            Req.Test.json(conn, %{
+              "installations" => [
+                installation_json(8, "jdoe", "selected", %{"target_type" => "User"})
+              ]
+            })
+
+          {"GET", "/user/installations/8/repositories"} ->
+            Req.Test.json(conn, repositories_json("jdoe", ["lib"]))
+        end
+      end)
+
+      assert {:ok, _user} = Varsel.Accounts.sync_github_installations(user, actor: user)
+      assert reached(user) == [8]
+      assert repositories(poc) == [{8, "lib"}]
+      assert %DateTime{} = synced_at(user)
+    end
+
+    test "is refused to anyone else, a POC too" do
+      user = sign_in("jdoe", "gho_jdoe")
+      other = register_user(unique("other"), :supporter)
+      poc = register_user(unique("poc"), :poc)
+      Req.Test.stub(Client, fn _conn -> flunk("a refused sync reached GitHub") end)
+
+      assert Varsel.Accounts.can_sync_github_installations?(user, user)
+      refute Varsel.Accounts.can_sync_github_installations?(other, user)
+      refute Varsel.Accounts.can_sync_github_installations?(poc, user)
+      refute Varsel.Accounts.can_sync_github_installations?(nil, user)
+
+      assert {:error, %Forbidden{}} =
+               Varsel.Accounts.sync_github_installations(user, actor: other)
+
+      assert {:error, %Forbidden{}} =
+               Varsel.Accounts.sync_github_installations(user, actor: poc)
+
       assert synced_at(user) == nil
     end
   end
