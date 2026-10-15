@@ -15,7 +15,10 @@ defmodule Varsel.Cases.Proposal.Changes.NoteSweepReason do
 
   alias Varsel.Cases.Signals
 
-  @notes %{{Signals, :case_closed} => "the case was closed"}
+  @notes %{
+    {Signals, :case_closed} => "the case was closed",
+    {Signals, :proposal_accepted} => "a competing proposal was accepted"
+  }
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, _context) do

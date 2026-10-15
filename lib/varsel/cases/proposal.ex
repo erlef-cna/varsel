@@ -38,7 +38,6 @@ defmodule Varsel.Cases.Proposal do
   alias Varsel.Cases.Proposal.Changes.ApplyToTarget
   alias Varsel.Cases.Proposal.Changes.EnsureOpen
   alias Varsel.Cases.Proposal.Changes.NoteSweepReason
-  alias Varsel.Cases.Proposal.Changes.SupersedeCompeting
   alias Varsel.Cases.Proposal.Operation
   alias Varsel.Cases.Proposal.State
   alias Varsel.Cases.Proposal.Target
@@ -90,6 +89,9 @@ defmodule Varsel.Cases.Proposal do
     version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
+  # `:list_competing` selects the rows the `:proposal_accepted` listener
+  # supersedes, and nothing else reads it.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingCodeInterface
   actions do
     read :read do
       description "Reads proposals."
@@ -111,6 +113,35 @@ defmodule Varsel.Cases.Proposal do
       argument :case_id, :uuid, allow_nil?: false
       filter expr(case_id == ^arg(:case_id) and state == :open)
       prepare build(sort: [inserted_at: :asc])
+      pagination keyset?: true, required?: false
+    end
+
+    read :list_competing do
+      public? false
+
+      description """
+      The open proposals an accepted one makes obsolete. A :set competes on
+      its own field of the target row, a :delete on every field of it, and an
+      :insert on nothing.
+      """
+
+      argument :proposal_id, :uuid, allow_nil?: false
+      argument :case_id, :uuid, allow_nil?: false
+      argument :operation, Operation, allow_nil?: false
+      argument :target, Target, allow_nil?: false
+      argument :target_id, :uuid
+      argument :field_name, :string
+
+      filter expr(
+               case_id == ^arg(:case_id) and state == :open and id != ^arg(:proposal_id) and
+                 target == ^arg(:target) and
+                 (target_id == ^arg(:target_id) or
+                    (is_nil(target_id) and is_nil(^arg(:target_id)))) and
+                 (^arg(:operation) == :delete or field_name == ^arg(:field_name) or
+                    (is_nil(field_name) and is_nil(^arg(:field_name)))) and
+                 ^arg(:operation) != :insert
+             )
+
       pagination keyset?: true, required?: false
     end
 
@@ -165,7 +196,16 @@ defmodule Varsel.Cases.Proposal do
       change set_attribute(:resolved_at, &DateTime.utc_now/0)
 
       change ApplyToTarget
-      change SupersedeCompeting
+
+      emit Signals, :proposal_accepted,
+        fields: [
+          proposal_id: :id,
+          case_id: :case_id,
+          operation: :operation,
+          target: :target,
+          target_id: :target_id,
+          field_name: :field_name
+        ]
     end
 
     update :decline do
@@ -253,6 +293,7 @@ defmodule Varsel.Cases.Proposal do
 
     policy action(:supersede) do
       authorize_if signal_in(Signals, :case_closed)
+      authorize_if signal_in(Signals, :proposal_accepted)
 
       forbid_unless context_equals([:private, :proposal_sweep?], true)
       authorize_if actor_attribute_equals(:role, :poc)
@@ -404,6 +445,11 @@ defmodule Varsel.Cases.Proposal do
   signals_in do
     from Signals do
       on :case_closed, :supersede, read_action: :list_open_for_case, args: [:case_id]
+
+      on :proposal_accepted, :supersede_competing,
+        action: :supersede,
+        read_action: :list_competing,
+        args: [:proposal_id, :case_id, :operation, :target, :target_id, :field_name]
     end
   end
 end
