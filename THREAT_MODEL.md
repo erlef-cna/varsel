@@ -135,6 +135,7 @@ access says otherwise (`release.ex`).
 | Auth surface (GitHub **and Hex.pm** OAuth login, OAuth 2.1 server, API keys, sessions) | `/auth`, `/oauth/*`, `/sign-in`, `/settings/tokens`, `/settings/account` | GitHub + Hex.pm IdPs, DB, **CIMD egress** | **Yes — §6** |
 | Account linking (attach a second provider to an existing account) | `/settings/account/link/start/:strategy` | IdP, DB | **Yes — §6** |
 | CNA workbench (cases, reports, CVE lifecycle, user mgmt, notifications) — LiveView + GraphQL/MCP tools | `/cases`, `/reports`, `/users`, `/cves`, `/notifications`, `/settings/notifications`, GraphQL/MCP POC tools | DB, **MITRE API**, **git egress** | **Yes** |
+| Manual GitHub request steps (the command a POC runs with `gh` where the App is not installed), one-time bearer token | `GET /api/github/manual/:id/request`, `POST /api/github/manual/:id/result` | DB reads/writes | **Yes — §4, §6** |
 | Render-time derivation (`exgit` git clone/fetch of package repos) | `Varsel.Cases.Derivation` | **Outbound git to `repo_url`** | **Yes — key boundary (§4)** |
 | Catalog sync (CWE/CAPEC/OTP-versions) — Oban jobs | scheduled workers | Outbound HTTPS to fixed hosts | **Yes (trusted-source egress)** |
 | `cvelint` subprocess (validates rendered CVE JSON) | `Varsel.CVE.Cvelint` | `Exile`, record piped to stdin | **Yes** |
@@ -231,6 +232,24 @@ which system is calling, and the request then runs as that system. So the
 boundary there is the same one as everywhere else, with a non-human on the
 other side of it. (`router.ex`, `hex_service_auth.ex`, `service.ex`)
 
+**One route group authorizes on a token bound to one row.**
+`/api/github/manual/:id/request` and `/result` take no login. A POC who
+prepares a `GitHubManualRequest` on the GitHub tab gets a one-time token,
+shown once in a command. It is an AshAuthentication token of that POC with
+the purpose `github_manual`, a 15-minute life and the request's id as a
+claim, stored in the tokens table like every token the app mints. The
+library marks any purpose other than `user` unusable as a bearer
+credential, so it cannot stand in for a session. The controller finds the
+request by its id as the `github_manual` system, and the token then decides
+the step: it verifies, carries that purpose, names the request's user and
+the request, is stored with that purpose, and is not revoked. Recording the
+answer revokes it in the same transaction, and as the POC who prepared the
+request, through link actions that also demand the POC role and a stamp
+only that recording step sets. The request belongs to its token's row, so
+the token expunger, which deletes expired tokens every 12 hours, deletes
+the request with it. (`github_manual_request.ex`, `mint_token.ex`,
+`token_matches.ex`, `record_answer.ex`, `github_advisory_link.ex`)
+
 **The boundary is enforced in one place.** The router runs a single
 `:live_user` hook that resolves the actor and nothing else; it does not gate
 routes by role, and there is no route-level allowlist to keep in step with
@@ -322,6 +341,13 @@ moment. (`socket_disconnect.ex`, `disconnect_sockets.ex`, `graphql_socket.ex`)
    the hex.pm participants matching the username or address, and the address
    on matching hex.pm case invites.
    (`hex_erasure_controller.ex`, `report_participant.ex`, `case_invite.ex`)
+2c. **Manual GitHub request** — POC prepares a request on the GitHub tab of
+   a case whose repository has no App installation → the POC's terminal
+   fetches the body (`GET …/request`), sends it to GitHub with `gh api` as
+   the POC's own GitHub account, and posts GitHub's answer (`POST …/result`)
+   → the answer is stored on the case's `GitHubAdvisoryLink`, as the POC.
+   Varsel itself makes no GitHub request for it.
+   (`github_manual_controller.ex`, `record_answer.ex`)
 3. **Editorial** — POC/assigned-supporter → case + child rows (facts) →
    **render-time derivation clones `repo_url`** → rendered CNA container
    (`derivation.ex`, `git_repo.ex`).
@@ -370,6 +396,15 @@ claims:
   nobody. Reaching the action from another surface gains nothing on its own,
   since the actor is what it authorizes on.
   (`hex_service_auth.ex`, `service_token.ex`, `service.ex`)
+- **Manual GitHub request steps** (`GET /api/github/manual/:id/request`,
+  `POST /api/github/manual/:id/result`) — reachable by **anyone holding the
+  request's one-time token**, for 15 minutes and until its answer is
+  recorded. Only a POC who may run the action the request stands in for, on
+  that case or link, prepares one. The holder can read that request's body,
+  which is case content a push or report would send, and post one answer. A
+  finding premised on reaching either step without the token is out of
+  model unless the token check itself is defeated.
+  (`github_manual_request.ex`, `may_run_action.ex`, `token_matches.ex`)
 - **CVE validation** (`validate_cve_record`, `…_schema`, `…_cvelint`,
   `…_hex_packages`, `…_eef`) — reachable by **any authenticated user**, over
   GraphQL and MCP. These actions read nothing and write nothing: they take a
@@ -529,6 +564,7 @@ from controlling only its size.
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
 | `Case.report_to_github` | `owner`, `repo`, `description` | resource name + data | **Yes — POC / assigned supporter only**, on an unlinked case in `:draft` or `:review`, decided before the write (`case.ex`) | `owner` and `repo` become path segments of one `api.github.com` read and one write, encoded; the host is fixed. The read asks whether the caller administers the repository. The write then carries the description and the case's content to that repository's maintainers as a private vulnerability report, or opens a draft advisory there when the caller administers it. Both are made with the caller's own GitHub token, and only when the caller's login reaches the App's installation on the repository, as the synced rows record it. A POC with no GitHub identity, a POC whose login does not reach it, and a POC whose request GitHub answers with 404 or 403 open a draft advisory directly with the App's installation token on that repository (`report_to_github.ex`, `credentials.ex`, `repositories.ex`, `advisories.ex`) |
 | `Case.open_from_github_advisory` / `GitHubAdvisoryLink.link` | `advisory_url` | resource name | **Yes — POC / supporter** (open) or **POC / assigned supporter** (link) (`case.ex`, `github_advisory_link.ex`) | Parsed into the owner, repository and GHSA id of one `api.github.com` read, path-encoded; the host is fixed. A repository advisory is read with the caller's own GitHub token when their login reaches the App's installation on the repository. A POC with no GitHub identity, a POC whose login does not reach it, and a POC whose read GitHub answers with 404 or 403 read it with that installation's token. A global database entry is read with the home organization's installation token (`credentials.ex`). The answer is stored whole on the link and compared as data (`fetch.ex`, `advisories.ex`, `store_advisory.ex`). Opening a case from it writes the advisory's prose into the case markdown, which renders through the sanitizing sinks of §6a like prose imported from a CVE record, and its logins into credit handles confirmed at GitHub like hand-entered ones (`import.ex`, `resolve_credited_user.ex`) |
+| `GitHubManualRequest.complete` (`/api/github/manual/:id/result`) | the posted JSON, GitHub's answer as the command relays it | data + size | **Yes — whoever holds the request's one-time token** (§4), on the POC's attestation that it is GitHub's answer; nothing reads it again from GitHub | JSON only, bounded by the endpoint parser like every request body. Accepted only as an advisory whose `html_url` names the request's repository and, where the request names one, its GHSA id. Then stored whole on the case's link as the POC, as a read from GitHub is, and on a pull its fields taken onto the case through the case's own actions. It reaches the same diff and the same sanitizing sinks of §6a as an advisory Varsel read itself (`answer_names_request.ex`, `record_answer.ex`, `store_advisory.ex`, `pull.ex`) |
 | `VersionEvent` | `commit_sha` | data | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
 | `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | data | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
 | `CveValidation.validate*` | `cve_json` | data | **Yes — any authenticated user** | **cvelint subprocess** (piped to stdin; argv, not shell) and **hex.pm lookups** keyed on package names taken from the JSON. No policy authorizer on this resource; the login gate is the control (§4) |
@@ -615,6 +651,7 @@ a trusted integration partner.
 | Case invite email | Plain-text mail to a person with no account | Yes — same shape: the provider handle the invite names and a sign-in link, no case content and no inviter (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
 | Case fields → the linked GitHub advisory (`GitHubAdvisoryLink.push`), or a new private report or draft advisory on a repository (`Case.report_to_github`) | GitHub, as the acting user or as the App | JSON body of typed fields and the advisory description rendered from the case's own sections as markdown (`export.ex`). Written with the caller's own GitHub token, so GitHub attributes it to them and decides whether they may. A POC's write that their own token cannot make, or a write by a POC with no GitHub identity, goes with the App's installation token on that repository and GitHub attributes it to the App (`push.ex`, `report_to_github.ex`, `credentials.ex`, `advisories.ex`) | — |
+| The `gh` command of a manual GitHub request (`gh_command/3`), and its request body (`/api/github/manual/:id/request`) | A POC's shell, then GitHub as the POC's own GitHub account | **Yes** — the command interpolates only the configured endpoint URL, the request's UUID, a JWT of URL-safe Base64 segments, and an API path whose owner and repository are refused unless they match GitHub's name characters and whose GHSA id is refused unless it parses as one (`build_request.ex`, `advisory_components.ex`). The body is the one the automatic push or report builds (`export.ex`, `report_to_github.ex`) | — |
 
 Every markdown/HTML render sink sanitizes (ammonia allow-list) before `raw/1`,
 so injected script/handlers are stripped at the source. The app-wide
@@ -1293,6 +1330,7 @@ a triager who hits one of those flags sees the justification there.
 | "A supporter can resolve proposals like a POC." | Accepting or declining a proposal on an assigned case is intended supporter authority; assignment is the grant (§11). |
 | "An avatar URL exposes the MD5 of a user's email." | Known and accepted (§9): the hash confirms a guessed address to someone who can already read that user's row. Reported often because the hash is recognisable. |
 | "A concurrent edit fails with a stale-record error." | The optimistic lock doing its job (§4): the row moved between read and write, the write rolled back whole, and a reload-and-retry succeeds. Not a data race — it is what prevents one. |
+| "The manual-request token lets its holder act as the POC." | It authorizes the two steps of one request: read that request's body, and post one answer that is recorded only if it names the request's repository and advisory. The recording runs actions that still demand the POC role and revokes the token. It is an AshAuthentication token of purpose `github_manual`, which the library refuses as a bearer credential, so it cannot stand in for a session and reaches no other action (§4). |
 | "Markdown from the JSON API is not escaped." | Sanitization runs at each render sink, not at rest (§9). Escaping is the consumer's obligation (§10). |
 
 **An entry here describes an outcome, not a promise to disregard the
@@ -1348,6 +1386,9 @@ that reaches a shell, an anonymous read that returns rows — is `VALID`, not
 - Re-introducing a **route-level role gate** in the router. The model rests
   on there being exactly one place that decides (§4); a second one that can
   drift from the policies is the condition this section exists to catch.
+- **Widening what a manual-request token reaches** — a longer life, a second
+  use, or a step beyond the request's own body and answer. The token is the
+  whole of the authorization on `/api/github/manual` (§4).
 - **A second way to obtain a service actor.** Each `Varsel.Service` actor is
   built only by the subsystem it names, and that is what the policies naming
   its system authorize (§4). Another builder makes the actor say less than

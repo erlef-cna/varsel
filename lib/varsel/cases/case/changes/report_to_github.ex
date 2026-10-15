@@ -94,25 +94,31 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHub do
   end
 
   defp submit(%{kind: :installation, token: token}, owner, repo, case_record, description) do
-    {:draft, Advisories.create(owner, repo, body(case_record, @draft_fields, description), token: token)}
+    {:draft, Advisories.create(owner, repo, body(case_record, :draft, description), token: token)}
   end
 
   defp submit(%{kind: :user, token: token}, owner, repo, case_record, description) do
     case Repositories.admin?(owner, repo, token: token) do
       {:ok, true} ->
-        {:draft, Advisories.create(owner, repo, body(case_record, @draft_fields, description), token: token)}
+        {:draft, Advisories.create(owner, repo, body(case_record, :draft, description), token: token)}
 
       {:ok, false} ->
-        {:report, Advisories.report(owner, repo, body(case_record, @fields, description), token: token)}
+        {:report, Advisories.report(owner, repo, body(case_record, :report, description), token: token)}
 
       answer ->
         {:admin, answer}
     end
   end
 
-  defp body(case_record, fields, description) do
+  @doc """
+  The request body of a draft advisory or a private report of the case,
+  loaded as `Varsel.Cases.GitHubAdvisory.Export.load/0` says. A draft
+  carries the CVE ID as well.
+  """
+  @spec body(Varsel.Cases.Case.t(), :draft | :report, String.t()) :: map()
+  def body(case_record, kind, description) do
     case_record
-    |> Export.body(fields)
+    |> Export.body(if(kind == :draft, do: @draft_fields, else: @fields))
     |> Map.fetch!(:body)
     |> Map.put("description", description)
   end

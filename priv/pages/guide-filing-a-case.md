@@ -100,8 +100,17 @@ path from there to a published CVE.
    it. A Point of Contact without a linked GitHub account, or whose account
    cannot act on a repository with the app installed, or whose request
    GitHub refuses there, acts through the app instead, and GitHub shows the
-   app as the author. Where the app is not installed, a Point of Contact
-   cannot do it from here.
+   app as the author.
+
+   Where the app is not installed, a Point of Contact does the request from
+   their own terminal with the GitHub CLI, `gh`. Link, Refresh, Pull, Push
+   and Report each offer to do it with gh, and show one command. The command
+   fetches the request from here, sends it to GitHub with `gh api` as your
+   GitHub account, and posts GitHub's answer back. The tab then records the
+   answer as you and updates. The command works once, for 15 minutes. The
+   tab cannot ask GitHub whether you administer the repository, so for a
+   report choose a draft advisory when you do and a private report when you
+   do not.
 
    A case that has no advisory yet is reported from the same tab to the
    maintainers of one of its GitHub repositories, as a private vulnerability

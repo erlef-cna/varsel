@@ -38,6 +38,9 @@ defmodule VarselWeb.Storybook.Case do
   def entry("derivation_status"), do: [name: "Derivation status", icon: {:local, "hero-signal"}]
   def entry("edit_actions"), do: [name: "Edit actions", icon: {:local, "hero-check"}]
   def entry("edit_mode_notice"), do: [name: "Edit mode notice", icon: {:local, "hero-pencil"}]
+
+  def entry("gh_command_modal"), do: [name: "gh command modal", icon: {:local, "hero-command-line"}]
+
   def entry("impact_form"), do: [name: "Impact form", icon: {:local, "hero-tag"}]
   def entry("lifecycle_stepper"), do: [name: "Lifecycle stepper", icon: {:local, "hero-flag"}]
   def entry("markdown"), do: [name: "Markdown", icon: {:local, "hero-document-text"}]

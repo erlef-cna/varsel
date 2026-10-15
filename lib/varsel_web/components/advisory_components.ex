@@ -16,10 +16,12 @@ defmodule VarselWeb.AdvisoryComponents do
   @doc """
   Renders the linked advisory: its id, standing, repository and title, when
   it was last read, and the actions the viewer may take on it. `busy` holds
-  the actions while a request to GitHub runs.
+  the actions while a request to GitHub runs. `gh_refresh` offers the read as
+  a command for the viewer's own terminal instead.
   """
   attr :link, :map, required: true, doc: "the `Varsel.Cases.GitHubAdvisoryLink`"
   attr :can_refresh, :boolean, default: false
+  attr :gh_refresh, :boolean, default: false
   attr :can_unlink, :boolean, default: false
   attr :busy, :boolean, default: false
 
@@ -36,6 +38,14 @@ defmodule VarselWeb.AdvisoryComponents do
           disabled={@busy}
         >
           Refresh
+        </button>
+        <button
+          :if={@gh_refresh and not @can_refresh}
+          type="button"
+          phx-click="gh_refresh"
+          class="btn btn-xs btn-ghost"
+        >
+          Refresh with gh
         </button>
         <button
           :if={@can_unlink}
@@ -190,11 +200,15 @@ defmodule VarselWeb.AdvisoryComponents do
   two relate. With `can_pull`, a row the advisory can add to offers to pull
   its field, and the panel to pull every such field at once. `can_push`
   offers the same for the rows the case can write to the advisory. `busy`
-  holds every pull and push while a request to GitHub runs.
+  holds every pull and push while a request to GitHub runs. `gh_pull` and
+  `gh_push` offer a read and pull, or a push, as a command for the viewer's
+  own terminal instead.
   """
   attr :rows, :list, required: true
   attr :can_pull, :boolean, default: false
   attr :can_push, :boolean, default: false
+  attr :gh_pull, :boolean, default: false
+  attr :gh_push, :boolean, default: false
   attr :busy, :boolean, default: false
 
   def advisory_diff(assigns) do
@@ -202,13 +216,17 @@ defmodule VarselWeb.AdvisoryComponents do
       assign(assigns,
         rows_with_ids: row_ids(assigns.rows),
         pullable_fields: fields_where(assigns.rows, &Diff.pullable?/1),
-        pushable_fields: fields_where(assigns.rows, &Diff.pushable?/1)
+        pushable_fields: fields_where(assigns.rows, &Diff.pushable?/1),
+        gh_push: assigns.gh_push and not assigns.can_push
       )
 
     ~H"""
     <.panel id="advisory-diff">
       <:title>Case against advisory</:title>
-      <:actions :if={(@can_pull and @pullable_fields != []) or (@can_push and @pushable_fields != [])}>
+      <:actions :if={
+        ((@can_pull or @gh_pull) and @pullable_fields != []) or
+          ((@can_push or @gh_push) and @pushable_fields != [])
+      }>
         <button
           :if={@can_pull and @pullable_fields != []}
           type="button"
@@ -218,6 +236,15 @@ defmodule VarselWeb.AdvisoryComponents do
           disabled={@busy}
         >
           Pull all
+        </button>
+        <button
+          :if={@gh_pull and @pullable_fields != []}
+          type="button"
+          phx-click="gh_pull"
+          phx-value-fields={Enum.join(@pullable_fields, ",")}
+          class="btn btn-xs btn-eef-quiet"
+        >
+          Read again and pull all with gh
         </button>
         <button
           :if={@can_push and @pushable_fields != []}
@@ -230,6 +257,15 @@ defmodule VarselWeb.AdvisoryComponents do
         >
           Push all
         </button>
+        <button
+          :if={@gh_push and @pushable_fields != []}
+          type="button"
+          phx-click="gh_push"
+          phx-value-fields={Enum.join(@pushable_fields, ",")}
+          class="btn btn-xs btn-eef-quiet"
+        >
+          Push all with gh
+        </button>
       </:actions>
       <div class="overflow-x-auto">
         <table class="table table-sm table-fixed w-full">
@@ -239,7 +275,7 @@ defmodule VarselWeb.AdvisoryComponents do
               <th>Case</th>
               <th>GitHub</th>
               <th class="w-28"></th>
-              <th :if={@can_pull or @can_push} class="w-24"></th>
+              <th :if={@can_pull or @can_push or @gh_push} class="w-24"></th>
             </tr>
           </thead>
           <tbody>
@@ -255,7 +291,10 @@ defmodule VarselWeb.AdvisoryComponents do
                 <.diff_value row={row} side={:theirs} />
               </td>
               <td class="align-top whitespace-nowrap"><.diff_status status={row.status} /></td>
-              <td :if={@can_pull or @can_push} class="align-top whitespace-nowrap text-right">
+              <td
+                :if={@can_pull or @can_push or @gh_push}
+                class="align-top whitespace-nowrap text-right"
+              >
                 <button
                   :if={@can_pull and Diff.pullable?(row)}
                   type="button"
@@ -276,6 +315,15 @@ defmodule VarselWeb.AdvisoryComponents do
                   disabled={@busy}
                 >
                   Push
+                </button>
+                <button
+                  :if={@gh_push and Diff.pushable?(row)}
+                  type="button"
+                  phx-click="gh_push"
+                  phx-value-fields={row.field}
+                  class="btn btn-xs btn-ghost"
+                >
+                  Push with gh
                 </button>
               </td>
             </tr>
@@ -385,6 +433,86 @@ defmodule VarselWeb.AdvisoryComponents do
 
   defp row_label(%{field: :affected, package: package}), do: "Affected · #{package}"
   defp row_label(%{field: field}), do: field_label(field)
+
+  @doc """
+  Renders the command of a `Varsel.Cases.GitHubManualRequest` in a modal: one
+  shell pipeline that fetches the request, sends it to GitHub with `gh api`,
+  and posts GitHub's answer back to `base_url`. `token` is the request's
+  one-time token, which the command carries and the page shows nowhere else.
+  """
+  attr :request, :map,
+    required: true,
+    doc: "the request: `id`, `operation`, `method`, `path`, `owner`, `repo`, `ghsa_id` and `fields`"
+
+  attr :token, :string, required: true
+  attr :base_url, :string, required: true
+
+  def gh_command_modal(assigns) do
+    assigns =
+      assign(assigns, command: gh_command(assigns.request, assigns.token, assigns.base_url))
+
+    ~H"""
+    <.modal id="gh-command" title="Do it with gh" on_cancel="close_gh" class="max-w-3xl">
+      <div class="space-y-3 text-sm">
+        <p>
+          Run this in a terminal where <code class="font-mono">gh</code>
+          is signed in to your GitHub account. It {gh_summary(@request)} as you, then sends
+          GitHub's answer back here.
+        </p>
+        <div id="gh-command-text">
+          <.code_block source={@command} language="bash" />
+        </div>
+        <p class="text-base-content/60">
+          The command is valid for 15 minutes and works once. This page updates when GitHub's
+          answer arrives.
+        </p>
+      </div>
+      <:actions>
+        <button type="button" phx-click="close_gh" class="btn btn-sm btn-ghost">Close</button>
+      </:actions>
+    </.modal>
+    """
+  end
+
+  @doc """
+  The shell command of a manual GitHub request. A read has no body, so it
+  starts at `gh api`.
+  """
+  @spec gh_command(map(), String.t(), String.t()) :: String.t()
+  def gh_command(request, token, base_url) do
+    endpoint = "#{base_url}/api/github/manual/#{request.id}"
+    auth = ~s(-H "Authorization: Bearer #{token}")
+
+    result =
+      ~s(curl -sS --fail-with-body #{auth} -H "Content-Type: application/json" #{endpoint}/result --data-binary @-)
+
+    case request.method do
+      :get ->
+        "gh api #{request.path} \\\n  | #{result}"
+
+      method ->
+        "curl -sf #{auth} #{endpoint}/request \\\n" <>
+          "  | gh api -X #{method |> Atom.to_string() |> String.upcase()} #{request.path} --input - \\\n" <>
+          "  | #{result}"
+    end
+  end
+
+  defp gh_summary(%{operation: :read, advisory_url: url, ghsa_id: ghsa_id}) when is_binary(url),
+    do: "reads #{ghsa_id} from GitHub and links it to the case"
+
+  defp gh_summary(%{operation: :read, fields: [_field | _rest] = fields, ghsa_id: ghsa_id}),
+    do: "reads #{ghsa_id} again and pulls #{Enum.map_join(fields, ", ", &field_label/1)} onto the case"
+
+  defp gh_summary(%{operation: :read, ghsa_id: ghsa_id}), do: "reads #{ghsa_id} again"
+
+  defp gh_summary(%{operation: :push, fields: fields, ghsa_id: ghsa_id}),
+    do: "writes #{Enum.map_join(fields, ", ", &field_label/1)} to #{ghsa_id}"
+
+  defp gh_summary(%{operation: :report, path: path, owner: owner, repo: repo}) do
+    if String.ends_with?(path, "/reports"),
+      do: "reports the case privately to the maintainers of #{owner}/#{repo}",
+      else: "opens a draft advisory of the case on #{owner}/#{repo}"
+  end
 
   @doc "The label of a diff field, by its name as the pull and push events carry it."
   @spec field_label(atom() | String.t()) :: String.t()

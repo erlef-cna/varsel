@@ -18,6 +18,7 @@ defmodule Varsel.Cases do
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.Comment
   alias Varsel.Cases.GitHubAdvisoryLink
+  alias Varsel.Cases.GitHubManualRequest
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Proposal
   alias Varsel.Cases.VersionEvent
@@ -497,12 +498,31 @@ defmodule Varsel.Cases do
 
     resource GitHubAdvisoryLink do
       define :list_github_advisory_links, action: :read
+      define :get_github_advisory_link, action: :read, get_by: [:id]
       define :link_github_advisory, action: :link
+      define :link_github_advisory_attested, action: :link_attested
       define :record_github_advisory_link, action: :record
       define :refresh_github_advisory_link, action: :refresh
+      define :refresh_github_advisory_attested, action: :refresh_attested, args: [:advisory]
       define :pull_github_advisory, action: :pull, args: [:fields]
       define :push_github_advisory, action: :push, args: [:fields]
       define :unlink_github_advisory, action: :unlink
+    end
+
+    resource GitHubManualRequest do
+      define :get_github_manual_request, action: :read, get_by: [:id]
+      define :prepare_manual_link, action: :prepare_link, args: [:case_id, :advisory_url]
+      define :prepare_manual_refresh, action: :prepare_refresh, args: [:link_id]
+      define :prepare_manual_pull, action: :prepare_pull, args: [:link_id, :fields]
+      define :prepare_manual_push, action: :prepare_push, args: [:link_id, :fields]
+
+      define :prepare_manual_report,
+        action: :prepare_report,
+        args: [:case_id, :owner, :repo, :description]
+
+      define :locate_github_manual_request, action: :locate, get_by: [:id]
+      define :fetch_github_manual_request, action: :fetch, args: [:token]
+      define :complete_github_manual_request, action: :complete, args: [:token, :answer]
     end
 
     resource Comment do

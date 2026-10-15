@@ -25,11 +25,19 @@ defmodule Varsel.Service do
   `actor_attribute_equals(:system, ...)`.
   """
   @type system() ::
-          system_github_public_read()
+          system_github_manual()
+          | system_github_public_read()
           | system_hexpm_intake()
           | system_identity_claim()
           | system_notifier()
           | system_release_console()
+
+  @typedoc """
+  The `/api/github/manual` routes of `VarselWeb.GitHubManualController`. It
+  finds a `Varsel.Cases.GitHubManualRequest` by its id, before the request's
+  one-time token decides the step.
+  """
+  @type system_github_manual() :: :github_manual
 
   @typedoc """
   Finds the GitHub App's installation on the home organization and mints its
@@ -65,6 +73,10 @@ defmodule Varsel.Service do
   @type system_release_console() :: :release_console
 
   @type t() :: %__MODULE__{system: system(), role: :system}
+
+  @doc "The actor that finds a manual GitHub request for its command's two steps."
+  @spec github_manual() :: t()
+  def github_manual, do: %__MODULE__{system: :github_manual}
 
   @doc "The actor that resolves and mints the home organization's installation token."
   @spec github_public_read() :: t()

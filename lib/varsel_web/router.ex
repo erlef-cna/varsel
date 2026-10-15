@@ -97,6 +97,13 @@ defmodule VarselWeb.Router do
     plug HexServiceAuth
   end
 
+  # The command of a manual GitHub request, run in a POC's terminal. Each
+  # request's one-time token, checked by the resource, is the whole of the
+  # authorization.
+  pipeline :github_manual do
+    plug :accepts, ["json"]
+  end
+
   scope "/gql" do
     pipe_through [:graphql]
 
@@ -360,6 +367,13 @@ defmodule VarselWeb.Router do
 
     post "/reports", HexReportController, :create
     post "/erasures", HexErasureController, :create
+  end
+
+  scope "/api/github/manual", VarselWeb do
+    pipe_through :github_manual
+
+    get "/:id/request", GitHubManualController, :request
+    post "/:id/result", GitHubManualController, :result
   end
 
   # Public HTML surface (browser pipeline: session, root layout, navbar).

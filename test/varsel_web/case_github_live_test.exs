@@ -354,8 +354,9 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     render_async(lv)
 
     assert has_element?(lv, "#github-identity-notice")
-    refute has_element?(lv, "#github-advisory button", "Refresh")
-    refute has_element?(lv, "#diff-title button", "Push")
+    refute has_element?(lv, "#github-advisory button[phx-click='refresh_advisory']")
+    refute has_element?(lv, "#diff-title button[phx-click='push_advisory']")
+    assert has_element?(lv, "#github-advisory button", "Refresh with gh")
   end
 
   defp stub_reporting(enabled?) do
@@ -600,7 +601,8 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     render_async(lv)
 
     assert has_element?(lv, "#report-reach-notice", "This cannot be done from here")
-    assert has_element?(lv, "#report-advisory button[disabled]")
+    assert has_element?(lv, "#report-advisory button", "Report with gh")
+    refute has_element?(lv, "#report-advisory button[disabled]")
   end
 
   test "who sees the advisory is resolved to people, marked against the case", %{
@@ -802,8 +804,8 @@ defmodule VarselWeb.CaseGitHubLiveTest do
       render_async(lv)
 
       assert has_element?(lv, "#github-reach-notice", "This cannot be done from here")
-      refute has_element?(lv, "#github-advisory button", "Refresh")
-      refute has_element?(lv, "#diff-title button", "Push")
+      refute has_element?(lv, "#github-advisory button[phx-click='refresh_advisory']")
+      refute has_element?(lv, "#diff-title button[phx-click='push_advisory']")
     end
 
     test "a POC whose login does not reach the repository pushes as the App", %{
@@ -895,5 +897,232 @@ defmodule VarselWeb.CaseGitHubLiveTest do
            )
 
     assert has_element?(lv, "#report-advisory-form button[disabled]", "Report privately")
+  end
+
+  describe "a request done with gh where the App is not installed" do
+    @other_lib_ghsa "GHSA-4v2x-7mq8-w3rf"
+    @other_lib_url "https://github.com/acme/other_lib/security/advisories/#{@other_lib_ghsa}"
+
+    setup do
+      GitHubApi.stub(fn _conn -> flunk("GitHub was asked about a repository") end)
+      :ok
+    end
+
+    defp other_lib_answer(overrides \\ %{}) do
+      hex_advisory()
+      |> Map.merge(%{"ghsa_id" => @other_lib_ghsa, "html_url" => @other_lib_url})
+      |> Map.merge(overrides)
+    end
+
+    # The command is syntax-highlighted, and the test DOM drops the whitespace
+    # between the highlighted tokens, so the text is compared without it.
+    defp command(lv) do
+      lv
+      |> element("#gh-command-text pre")
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.text()
+      |> without_whitespace()
+    end
+
+    defp without_whitespace(text), do: String.replace(text, ~r/\s+/, "")
+
+    defp command_parts(command) do
+      [_all, token] = Regex.run(~r/Bearer([A-Za-z0-9_.-]+)"/, command)
+      [_all, id] = Regex.run(~r{/api/github/manual/([0-9a-f-]+)/result}, command)
+      %{token: token, id: id}
+    end
+
+    defp post_answer(%{token: token, id: id}, answer) do
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> put_req_header("content-type", "application/json")
+      |> post(~p"/api/github/manual/#{id}/result", JSON.encode!(answer))
+      |> json_response(200)
+    end
+
+    defp occurrences(text, part), do: length(String.split(text, part)) - 1
+
+    test "is offered to a POC, and not to a supporter or where the App is installed", %{
+      conn: conn,
+      poc: poc,
+      case: case_record
+    } do
+      uninstalled = Fixtures.open_case(poc, %{title: "Header injection in other_lib"})
+      seed_uninstalled_link!(uninstalled)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{uninstalled.id}/github")
+      render_async(lv)
+
+      assert has_element?(lv, "#github-reach-notice", "Do it with gh instead")
+      assert has_element?(lv, "#github-advisory button", "Refresh with gh")
+      assert has_element?(lv, "#diff-title button", "Push with gh")
+      assert has_element?(lv, "#advisory-diff button", "Push all with gh")
+
+      supporter = Fixtures.register_user("advisory_live_gh_supporter", :supporter)
+      assign!(uninstalled, supporter, poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{uninstalled.id}/github")
+      render_async(lv)
+
+      refute has_element?(lv, "#github-advisory button", "Refresh with gh")
+      refute has_element?(lv, "#diff-title button", "Push with gh")
+
+      GitHubApi.stub_advisory(hex_advisory())
+      Cases.edit_case!(case_record, %{title: "Header injection in acme_lib, revised"}, actor: poc)
+      link!(case_record, poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+      render_async(lv)
+
+      refute has_element?(lv, "#github-advisory button", "Refresh with gh")
+      assert has_element?(lv, "#diff-title button", "Push")
+      refute has_element?(lv, "#diff-title button", "Push with gh")
+    end
+
+    test "the command carries the request and the token, which the page shows nowhere else", %{
+      conn: conn,
+      poc: poc
+    } do
+      uninstalled = Fixtures.open_case(poc, %{title: "Header injection in other_lib"})
+      seed_uninstalled_link!(uninstalled)
+      path = "/repos/acme/other_lib/security-advisories/#{@other_lib_ghsa}"
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{uninstalled.id}/github")
+      render_async(lv)
+
+      lv |> element("#github-advisory button", "Refresh with gh") |> render_click()
+      read = command(lv)
+      %{token: token, id: id} = command_parts(read)
+
+      assert String.starts_with?(
+               read,
+               without_whitespace("gh api #{path} \\\n  | curl -sS --fail-with-body")
+             )
+
+      assert occurrences(read, token) == 1
+      assert occurrences(render(lv), token) == 1
+      assert has_element?(lv, "#gh-command", "valid for 15 minutes")
+
+      assert {:ok, %{"jti" => jti, "request_id" => ^id}} = AshAuthentication.Jwt.peek(token)
+      assert Cases.get_github_manual_request!(id, actor: poc).token_id == jti
+
+      lv |> element("#gh-command button", "Close") |> render_click()
+      refute has_element?(lv, "#gh-command")
+
+      lv |> element("#diff-title button", "Push with gh") |> render_click()
+      push = command(lv)
+      %{token: push_token} = command_parts(push)
+
+      assert String.starts_with?(
+               push,
+               without_whitespace("curl -sf -H \"Authorization: Bearer #{push_token}\"")
+             )
+
+      assert push =~ without_whitespace("| gh api -X PATCH #{path} --input - \\\n")
+      assert occurrences(push, push_token) == 2
+      assert occurrences(render(lv), push_token) == 2
+      refute push_token == token
+
+      lv |> element("#gh-command button", "Close") |> render_click()
+      lv |> element("#advisory-diff button", "Read again and pull all with gh") |> render_click()
+
+      assert String.starts_with?(command(lv), without_whitespace("gh api #{path}"))
+      assert has_element?(lv, "#gh-command", "reads #{@other_lib_ghsa} again and pulls Title")
+    end
+
+    test "the page closes the command and shows the advisory once GitHub's answer is posted", %{
+      conn: conn,
+      poc: poc
+    } do
+      uninstalled = Fixtures.open_case(poc, %{title: "Header injection in other_lib"})
+      seed_uninstalled_link!(uninstalled)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{uninstalled.id}/github")
+      render_async(lv)
+
+      lv |> element("#github-advisory button", "Refresh with gh") |> render_click()
+      parts = lv |> command() |> command_parts()
+
+      assert %{"ok" => true} =
+               post_answer(parts, other_lib_answer(%{"summary" => "Revised on GitHub"}))
+
+      html = render(lv)
+      refute html |> LazyHTML.from_document() |> LazyHTML.query("#gh-command") |> Enum.any?()
+      assert has_element?(lv, "#flash-info", "GitHub's answer arrived and is recorded.")
+      assert has_element?(lv, "#github-advisory", "Revised on GitHub")
+    end
+
+    test "a refused link offers to link with gh", %{conn: conn, poc: poc, case: case_record} do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+
+      lv |> form("#link-advisory-form", form: %{advisory_url: @other_lib_url}) |> render_submit()
+
+      assert has_element?(lv, "#link-advisory-form", "the EEF CNA app is not installed")
+
+      lv |> element("#gh-link-offer button", "Link with gh") |> render_click()
+      read = command(lv)
+
+      assert String.starts_with?(
+               read,
+               without_whitespace("gh api /repos/acme/other_lib/security-advisories/#{@other_lib_ghsa}")
+             )
+
+      assert %{"ok" => true} = read |> command_parts() |> post_answer(other_lib_answer())
+
+      render(lv)
+      assert has_element?(lv, "#github-advisory", @other_lib_ghsa)
+      refute has_element?(lv, "#gh-command")
+    end
+
+    test "a report to a repository without the App is offered as a draft or a private report", %{
+      conn: conn,
+      poc: poc,
+      case: case_record
+    } do
+      Fixtures.add_affected_package(poc, case_record, %{
+        repo_url: "https://github.com/acme/other_lib"
+      })
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+      render_async(lv)
+
+      assert has_element?(lv, "#report-gh-kind input[value='draft'][checked]")
+      refute has_element?(lv, "#report-advisory-form button", "Report privately")
+
+      lv
+      |> form("#report-advisory-form", %{
+        "repository" => "acme/other_lib",
+        "gh_kind" => "report",
+        "report" => %{"description" => "For the maintainers."}
+      })
+      |> render_submit(%{"via" => "gh"})
+
+      report = command(lv)
+      parts = command_parts(report)
+
+      assert report =~
+               without_whitespace("| gh api -X POST /repos/acme/other_lib/security-advisories/reports --input - \\\n")
+
+      assert has_element?(
+               lv,
+               "#gh-command",
+               "reports the case privately to the maintainers of acme/other_lib"
+             )
+
+      assert %{
+               "description" => "For the maintainers.",
+               "summary" => "Header injection in acme_lib"
+             } =
+               build_conn()
+               |> put_req_header("authorization", "Bearer #{parts.token}")
+               |> get(~p"/api/github/manual/#{parts.id}/request")
+               |> json_response(200)
+
+      assert %{"ok" => true} = post_answer(parts, other_lib_answer())
+
+      render(lv)
+      assert has_element?(lv, "#github-advisory", @other_lib_ghsa)
+    end
   end
 end

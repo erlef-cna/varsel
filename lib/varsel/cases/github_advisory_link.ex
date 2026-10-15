@@ -79,6 +79,33 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
       change StoreAdvisory
     end
 
+    create :link_attested do
+      description """
+      Internal: links the case to the advisory a POC read or opened on GitHub
+      themselves, as they posted it back for a `Varsel.Cases.GitHubManualRequest`.
+      """
+
+      accept [:case_id]
+
+      argument :advisory, :map, allow_nil?: false
+
+      change StoreAdvisory
+    end
+
+    update :refresh_attested do
+      description """
+      Internal: stores the advisory a POC read or wrote on GitHub themselves,
+      as they posted it back for a `Varsel.Cases.GitHubManualRequest`.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :advisory, :map, allow_nil?: false
+
+      change StoreAdvisory
+    end
+
     update :refresh do
       description "Reads the advisory from GitHub again, as the caller."
       primary? true
@@ -173,7 +200,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
 
     # Content freeze: the link and the case may only change while the case is
     # editable, or when a POC corrects an approved one.
-    policy action([:link, :unlink, :pull]) do
+    policy action([:link, :unlink, :pull, :link_attested]) do
       authorize_if expr(case.state in [:draft, :review])
 
       authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
@@ -181,6 +208,13 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
 
     policy action(:record) do
       authorize_if accessing_from(Case, :github_advisory_link)
+    end
+
+    # Stamped by `Varsel.Cases.GitHubManualRequest.Changes.RecordAnswer`, which
+    # records an answer only for the holder of the request's one-time token.
+    policy action([:link_attested, :refresh_attested]) do
+      forbid_unless context_equals([:private, :github_manual_answer?], true)
+      authorize_if actor_attribute_equals(:role, :poc)
     end
 
     policy action(:refresh) do

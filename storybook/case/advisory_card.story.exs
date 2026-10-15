@@ -56,6 +56,11 @@ defmodule VarselWeb.Storybook.Case.AdvisoryCard do
         attributes: %{link: link(%{}), can_refresh: true, can_unlink: true, busy: true}
       },
       %Variation{
+        id: :gh_refresh,
+        description: "A POC on a repository without the App reads the advisory with gh instead.",
+        attributes: %{link: link(%{}), gh_refresh: true, can_unlink: true}
+      },
+      %Variation{
         id: :read_only,
         description: "A viewer who may neither refresh nor unlink sees the facts alone.",
         attributes: %{link: link(%{state: :withdrawn})}

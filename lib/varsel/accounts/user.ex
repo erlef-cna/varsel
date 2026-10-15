@@ -31,6 +31,7 @@ defmodule Varsel.Accounts.User do
   alias Varsel.Accounts.User.Changes.SyncGitHubInstallations
   alias Varsel.Accounts.User.Role
   alias Varsel.Accounts.UserIdentity
+  alias Varsel.Cases.GitHubManualRequest
   alias Varsel.Cases.Proposal
   alias Varsel.Notifications.EmailMode
   alias Varsel.Notifications.Notification
@@ -89,6 +90,7 @@ defmodule Varsel.Accounts.User do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
       authorize_if accessing_from(UserIdentity, :user)
+      authorize_if accessing_from(GitHubManualRequest, :user)
     end
   end
 
@@ -418,6 +420,10 @@ defmodule Varsel.Accounts.User do
       authorize_if accessing_from(Varsel.Cases.CaseAssignment, :user)
       authorize_if accessing_from(Varsel.Cases.CaseCredit, :user)
       authorize_if accessing_from(UserIdentity, :user)
+      # A manual GitHub request's answer is recorded as the POC who prepared
+      # it (`Varsel.Cases.GitHubManualRequest.Changes.RecordAnswer`), so its
+      # role has to load too.
+      authorize_if accessing_from(GitHubManualRequest, :user)
     end
 
     policy action(:update) do

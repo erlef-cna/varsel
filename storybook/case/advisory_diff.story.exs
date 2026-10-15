@@ -127,6 +127,27 @@ defmodule VarselWeb.Storybook.Case.AdvisoryDiff do
         }
       },
       %Variation{
+        id: :gh,
+        description:
+          "A POC on a repository without the App pushes, and reads again and pulls, with gh. " <>
+            "The pull from the stored copy stays.",
+        attributes: %{
+          can_pull: true,
+          gh_pull: true,
+          gh_push: true,
+          rows: [
+            %{
+              field: :title,
+              ours: "Header injection in acme_lib",
+              theirs: "Header injection",
+              status: :differs
+            },
+            %{field: :cvss_v4, ours: nil, theirs: @vector, status: :theirs_only},
+            %{field: :weaknesses, ours: [113, 79], theirs: [113], status: :differs}
+          ]
+        }
+      },
+      %Variation{
         id: :busy,
         description: "While a request to GitHub runs, every pull and push is held.",
         attributes: %{
