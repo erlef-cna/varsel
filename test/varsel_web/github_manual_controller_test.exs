@@ -306,4 +306,96 @@ defmodule VarselWeb.GitHubManualControllerTest do
       assert [] = link_of(case_record, poc)
     end
   end
+
+  describe "an open" do
+    test "fills the case from the advisory the POC read", %{conn: conn, poc: poc} do
+      advisory =
+        otp_advisory()
+        |> Map.put("credits", [])
+        |> Map.put("credits_detailed", [])
+        |> Map.put("vulnerabilities", [])
+
+      url = advisory["html_url"]
+      request = Cases.prepare_manual_open!(url, actor: poc)
+
+      assert request.case_id == nil
+
+      assert %{"ok" => true, "message" => message} =
+               conn
+               |> post_result(request, request.__metadata__.token, advisory)
+               |> json_response(200)
+
+      assert message == "Opened a case from #{advisory["ghsa_id"]}."
+
+      assert [opened] =
+               Cases.list_cases!(
+                 actor: poc,
+                 query: [filter: [title: advisory["summary"]]],
+                 load: [:github_advisory_link]
+               )
+
+      assert opened.description_md == "The inets HTTP server allocates without limit.\n\nUpgrade."
+      assert opened.date_public == ~U[2026-08-20 09:00:00Z]
+      assert opened.cvss_v4.vector == advisory["cvss_severities"]["cvss_v4"]["vector_string"]
+      assert opened.github_advisory_link.ghsa_id == advisory["ghsa_id"]
+    end
+
+    test "is refused up front when the advisory is linked already", %{conn: conn, poc: poc} do
+      advisory =
+        otp_advisory()
+        |> Map.put("credits", [])
+        |> Map.put("credits_detailed", [])
+        |> Map.put("vulnerabilities", [])
+
+      url = advisory["html_url"]
+      request = Cases.prepare_manual_open!(url, actor: poc)
+
+      assert %{"ok" => true} =
+               conn
+               |> post_result(request, request.__metadata__.token, advisory)
+               |> json_response(200)
+
+      # No second request is minted, so no command is ever shown.
+      assert {:error, error} = Cases.prepare_manual_open(url, actor: poc)
+      assert Exception.message(error) =~ "is already linked to another case"
+    end
+
+    test "states a refusal of the open rather than failing", %{conn: conn, poc: poc} do
+      advisory =
+        otp_advisory()
+        |> Map.put("credits", [])
+        |> Map.put("credits_detailed", [])
+        |> Map.put("vulnerabilities", [])
+
+      url = advisory["html_url"]
+      first = Cases.prepare_manual_open!(url, actor: poc)
+      second = Cases.prepare_manual_open!(url, actor: poc)
+
+      assert %{"ok" => true} =
+               conn
+               |> post_result(first, first.__metadata__.token, advisory)
+               |> json_response(200)
+
+      # The advisory is linked to the case the first answer opened, so the
+      # second cannot open another.
+      assert %{"ok" => false, "message" => message} =
+               build_conn()
+               |> post_result(second, second.__metadata__.token, advisory)
+               |> json_response(422)
+
+      assert message =~ "is already linked to another case"
+    end
+
+    test "refuses an advisory other than the one asked for", %{conn: conn, poc: poc} do
+      request = Cases.prepare_manual_open!(otp_advisory()["html_url"], actor: poc)
+      before = length(Cases.list_cases!(actor: poc))
+
+      assert %{"ok" => false} =
+               conn
+               |> post_result(request, request.__metadata__.token, answer())
+               |> json_response(422)
+
+      assert length(Cases.list_cases!(actor: poc)) == before
+    end
+  end
 end

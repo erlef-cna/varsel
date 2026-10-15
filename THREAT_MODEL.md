@@ -234,19 +234,19 @@ other side of it. (`router.ex`, `hex_service_auth.ex`, `service.ex`)
 
 **One route group authorizes on a token bound to one row.**
 `/api/github/manual/:id/request` and `/result` take no login. A POC who
-prepares a `GitHubManualRequest` on the GitHub tab gets a one-time token,
-shown once in a command. It is an AshAuthentication token of that POC with
-the purpose `github_manual`, a 15-minute life and the request's id as a
-claim, stored in the tokens table like every token the app mints. The
-library marks any purpose other than `user` unusable as a bearer
+prepares a `GitHubManualRequest`, on the GitHub tab or on the cases console,
+gets a one-time token, shown once in a command. It is an AshAuthentication
+token of that POC with the purpose `github_manual`, a 15-minute life and the
+request's id as a claim, stored in the tokens table like every token the app
+mints. The library marks any purpose other than `user` unusable as a bearer
 credential, so it cannot stand in for a session. The controller finds the
 request by its id as the `github_manual` system, and the token then decides
 the step: it verifies, carries that purpose, names the request's user and
 the request, is stored with that purpose, and is not revoked. Recording the
 answer revokes it in the same transaction, and as the POC who prepared the
-request, through link actions that also demand the POC role and a stamp
-only that recording step sets. The request belongs to its token's row, so
-the token expunger, which deletes expired tokens every 12 hours, deletes
+request, through link and case actions that also demand the POC role and a
+stamp only that recording step sets. The request belongs to its token's row,
+so the token expunger, which deletes expired tokens every 12 hours, deletes
 the request with it. (`github_manual_request.ex`, `mint_token.ex`,
 `token_matches.ex`, `record_answer.ex`, `github_advisory_link.ex`)
 
@@ -400,10 +400,13 @@ claims:
   `POST /api/github/manual/:id/result`) — reachable by **anyone holding the
   request's one-time token**, for 15 minutes and until its answer is
   recorded. Only a POC who may run the action the request stands in for, on
-  that case or link, prepares one. The holder can read that request's body,
-  which is case content a push or report would send, and post one answer. A
-  finding premised on reaching either step without the token is out of
-  model unless the token check itself is defeated.
+  that case or link, prepares one. An open names neither, since the case does
+  not exist until the answer arrives. The POC role alone authorizes it, which
+  is the question `open_from_github_advisory` asks as well. The holder can
+  read that request's body, which is case content a push or report would
+  send, and post one answer. A finding premised on reaching either step
+  without the token is out of model unless the token check itself is
+  defeated.
   (`github_manual_request.ex`, `may_run_action.ex`, `token_matches.ex`)
 - **CVE validation** (`validate_cve_record`, `…_schema`, `…_cvelint`,
   `…_hex_packages`, `…_eef`) — reachable by **any authenticated user**, over

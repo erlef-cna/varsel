@@ -31,9 +31,23 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory do
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
     changeset
-    |> Changeset.before_transaction(&fetch(&1, context.actor))
+    |> attest_or_fetch(context.actor)
     |> Changeset.before_action(&fill/1)
     |> Changeset.after_action(&add_children(&1, &2, context))
+  end
+
+  # An attested open carries the advisory the POC read with `gh`. Nothing
+  # reads it again from GitHub, as `RecordAnswer` states for every answer.
+  defp attest_or_fetch(%{action: %{name: :open_from_github_advisory_attested}} = changeset, _actor) do
+    Changeset.put_context(
+      changeset,
+      @advisory_key,
+      Changeset.get_argument(changeset, :advisory)
+    )
+  end
+
+  defp attest_or_fetch(changeset, actor) do
+    Changeset.before_transaction(changeset, &fetch(&1, actor))
   end
 
   defp fetch(changeset, actor) do

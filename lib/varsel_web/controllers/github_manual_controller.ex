@@ -89,11 +89,21 @@ defmodule VarselWeb.GitHubManualController do
         {:error, :unprocessable_entity, "GitHub's answer #{answer.message}."}
 
       true ->
-        raise error
+        # Recording runs the actions the request stands in for, and their
+        # refusals name their own fields. The caller cannot fix the request
+        # either way, so each one is stated rather than raised.
+        {:error, :unprocessable_entity, "GitHub's answer could not be recorded: #{refusal(error)}"}
     end
   end
 
   defp step({:error, error}), do: raise(Ash.Error.to_error_class(error))
+
+  defp refusal(%Invalid{errors: errors}) do
+    errors
+    |> Enum.map_join("; ", &Exception.message/1)
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+  end
 
   defp refuse(conn, status, message) do
     conn
@@ -106,6 +116,9 @@ defmodule VarselWeb.GitHubManualController do
     do: put_resp_header(conn, "www-authenticate", ~s(Bearer error="invalid_token"))
 
   defp maybe_challenge(conn, _status), do: conn
+
+  defp recorded(%{operation: :read, advisory_url: url, case_id: nil, ghsa_id: ghsa_id}, _answer) when is_binary(url),
+    do: "Opened a case from #{ghsa_id}."
 
   defp recorded(%{operation: :read, advisory_url: url, ghsa_id: ghsa_id}, _answer) when is_binary(url),
     do: "Linked #{ghsa_id} to the case."

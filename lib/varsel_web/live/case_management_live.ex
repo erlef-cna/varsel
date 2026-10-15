@@ -21,6 +21,7 @@ defmodule VarselWeb.CaseManagementLive do
   use VarselWeb, :live_view
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
+  import VarselWeb.AdvisoryComponents, only: [gh_command_modal: 1]
   import VarselWeb.CveView, only: [package_display_name: 1]
   import VarselWeb.LivePagination, only: [change_page: 3, jump_to_page: 3]
   import VarselWeb.UserComponents, only: [avatar_disc: 1]
@@ -60,7 +61,9 @@ defmodule VarselWeb.CaseManagementLive do
        open_case_dialog: nil,
        advisory_reach: nil,
        open_case_form: nil,
-       advisory_form: nil
+       advisory_form: nil,
+       gh: nil,
+       gh_open?: false
      )}
   end
 
@@ -116,6 +119,23 @@ defmodule VarselWeb.CaseManagementLive do
     )
   end
 
+  # The answer to a gh open arrives out of band, on the POC's own terminal.
+  # What reaches the page is the case's own create notification, which
+  # refetches the lanes, so the arrival is checked from here.
+  defp check_gh_answer(%{assigns: %{gh: %{request: %{id: id}}}} = socket) do
+    case Cases.get_github_manual_request(id, actor: socket.assigns.current_user) do
+      {:ok, %{completed_at: %DateTime{}, case_id: case_id}} when is_binary(case_id) ->
+        socket
+        |> assign(gh: nil, open_case_dialog: nil)
+        |> push_navigate(to: ~p"/cases/#{case_id}/github")
+
+      _pending ->
+        socket
+    end
+  end
+
+  defp check_gh_answer(socket), do: socket
+
   defp assign_lanes(cases, socket) do
     grouped = Enum.group_by(cases, & &1.state)
     totals = lane_totals(socket)
@@ -143,6 +163,7 @@ defmodule VarselWeb.CaseManagementLive do
     |> assign(:lanes, lanes)
     |> assign(:pipeline_count, totals |> Map.values() |> Enum.sum())
     |> assign(:pipeline_match_count, length(cases))
+    |> check_gh_answer()
   end
 
   # The rows are already filtered by the search, so a lane's total needs its
@@ -175,6 +196,7 @@ defmodule VarselWeb.CaseManagementLive do
     assign(socket, :cve_record_match_count, count)
   end
 
+  # ------------------------------------------------------------- archive face
   defp lane_dot(:draft), do: "bg-warning"
   defp lane_dot(:review), do: "bg-info"
   defp lane_dot(:approved), do: "bg-[color:var(--violet)]"
@@ -186,8 +208,6 @@ defmodule VarselWeb.CaseManagementLive do
       term -> Ash.Query.filter(base, matches_query(query: ^String.downcase(term)))
     end
   end
-
-  # ------------------------------------------------------------- archive face
 
   defp keep_archive_live(socket, params) do
     socket.endpoint.unsubscribe("case:all")
@@ -294,7 +314,16 @@ defmodule VarselWeb.CaseManagementLive do
       )
       |> to_form()
 
+    # --------------------------------------------------------------- events
+
     assign(socket, :advisory_form, form)
+  end
+
+  # The POC runs the read themselves where no credential of ours reaches the
+  # repository. The domain decides whether they may.
+  defp gh_open?(reach, url, actor) do
+    not submittable_reach?(reach) and
+      Cases.can_prepare_manual_open?(actor, url, %{}, validate?: true)
   end
 
   # A global database entry belongs to no repository, so no credential of
@@ -306,8 +335,6 @@ defmodule VarselWeb.CaseManagementLive do
       :error -> nil
     end
   end
-
-  # --------------------------------------------------------------- events
 
   @impl Phoenix.LiveView
   def handle_event("open_case", %{"form" => params}, socket) do
@@ -375,11 +402,32 @@ defmodule VarselWeb.CaseManagementLive do
      |> assign(:open_case_open?, false)
      |> assign(:open_case_dialog, dialog)
      |> assign(:advisory_reach, nil)
+     |> assign(:gh, nil)
+     |> assign(:gh_open?, false)
      |> assign_dialog_form(dialog)}
   end
 
   def handle_event("close_open_case_dialog", _params, socket) do
-    {:noreply, socket |> assign(:open_case_dialog, nil) |> assign(:advisory_reach, nil)}
+    {:noreply,
+     socket
+     |> assign(:open_case_dialog, nil)
+     |> assign(:advisory_reach, nil)
+     |> assign(:gh, nil)
+     |> assign(:gh_open?, false)}
+  end
+
+  def handle_event("close_gh", _params, socket), do: {:noreply, assign(socket, :gh, nil)}
+
+  def handle_event("gh_open", _params, socket) do
+    url = Form.value(socket.assigns.advisory_form, :advisory_url)
+
+    case Cases.prepare_manual_open(url, actor: socket.assigns.current_user) do
+      {:ok, request} ->
+        {:noreply, assign(socket, :gh, %{request: request, token: request.__metadata__.token})}
+
+      {:error, error} ->
+        {:noreply, put_flash(socket, :error, errors_to_string(error))}
+    end
   end
 
   def handle_event("validate_open_case", %{"form" => params}, socket) do
@@ -387,17 +435,20 @@ defmodule VarselWeb.CaseManagementLive do
   end
 
   def handle_event("validate_advisory", %{"form" => params}, socket) do
+    url = params["advisory_url"] || ""
+    reach = advisory_reach(url, socket.assigns.current_user)
+
     {:noreply,
      socket
      |> assign(:advisory_form, Form.validate(socket.assigns.advisory_form, params))
-     |> assign(
-       :advisory_reach,
-       advisory_reach(params["advisory_url"] || "", socket.assigns.current_user)
-     )}
+     |> assign(:advisory_reach, reach)
+     |> assign(:gh_open?, gh_open?(reach, url, socket.assigns.current_user))}
   end
 
   def handle_event("toggle_lane", %{"lane" => lane}, socket) do
     state = String.to_existing_atom(lane)
+
+    # ------------------------------------------------------------------ helpers
 
     expanded =
       if MapSet.member?(socket.assigns.expanded_lanes, state) do
@@ -432,8 +483,6 @@ defmodule VarselWeb.CaseManagementLive do
   end
 
   defp drop_empty(params), do: Enum.reject(params, fn {_key, value} -> is_nil(value) end)
-
-  # ------------------------------------------------------------------ helpers
 
   defp format_short_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %-d")
 
@@ -688,12 +737,16 @@ defmodule VarselWeb.CaseManagementLive do
               entry.
             </p>
           </div>
-          <.advisory_reach_notice reach={@advisory_reach} />
+          <.advisory_reach_notice reach={@advisory_reach} gh={@gh_open?} />
           <div class="modal-action">
             <button type="button" phx-click="close_open_case_dialog" class="btn btn-sm btn-ghost">
               Cancel
             </button>
+            <button :if={@gh_open?} type="button" phx-click="gh_open" class="btn btn-sm btn-eef">
+              Do it with gh
+            </button>
             <button
+              :if={not @gh_open?}
               type="submit"
               class="btn btn-sm btn-eef"
               disabled={not submittable_reach?(@advisory_reach)}
@@ -703,6 +756,13 @@ defmodule VarselWeb.CaseManagementLive do
           </div>
         </.form>
       </.modal>
+
+      <.gh_command_modal
+        :if={@gh}
+        request={@gh.request}
+        token={@gh.token}
+        base_url={VarselWeb.Endpoint.url()}
+      />
     </Layouts.app>
     """
   end
@@ -715,6 +775,7 @@ defmodule VarselWeb.CaseManagementLive do
   # Reach comes from the synced installation rows, so this says nothing about
   # whether GitHub will answer the read itself.
   attr :reach, :atom, required: true
+  attr :gh, :boolean, required: true
 
   defp advisory_reach_notice(%{reach: reach} = assigns) do
     if submittable_reach?(reach), do: ~H"", else: refused_reach(assigns)
@@ -724,7 +785,13 @@ defmodule VarselWeb.CaseManagementLive do
     ~H"""
     <div class="alert alert-info text-sm">
       <.icon name="hero-information-circle" class="size-5 shrink-0" />
-      <span>This {Credentials.message(@reach)}.</span>
+      <span>
+        This {Credentials.message(@reach)}.
+        <span :if={@gh}>
+          Do it with gh instead: you get a command to run in your own terminal,
+          as your GitHub account.
+        </span>
+      </span>
     </div>
     """
   end

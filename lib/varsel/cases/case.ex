@@ -55,6 +55,7 @@ defmodule Varsel.Cases.Case do
     notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
 
   alias Varsel.Cases.AffectedPackage.DerivationState
+  alias Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
@@ -263,9 +264,31 @@ defmodule Varsel.Cases.Case do
         public? false
       end
 
+      validate Varsel.Cases.Validations.AdvisoryIsFree
+
       change AssignOpener
       change manage_relationship(:assignments, type: :create)
-      change Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory
+      change OpenFromGitHubAdvisory
+    end
+
+    create :open_from_github_advisory_attested do
+      description """
+      Internal: opens a case from the advisory a POC read on GitHub
+      themselves, as they posted it back for a
+      `Varsel.Cases.GitHubManualRequest`.
+      """
+
+      accept []
+
+      argument :advisory, :map, allow_nil?: false
+
+      argument :assignments, {:array, :map} do
+        public? false
+      end
+
+      change AssignOpener
+      change manage_relationship(:assignments, type: :create)
+      change OpenFromGitHubAdvisory
     end
 
     update :edit do
@@ -545,6 +568,13 @@ defmodule Varsel.Cases.Case do
     policy action([:open, :open_from_github_advisory]) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if actor_attribute_equals(:role, :supporter)
+    end
+
+    # Stamped by `Varsel.Cases.GitHubManualRequest.Changes.RecordAnswer`, which
+    # records an answer only for the holder of the request's one-time token.
+    policy action(:open_from_github_advisory_attested) do
+      forbid_unless context_equals([:private, :github_manual_answer?], true)
+      authorize_if actor_attribute_equals(:role, :poc)
     end
 
     # An assigned supporter takes the *next free* ID of the year; naming the

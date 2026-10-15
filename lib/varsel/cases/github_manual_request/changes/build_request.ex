@@ -31,7 +31,7 @@ defmodule Varsel.Cases.GitHubManualRequest.Changes.BuildRequest do
 
   defp build(%{valid?: false} = changeset, _opts), do: changeset
 
-  defp build(%{action: %{name: :prepare_link}} = changeset, _opts) do
+  defp build(%{action: %{name: name}} = changeset, _opts) when name in [:prepare_link, :prepare_open] do
     case Advisories.parse(Changeset.get_argument(changeset, :advisory_url)) do
       {:ok, %{owner: owner, repo: repo, ghsa_id: ghsa_id}} ->
         changeset

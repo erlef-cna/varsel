@@ -34,6 +34,7 @@ defmodule Varsel.Cases.GitHubManualRequest do
   alias Varsel.Cases.GitHubManualRequest.Checks.TokenMatches
   alias Varsel.Cases.GitHubManualRequest.Operation
   alias Varsel.Cases.GitHubManualRequest.Validations.AnswerNamesRequest
+  alias Varsel.Cases.Validations.AdvisoryIsFree
 
   @pullable [:title, :cvss_v4, :weaknesses, :credits, :affected]
   @pushable [:title, :description, :cve_id, :cvss_v4, :weaknesses, :credits, :affected]
@@ -70,6 +71,29 @@ defmodule Varsel.Cases.GitHubManualRequest do
       end
 
       metadata :token, :string, description: "The one-time token, given here and nowhere else."
+
+      change relate_actor(:user)
+      change BuildRequest
+      change MintToken
+    end
+
+    create :prepare_open do
+      description """
+      Prepares the read of the advisory at `advisory_url`, from which the
+      answer then opens a case. The request names no case: it does not exist
+      until the answer arrives.
+      """
+
+      accept []
+
+      argument :advisory_url, :string do
+        allow_nil? false
+        description "The advisory's URL on GitHub."
+      end
+
+      metadata :token, :string, description: "The one-time token, given here and nowhere else."
+
+      validate AdvisoryIsFree
 
       change relate_actor(:user)
       change BuildRequest
@@ -162,6 +186,16 @@ defmodule Varsel.Cases.GitHubManualRequest do
       change set_attribute(:fetched_at, &DateTime.utc_now/0)
     end
 
+    update :name_case do
+      description """
+      Internal: names the case that an open's answer created, so the page
+      that prepared the request can find it.
+      """
+
+      accept [:case_id]
+      require_atomic? false
+    end
+
     update :complete do
       description "Records GitHub's answer, posted by the holder of the token, and revokes the token."
       accept []
@@ -208,8 +242,22 @@ defmodule Varsel.Cases.GitHubManualRequest do
       authorize_if MayRunAction
     end
 
+    # The case does not exist yet, so there is no row to ask about. A POC may
+    # open one, which is the question :open_from_github_advisory asks too.
+    policy action(:prepare_open) do
+      access_type :strict
+      authorize_if actor_attribute_equals(:role, :poc)
+    end
+
     policy action([:fetch, :complete]) do
       authorize_if TokenMatches
+    end
+
+    # Stamped by `Varsel.Cases.GitHubManualRequest.Changes.RecordAnswer`, which
+    # names the case only for the holder of the request's one-time token.
+    policy action(:name_case) do
+      forbid_unless context_equals([:private, :github_manual_answer?], true)
+      authorize_if actor_attribute_equals(:role, :poc)
     end
   end
 
@@ -264,7 +312,8 @@ defmodule Varsel.Cases.GitHubManualRequest do
 
   relationships do
     belongs_to :case, Varsel.Cases.Case do
-      allow_nil? false
+      description "The case the answer is recorded on. nil for an open, whose answer creates it."
+      allow_nil? true
       public? true
       attribute_writable? true
     end

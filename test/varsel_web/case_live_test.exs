@@ -165,27 +165,6 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "EEF CNA app"
     end
 
-    test "the dialog disables submit when the app cannot reach the repository", %{
-      conn: conn,
-      poc: poc
-    } do
-      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
-      lv |> element("button", "Open case") |> render_click()
-      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
-
-      refute has_element?(lv, "#open-case-advisory-form button[type=submit][disabled]")
-
-      lv
-      |> form("#open-case-advisory-form", %{
-        "form" => %{
-          "advisory_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
-        }
-      })
-      |> render_change()
-
-      assert has_element?(lv, "#open-case-advisory-form button[type=submit][disabled]")
-    end
-
     test "a submit that bypasses the disabled button is still refused", %{conn: conn, poc: poc} do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
       lv |> element("button", "Open case") |> render_click()
@@ -204,6 +183,137 @@ defmodule VarselWeb.CaseLiveTest do
       assert lv
              |> element("#open-case-advisory-form")
              |> render() =~ "EEF CNA app is not installed"
+    end
+
+    test "a POC is offered a gh command where the app is not installed", %{conn: conn, poc: poc} do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
+
+      html =
+        lv
+        |> form("#open-case-advisory-form", %{
+          "form" => %{
+            "advisory_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+          }
+        })
+        |> render_change()
+
+      assert html =~ "Do it with gh"
+      # The gh command replaces the submit: there is no credential to submit with.
+      refute has_element?(lv, "#open-case-advisory-form button[type=submit]")
+
+      lv |> element("button", "Do it with gh") |> render_click()
+
+      assert render(lv) =~ "opens a case from it"
+
+      command =
+        lv
+        |> element("#gh-command-text pre")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.text()
+        |> String.replace(~r/\s+/, "")
+
+      assert command =~
+               "ghapi/repos/acme/acme_lib/security-advisories/GHSA-2cfg-hjmp-qrvw"
+
+      assert command =~ "/api/github/manual/"
+    end
+
+    test "the answer to a gh open closes the dialogs and navigates to the case", %{
+      conn: conn,
+      poc: poc
+    } do
+      advisory =
+        GitHubAdvisoryFixtures.otp_advisory()
+        |> Map.put("credits", [])
+        |> Map.put("credits_detailed", [])
+        |> Map.put("vulnerabilities", [])
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
+
+      lv
+      |> form("#open-case-advisory-form", %{
+        "form" => %{"advisory_url" => advisory["html_url"]}
+      })
+      |> render_change()
+
+      lv |> element("button", "Do it with gh") |> render_click()
+      assert has_element?(lv, "#gh-command")
+
+      # The command carries the request's id and its one-time token, and is
+      # the only place the token is shown.
+      command =
+        lv
+        |> element("#gh-command-text pre")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.text()
+        |> String.replace(~r/\s+/, "")
+
+      [_all, token] = Regex.run(~r/Bearer([A-Za-z0-9_.-]+)"/, command)
+      [_all, id] = Regex.run(~r{/api/github/manual/([0-9a-f-]+)/result}, command)
+
+      # The POC runs the command in their own terminal: the answer reaches
+      # Varsel over the API, not through the page.
+      build_conn()
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> put_req_header("content-type", "application/json")
+      |> post(~p"/api/github/manual/#{id}/result", JSON.encode!(advisory))
+      |> json_response(200)
+
+      case_id = Cases.get_github_manual_request!(id, actor: poc).case_id
+
+      assert is_binary(case_id)
+
+      # The redirect replaces the page, so both the advisory dialog and the
+      # command modal go with it.
+      assert_redirect(lv, ~p"/cases/#{case_id}/github")
+    end
+
+    test "no gh command is offered for an advisory a case holds already", %{
+      conn: conn,
+      poc: poc
+    } do
+      advisory = GitHubAdvisoryFixtures.hex_advisory()
+      url = advisory["html_url"]
+
+      # The advisory is on a repository the app cannot reach, so a gh command
+      # is the only thing left to offer until a case holds it.
+      Ash.Seed.seed!(Varsel.Cases.GitHubAdvisoryLink, %{
+        case_id: Fixtures.open_case(poc, %{title: "Holds the advisory"}).id,
+        ghsa_id: advisory["ghsa_id"],
+        owner: "acme",
+        repo: "acme_lib",
+        html_url: url,
+        state: :draft,
+        advisory: advisory,
+        fetched_at: DateTime.utc_now(:second)
+      })
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      lv |> element("button", "Open case") |> render_click()
+      lv |> element("ul.menu button[phx-value-choice=advisory]") |> render_click()
+
+      html =
+        lv
+        |> form("#open-case-advisory-form", %{"form" => %{"advisory_url" => url}})
+        |> render_change()
+
+      assert html =~ "EEF CNA app"
+      refute html =~ "Do it with gh"
+      assert html =~ "is already linked to another case"
+      refute has_element?(lv, "#open-case-advisory-form button[type=submit]:not([disabled])")
+    end
+
+    test "a supporter may not prepare the gh open", %{supporter: supporter} do
+      url = "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+
+      refute Cases.can_prepare_manual_open?(supporter, url)
+      assert {:error, _refused} = Cases.prepare_manual_open(url, actor: supporter)
     end
 
     test "an address that is no advisory is refused on the field", %{conn: conn, poc: poc} do

@@ -330,6 +330,10 @@ defmodule Varsel.Cases do
     resource Case do
       define :open_case, action: :open
       define :open_case_from_github_advisory, action: :open_from_github_advisory
+
+      define :open_case_from_github_advisory_attested,
+        action: :open_from_github_advisory_attested
+
       define :report_case_to_github, action: :report_to_github
       define :adopt_cve_record, action: :adopt_cve_record
       define :list_cases, action: :list_cases
@@ -512,6 +516,8 @@ defmodule Varsel.Cases do
     resource GitHubManualRequest do
       define :get_github_manual_request, action: :read, get_by: [:id]
       define :prepare_manual_link, action: :prepare_link, args: [:case_id, :advisory_url]
+      define :prepare_manual_open, action: :prepare_open, args: [:advisory_url]
+      define :name_github_manual_request_case, action: :name_case, args: [:case_id]
       define :prepare_manual_refresh, action: :prepare_refresh, args: [:link_id]
       define :prepare_manual_pull, action: :prepare_pull, args: [:link_id, :fields]
       define :prepare_manual_push, action: :prepare_push, args: [:link_id, :fields]

@@ -59,6 +59,15 @@ defmodule Varsel.Cases.GitHubManualRequest.Changes.RecordAnswer do
     end
   end
 
+  # The request carries no case until its answer makes one. Naming it here is
+  # what lets the page that prepared the request find the case it opened.
+  defp record(%{operation: :read, advisory_url: url, case_id: nil} = request, answer, opts) when is_binary(url) do
+    with {:ok, case_record} <-
+           Cases.open_case_from_github_advisory_attested(%{advisory: answer}, opts),
+         {:ok, _request} <- Cases.name_github_manual_request_case(request, case_record.id, opts),
+         do: :ok
+  end
+
   defp record(%{operation: :read, advisory_url: url} = request, answer, opts) when is_binary(url),
     do: link(request, answer, opts)
 

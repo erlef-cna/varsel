@@ -497,6 +497,9 @@ defmodule VarselWeb.AdvisoryComponents do
     end
   end
 
+  defp gh_summary(%{operation: :read, advisory_url: url, case_id: nil, ghsa_id: ghsa_id}) when is_binary(url),
+    do: "reads #{ghsa_id} from GitHub and opens a case from it"
+
   defp gh_summary(%{operation: :read, advisory_url: url, ghsa_id: ghsa_id}) when is_binary(url),
     do: "reads #{ghsa_id} from GitHub and links it to the case"
 

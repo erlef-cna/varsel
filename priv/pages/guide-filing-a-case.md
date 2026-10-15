@@ -104,9 +104,10 @@ path from there to a published CVE.
 
    Where the app is not installed, a Point of Contact does the request from
    their own terminal with the GitHub CLI, `gh`. Link, Refresh, Pull, Push
-   and Report each offer to do it with gh, and show one command. The command
-   fetches the request from here, sends it to GitHub with `gh api` as your
-   GitHub account, and posts GitHub's answer back. The tab then records the
+   and Report each offer to do it with gh, and show one command. Opening a
+   case from an advisory offers the same command on the cases console. The
+   command fetches the request from here, sends it to GitHub with `gh api` as
+   your GitHub account, and posts GitHub's answer back. The tab then records the
    answer as you and updates. The command works once, for 15 minutes. The
    tab cannot ask GitHub whether you administer the repository, so for a
    report choose a draft advisory when you do and a private report when you
