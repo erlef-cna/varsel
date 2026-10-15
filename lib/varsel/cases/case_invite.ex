@@ -179,6 +179,7 @@ defmodule Varsel.Cases.CaseInvite do
     end
 
     policy action_type([:read, :destroy]) do
+      authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])

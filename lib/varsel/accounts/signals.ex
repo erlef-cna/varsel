@@ -14,5 +14,16 @@ defmodule Varsel.Accounts.Signals do
       description "A GitHub sign-in or provider link wrote the account's GitHub identity."
       argument :user_id, :uuid, allow_nil?: false
     end
+
+    signal :identity_linked do
+      description """
+      A provider vouched for a handle on an account, at a first sign-in or a
+      later provider link. What was waiting on that handle is now theirs.
+      """
+
+      argument :user_id, :uuid, allow_nil?: false
+      argument :strategy, :string, allow_nil?: false
+      argument :username, :ci_string, allow_nil?: false
+    end
   end
 end

@@ -24,9 +24,9 @@ defmodule Varsel.Accounts.UserIdentity do
     extensions: [AshAuthentication.UserIdentity, AshCloak, AshPaperTrail.Resource]
 
   alias Ash.Type.CiString
+  alias Varsel.Accounts.Signals
   alias Varsel.Accounts.User
   alias Varsel.Accounts.UserIdentity.Changes.ClaimCaseCredits
-  alias Varsel.Accounts.UserIdentity.Changes.ClaimCaseInvites
   alias Varsel.Accounts.UserIdentity.Changes.ClaimReportParticipants
   alias Varsel.Accounts.UserIdentity.Changes.ReconcileUserNotificationEmail
   alias Varsel.Accounts.UserIdentity.Changes.RefreshAccessToken
@@ -129,11 +129,16 @@ defmodule Varsel.Accounts.UserIdentity do
       change AshAuthentication.UserIdentity.UpsertIdentityChange
       change Varsel.Accounts.UserIdentity.Changes.ApplyProviderFields
       change ReconcileUserNotificationEmail
-      change ClaimCaseInvites
       change ClaimCaseCredits
       change ClaimReportParticipants
 
-      emit Varsel.Accounts.Signals, :github_identity_linked, where: [attribute_equals(:strategy, "github")]
+      emit Signals, :github_identity_linked, where: [attribute_equals(:strategy, "github")]
+
+      # Only the providers a case may name someone by. The dev mock sign-in is
+      # a strategy too, and nothing waits on its handles.
+      emit Signals, :identity_linked,
+        fields: [user_id: :user_id, strategy: :strategy, username: :username],
+        where: [present(:username), attribute_in(:strategy, ["github", "hex"])]
     end
 
     update :refresh_access_token do

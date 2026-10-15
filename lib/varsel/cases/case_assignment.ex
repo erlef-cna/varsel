@@ -20,8 +20,10 @@ defmodule Varsel.Cases.CaseAssignment do
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
 
+  alias Varsel.Accounts.Signals
   alias Varsel.Accounts.User
   alias Varsel.Cases.Case
+  alias Varsel.Cases.CaseAssignment.Changes.ClaimInvites
 
   graphql do
     type :case_assignment
@@ -47,6 +49,9 @@ defmodule Varsel.Cases.CaseAssignment do
     version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
+  # `:claim_invites` is reached only by the `:identity_linked` listener, and
+  # its policy authorizes nothing else.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingCodeInterface
   actions do
     defaults [:read]
 
@@ -63,6 +68,14 @@ defmodule Varsel.Cases.CaseAssignment do
     destroy :unassign do
       description "POC revokes a user's access to a case."
     end
+
+    action :claim_invites do
+      description "Internal: turns the invites naming a freshly linked handle into assignments."
+
+      argument :signal, Varsel.Accounts.Signals.IdentityLinked, allow_nil?: false
+
+      run ClaimInvites
+    end
   end
 
   policies do
@@ -77,7 +90,14 @@ defmodule Varsel.Cases.CaseAssignment do
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
 
+    # The invite claim runs as the user who just signed in. Their invite is
+    # what granted them the case, so the signal is the permission.
+    policy action(:claim_invites) do
+      authorize_if signal_in(Signals, :identity_linked)
+    end
+
     policy action_type(:create) do
+      authorize_if signal_in(Signals, :identity_linked)
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if accessing_from(Case, :assignments)
@@ -124,6 +144,12 @@ defmodule Varsel.Cases.CaseAssignment do
       allow_nil? false
       public? true
       attribute_writable? true
+    end
+  end
+
+  signals_in do
+    from Signals do
+      on :identity_linked, :claim_invites
     end
   end
 
