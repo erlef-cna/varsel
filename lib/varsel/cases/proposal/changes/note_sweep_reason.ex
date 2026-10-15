@@ -17,7 +17,8 @@ defmodule Varsel.Cases.Proposal.Changes.NoteSweepReason do
 
   @notes %{
     {Signals, :case_closed} => "the case was closed",
-    {Signals, :proposal_accepted} => "a competing proposal was accepted"
+    {Signals, :proposal_accepted} => "a competing proposal was accepted",
+    {Signals, :proposal_target_destroyed} => "the targeted row was deleted"
   }
 
   @impl Ash.Resource.Change

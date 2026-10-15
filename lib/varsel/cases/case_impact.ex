@@ -21,8 +21,8 @@ defmodule Varsel.Cases.CaseImpact do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.Changes.ApplyProposedField
-  alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Proposable
+  alias Varsel.Cases.Signals
 
   graphql do
     type :case_impact
@@ -68,7 +68,7 @@ defmodule Varsel.Cases.CaseImpact do
       description "Removes a CAPEC classification."
       primary? true
       require_atomic? false
-      change SupersedeOrphanedProposals
+      emit Signals, :proposal_target_destroyed, fields: [target_id: :id]
     end
 
     update :apply_proposal do
@@ -94,7 +94,10 @@ defmodule Varsel.Cases.CaseImpact do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-      change SupersedeOrphanedProposals
+
+      emit Signals, :proposal_target_destroyed,
+        fields: [target_id: :id],
+        values: [driving_proposal_id: arg(:proposal_id)]
     end
   end
 

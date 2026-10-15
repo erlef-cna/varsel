@@ -41,7 +41,6 @@ defmodule Varsel.Cases.PackageChannel do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.Changes.ApplyProposedField
-  alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.PackageChannel.Calculations.Purl, as: PurlCalculation
   alias Varsel.Cases.PackageChannel.Kind
   alias Varsel.Cases.PackageChannel.PurlType
@@ -49,6 +48,7 @@ defmodule Varsel.Cases.PackageChannel do
   alias Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage
   alias Varsel.Cases.PackageChannel.VersionType
   alias Varsel.Cases.Proposable
+  alias Varsel.Cases.Signals
 
   graphql do
     type :case_package_channel
@@ -96,7 +96,7 @@ defmodule Varsel.Cases.PackageChannel do
       primary? true
       description "Removes a channel from a logical product."
       require_atomic? false
-      change SupersedeOrphanedProposals
+      emit Signals, :proposal_target_destroyed, fields: [target_id: :id]
     end
 
     update :apply_proposal do
@@ -124,7 +124,10 @@ defmodule Varsel.Cases.PackageChannel do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-      change SupersedeOrphanedProposals
+
+      emit Signals, :proposal_target_destroyed,
+        fields: [target_id: :id],
+        values: [driving_proposal_id: arg(:proposal_id)]
     end
   end
 

@@ -26,8 +26,8 @@ defmodule Varsel.Cases.CaseReference do
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.Changes.ApplyProposedField
-  alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Proposable
+  alias Varsel.Cases.Signals
 
   # CVE 5.2 reference-tag vocabulary (tags/reference-tags.json), plus x_ custom tags.
   @reference_tags ~w(
@@ -84,7 +84,7 @@ defmodule Varsel.Cases.CaseReference do
       description "Removes a reference from a case."
       primary? true
       require_atomic? false
-      change SupersedeOrphanedProposals
+      emit Signals, :proposal_target_destroyed, fields: [target_id: :id]
     end
 
     update :apply_proposal do
@@ -110,7 +110,10 @@ defmodule Varsel.Cases.CaseReference do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-      change SupersedeOrphanedProposals
+
+      emit Signals, :proposal_target_destroyed,
+        fields: [target_id: :id],
+        values: [driving_proposal_id: arg(:proposal_id)]
     end
   end
 

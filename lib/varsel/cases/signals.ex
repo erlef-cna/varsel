@@ -15,6 +15,14 @@ defmodule Varsel.Cases.Signals do
       argument :case_id, :uuid, allow_nil?: false
     end
 
+    signal :proposal_target_destroyed do
+      description "A row that proposals address was deleted."
+      argument :target_id, :uuid, allow_nil?: false
+
+      argument :driving_proposal_id, :uuid,
+        description: "The accepted :delete proposal that drove the destroy, which is not orphaned."
+    end
+
     signal :proposal_accepted do
       description "A proposal was accepted and applied to its target."
       argument :proposal_id, :uuid, allow_nil?: false

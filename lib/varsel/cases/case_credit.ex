@@ -29,8 +29,8 @@ defmodule Varsel.Cases.CaseCredit do
   alias Varsel.Cases.CaseCredit.CreditType
   alias Varsel.Cases.CaseCredit.Handle
   alias Varsel.Cases.Changes.ApplyProposedField
-  alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Proposable
+  alias Varsel.Cases.Signals
 
   graphql do
     type :case_credit
@@ -121,7 +121,7 @@ defmodule Varsel.Cases.CaseCredit do
       description "Removes a credit from a case."
       primary? true
       require_atomic? false
-      change SupersedeOrphanedProposals
+      emit Signals, :proposal_target_destroyed, fields: [target_id: :id]
     end
 
     update :apply_proposal do
@@ -149,7 +149,10 @@ defmodule Varsel.Cases.CaseCredit do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-      change SupersedeOrphanedProposals
+
+      emit Signals, :proposal_target_destroyed,
+        fields: [target_id: :id],
+        values: [driving_proposal_id: arg(:proposal_id)]
     end
   end
 

@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
 #
 # SPDX-License-Identifier: Apache-2.0
-
 defmodule Varsel.Cases.AffectedPackage do
   @moduledoc """
   One *logical product* affected by the case's vulnerability (e.g. "Erlang/OTP"
@@ -39,8 +38,8 @@ defmodule Varsel.Cases.AffectedPackage do
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.AffectedPackage.ProgramFile
   alias Varsel.Cases.Changes.ApplyProposedField
-  alias Varsel.Cases.Changes.SupersedeOrphanedProposals
   alias Varsel.Cases.Proposable
+  alias Varsel.Cases.Signals
 
   graphql do
     type :case_affected_package
@@ -200,7 +199,7 @@ defmodule Varsel.Cases.AffectedPackage do
       description "Removes a logical product (with all its channels and version events) from a case."
       primary? true
       require_atomic? false
-      change SupersedeOrphanedProposals
+      emit Signals, :proposal_target_destroyed, fields: [target_id: :id]
     end
 
     update :apply_proposal do
@@ -292,7 +291,10 @@ defmodule Varsel.Cases.AffectedPackage do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-      change SupersedeOrphanedProposals
+
+      emit Signals, :proposal_target_destroyed,
+        fields: [target_id: :id],
+        values: [driving_proposal_id: arg(:proposal_id)]
     end
 
     update :store_derivation do

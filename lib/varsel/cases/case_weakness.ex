@@ -19,7 +19,7 @@ defmodule Varsel.Cases.CaseWeakness do
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
-  alias Varsel.Cases.Changes.SupersedeOrphanedProposals
+  alias Varsel.Cases.Signals
 
   graphql do
     type :case_weakness
@@ -58,7 +58,7 @@ defmodule Varsel.Cases.CaseWeakness do
       description "Removes a CWE classification."
       primary? true
       require_atomic? false
-      change SupersedeOrphanedProposals
+      emit Signals, :proposal_target_destroyed, fields: [target_id: :id]
     end
 
     create :apply_proposal_insert do
@@ -73,7 +73,10 @@ defmodule Varsel.Cases.CaseWeakness do
       require_atomic? false
 
       argument :proposal_id, :uuid, allow_nil?: false
-      change SupersedeOrphanedProposals
+
+      emit Signals, :proposal_target_destroyed,
+        fields: [target_id: :id],
+        values: [driving_proposal_id: arg(:proposal_id)]
     end
   end
 

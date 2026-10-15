@@ -145,6 +145,27 @@ defmodule Varsel.Cases.Proposal do
       pagination keyset?: true, required?: false
     end
 
+    read :list_orphaned do
+      public? false
+
+      description """
+      The open proposals left dangling by a destroyed row: those addressing
+      the row itself, and pending :insert proposals under it. The accepted
+      :delete proposal that drove the destroy is being resolved, not
+      orphaned, so it is excluded.
+      """
+
+      argument :target_id, :uuid, allow_nil?: false
+      argument :driving_proposal_id, :uuid
+
+      filter expr(
+               state == :open and target_id == ^arg(:target_id) and
+                 (is_nil(^arg(:driving_proposal_id)) or id != ^arg(:driving_proposal_id))
+             )
+
+      pagination keyset?: true, required?: false
+    end
+
     create :propose do
       # The generic entry point behind every specialized propose_* action;
       # internal-only (private) but the resource's primary create.
@@ -294,14 +315,7 @@ defmodule Varsel.Cases.Proposal do
     policy action(:supersede) do
       authorize_if signal_in(Signals, :case_closed)
       authorize_if signal_in(Signals, :proposal_accepted)
-
-      forbid_unless context_equals([:private, :proposal_sweep?], true)
-      authorize_if actor_attribute_equals(:role, :poc)
-
-      authorize_if expr(
-                     ^actor(:role) == :supporter and
-                       exists(case.assignments, user_id == ^actor(:id))
-                   )
+      authorize_if signal_in(Signals, :proposal_target_destroyed)
     end
   end
 
@@ -450,6 +464,11 @@ defmodule Varsel.Cases.Proposal do
         action: :supersede,
         read_action: :list_competing,
         args: [:proposal_id, :case_id, :operation, :target, :target_id, :field_name]
+
+      on :proposal_target_destroyed, :supersede_orphaned,
+        action: :supersede,
+        read_action: :list_orphaned,
+        args: [:target_id, :driving_proposal_id]
     end
   end
 end
