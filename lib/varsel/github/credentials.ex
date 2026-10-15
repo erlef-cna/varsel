@@ -17,8 +17,9 @@ defmodule Varsel.GitHub.Credentials do
   An actor who may act as the App (`Varsel.GitHub.can_installation_token?`)
   has one more credential: the installation token of the repository. Such
   an actor without a GitHub identity, or whose login does not reach the
-  installation, acts with it. Such an actor whose login reaches it and whose
-  request GitHub answers with 404 or 403 runs the request once more with it.
+  installation, acts with it. Such an actor whose own token does not renew
+  acts with it too. Such an actor whose login reaches it and whose request
+  GitHub answers with 404 or 403 runs the request once more with it.
   That retry is the one place a second credential follows a failure.
   Everyone else has their own token or nothing.
 
@@ -194,7 +195,7 @@ defmodule Varsel.GitHub.Credentials do
   defp decide(actor, %Installation{reached_by_actor?: true} = installation, app?) do
     case UserToken.fetch(actor) do
       {:ok, token} -> {:user, token, installation, app?}
-      {:error, :no_github_identity} when app? -> {:installation, installation}
+      {:error, _reason} when app? -> {:installation, installation}
       {:error, reason} -> {:error, reason}
     end
   end

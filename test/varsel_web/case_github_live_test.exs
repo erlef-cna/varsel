@@ -808,6 +808,31 @@ defmodule VarselWeb.CaseGitHubLiveTest do
       refute has_element?(lv, "#diff-title button[phx-click='push_advisory']")
     end
 
+    test "a token the App cannot mint is reported on the click", %{conn: conn} do
+      poc = Fixtures.register_user("advisory_live_unminted_poc", :poc)
+      case_record = Fixtures.open_case(poc, %{title: "Header injection in other_lib"})
+      GitHubApp.seed_installation(%{id: 8, account: "acme"}, repositories: ["acme/other_lib"])
+      seed_uninstalled_link!(case_record)
+
+      GitHubApi.stub(fn
+        %{method: "POST", path_info: ["app", "installations", "8", "access_tokens"]} = conn ->
+          Plug.Conn.send_resp(conn, 502, "{}")
+
+        conn ->
+          flunk("GitHub was asked #{conn.method} #{conn.request_path}")
+      end)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+      render_async(lv)
+
+      refute has_element?(lv, "#github-reach-notice")
+      lv |> element("#github-advisory button", "Refresh") |> render_click()
+      render_async(lv)
+
+      assert has_element?(lv, "#flash-error", "could not reach GitHub")
+      assert has_element?(lv, "#github-advisory", "GHSA-4v2x-7mq8-w3rf")
+    end
+
     test "a POC whose login does not reach the repository pushes as the App", %{
       conn: conn,
       case: case_record

@@ -30,6 +30,8 @@ defmodule VarselWeb.CaseGitHubLive do
   alias Varsel.GitHub.UserToken
   alias VarselWeb.CaseLifecycle
 
+  require Logger
+
   @github_requests ["refresh_advisory", "push_advisory", "report_to_github"]
 
   @impl Phoenix.LiveView
@@ -502,8 +504,9 @@ defmodule VarselWeb.CaseGitHubLive do
 
   def handle_async(:reach, {:ok, reach}, socket), do: {:noreply, socket |> assign(reach: reach) |> assign_gh_offers()}
 
-  def handle_async(:reach, {:exit, _reason}, socket) do
-    {:noreply, assign(socket, reach: :github_unreachable)}
+  def handle_async(:reach, {:exit, reason}, socket) do
+    Logger.warning("Reach lookup for case #{socket.assigns.case_id} exited: #{inspect(reason)}")
+    {:noreply, socket |> assign(reach: :unknown) |> assign_gh_offers()}
   end
 
   def handle_async(:audience, {:ok, audience}, socket) do
@@ -838,6 +841,15 @@ defmodule VarselWeb.CaseGitHubLive do
 
   defp reach_notice(%{reach: reach} = assigns)
        when reach in [nil, :user, :installation, :public_read, :no_github_identity], do: ~H""
+
+  defp reach_notice(%{reach: :unknown} = assigns) do
+    ~H"""
+    <div id={@id} class="alert alert-warning text-sm">
+      <.icon name="hero-exclamation-triangle" class="size-5 shrink-0" />
+      <span>This page could not tell what your GitHub login can do here. Reload to try again.</span>
+    </div>
+    """
+  end
 
   defp reach_notice(assigns) do
     ~H"""

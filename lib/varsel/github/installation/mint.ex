@@ -35,13 +35,16 @@ defmodule Varsel.GitHub.Installation.Mint do
     end
   end
 
+  # A caller may already be in a transaction, and a rollback here would end
+  # it with the mint's error. Nothing is written before GitHub answered, so a
+  # failed mint has nothing to roll back.
   defp renew(installation_id, opts) do
     Installation
     |> Ash.DataLayer.transaction(
       fn -> locked_renew(installation_id, opts) end,
       nil,
       %{type: :custom, metadata: %{}},
-      rollback_on_error?: true
+      rollback_on_error?: false
     )
     |> case do
       {:ok, {:ok, token, notifications}} ->

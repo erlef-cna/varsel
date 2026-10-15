@@ -15,6 +15,7 @@ defmodule Varsel.GitHub.CredentialsTest do
   alias Varsel.Fixtures
   alias Varsel.GitHub.Advisories
   alias Varsel.GitHub.Credentials
+  alias Varsel.GitHub.UserToken
   alias Varsel.Test.GitHubApi
   alias Varsel.Test.GitHubApp
 
@@ -60,6 +61,20 @@ defmodule Varsel.GitHub.CredentialsTest do
 
   defp ok(conn, _authorization), do: Req.Test.json(conn, %{"ghsa_id" => "GHSA-2cfg-hjmp-qrvw"})
 
+  defp refused_refresh_user(handle, role) do
+    user =
+      Fixtures.sign_in_with_github(handle, System.unique_integer([:positive]), %{
+        "access_token" => "ghu_old",
+        "expires_in" => 60,
+        "refresh_token" => "ghr_old",
+        "refresh_token_expires_in" => 15_811_200
+      })
+
+    Req.Test.stub(UserToken, &Req.Test.json(&1, %{"error" => "bad_refresh_token"}))
+
+    Ash.update!(user, %{role: role}, action: :set_role, authorize?: false)
+  end
+
   defp refuse(status) do
     fn conn, authorization ->
       case authorization do
@@ -97,6 +112,17 @@ defmodule Varsel.GitHub.CredentialsTest do
         assert_received {:github, @own}
         refute_received {:github, _authorization}
       end
+    end
+
+    test "has no credential when their own token does not renew" do
+      install_on_acme_lib()
+      supporter = refused_refresh_user("credentials_expired_supporter", :supporter)
+      GitHubApp.seed_user_installations(supporter, [7])
+      stub(&ok/2)
+
+      assert Credentials.reach(supporter, "acme", "acme_lib") == :unauthorized
+      assert fetch(supporter) == {:no_credential, :unauthorized}
+      refute_received {:github, _authorization}
     end
 
     test "has no credential when their login does not reach the installation", %{
@@ -188,6 +214,19 @@ defmodule Varsel.GitHub.CredentialsTest do
       assert {:installation, {:ok, _advisory}} = fetch(other_poc)
       assert_received {:github, @installation}
       refute_received {:github, _authorization}
+    end
+
+    test "runs with the installation token when their own token does not renew" do
+      expired_poc = refused_refresh_user("credentials_expired_poc", :poc)
+      GitHubApp.seed_user_installations(expired_poc, [7])
+      stub(&ok/2)
+
+      assert Credentials.reach(expired_poc, "acme", "acme_lib") == :installation
+      assert {:installation, {:ok, _advisory}} = fetch(expired_poc)
+      assert_received {:github, @installation}
+      refute_received {:github, _authorization}
+
+      assert Credentials.reach(expired_poc, "acme", "other_lib") == :not_installed
     end
 
     test "has no credential when the App is not on the repository", %{poc: poc} do
