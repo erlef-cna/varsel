@@ -163,12 +163,10 @@ defmodule Varsel.Cases.CaseCredit do
     # claims a credit whatever state its case is in.
     bypass action(:claim) do
       authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
-      authorize_if actor_attribute_equals(:system, :identity_claim)
     end
 
     policy action_type(:read) do
       authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
-      authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end

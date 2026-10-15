@@ -85,7 +85,6 @@ defmodule Varsel.Cases.CaseAssignment do
 
     # Assigned users may see who else works the case; POCs see everything.
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
@@ -98,7 +97,6 @@ defmodule Varsel.Cases.CaseAssignment do
 
     policy action_type(:create) do
       authorize_if signal_in(Signals, :identity_linked)
-      authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if accessing_from(Case, :assignments)
 
