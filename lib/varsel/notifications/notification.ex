@@ -123,12 +123,28 @@ defmodule Varsel.Notifications.Notification do
     end
 
     update :mark_case_read do
-      description "Marks the acting user's unread notifications for one case as read."
+      description """
+      Marks the acting user's unread notifications for one case as read,
+      limited to `kinds` when it is given. A page marks read only the kinds
+      it shows, so the bell keeps pointing at what has not been seen.
+      """
+
       accept []
 
       argument :case_id, :uuid, allow_nil?: false
 
+      argument :kinds, {:array, Kind} do
+        description "The kinds to mark read. Every kind when absent."
+        allow_nil? true
+        constraints min_length: 1
+      end
+
       change filter(expr(case_id == ^arg(:case_id) and is_nil(read_at)))
+
+      change filter(expr(kind in ^arg(:kinds))) do
+        where present(:kinds)
+      end
+
       change set_attribute(:read_at, &DateTime.utc_now/0)
     end
 

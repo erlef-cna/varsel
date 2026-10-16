@@ -1044,6 +1044,10 @@ defmodule Varsel.Cases.Case do
     count :report_count, :vulnerability_reports do
       description "How many vulnerability reports were consolidated into this case."
     end
+
+    count :comment_count, :comments do
+      description "How many comments the case's discussion stream holds."
+    end
   end
 
   identities do

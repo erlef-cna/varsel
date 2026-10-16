@@ -176,6 +176,7 @@ defmodule VarselWeb.Router do
       live "/cases/:id/edit", CaseDetailLive, :edit
       live "/cases/:id/propose", CaseDetailLive, :propose
       live "/cases/:id/reports", CaseReportsLive, :index
+      live "/cases/:id/comments", CaseCommentsLive, :index
       live "/cases/:id/github", CaseGitHubLive, :github
       live "/cases/:id/cve", CaseRecordLive, :cve
       live "/cases/:id/osv", CaseRecordLive, :osv

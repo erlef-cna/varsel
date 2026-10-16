@@ -31,6 +31,9 @@ defmodule VarselWeb.Storybook.Case do
   def entry("card_section_header"), do: [name: "Card section header", icon: {:local, "hero-bars-2"}]
 
   def entry("channel_form"), do: [name: "Channel form", icon: {:local, "hero-truck"}]
+
+  def entry("comment_card"), do: [name: "Comment card", icon: {:local, "hero-chat-bubble-left"}]
+
   def entry("credit_form"), do: [name: "Credit form", icon: {:local, "hero-user"}]
 
   def entry("derivation_marker"), do: [name: "Derivation marker", icon: {:local, "hero-flag"}]

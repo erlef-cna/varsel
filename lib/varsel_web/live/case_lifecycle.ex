@@ -24,6 +24,10 @@ defmodule VarselWeb.CaseLifecycle do
 
   @topics ~w(case case_proposal case_comment)
 
+  # The case's own state, which every tab renders in the header and the
+  # lifecycle buttons. A tab adds the kinds its body shows.
+  @lifecycle_kinds [:review_requested, :case_published, :case_assigned]
+
   @doc """
   Mounts the case on the socket as the `:case_record` assign and attaches
   the lifecycle event handlers.
@@ -31,30 +35,43 @@ defmodule VarselWeb.CaseLifecycle do
   `load` names what to load on the case. `after_fetch` receives the loaded
   case and the socket after every fetch and returns the socket. A case the
   actor cannot read sends them back to the case list.
+
+  `marks_read` names the notification kinds this tab's body shows, which it
+  marks read on top of the case's own lifecycle kinds. A kind no open tab
+  shows stays unread, so the bell keeps pointing at the tab that answers it.
   """
-  @spec mount(Socket.t(), String.t(), load: list(), after_fetch: fun()) ::
+  @spec mount(Socket.t(), String.t(), load: list(), after_fetch: fun(), marks_read: [atom()]) ::
           Socket.t()
   def mount(socket, case_id, opts) do
-    load = [:report_count | Keyword.fetch!(opts, :load)]
+    load = [:report_count, :comment_count | Keyword.fetch!(opts, :load)]
     after_fetch = Keyword.fetch!(opts, :after_fetch)
+    marks_read = @lifecycle_kinds ++ Keyword.get(opts, :marks_read, [])
 
     socket
     |> assign(case_id: case_id, cve_picker: nil)
     |> attach_hook(__MODULE__, :handle_event, &handle_event/3)
     |> keep_live(:case_record, &load_case(&1, load),
       subscribe: Enum.map(@topics, &"#{&1}:#{case_id}"),
-      after_fetch: &fetched(&1, &2, after_fetch)
+      after_fetch: &fetched(&1, &2, after_fetch, marks_read)
     )
   end
 
   @doc """
   The tabs of a case, in display order. The Reports tab shows only when
-  reports led to the case.
+  reports led to the case. A count of zero renders as no count at all.
   """
-  def tabs(%{id: case_id, report_count: report_count}) do
+  def tabs(%{id: case_id, report_count: report_count, comment_count: comment_count}) do
+    comment_count = if comment_count > 0, do: comment_count
+
     Enum.filter(
       [
         %{id: :workspace, label: "Workspace", navigate: ~p"/cases/#{case_id}"},
+        %{
+          id: :comments,
+          label: "Comments",
+          count: comment_count,
+          navigate: ~p"/cases/#{case_id}/comments"
+        },
         report_count > 0 &&
           %{
             id: :reports,
@@ -88,13 +105,15 @@ defmodule VarselWeb.CaseLifecycle do
   end
 
   # nil: the case vanished or became inaccessible (on mount and refetch alike).
-  defp fetched(nil, socket, _after_fetch) do
+  defp fetched(nil, socket, _after_fetch, _marks_read) do
     socket |> put_flash(:error, "Case not found.") |> push_navigate(to: ~p"/cases")
   end
 
-  defp fetched(case_record, socket, after_fetch) do
+  defp fetched(case_record, socket, after_fetch, marks_read) do
     if connected?(socket) do
-      Notifications.mark_case_notifications_read!(case_record.id,
+      Notifications.mark_case_notifications_read!(
+        case_record.id,
+        %{kinds: marks_read},
         actor: socket.assigns.current_user
       )
     end

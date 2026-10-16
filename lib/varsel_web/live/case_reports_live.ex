@@ -25,7 +25,8 @@ defmodule VarselWeb.CaseReportsLive do
           :cve_record,
           vulnerability_reports: [reporter: [:avatar_url, :display_name]]
         ],
-        after_fetch: &after_fetch/2
+        after_fetch: &after_fetch/2,
+        marks_read: [:report_submitted]
       )
 
     {:ok, socket}

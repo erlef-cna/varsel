@@ -146,7 +146,8 @@ defmodule VarselWeb.CaseDetailLive do
       )
       |> CaseLifecycle.mount(id,
         load: @case_loads,
-        after_fetch: fn case_record, socket -> assign_case(socket, case_record) end
+        after_fetch: fn case_record, socket -> assign_case(socket, case_record) end,
+        marks_read: [:proposal_opened]
       )
 
     {:ok, socket}
@@ -548,24 +549,6 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, socket}
   end
 
-  ## ---------------------------------------------------------------- comments
-
-  def handle_event("post_comment", %{"body" => body} = params, socket) do
-    attrs = %{
-      case_id: socket.assigns.case_record.id,
-      body: body,
-      proposal_id: presence(params["proposal_id"])
-    }
-
-    socket =
-      case Cases.post_case_comment(attrs, actor: socket.assigns.current_user) do
-        {:ok, _comment} -> socket
-        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
-      end
-
-    {:noreply, socket}
-  end
-
   @impl Phoenix.LiveView
   def handle_async(:refresh_derivation, {:ok, _case_record}, socket) do
     {:noreply, assign(socket, refreshing: false)}
@@ -659,7 +642,6 @@ defmodule VarselWeb.CaseDetailLive do
       projection: projection,
       mode: mode,
       content_form: content_form,
-      can_comment: can_comment?(case_record, actor),
       can_refresh: Cases.can_refresh_case_derivation?(actor, case_record, validate?: true),
       page_title: case_record.title || "Case"
     )
@@ -1091,16 +1073,11 @@ defmodule VarselWeb.CaseDetailLive do
           </.panel>
           <.panel>
             <:title>Activity</:title>
-            <form :if={@can_comment} phx-submit="post_comment" class="mb-4">
-              <textarea
-                name="body"
-                rows="2"
-                required
-                placeholder="Write a comment…"
-                class="w-full textarea text-sm"
-              ></textarea>
-              <button type="submit" class="btn btn-outline btn-xs mt-1">Comment</button>
-            </form>
+            <:actions>
+              <.link navigate={~p"/cases/#{@case_record.id}/comments"} class="link link-hover">
+                Comments
+              </.link>
+            </:actions>
             <.activity_feed entries={activity_entries(@case_record)} />
           </.panel>
           <.assignments_section case_record={@case_record} current_user={@current_user} />
@@ -1187,16 +1164,7 @@ defmodule VarselWeb.CaseDetailLive do
 
   # Comments and suggestion events interleaved, newest first.
   defp activity_entries(case_record) do
-    comments =
-      Enum.map(case_record.comments, fn comment ->
-        %{
-          kind: :comment,
-          who: comment.author,
-          at: comment.inserted_at,
-          body: comment.body,
-          markdown?: true
-        }
-      end)
+    comments = comment_entries(case_record)
 
     proposals =
       Enum.map(case_record.proposals, fn proposal ->
@@ -1214,6 +1182,30 @@ defmodule VarselWeb.CaseDetailLive do
     |> Enum.sort_by(& &1.at, {:desc, DateTime})
     |> Enum.take(25)
   end
+
+  # The rail says a comment happened and links to the Comments tab, which is
+  # where one is read. A run by the same author counts as one line, so a long
+  # exchange does not crowd out the suggestions beside it.
+  defp comment_entries(case_record) do
+    case_record.comments
+    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+    |> Enum.chunk_by(&author_key(&1.author))
+    |> Enum.map(fn [newest | _rest] = run ->
+      %{
+        kind: :comment,
+        who: newest.author,
+        at: newest.inserted_at,
+        body: comment_run_label(length(run)),
+        navigate: ~p"/cases/#{case_record.id}/comments"
+      }
+    end)
+  end
+
+  defp comment_run_label(1), do: "wrote a comment"
+  defp comment_run_label(count), do: "wrote #{count} comments"
+
+  defp author_key(nil), do: :deleted
+  defp author_key(author), do: author.id
 
   defp proposal_field_ref(%{operation: :set, target: :case, field_name: field}), do: "case.#{field}"
 

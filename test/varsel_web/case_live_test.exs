@@ -2059,16 +2059,43 @@ defmodule VarselWeb.CaseLiveTest do
       assert render(lv) =~ "Han Dled"
     end
 
-    test "posts a comment", %{conn: conn, poc: poc} do
+    test "the activity rail summarizes comments and links to the tab that holds them", %{
+      conn: conn,
+      poc: poc
+    } do
       case_record = Fixtures.open_case(poc)
 
+      Cases.post_case_comment!(
+        %{case_id: case_record.id, body: "UNIQUEBODY"},
+        actor: poc
+      )
+
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      html = render(lv)
 
-      lv
-      |> form("form[phx-submit=post_comment]", %{"body" => "Looks good to me"})
-      |> render_submit()
+      assert html =~ "wrote a comment"
+      refute html =~ "UNIQUEBODY"
+      assert has_element?(lv, ~s(a[href="/cases/#{case_record.id}/comments"]))
 
-      assert render(lv) =~ "Looks good to me"
+      # Comments are written on their own tab.
+      refute has_element?(lv, "form[phx-submit=post_comment]")
+    end
+
+    test "the activity rail collapses a run by one author into one line", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+
+      for body <- ["one", "two", "three"] do
+        Cases.post_case_comment!(%{case_id: case_record.id, body: body}, actor: poc)
+      end
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      html = render(lv)
+
+      assert html =~ "wrote 3 comments"
+      refute html =~ "wrote a comment"
     end
 
     test "accepts a proposal from the review panel", %{conn: conn, poc: poc, supporter: supporter} do
@@ -3290,7 +3317,7 @@ defmodule VarselWeb.CaseLiveTest do
       case_record = Fixtures.open_case(poc, %{title: "Auto-read on visit"})
 
       Notifications.record_notification!(
-        %{kind: :comment_posted, user_id: poc.id, case_id: case_record.id},
+        %{kind: :proposal_opened, user_id: poc.id, case_id: case_record.id},
         authorize?: false
       )
 
@@ -3300,6 +3327,25 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert render(lv) =~ case_record.title
       assert Notifications.list_unread_notifications!(actor: poc) == []
+    end
+
+    # The workspace shows the newest comments in its rail but is not where
+    # they are read, so it leaves them for the Comments tab.
+    test "visiting the workspace leaves a comment notification unread", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Comment stays unread"})
+
+      Notifications.record_notification!(
+        %{kind: :comment_posted, user_id: poc.id, case_id: case_record.id},
+        authorize?: false
+      )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      assert render(lv) =~ case_record.title
+
+      assert [%{kind: :comment_posted}] = Notifications.list_unread_notifications!(actor: poc)
     end
 
     test "visiting leaves another user's unread notifications for the same case untouched", %{

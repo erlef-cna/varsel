@@ -211,6 +211,9 @@ defmodule VarselWeb.CaseComponents do
   The unified activity feed: comments, suggestions and other case events
   interleaved, newest first. Entries are maps with `:kind`
   (:comment | :proposal | :event), `:who`, `:at`, `:body` and `:markdown?`.
+
+  An entry with `:navigate` renders its body as a link to where the thing
+  itself is read, for a feed that summarizes rather than reproduces it.
   """
   attr :entries, :list, required: true
 
@@ -231,7 +234,10 @@ defmodule VarselWeb.CaseComponents do
         </p>
         <.markdown :if={entry[:markdown?]} content={entry.body} class="prose-xs" />
         <p :if={!entry[:markdown?]} class="text-base-content/70">
-          {entry.body}<span
+          <.link :if={entry[:navigate]} navigate={entry[:navigate]} class="link link-hover">
+            {entry.body}
+          </.link>
+          <span :if={!entry[:navigate]}>{entry.body}</span><span
             :if={entry[:chip]}
             class="font-mono text-[11px] bg-base-300 rounded px-1 py-px mx-1"
           >{entry.chip}</span>{entry[:suffix]}
@@ -239,6 +245,37 @@ defmodule VarselWeb.CaseComponents do
       </li>
     </ol>
     <p :if={@entries == []} class="text-sm text-base-content/60">Nothing yet.</p>
+    """
+  end
+
+  @doc """
+  Renders one comment as its own card: a header strip naming the author and
+  when they wrote, and the body below it.
+
+  Callers must load the author's `:avatar_url` and `:display_name`.
+  """
+  attr :comment, :any, required: true
+  attr :row_id, :string, default: nil, doc: "the card's DOM id, for an anchor"
+
+  def comment_card(assigns) do
+    ~H"""
+    <article
+      id={@row_id}
+      class="lane-card rounded-lg border border-base-300 text-sm scroll-mt-4 overflow-hidden"
+    >
+      <div class="flex items-center gap-2 border-b border-base-300 bg-base-200/60 px-3 py-2">
+        <.avatar_disc user={@comment.author} variant={:a} />
+        <.user_name user={@comment.author} class="font-bold" />
+        <span class="text-base-content/60">commented</span>
+        <.relative_timestamp
+          at={@comment.inserted_at}
+          class="ml-auto shrink-0 text-xs text-base-content/50"
+        />
+      </div>
+      <div class="px-3 py-2.5">
+        <.markdown content={@comment.body} class="prose-sm" />
+      </div>
+    </article>
     """
   end
 
