@@ -10,6 +10,7 @@ defmodule VarselWeb.CaseCommentsLiveTest do
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Cases
   alias Varsel.Fixtures
+  alias Varsel.Notifications.Event
 
   require Ash.Query
 
@@ -179,7 +180,7 @@ defmodule VarselWeb.CaseCommentsLiveTest do
         actor: supporter
       )
 
-      AshOban.Test.schedule_and_run_triggers({Varsel.Notifications.Event, :fan_out})
+      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
 
       %{case_record: case_record}
     end
@@ -215,6 +216,101 @@ defmodule VarselWeb.CaseCommentsLiveTest do
     end
   end
 
+  describe "unseen marker" do
+    setup %{poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      for body <- ["one", "two", "three"] do
+        Cases.post_case_comment!(%{case_id: case_record.id, body: body}, actor: poc)
+      end
+
+      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+
+      %{case_record: case_record}
+    end
+
+    # The marker counts what the reader has not been told about, so the
+    # person who wrote everything has nothing waiting.
+    test "the author of every comment sees no marker", %{
+      conn: conn,
+      poc: poc,
+      case_record: case_record
+    } do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve")
+
+      refute unseen_label(render(lv))
+    end
+
+    for {tab, path} <- [workspace: "", cve: "/cve", github: "/github"] do
+      test "the #{tab} tab marks how many wait", %{
+        conn: conn,
+        supporter: supporter,
+        case_record: case_record
+      } do
+        {:ok, lv, _html} =
+          conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}" <> unquote(path))
+
+        assert unseen_label(render(lv)) == "3 new comments"
+      end
+    end
+
+    test "opening the comments tab clears it in the same render", %{
+      conn: conn,
+      supporter: supporter,
+      case_record: case_record
+    } do
+      {:ok, lv, _html} =
+        conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/comments")
+
+      refute unseen_label(render(lv))
+    end
+
+    test "a comment arriving on another tab raises the count", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter,
+      case_record: case_record
+    } do
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/cve")
+      assert unseen_label(render(lv)) == "3 new comments"
+
+      Cases.post_case_comment!(%{case_id: case_record.id, body: "four"}, actor: poc)
+      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+
+      assert unseen_label(render(lv)) == "4 new comments"
+    end
+
+    test "one waiting comment reads as one", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+      Cases.post_case_comment!(%{case_id: case_record.id, body: "only"}, actor: poc)
+      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/cve")
+
+      assert unseen_label(render(lv)) == "1 new comment"
+    end
+
+    test "the total count stays whatever the stream holds", %{
+      conn: conn,
+      supporter: supporter,
+      case_record: case_record
+    } do
+      {:ok, lv, _html} =
+        conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/comments")
+
+      html = render(lv)
+
+      assert tab_count(html, case_record.id) == "3"
+      refute unseen_label(html)
+    end
+  end
+
   describe "comments tab link" do
     test "counts the stream and drops a zero", %{conn: conn, poc: poc} do
       quiet = Fixtures.open_case(poc, %{title: "Quiet case"})
@@ -227,6 +323,14 @@ defmodule VarselWeb.CaseCommentsLiveTest do
 
       assert tab_count(quiet_html, quiet.id) == nil
       assert tab_count(busy_html, busy.id) == "1"
+    end
+  end
+
+  # The marker names what waits, so what it says is what is asserted.
+  defp unseen_label(html) do
+    case Regex.run(~r/aria-label="(\d+ new comments?)"/, html, capture: :all_but_first) do
+      [label] -> label
+      nil -> nil
     end
   end
 

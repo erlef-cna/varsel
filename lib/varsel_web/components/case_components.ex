@@ -51,7 +51,7 @@ defmodule VarselWeb.CaseComponents do
 
   attr :tabs, :list,
     required: true,
-    doc: "maps of `:id`, `:label`, `:navigate` and an optional `:count`, in display order"
+    doc: "maps of `:id`, `:label`, `:navigate` and an optional `:count` and `:unseen`, in display order"
 
   attr :active, :atom, required: true, doc: "the `:id` of the tab this page is"
 
@@ -93,7 +93,12 @@ defmodule VarselWeb.CaseComponents do
           <ul class="priority-nav flex min-w-0 flex-1 items-center gap-4">
             <li :for={tab <- @tabs} class="shrink-0">
               <.link navigate={tab.navigate}>
-                <.scope_tab active?={tab.id == @active} label={tab.label} count={tab[:count]} />
+                <.scope_tab
+                  active?={tab.id == @active}
+                  label={tab.label}
+                  count={tab[:count]}
+                  unseen={tab[:unseen]}
+                />
               </.link>
             </li>
           </ul>
@@ -114,6 +119,13 @@ defmodule VarselWeb.CaseComponents do
                 <.link navigate={tab.navigate} class={tab.id == @active && "menu-active"}>
                   {tab.label}
                   <span :if={tab[:count]} class="badge badge-sm badge-ghost">{tab[:count]}</span>
+                  <span
+                    :if={tab[:unseen]}
+                    class="size-1.5 rounded-full bg-info"
+                    title={tab[:unseen]}
+                    aria-label={tab[:unseen]}
+                    role="img"
+                  ></span>
                 </.link>
               </li>
             </ul>

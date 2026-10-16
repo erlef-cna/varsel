@@ -409,6 +409,9 @@ defmodule VarselWeb.CoreComponents do
 
   `matched?` tints the count — a search reaches every scope, so one you are
   not looking at says how many of its own the search found.
+
+  `unseen` marks the tab with a dot and names what waits there, for a scope
+  whose count is everything it holds rather than what is new in it.
   """
   attr :active?, :boolean, required: true
   attr :label, :string, required: true
@@ -417,6 +420,10 @@ defmodule VarselWeb.CoreComponents do
   attr :matched?, :boolean,
     default: false,
     doc: "the count is what a search found here, rather than everything here"
+
+  attr :unseen, :string,
+    default: nil,
+    doc: "what has not been seen in this scope, as the dot's label; nil draws no dot"
 
   def scope_tab(assigns) do
     ~H"""
@@ -441,6 +448,13 @@ defmodule VarselWeb.CoreComponents do
       >
         {@count}
       </span>
+      <span
+        :if={@unseen}
+        class="ml-1 inline-block size-1.5 rounded-full bg-info align-middle"
+        title={@unseen}
+        aria-label={@unseen}
+        role="img"
+      ></span>
     </span>
     """
   end

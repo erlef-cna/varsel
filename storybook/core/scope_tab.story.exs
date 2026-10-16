@@ -37,6 +37,27 @@ defmodule VarselWeb.Storybook.Core.ScopeTab do
         description: "A scope that does not carry a count renders only its label.",
         attributes: %{active?: true, label: "Pipeline"}
       },
+      %VariationGroup{
+        id: :unseen,
+        description:
+          "`unseen` dots a scope holding something new. The count stays what the scope " <>
+            "holds, so the two say different things side by side.",
+        variations: [
+          %Variation{
+            id: :waiting,
+            attributes: %{
+              active?: false,
+              label: "Comments",
+              count: 11,
+              unseen: "3 new comments"
+            }
+          },
+          %Variation{
+            id: :seen,
+            attributes: %{active?: false, label: "Comments", count: 11}
+          }
+        ]
+      },
       %Variation{
         id: :matched_elsewhere,
         description:

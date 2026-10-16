@@ -1048,6 +1048,18 @@ defmodule Varsel.Cases.Case do
     count :comment_count, :comments do
       description "How many comments the case's discussion stream holds."
     end
+
+    # The actor's own unread notifications are what "unseen" means here, so a
+    # comment they wrote is never unseen, and someone who turned the in-app
+    # kind off is never told. `count` holds the comments one row absorbed.
+    sum :unseen_comment_count, Varsel.Notifications.Notification, :count do
+      description "How many of the case's comments the acting user has not seen."
+
+      filter expr(
+               case_id == parent(id) and kind == :comment_posted and is_nil(read_at) and
+                 user_id == ^actor(:id)
+             )
+    end
   end
 
   identities do

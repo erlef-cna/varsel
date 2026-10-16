@@ -79,7 +79,13 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
           },
           tabs: [
             %{id: :workspace, label: "Workspace", navigate: "#workspace"},
-            %{id: :comments, label: "Comments", count: 11, navigate: "#comments"},
+            %{
+              id: :comments,
+              label: "Comments",
+              count: 11,
+              unseen: "3 new comments",
+              navigate: "#comments"
+            },
             %{id: :reports, label: "Reports", count: 1, navigate: "#reports"},
             %{id: :cve, label: "CVE", navigate: "#cve"},
             %{id: :osv, label: "OSV", navigate: "#osv"},

@@ -43,7 +43,7 @@ defmodule VarselWeb.CaseLifecycle do
   @spec mount(Socket.t(), String.t(), load: list(), after_fetch: fun(), marks_read: [atom()]) ::
           Socket.t()
   def mount(socket, case_id, opts) do
-    load = [:report_count, :comment_count | Keyword.fetch!(opts, :load)]
+    load = [:report_count, :comment_count, :unseen_comment_count | Keyword.fetch!(opts, :load)]
     after_fetch = Keyword.fetch!(opts, :after_fetch)
     marks_read = @lifecycle_kinds ++ Keyword.get(opts, :marks_read, [])
 
@@ -60,8 +60,11 @@ defmodule VarselWeb.CaseLifecycle do
   The tabs of a case, in display order. The Reports tab shows only when
   reports led to the case. A count of zero renders as no count at all.
   """
-  def tabs(%{id: case_id, report_count: report_count, comment_count: comment_count}) do
+  def tabs(%{id: case_id} = case_record) do
+    %{report_count: report_count, comment_count: comment_count} = case_record
+
     comment_count = if comment_count > 0, do: comment_count
+    unseen_comments = unseen_label(case_record.unseen_comment_count)
 
     Enum.filter(
       [
@@ -70,6 +73,7 @@ defmodule VarselWeb.CaseLifecycle do
           id: :comments,
           label: "Comments",
           count: comment_count,
+          unseen: unseen_comments,
           navigate: ~p"/cases/#{case_id}/comments"
         },
         report_count > 0 &&
@@ -88,6 +92,15 @@ defmodule VarselWeb.CaseLifecycle do
       & &1
     )
   end
+
+  # The aggregate sums the notification rows that are still unread, so it is
+  # nil both for a case with nothing new and for the author of everything in
+  # it.
+  defp unseen_label(count) when is_integer(count) and count > 0 do
+    "#{count} new #{if count == 1, do: "comment", else: "comments"}"
+  end
+
+  defp unseen_label(_none), do: nil
 
   # The public page serves `:published` records only, so a link for any other
   # state would land on a 404.
@@ -110,13 +123,22 @@ defmodule VarselWeb.CaseLifecycle do
   end
 
   defp fetched(case_record, socket, after_fetch, marks_read) do
-    if connected?(socket) do
-      Notifications.mark_case_notifications_read!(
-        case_record.id,
-        %{kinds: marks_read},
-        actor: socket.assigns.current_user
-      )
-    end
+    actor = socket.assigns.current_user
+
+    {case_record, socket} =
+      if connected?(socket) do
+        Notifications.mark_case_notifications_read!(case_record.id, %{kinds: marks_read}, actor: actor)
+
+        # The case was read before those rows were, so what it says is unseen
+        # is what was unseen on the way in. `keep_live` has already assigned
+        # it, so the reloaded one has to take its place.
+        case_record =
+          Ash.load!(case_record, [:unseen_comment_count], actor: actor, reuse_values?: false)
+
+        {case_record, assign(socket, :case_record, case_record)}
+      else
+        {case_record, socket}
+      end
 
     after_fetch.(case_record, socket)
   end
