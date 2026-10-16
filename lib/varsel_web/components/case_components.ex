@@ -14,7 +14,15 @@ defmodule VarselWeb.CaseComponents do
   import Phoenix.HTML, only: [raw: 1]
 
   import VarselWeb.CoreComponents,
-    only: [code_block: 1, copy_button: 1, mono_chip: 1, page_header: 1, scope_tab: 1, state: 1]
+    only: [
+      code_block: 1,
+      copy_button: 1,
+      icon: 1,
+      mono_chip: 1,
+      page_header: 1,
+      scope_tab: 1,
+      state: 1
+    ]
 
   import VarselWeb.UserComponents, only: [avatar_disc: 1, user_badge: 1, user_name: 1]
 
@@ -28,6 +36,10 @@ defmodule VarselWeb.CaseComponents do
   Renders the band every case tab shares: the CVE ID, the title, the
   lifecycle stepper, the actions, and the tabs that lead to the other pages
   of the case.
+
+  The tabs are a priority+ nav: `assets/js/priority_nav.js` measures them and
+  moves whatever does not fit into the `…` menu, which lists every tab in the
+  same order so the per-index rules in app.css hide the right ones.
   """
   attr :case_record, :map,
     required: true,
@@ -74,10 +86,38 @@ defmodule VarselWeb.CaseComponents do
       <:title>{@case_record.title || "Untitled case"}</:title>
       <:meta>
         <.lifecycle_stepper state={@case_record.state} />
-        <div class="flex items-center gap-4 text-sm mt-3">
-          <.link :for={tab <- @tabs} navigate={tab.navigate}>
-            <.scope_tab active?={tab.id == @active} label={tab.label} count={tab[:count]} />
-          </.link>
+        <%!-- Priority+: as many tabs as fit, the rest under "More". The gauge
+              and the menu's order must match the list's, see priority_nav.js. --%>
+        <div class="relative flex items-center gap-2 text-sm mt-3">
+          <span id="case-tabs-gauge" class="priority-nav-gauge" phx-update="ignore"></span>
+          <ul class="priority-nav flex min-w-0 flex-1 items-center gap-4">
+            <li :for={tab <- @tabs} class="shrink-0">
+              <.link navigate={tab.navigate}>
+                <.scope_tab active?={tab.id == @active} label={tab.label} count={tab[:count]} />
+              </.link>
+            </li>
+          </ul>
+          <div class="dropdown dropdown-end priority-nav-more shrink-0">
+            <div
+              tabindex="0"
+              role="button"
+              aria-label="More tabs"
+              class="btn btn-ghost btn-xs -mt-1"
+            >
+              <.icon name="hero-ellipsis-horizontal-mini" class="size-5" />
+            </div>
+            <ul
+              tabindex="0"
+              class="priority-nav-more-menu dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-56 p-2 z-50"
+            >
+              <li :for={tab <- @tabs}>
+                <.link navigate={tab.navigate} class={tab.id == @active && "menu-active"}>
+                  {tab.label}
+                  <span :if={tab[:count]} class="badge badge-sm badge-ghost">{tab[:count]}</span>
+                </.link>
+              </li>
+            </ul>
+          </div>
         </div>
       </:meta>
       <:actions :if={@actions != []}>{render_slot(@actions)}</:actions>
@@ -104,10 +144,14 @@ defmodule VarselWeb.CaseComponents do
     assigns = assign(assigns, :steps, lifecycle_steps(assigns.state))
 
     ~H"""
-    <div class="flex items-center mt-2.5">
+    <div class="flex flex-wrap items-center gap-y-1 mt-2.5">
       <%= for {{label, status}, index} <- Enum.with_index(@steps) do %>
-        <div :if={index > 0} class={["w-8 h-0.5 mx-2", stepper_line_class(status)]}></div>
-        <span class={["flex items-center gap-1.5 text-xs font-semibold", stepper_text_class(status)]}>
+        <div :if={index > 0} class={["w-4 sm:w-8 h-0.5 mx-1.5 sm:mx-2", stepper_line_class(status)]}>
+        </div>
+        <span class={[
+          "flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap",
+          stepper_text_class(status)
+        ]}>
           <span class={[
             "size-[18px] rounded-full border-2 inline-flex items-center justify-center text-[0.6rem]",
             stepper_dot_class(status)

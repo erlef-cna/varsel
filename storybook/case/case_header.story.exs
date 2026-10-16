@@ -64,6 +64,42 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
         ]
       },
       %Variation{
+        id: :every_tab,
+        description: """
+        Every tab a case can have, with counts. Past the width that fits them
+        the trailing tabs move into the `…` menu, and the actions hold one
+        right-aligned line.
+        """,
+        attributes: %{
+          case_record: %{
+            cve_id: "CVE-2026-12345",
+            title: "Bandit reads a chunked body twice",
+            inserted_at: ~U[2026-08-12 09:30:00Z],
+            state: :review
+          },
+          tabs: [
+            %{id: :workspace, label: "Workspace", navigate: "#workspace"},
+            %{id: :comments, label: "Comments", count: 11, navigate: "#comments"},
+            %{id: :reports, label: "Reports", count: 1, navigate: "#reports"},
+            %{id: :cve, label: "CVE", navigate: "#cve"},
+            %{id: :osv, label: "OSV", navigate: "#osv"},
+            %{id: :advisory, label: "Advisory", navigate: "#advisory"},
+            %{id: :github, label: "GitHub", navigate: "#github"},
+            %{id: :publication, label: "Publication", navigate: "#publication"}
+          ],
+          active: :comments
+        },
+        slots: [
+          """
+          <:actions>
+            <button class="btn btn-sm btn-eef-quiet">Suggest: off</button>
+            <button class="btn btn-sm btn-eef-quiet">Assign CVE ID</button>
+            <button class="btn btn-sm btn-eef">Request review</button>
+          </:actions>
+          """
+        ]
+      },
+      %Variation{
         id: :closed,
         description: "A closed case shows the terminal pill and no actions.",
         attributes: %{

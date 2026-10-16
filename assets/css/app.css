@@ -274,6 +274,9 @@
   display: none;
 }
 
+/* The "More" control is a sibling of the gauge in one nav and nested inside
+   one in another, so both shapes are matched. */
+.priority-nav-gauge.nav-overflow ~ .priority-nav-more,
 .priority-nav-gauge.nav-overflow ~ * .priority-nav-more {
   display: inline-block;
 }
@@ -444,8 +447,12 @@
 .page-header-subtitle {
   grid-area: subtitle;
 }
+/* A grid track will not shrink below its content's `min-width: auto`, so a
+   wide meta row (the case tabs) would push the band past the viewport
+   instead of collapsing into its own overflow control. */
 .page-header-meta {
   grid-area: meta;
+  min-width: 0;
 }
 
 .page-header-actions {
@@ -453,6 +460,10 @@
   margin-top: 0.75rem;
 }
 
+/* The actions take what they need up to half the band, so a set of buttons
+   stays on one line instead of wrapping into a stagger of one-button rows,
+   while a wide set (a search field and buttons) still leaves the subtitle
+   and the meta row a readable measure. */
 @media (width >= 40rem) {
   .page-header {
     grid-template-areas:
@@ -460,20 +471,12 @@
       "title    title"
       "subtitle actions"
       "meta     actions";
-    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) fit-content(50%);
   }
 
   .page-header-actions {
     align-self: end;
     margin-top: 0;
-  }
-}
-
-/* Past the page's own measure there is room to spare, so the actions take
-   what they need on one line and the meta keeps the rest. */
-@media (width >= 72rem) {
-  .page-header {
-    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 

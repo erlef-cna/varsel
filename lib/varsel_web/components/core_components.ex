@@ -172,7 +172,7 @@ defmodule VarselWeb.CoreComponents do
         <div :if={@meta != []} class="page-header-meta">{render_slot(@meta)}</div>
         <div
           :if={@actions != []}
-          class="page-header-actions flex flex-wrap items-center gap-2 sm:justify-end"
+          class="page-header-actions flex flex-wrap items-center justify-end gap-2"
         >
           {render_slot(@actions)}
         </div>
