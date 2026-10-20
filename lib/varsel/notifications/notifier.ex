@@ -36,6 +36,21 @@ defmodule Varsel.Notifications.Notifier do
     emit(:comment_posted, actor, case_id: comment.case_id)
   end
 
+  # A comment read from a linked advisory was written by nobody here, so it is
+  # raised with no actor and reaches everyone the case is assigned to. A
+  # re-read of a comment already stored tells them nothing new.
+  def notify(%Notification{
+        resource: Comment,
+        action: %{name: :sync_from_github},
+        data: %{__metadata__: %{upsert_skipped: true}}
+      }) do
+    :ok
+  end
+
+  def notify(%Notification{resource: Comment, action: %{name: :sync_from_github}, data: comment}) do
+    emit(:comment_posted, nil, case_id: comment.case_id)
+  end
+
   def notify(%Notification{resource: Proposal, action: %{type: :create}, data: proposal, actor: actor}) do
     emit(:proposal_opened, actor, case_id: proposal.case_id)
   end

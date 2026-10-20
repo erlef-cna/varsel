@@ -58,11 +58,18 @@ defmodule Varsel.Cases.CommentTest do
              Cases.post_case_comment!(%{case_id: case_record.id, body: "post-mortem"}, actor: poc)
   end
 
-  test "comments are append-only: no update or destroy actions exist" do
-    action_names = Comment |> Info.actions() |> Enum.map(& &1.type)
+  # The stream is append-only: a comment's text is never edited here and a
+  # comment is never removed. `:claim_for_identity` is the one update, and it
+  # writes only who wrote it, never what they wrote.
+  test "comments are append-only: nothing may rewrite a body or remove a comment" do
+    actions = Info.actions(Comment)
 
-    refute :update in action_names
-    refute :destroy in action_names
+    refute Enum.any?(actions, &(&1.type == :destroy))
+
+    for action <- actions, action.type == :update do
+      assert action.name == :claim_for_identity
+      assert action.accept == [:author_id]
+    end
   end
 
   test "an unassigned supporter can neither read nor post", %{case: case_record} do

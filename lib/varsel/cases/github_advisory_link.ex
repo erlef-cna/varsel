@@ -12,6 +12,9 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
   request, with the credential `Varsel.GitHub.Credentials` gives the person
   asking, so a draft is visible here exactly when GitHub shows it to that
   credential.
+
+  While the case is open, `:sync_comments` reads the advisory's discussion
+  every five minutes and records what it finds as the case's own comments.
   """
 
   use Ash.Resource,
@@ -19,15 +22,17 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
     domain: Varsel.Cases,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshPaperTrail.Resource],
+    extensions: [AshOban, AshPaperTrail.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
+  alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.Case
   alias Varsel.Cases.GitHubAdvisory.State
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.FetchAdvisory
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.Pull
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.Push
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.StoreAdvisory
+  alias Varsel.Cases.GitHubAdvisoryLink.Changes.SyncComments
 
   postgres do
     table "case_github_advisory_links"
@@ -38,10 +43,33 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
     end
   end
 
+  oban do
+    triggers do
+      trigger :sync_comments do
+        action :sync_comments
+
+        # Only a case still being worked on, and only a link to a repository
+        # advisory: a global database entry has no discussion to read.
+        where expr(
+                not is_nil(owner) and not is_nil(repo) and
+                  case.state in [:draft, :review, :approved] and
+                  (is_nil(comments_polled_at) or comments_polled_at < ago(5, :minute))
+              )
+
+        worker_module_name Varsel.Cases.GitHubAdvisoryLink.SyncCommentsWorker
+        scheduler_module_name Varsel.Cases.GitHubAdvisoryLink.SyncCommentsScheduler
+        queue :github_comments
+        max_attempts 3
+        scheduler_cron "*/5 * * * *"
+        worker_opts unique: [period: :infinity, states: :incomplete, keys: [:primary_key]]
+      end
+    end
+  end
+
   paper_trail do
     change_tracking_mode :changes_only
     reference_source? false
-    ignore_attributes [:advisory, :fetched_at, :inserted_at, :updated_at]
+    ignore_attributes [:advisory, :fetched_at, :comments_polled_at, :inserted_at, :updated_at]
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, Varsel.Accounts.User, domain: Varsel.Accounts
@@ -116,6 +144,21 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
       change StoreAdvisory
     end
 
+    update :sync_comments do
+      description """
+      Internal: reads the linked advisory's comments and records the ones the
+      case does not hold. Run on a schedule, with the App's installation
+      token on the advisory's repository.
+      """
+
+      public? false
+
+      accept []
+      require_atomic? false
+
+      change SyncComments
+    end
+
     update :pull do
       description """
       Takes `fields` of the stored advisory over onto the case, through the
@@ -179,6 +222,11 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
   end
 
   policies do
+    bypass AshObanInteraction do
+      authorize_if action_type(:read)
+      authorize_if action(:sync_comments)
+    end
+
     policy action_type(:read) do
       access_type :strict
       authorize_if actor_present()
@@ -220,6 +268,11 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
     policy action(:refresh) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    policy action(:sync_comments) do
+      authorize_if AshObanInteraction
+      authorize_if actor_attribute_equals(:system, :github_comment_sync)
     end
   end
 
@@ -279,6 +332,11 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
 
     attribute :fetched_at, :utc_datetime do
       allow_nil? false
+      public? true
+    end
+
+    attribute :comments_polled_at, :utc_datetime do
+      description "When the advisory's comments were last read. The next read asks GitHub only for what changed since."
       public? true
     end
 

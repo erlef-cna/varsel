@@ -11,6 +11,9 @@ defmodule VarselWeb.CaseCommentsLiveTest do
   alias Varsel.Cases
   alias Varsel.Fixtures
   alias Varsel.Notifications.Event
+  alias Varsel.Test.GitHubAdvisoryFixtures
+  alias Varsel.Test.GitHubApi
+  alias Varsel.Test.GitHubApp
 
   require Ash.Query
 
@@ -308,6 +311,153 @@ defmodule VarselWeb.CaseCommentsLiveTest do
 
       assert tab_count(html, case_record.id) == "3"
       refute unseen_label(html)
+    end
+  end
+
+  describe "comments read from GitHub" do
+    setup %{poc: poc} do
+      GitHubApp.seed_installation(%{id: 1, account: "erlef-cna"}, token: "ghs_erlef_cna")
+
+      GitHubApp.seed_installation(%{id: 7, account: "acme", repository_selection: :selected},
+        repositories: ["acme/acme_lib"],
+        token: "ghs_acme_lib"
+      )
+
+      GitHubApp.seed_user_installations(poc, [7])
+
+      %{case_record: Fixtures.open_case(poc, %{title: "Header injection"})}
+    end
+
+    defp link_with_comments!(case_record, poc, comments) do
+      GitHubApi.stub(fn conn ->
+        case Enum.reverse(conn.path_info) do
+          ["comments" | _rest] -> Req.Test.json(conn, comments)
+          ["users", login] -> Req.Test.json(conn, %{"login" => login, "name" => nil})
+          _advisory -> Req.Test.json(conn, GitHubAdvisoryFixtures.hex_advisory())
+        end
+      end)
+
+      link =
+        Cases.link_github_advisory!(
+          %{
+            case_id: case_record.id,
+            advisory_url: "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+          },
+          actor: poc
+        )
+
+      Cases.sync_github_advisory_comments!(link, actor: Varsel.Service.github_comment_sync())
+    end
+
+    defp github_comment(id, body, login) do
+      %{
+        "id" => id,
+        "body" => body,
+        "html_url" => "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw#advisory-comment-#{id}",
+        "created_at" => "2026-10-01T10:00:00Z",
+        "updated_at" => "2026-10-01T10:00:00Z",
+        "user" => %{"login" => login, "id" => 42, "type" => "User"}
+      }
+    end
+
+    test "names the GitHub author and links the comment back", %{
+      conn: conn,
+      poc: poc,
+      case_record: case_record
+    } do
+      link_with_comments!(case_record, poc, [github_comment(1, "Seen on GitHub", "octocat")])
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      [synced] = Cases.list_case_comments!(case_record.id, actor: poc)
+
+      assert has_element?(lv, "#comment-#{synced.id}", "Seen on GitHub")
+      assert has_element?(lv, "#comment-#{synced.id}", "@octocat")
+      refute has_element?(lv, "#comment-#{synced.id}", "Deleted user")
+
+      assert has_element?(
+               lv,
+               ~s(#comment-#{synced.id} a[href="#{synced.github_html_url}"]),
+               "on GitHub"
+             )
+    end
+
+    test "says the GitHub discussion may hold more than this", %{
+      conn: conn,
+      poc: poc,
+      case_record: case_record
+    } do
+      link_with_comments!(case_record, poc, [])
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      assert render(lv) =~ "confidential comments"
+    end
+
+    test "a case with no advisory says nothing about GitHub", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      refute render(lv) =~ "confidential comments"
+    end
+
+    test "the workspace rail names the GitHub author, not a deleted user", %{
+      conn: conn,
+      poc: poc,
+      case_record: case_record
+    } do
+      link_with_comments!(case_record, poc, [github_comment(1, "From GitHub", "octocat")])
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      html = render(lv)
+
+      assert html =~ "@octocat (GitHub)"
+      refute html =~ "Deleted user"
+    end
+
+    test "names the account holding the login, keeping the login beside it", %{
+      conn: conn,
+      poc: poc,
+      case_record: case_record
+    } do
+      author =
+        "octocat"
+        |> Fixtures.register_user(:supporter)
+        |> Ash.load!(:display_name, authorize?: false)
+
+      link_with_comments!(case_record, poc, [github_comment(1, "Maintainer here", "octocat")])
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      [synced] = Cases.list_case_comments!(case_record.id, actor: poc)
+
+      assert synced.author_id == author.id
+      assert has_element?(lv, "#comment-#{synced.id}", author.display_name)
+      assert has_element?(lv, "#comment-#{synced.id}", "@octocat")
+      refute has_element?(lv, "#comment-#{synced.id}", "Deleted user")
+    end
+
+    test "the rail names the account and where they wrote", %{
+      conn: conn,
+      poc: poc,
+      case_record: case_record
+    } do
+      author =
+        "octocat"
+        |> Fixtures.register_user(:supporter)
+        |> Ash.load!(:display_name, authorize?: false)
+
+      link_with_comments!(case_record, poc, [github_comment(1, "From GitHub", "octocat")])
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      html = render(lv)
+
+      assert html =~ author.display_name
+      assert html =~ "as @octocat on GitHub"
+      refute html =~ "@octocat (GitHub)"
     end
   end
 

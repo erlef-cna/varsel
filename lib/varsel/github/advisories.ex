@@ -6,7 +6,8 @@ defmodule Varsel.GitHub.Advisories do
   @moduledoc """
   GitHub security advisories over the REST API: reading a repository's own
   advisory or the global database entry, updating one, reporting one
-  privately, and the forms a GHSA is pasted in.
+  privately, reading and writing the comments on one, and the forms a GHSA
+  is pasted in.
 
   A read runs as the holder of the token given, a person or the App. That is
   what lets GitHub decide whether a draft is theirs to see: a draft they may
@@ -126,6 +127,58 @@ defmodule Varsel.GitHub.Advisories do
     )
   end
 
+  @doc """
+  The comments on the advisory `ghsa_id` of `owner/repo`, oldest first.
+
+  `since:` limits the answer to the comments written or edited at or after
+  that moment, which is how a poll asks only for what it has not read.
+  GitHub answers an empty list to a caller who may see the advisory but not
+  its discussion, so an empty list never means the discussion is empty.
+  Confidential comments are never answered.
+  """
+  @spec list_comments(String.t(), String.t(), String.t(),
+          token: String.t() | nil,
+          since: DateTime.t() | nil
+        ) ::
+          {:ok, [map()]} | :not_found | {:error, :unauthorized | term()}
+  def list_comments(owner, repo, ghsa_id, opts \\ []) when is_binary(owner) and is_binary(repo) and is_binary(ghsa_id) do
+    params =
+      Enum.reject([per_page: 100, since: since_param(opts[:since])], &match?({_key, nil}, &1))
+
+    opts
+    |> Keyword.get(:token)
+    |> req()
+    |> Req.request(
+      method: :get,
+      url: "/repos/:owner/:repo/security-advisories/:ghsa_id/comments",
+      path_params: [owner: owner, repo: repo, ghsa_id: ghsa_id],
+      params: params
+    )
+    |> case do
+      {:ok, %Req.Response{status: 200, body: comments}} when is_list(comments) -> {:ok, comments}
+      other -> translate(other)
+    end
+  end
+
+  @doc """
+  Writes `body` as a comment on the advisory `ghsa_id` of `owner/repo`, as
+  the holder of the token given. Answers the comment GitHub recorded.
+  """
+  @spec post_comment(String.t(), String.t(), String.t(), String.t(), token: String.t()) ::
+          result()
+  def post_comment(owner, repo, ghsa_id, body, opts)
+      when is_binary(owner) and is_binary(repo) and is_binary(ghsa_id) and is_binary(body) do
+    request(Keyword.fetch!(opts, :token),
+      method: :post,
+      url: "/repos/:owner/:repo/security-advisories/:ghsa_id/comments",
+      path_params: [owner: owner, repo: repo, ghsa_id: ghsa_id],
+      json: %{body: body}
+    )
+  end
+
+  defp since_param(nil), do: nil
+  defp since_param(%DateTime{} = since), do: DateTime.to_iso8601(since)
+
   defp request(token, request_opts) do
     token
     |> req()
@@ -134,19 +187,17 @@ defmodule Varsel.GitHub.Advisories do
       {:ok, %Req.Response{status: status, body: %{} = body}} when status in [200, 201] ->
         {:ok, body}
 
-      {:ok, %Req.Response{status: 401}} ->
-        {:error, :unauthorized}
-
-      {:ok, %Req.Response{status: 404}} ->
-        :not_found
-
-      {:ok, %Req.Response{status: status, body: body}} ->
-        {:error, {:http, status, body}}
-
-      {:error, exception} ->
-        {:error, exception}
+      other ->
+        translate(other)
     end
   end
+
+  defp translate({:ok, %Req.Response{status: 401}}), do: {:error, :unauthorized}
+  defp translate({:ok, %Req.Response{status: 404}}), do: :not_found
+
+  defp translate({:ok, %Req.Response{status: status, body: body}}), do: {:error, {:http, status, body}}
+
+  defp translate({:error, exception}), do: {:error, exception}
 
   defp req(nil), do: Client.api()
   defp req(token) when is_binary(token), do: Client.api(auth: {:bearer, token})

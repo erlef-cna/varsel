@@ -1189,11 +1189,13 @@ defmodule VarselWeb.CaseDetailLive do
   defp comment_entries(case_record) do
     case_record.comments
     |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
-    |> Enum.chunk_by(&author_key(&1.author))
+    |> Enum.chunk_by(&author_key/1)
     |> Enum.map(fn [newest | _rest] = run ->
       %{
         kind: :comment,
         who: newest.author,
+        who_label: github_author_label(newest),
+        who_suffix: github_author_suffix(newest),
         at: newest.inserted_at,
         body: comment_run_label(length(run)),
         navigate: ~p"/cases/#{case_record.id}/comments"
@@ -1204,8 +1206,28 @@ defmodule VarselWeb.CaseDetailLive do
   defp comment_run_label(1), do: "wrote a comment"
   defp comment_run_label(count), do: "wrote #{count} comments"
 
-  defp author_key(nil), do: :deleted
-  defp author_key(author), do: author.id
+  # A comment read from GitHub names an account only when one holds the login,
+  # so an unclaimed one is grouped by the login GitHub named. Two logins are
+  # two runs.
+  defp author_key(%{author: %{id: id}}), do: id
+  defp author_key(%{source: :github, github_author_login: login}), do: {:github, login}
+  defp author_key(%{author: nil}), do: :deleted
+
+  # An account that wrote on GitHub keeps its name, so where it was written
+  # follows the name instead of replacing it.
+  defp github_author_label(%{source: :github, author: %{}}), do: nil
+
+  defp github_author_label(%{source: :github, github_author_login: login}) when is_binary(login),
+    do: "@" <> login <> " (GitHub)"
+
+  defp github_author_label(%{source: :github}), do: "A GitHub user"
+  defp github_author_label(_comment), do: nil
+
+  defp github_author_suffix(%{source: :github, author: %{}, github_author_login: login}) when is_binary(login),
+    do: "as @" <> login <> " on GitHub"
+
+  defp github_author_suffix(%{source: :github, author: %{}}), do: "on GitHub"
+  defp github_author_suffix(_comment), do: nil
 
   defp proposal_field_ref(%{operation: :set, target: :case, field_name: field}), do: "case.#{field}"
 

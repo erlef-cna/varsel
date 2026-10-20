@@ -462,13 +462,15 @@ claims:
   (`service_token.ex`). `GITHUB_APP_PRIVATE_KEY` is the GitHub App's
   private key. It is held by the environment only and signs the App's JWT.
   The installation tokens that the JWT mints are stored on their
-  installation's row, encrypted with the same Cloak vault. Only a POC or the
-  home organization's public-read path may get one. A POC's repository
-  request uses its repository's token (§6). The public-read path uses the
-  home organization's token for the global advisory database, handle lookups
-  and the OTP versions table. The installation sync uses a token to list its
-  installation's repositories (`app.ex`, `installation.ex`,
-  `credentials.ex`). A user's GitHub
+  installation's row, encrypted with the same Cloak vault. A POC, the home
+  organization's public-read path and the advisory comment poll may get one.
+  A POC's repository request uses its repository's token (§6). The
+  public-read path uses the home organization's token for the global advisory
+  database, handle lookups and the OTP versions table. The installation sync
+  uses a token to list its installation's repositories. The comment poll
+  reads the discussion of a linked advisory with its repository's token, on a
+  schedule with no person asking (`app.ex`, `installation.ex`,
+  `credentials.ex`, `sync_comments.ex`). A user's GitHub
   token is the one their sign-in stored. It is a GitHub App user token, so it
   reaches only what both the person and the App can reach. It expires after
   eight hours, and the refresh token stored with it renews it before use. It is
@@ -488,8 +490,9 @@ claims:
   `cwe.mitre.org`, `capec.mitre.org`), to GitHub and hex.pm as OAuth IdPs
   and for handle lookups, to the GitHub API for the OTP versions table,
   organization owner and team member listings, repository permission reads,
-  advisory reads and writes, and the App's installation syncs (`client.ex`,
-  `app.ex`), to `repo.hex.pm` for the package registry, to
+  advisory reads and writes, the comments on a linked advisory, and the
+  App's installation syncs (`client.ex`, `app.ex`), to
+  `repo.hex.pm` for the package registry, to
   the SMTP relay,
   **to the public https URL an anonymous caller hands `/oauth/authorize` as
   a CIMD `client_id`** (see §6), and — critically — **to the public https

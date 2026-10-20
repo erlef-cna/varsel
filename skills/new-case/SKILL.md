@@ -75,8 +75,10 @@ advisories are frequently the same issue arriving by two routes, and the advisor
 credits and the vendor's own version range. Note its `state`: a `draft` advisory has no publicly
 resolvable URL and usually still says `patched: TODO`, both of which block publishing later.
 
-Advisory comments are not exposed by the API. If a GHSA is involved, ask the user to check the
-advisory page for comments carrying a CVE number or handling instructions.
+Once the case is linked to the advisory, Varsel reads the advisory's comments every five minutes
+and shows them on the case's Comments tab. GitHub keeps confidential comments out of its API, so
+ask the user to check the advisory page when a handling instruction or a CVE number seems to be
+missing from the discussion.
 
 **Do not take the report's framing as final.** Reporters and advisory authors are often unfamiliar
 with CVE conventions, so the scope, the severity, and the affected range often need correcting even

@@ -173,7 +173,8 @@ config :varsel, Oban,
     cwe_sync: 1,
     capec_sync: 1,
     osv_sync: 1,
-    github_sync: 1
+    github_sync: 1,
+    github_comments: 1
   ],
   repo: Varsel.Repo,
   plugins: [

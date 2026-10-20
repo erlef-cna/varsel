@@ -270,6 +270,11 @@ defmodule VarselWeb.CaseComponents do
 
   An entry with `:navigate` renders its body as a link to where the thing
   itself is read, for a feed that summarizes rather than reproduces it.
+
+  An entry with `:who_label` names its author with that text, for an author
+  who holds no account here: a GitHub login on a comment read from an
+  advisory. An entry with `:who_suffix` keeps its author's name and adds that
+  text after it, for an account that wrote somewhere else.
   """
   attr :entries, :list, required: true
 
@@ -285,7 +290,15 @@ defmodule VarselWeb.CaseComponents do
           feed_dot_class(entry.kind)
         ]}></span>
         <p class="text-xs text-base-content/60">
-          <.user_name user={entry.who} class="font-semibold text-base-content/90" />
+          <span :if={entry[:who_label]} class="font-semibold text-base-content/90">
+            {entry[:who_label]}
+          </span>
+          <.user_name
+            :if={!entry[:who_label]}
+            user={entry.who}
+            class="font-semibold text-base-content/90"
+          />
+          <span :if={entry[:who_suffix]} class="text-base-content/50">{entry[:who_suffix]}</span>
           <span class="text-base-content/50">· {relative_time(entry.at)}</span>
         </p>
         <.markdown :if={entry[:markdown?]} content={entry.body} class="prose-xs" />
@@ -308,6 +321,10 @@ defmodule VarselWeb.CaseComponents do
   Renders one comment as its own card: a header strip naming the author and
   when they wrote, and the body below it.
 
+  A comment read from the case's linked GitHub advisory names its GitHub
+  author by login and links to itself on GitHub, so a reader can tell the
+  two streams apart and follow one back to where it was written.
+
   Callers must load the author's `:avatar_url` and `:display_name`.
   """
   attr :comment, :any, required: true
@@ -320,9 +337,37 @@ defmodule VarselWeb.CaseComponents do
       class="lane-card rounded-lg border border-base-300 text-sm scroll-mt-4 overflow-hidden"
     >
       <div class="flex items-center gap-2 border-b border-base-300 bg-base-200/60 px-3 py-2">
-        <.avatar_disc user={@comment.author} variant={:a} />
-        <.user_name user={@comment.author} class="font-bold" />
+        <%= cond do %>
+          <% @comment.source == :github && @comment.author -> %>
+            <.avatar_disc user={@comment.author} variant={:a} />
+            <.user_name user={@comment.author} class="font-bold" />
+            <span class="text-xs text-base-content/50">{github_author(@comment)}</span>
+          <% @comment.source == :github -> %>
+            <.icon
+              name="hero-chat-bubble-left-ellipsis-micro"
+              class="size-4 shrink-0 text-base-content/50"
+            />
+            <span class="font-bold">{github_author(@comment)}</span>
+          <% true -> %>
+            <.avatar_disc user={@comment.author} variant={:a} />
+            <.user_name user={@comment.author} class="font-bold" />
+        <% end %>
         <span class="text-base-content/60">commented</span>
+        <.link
+          :if={@comment.source == :github && @comment.github_html_url}
+          href={@comment.github_html_url}
+          target="_blank"
+          rel="noopener"
+          class="badge badge-ghost badge-sm gap-1 hover:underline"
+        >
+          on GitHub
+        </.link>
+        <span
+          :if={@comment.source == :github && !@comment.github_html_url}
+          class="badge badge-ghost badge-sm"
+        >
+          on GitHub
+        </span>
         <.relative_timestamp
           at={@comment.inserted_at}
           class="ml-auto shrink-0 text-xs text-base-content/50"
@@ -334,6 +379,9 @@ defmodule VarselWeb.CaseComponents do
     </article>
     """
   end
+
+  defp github_author(%{github_author_login: login}) when is_binary(login), do: "@" <> login
+  defp github_author(_comment), do: "Unknown GitHub user"
 
   # Comments are the warm hue; the palette's only non-status warm is amber.
   defp feed_dot_class(:comment), do: "bg-warning"

@@ -10,6 +10,10 @@ defmodule VarselWeb.CaseCommentsLive do
   The workspace rail shows the newest activity next to the content it is
   about. This tab is where the stream is read in full and where a comment is
   written with a preview.
+
+  A case linked to a GitHub advisory also shows the advisory's own comments,
+  read every five minutes. GitHub keeps its confidential comments out of its
+  API, so that part of the stream is never complete and says so.
   """
   use VarselWeb, :live_view
 
@@ -25,6 +29,7 @@ defmodule VarselWeb.CaseCommentsLive do
         load: [
           :cve_id,
           :cve_record,
+          :github_advisory_link,
           comments: [author: [:avatar_url, :display_name]]
         ],
         after_fetch: &after_fetch/2,
@@ -93,6 +98,12 @@ defmodule VarselWeb.CaseCommentsLive do
       </.case_header>
 
       <.page_container class="space-y-4">
+        <p :if={@case_record.github_advisory_link} class="text-xs text-base-content/60">
+          <.icon name="hero-information-circle-micro" class="size-4 align-text-bottom" />
+          The comments on the linked GitHub advisory are read every five minutes and shown here.
+          GitHub does not serve confidential comments, so its discussion may hold more than this.
+        </p>
+
         <div class="space-y-3">
           <.comment_card
             :for={comment <- @comments}

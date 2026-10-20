@@ -40,6 +40,7 @@ defmodule Varsel.GitHub.Installation do
     field_policy [:token, :token_expires_at] do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if actor_attribute_equals(:system, :github_public_read)
+      authorize_if actor_attribute_equals(:system, :github_comment_sync)
       authorize_if AshObanInteraction
     end
 
@@ -196,6 +197,7 @@ defmodule Varsel.GitHub.Installation do
     policy action_type(:read) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if actor_attribute_equals(:system, :github_public_read)
+      authorize_if actor_attribute_equals(:system, :github_comment_sync)
       authorize_if expr(exists(user_installations, user_id == ^actor(:id)))
     end
 
@@ -211,12 +213,19 @@ defmodule Varsel.GitHub.Installation do
       forbid_unless context_equals([:private, :github_sync], true)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if actor_attribute_equals(:system, :github_public_read)
+      authorize_if actor_attribute_equals(:system, :github_comment_sync)
     end
 
     policy action(:token) do
-      description "Only a POC acts with an installation token. This policy is the one place that rule lives."
+      description """
+      A POC acts with an installation token, and so does the comment poll,
+      which reads a linked advisory's discussion with no person asking. This
+      policy is the one place that rule lives.
+      """
+
       access_type :strict
       authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if actor_attribute_equals(:system, :github_comment_sync)
     end
 
     policy action(:public_read_token) do

@@ -25,12 +25,20 @@ defmodule Varsel.Service do
   `actor_attribute_equals(:system, ...)`.
   """
   @type system() ::
-          system_github_manual()
+          system_github_comment_sync()
+          | system_github_manual()
           | system_github_public_read()
           | system_hexpm_intake()
           | system_identity_claim()
           | system_notifier()
           | system_release_console()
+
+  @typedoc """
+  The comment poll of `Varsel.Cases.GitHubAdvisoryLink`. It reads the
+  comments on a linked advisory with the App's installation token and records
+  the ones the case does not hold.
+  """
+  @type system_github_comment_sync() :: :github_comment_sync
 
   @typedoc """
   The `/api/github/manual` routes of `VarselWeb.GitHubManualController`. It
@@ -72,6 +80,10 @@ defmodule Varsel.Service do
   @type system_release_console() :: :release_console
 
   @type t() :: %__MODULE__{system: system(), role: :system}
+
+  @doc "The actor the GitHub advisory comment poll runs as."
+  @spec github_comment_sync() :: t()
+  def github_comment_sync, do: %__MODULE__{system: :github_comment_sync}
 
   @doc "The actor that finds a manual GitHub request for its command's two steps."
   @spec github_manual() :: t()

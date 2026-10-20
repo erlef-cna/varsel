@@ -24,7 +24,10 @@ defmodule VarselWeb.Storybook.Case.CommentCard do
         id: "comment-1",
         inserted_at: ago(300),
         body: "Confirmed against 3.12.13 — the crash reproduces.",
-        author: %{display_name: "Sam Chen", avatar_url: nil}
+        author: %{display_name: "Sam Chen", avatar_url: nil},
+        source: :varsel,
+        github_author_login: nil,
+        github_html_url: nil
       },
       overrides
     )
@@ -61,6 +64,59 @@ defmodule VarselWeb.Storybook.Case.CommentCard do
         attributes: %{
           row_id: "comment-deleted-author",
           comment: comment(%{author: nil, body: "Closing this out — duplicate of the OTP case."})
+        }
+      },
+      %Variation{
+        id: :from_github,
+        description: """
+        A comment read from the linked advisory: named by its GitHub login,
+        with a link back to where it was written.
+        """,
+        attributes: %{
+          row_id: "comment-from-github",
+          comment:
+            comment(%{
+              author: nil,
+              source: :github,
+              github_author_login: "octocat",
+              github_html_url:
+                "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw#advisory-comment-1",
+              body: "Maintainer here — we shipped the patch in 3.12.14."
+            })
+        }
+      },
+      %Variation{
+        id: :from_github_claimed,
+        description: """
+        A GitHub comment whose login belongs to an account here: the person
+        the case knows, with the login they signed it with.
+        """,
+        attributes: %{
+          row_id: "comment-from-github-claimed",
+          comment:
+            comment(%{
+              author: %{display_name: "Sam Chen", avatar_url: nil},
+              source: :github,
+              github_author_login: "samchen",
+              github_html_url:
+                "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw#advisory-comment-2",
+              body: "Confirming from the advisory thread — the patch is in 3.12.14."
+            })
+        }
+      },
+      %Variation{
+        id: :from_github_unknown_author,
+        description: "A GitHub comment whose author GitHub did not name.",
+        attributes: %{
+          row_id: "comment-from-github-unknown",
+          comment:
+            comment(%{
+              author: nil,
+              source: :github,
+              github_author_login: nil,
+              github_html_url: nil,
+              body: "Reported through the private form."
+            })
         }
       },
       %Variation{

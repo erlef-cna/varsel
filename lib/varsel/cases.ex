@@ -511,6 +511,7 @@ defmodule Varsel.Cases do
       define :pull_github_advisory, action: :pull, args: [:fields]
       define :push_github_advisory, action: :push, args: [:fields]
       define :unlink_github_advisory, action: :unlink
+      define :sync_github_advisory_comments, action: :sync_comments
     end
 
     resource GitHubManualRequest do
@@ -535,6 +536,12 @@ defmodule Varsel.Cases do
       define :list_case_comments_all, action: :read
       define :post_case_comment, action: :post
       define :list_case_comments, action: :list_for_case, args: [:case_id]
+      define :sync_case_comment_from_github, action: :sync_from_github
+      define :claim_case_comment, action: :claim_for_identity
+
+      define :list_case_comments_for_github_login,
+        action: :for_github_login,
+        args: [:strategy, :username]
     end
   end
 end
