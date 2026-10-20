@@ -1738,6 +1738,7 @@ defmodule VarselWeb.CaseDetailLive do
       [
         package.allow_unreleased_fix && "allows unreleased fixes",
         package.allow_unreleased_intro && "allows unreleased intros",
+        package.repo_unreachable && "repository unreachable",
         !package.include_prereleases && "pre-releases excluded"
       ],
       & &1

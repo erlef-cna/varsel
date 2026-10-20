@@ -30,6 +30,14 @@ defmodule Varsel.Test.StubGitBackend do
   `{:error, :commit_not_found}`, which derivation reads as a commit it cannot
   place.
 
+  A repository declared with `stub_unreachable/1` fails every call with the
+  reason given, standing in for one that was deleted or taken private:
+
+      StubGitBackend.stub_unreachable(%{
+        "https://github.com/dropbox/esaml" =>
+          {:clone_failed, {:http_error, 401, "Repository not found."}}
+      })
+
   ## Ownership
 
   A stub belongs to the test that declared it, so `async: true` tests cannot
@@ -47,6 +55,7 @@ defmodule Varsel.Test.StubGitBackend do
   alias Varsel.Cases.Derivation.GitBackend
 
   @tags_key {__MODULE__, :tags}
+  @unreachable_key {__MODULE__, :unreachable}
   @commits_key {__MODULE__, :commits}
   @universe_key {__MODULE__, :universe}
   @refreshed_key {__MODULE__, :refreshed}
@@ -63,24 +72,36 @@ defmodule Varsel.Test.StubGitBackend do
   @spec stub_all_tags(%{String.t() => [String.t()]}) :: :ok
   def stub_all_tags(universe), do: put(@universe_key, universe)
 
+  @doc "Declares, per repo, the failure every call against it answers with."
+  @spec stub_unreachable(%{String.t() => term()}) :: :ok
+  def stub_unreachable(repos), do: put(@unreachable_key, repos)
+
   @impl GitBackend
   def tags_containing(repo_url, sha) do
-    case Map.fetch(get(@tags_key), {repo_url, sha}) do
-      {:ok, tags} -> {:ok, tags}
-      :error -> {:error, :commit_not_found}
+    with :reachable <- reachability(repo_url) do
+      case Map.fetch(get(@tags_key), {repo_url, sha}) do
+        {:ok, tags} -> {:ok, tags}
+        :error -> {:error, :commit_not_found}
+      end
     end
   end
 
   @impl GitBackend
   def commits_containing(repo_url, sha, candidates) do
-    case Map.fetch(get(@commits_key), {repo_url, sha}) do
-      {:ok, containing} -> {:ok, Enum.filter(candidates, &(&1 == sha or &1 in containing))}
-      :error -> {:error, :commit_not_found}
+    with :reachable <- reachability(repo_url) do
+      case Map.fetch(get(@commits_key), {repo_url, sha}) do
+        {:ok, containing} -> {:ok, Enum.filter(candidates, &(&1 == sha or &1 in containing))}
+        :error -> {:error, :commit_not_found}
+      end
     end
   end
 
   @impl GitBackend
   def all_tags(repo_url) do
+    with :reachable <- reachability(repo_url), do: {:ok, universe(repo_url)}
+  end
+
+  defp universe(repo_url) do
     from_commits =
       for {{repo, _sha}, tags} <- get(@tags_key),
           repo == repo_url,
@@ -89,7 +110,14 @@ defmodule Varsel.Test.StubGitBackend do
 
     extra = Map.get(get(@universe_key), repo_url, [])
 
-    {:ok, Enum.uniq(from_commits ++ extra)}
+    Enum.uniq(from_commits ++ extra)
+  end
+
+  defp reachability(repo_url) do
+    case Map.fetch(get(@unreachable_key), repo_url) do
+      {:ok, reason} -> {:error, reason}
+      :error -> :reachable
+    end
   end
 
   # Recorded in the calling process's dictionary, so a test that runs the

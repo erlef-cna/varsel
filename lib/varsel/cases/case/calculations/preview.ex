@@ -417,14 +417,15 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
 
       render_reference(
         "#{repo_url}/commit/#{event.commit_sha}",
-        commit_tags(event_kind),
+        commit_tags(event_kind, package.repo_unreachable),
         "#{commit_label(event_kind)} #{String.slice(event.commit_sha, 0, 7)} in #{repo_label(repo_url)}"
       )
     end
   end
 
-  defp commit_tags(:introduced), do: ["related"]
-  defp commit_tags(:fixed), do: ["patch"]
+  defp commit_tags(event_kind, true), do: commit_tags(event_kind, false) ++ ["broken-link"]
+  defp commit_tags(:introduced, false), do: ["related"]
+  defp commit_tags(:fixed, false), do: ["patch"]
 
   defp commit_label(:introduced), do: "Introducing commit"
   defp commit_label(:fixed), do: "Fix commit"

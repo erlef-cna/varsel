@@ -125,6 +125,13 @@ defmodule Varsel.Cases.Reachability do
   `{:error, reason}` if the tag universe cannot be obtained (clone/fetch failure).
   A commit that resolves to no tag is not fatal: an unreleased intro surfaces in
   `unreleased_intros`, an unresolvable/unreleased fix in `pending_fixes`.
+
+  ## Repositories that no longer answer
+
+  `derive_from_versions/2` derives the same ranges from version boundaries
+  alone, for a repository that has been deleted or taken private. Containment
+  supplies nothing, so every boundary must be stated as a version, and the
+  commits keep bounding only the channels that publish SHAs.
   """
   @spec derive(String.t(), [String.t()], [String.t()], keyword()) ::
           {:ok, result()} | {:error, term()}
@@ -191,6 +198,38 @@ defmodule Varsel.Cases.Reachability do
            issues: result.issues ++ unusable_explicit_issues(unusable_explicit)
        }}
     end
+  end
+
+  @doc """
+  Derives ranges from explicit version boundaries alone, for a repository git
+  can no longer be asked about.
+
+  The tag universe is the stated versions themselves, so the result describes
+  only the releases a human named: an `:introduced` version opens an affected
+  run that the next `:fixed` version closes, and nothing is claimed about
+  releases between them that went unmentioned. Commit boundaries do not reach
+  this path at all, which is why `pending_fixes` and `unreleased_intros` come
+  back empty — a SHA that cannot be placed is not pending, it is unknowable.
+
+  Takes `:comparator` and `:include_prereleases` like `deduce/3`.
+  """
+  @spec derive_from_versions([{atom(), String.t()}], keyword()) :: {:ok, result()}
+  def derive_from_versions(explicit_versions, opts) do
+    kind = Keyword.fetch!(opts, :comparator)
+
+    {explicit, unusable} =
+      Enum.split_with(explicit_versions, fn {_event, version} ->
+        VersionComparator.release?(kind, version)
+      end)
+
+    universe = explicit |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+
+    affected = apply_explicit(MapSet.new(), explicit, universe, kind, fix_releases: [])
+    fixed = MapSet.new(for {:fixed, version} <- explicit, do: version)
+
+    result = deduce(universe, affected, Keyword.put(opts, :fixed, fixed))
+
+    {:ok, %{result | issues: result.issues ++ unusable_explicit_issues(unusable)}}
   end
 
   @doc """

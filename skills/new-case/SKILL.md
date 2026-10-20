@@ -463,6 +463,12 @@ mcp__varsel__propose_affected_package(input: {
   affected packages. A's fix boundary is the extraction point; B carries the real fix commit.
 - **Unpatched.** Omit `fixed_commits` or the `fixed` boundary entirely. Varsel renders the
   open-ended range. Do not propose a patch reference at all. Varsel derrives it.
+- **The repository is gone.** A deleted or private repository fails derivation with `cannot
+  resolve versions`, and no commit can be placed. Propose the package with
+  `repo_unreachable: true` and give every boundary a `version` as well as its `commit_sha`:
+  the ranges derive from those versions, and the commit links ship tagged `broken-link`. Set
+  this only when the repository is genuinely gone, never to get past a transient clone
+  failure. Confirm it is gone before proposing.
 
 ### Correcting an accepted proposal
 

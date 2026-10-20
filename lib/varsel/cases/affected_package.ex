@@ -434,6 +434,18 @@ defmodule Varsel.Cases.AffectedPackage do
       public? true
     end
 
+    attribute :repo_unreachable, :boolean do
+      description """
+      Escape hatch: the source repository no longer answers (deleted or taken
+      private). Version ranges derive from explicit version boundaries alone,
+      and the commit links the record derives carry the `broken-link` tag.
+      """
+
+      allow_nil? false
+      default false
+      public? true
+    end
+
     attribute :default_status, DefaultStatus do
       description """
       What the record claims about versions its ranges do not list — rendered

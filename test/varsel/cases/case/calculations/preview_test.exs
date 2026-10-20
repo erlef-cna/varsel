@@ -28,6 +28,8 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
   @cpe "cpe:2.3:a:team-alembic:ash_authentication_phoenix:*:*:*:*:*:*:*:*"
   @vector "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
   @advisory "https://github.com/team-alembic/ash_authentication_phoenix/security/advisories/GHSA-f7gq-h8jv-h3cq"
+  @dead_repo "https://github.com/dropbox/esaml"
+  @dead_intro_sha "deeb84378d5c82153b470e99d24f77c38afca14a"
 
   setup do
     poc = Fixtures.register_user("render_poc", :poc)
@@ -162,6 +164,10 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
 
   # The CNA container from a Result, for the per-field assertions below.
   defp cna(%Result{cve_record: cve_record}), do: cve_record["containers"]["cna"]
+
+  defp result_reference(result, url) do
+    result |> cna() |> Map.fetch!("references") |> Enum.find(&(&1["url"] == url))
+  end
 
   test "renders dateAssigned from the assignment, and datePublic once set", %{
     poc: poc,
@@ -787,6 +793,148 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
     result = render!(case_record, poc)
     refute Enum.any?(result.blockers, &(&1 =~ "has no containing release"))
+  end
+
+  describe "a repository that no longer answers" do
+    setup %{poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "esaml case"})
+
+      # The repository was deleted, so every git question fails.
+      StubGitBackend.stub_unreachable(%{
+        @dead_repo => {:clone_failed, {:http_error, 401, "Repository not found."}}
+      })
+
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{
+          vendor: "dropbox",
+          product: "esaml",
+          repo_url: @dead_repo
+        })
+
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: "hex",
+          name: "esaml",
+          position: 0
+        },
+        actor: poc
+      )
+
+      # The intro is stated twice: the SHA bounds the git channel, the version
+      # names the release for the registry channel.
+      Cases.add_version_event!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          event: :introduced,
+          commit_sha: @dead_intro_sha
+        },
+        actor: poc
+      )
+
+      Cases.add_version_event!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          event: :introduced,
+          version: "0.1.0"
+        },
+        actor: poc
+      )
+
+      %{dead_case: case_record, dead_package: package}
+    end
+
+    defp mark_unreachable(package, poc) do
+      Cases.edit_affected_package!(package, %{repo_unreachable: true}, actor: poc)
+    end
+
+    defp hex_entry(cna) do
+      Enum.find(cna["affected"], &(&1["packageName"] == "esaml" and &1["collectionURL"]))
+    end
+
+    test "an unreachable repository blocks publishing until it is declared", %{
+      poc: poc,
+      dead_case: case_record
+    } do
+      result = render!(case_record, poc)
+      assert Enum.any?(result.blockers, &(&1 =~ "cannot resolve versions"))
+    end
+
+    test "declaring it derives the ranges from the stated versions instead", %{
+      poc: poc,
+      dead_case: case_record,
+      dead_package: package
+    } do
+      mark_unreachable(package, poc)
+
+      result = render!(case_record, poc)
+
+      refute Enum.any?(result.blockers, &(&1 =~ "cannot resolve versions"))
+      refute Enum.any?(result.blockers, &(&1 =~ "derived no affected versions"))
+
+      assert %{"versions" => [%{"version" => "0.1.0", "lessThan" => "*"}]} =
+               result |> cna() |> hex_entry()
+    end
+
+    test "the commit links stay listed and are tagged broken", %{
+      poc: poc,
+      dead_case: case_record,
+      dead_package: package
+    } do
+      mark_unreachable(package, poc)
+
+      reference =
+        result_reference(render!(case_record, poc), "#{@dead_repo}/commit/#{@dead_intro_sha}")
+
+      assert reference["tags"] == ["related", "broken-link"]
+    end
+
+    test "a reachable repository tags nothing broken", %{poc: poc, case: case_record} do
+      reference =
+        result_reference(render!(case_record, poc), "#{@repo}/commit/#{@fix_sha}")
+
+      assert reference["tags"] == ["patch"]
+    end
+
+    test "declaring it without any stated version still blocks", %{poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "esaml, commits only"})
+
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{
+          vendor: "dropbox",
+          product: "esaml",
+          repo_url: @dead_repo,
+          repo_unreachable: true
+        })
+
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: "hex",
+          name: "esaml",
+          position: 0
+        },
+        actor: poc
+      )
+
+      Cases.add_version_event!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          event: :introduced,
+          commit_sha: @dead_intro_sha
+        },
+        actor: poc
+      )
+
+      result = render!(case_record, poc)
+
+      assert Enum.any?(result.blockers, &(&1 =~ "no version boundaries were given"))
+    end
   end
 
   describe "forge handling on git channels" do

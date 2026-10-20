@@ -27,6 +27,12 @@ Pass `refresh: true` when the package repository may have changed since the last
 
 The returned `preview` holds the full CVE record (`preview.cve_record`, using a `CVE-0000-0000` placeholder until an ID is assigned) and **publish blockers** (`preview.blockers`). Any publish blocker is an automatic FAIL — resolve it before anything else. Use the CNA container at `preview.cve_record.containers.cna` as the record under test for the convention checklist.
 
+A `cannot resolve versions` blocker means git could not be reached. Retry with `refresh: true`
+first. When the repository is gone for good (deleted or taken private), the package needs
+`repo_unreachable: true` and a `version` on every boundary, which derives the ranges from those
+versions and tags the commit links `broken-link`. Verify the repository is actually gone before
+reporting that as the fix.
+
 `preview.osv_record` is the OSV document the record would publish as, enumerated hex.pm `versions` included (`preview.osv_status` says why when there is none).
 
 Note: the preview reflects **accepted** proposals only. If you (or the user) just submitted fixes as new proposals, they must be accepted before they show up here — accept, refresh, then re-render.

@@ -60,6 +60,13 @@ wrong. Investigate before trusting either side.
   When staying unreleased is intentional (a hotfix released from a
   maintenance branch and not merged back, leaving one of several fix commits
   outside every release), allow unreleased fixes on the package.
+- **The repository is gone.** When a project deletes its repository or takes
+  it private, derivation cannot place any commit and blocks publishing with
+  *cannot resolve versions*. Tick *repository is no longer reachable* on the
+  package and give every boundary a version as well as a commit. The ranges
+  then derive from the versions you stated, the commits keep bounding the
+  repository channel, and the record's commit links ship tagged `broken-link`
+  so a reader knows they lead nowhere.
 - **Vulnerable since the beginning of OTP's git history**: tick the OTP
   preset's since-creation checkbox. It stands for the erlang/otp root commit,
   and selects *unknown* for versions outside the derived ranges (below). When

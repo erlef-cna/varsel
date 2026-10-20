@@ -83,6 +83,14 @@ defmodule VarselWeb.CaseFormComponents do
       <.input field={@form[:allow_unreleased_intro]} type="checkbox">
         <:label>Allow publishing while the introducing commit has no containing release</:label>
       </.input>
+      <.input field={@form[:repo_unreachable]} type="checkbox">
+        <:label>Repository is no longer reachable</:label>
+        <:description>
+          For a repository that was deleted or taken private. Versions derive from
+          the boundary facts that name a version, and the commit links the record
+          derives are tagged as broken.
+        </:description>
+      </.input>
       <.input field={@form[:include_prereleases]} type="checkbox">
         <:label>Include pre-release versions (rc/alpha/beta) in the affected ranges</:label>
       </.input>

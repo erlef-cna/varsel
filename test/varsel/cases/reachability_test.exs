@@ -383,6 +383,49 @@ defmodule Varsel.Cases.ReachabilityTest do
     end
   end
 
+  describe "derive_from_versions/2 (repository no longer reachable)" do
+    test "an intro alone runs open-ended from the version it names" do
+      {:ok, result} =
+        Reachability.derive_from_versions([{:introduced, "0.1.0"}], comparator: :semver)
+
+      assert versions(result) == [{"0.1.0", :unbounded}]
+      assert result.open? == true
+      assert result.issues == []
+    end
+
+    test "an intro and a fix bound a closed range" do
+      {:ok, result} =
+        Reachability.derive_from_versions(
+          [{:introduced, "1.0.0"}, {:fixed, "1.2.0"}],
+          comparator: :semver
+        )
+
+      assert versions(result) == [{"1.0.0", "1.2.0"}]
+      assert result.open? == false
+    end
+
+    test "commit boundaries have no counterpart here, so nothing is pending" do
+      {:ok, result} =
+        Reachability.derive_from_versions([{:introduced, "0.1.0"}], comparator: :semver)
+
+      assert result.pending_fixes == []
+      assert result.unreleased_intros == []
+      assert result.descendants == %{}
+    end
+
+    test "a version the scheme cannot order is reported rather than dropped" do
+      {:ok, result} =
+        Reachability.derive_from_versions(
+          [{:introduced, "1.0.0"}, {:fixed, "R16B03"}],
+          comparator: :semver
+        )
+
+      assert [issue] = result.issues
+      assert issue =~ "R16B03"
+      assert versions(result) == [{"1.0.0", :unbounded}]
+    end
+  end
+
   describe "edge cases" do
     test "an affected span that is never fixed is open-ended" do
       result =

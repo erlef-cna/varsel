@@ -276,6 +276,7 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :platforms, {:array, :string}
       argument :allow_unreleased_fix, :boolean
       argument :allow_unreleased_intro, :boolean
+      argument :repo_unreachable, :boolean
       argument :channels, {:array, ChannelInput}
       argument :version_events, {:array, EventInput}
       change {PackProposal, target: :affected_package, operation: :insert}

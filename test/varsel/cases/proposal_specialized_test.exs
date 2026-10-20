@@ -351,6 +351,22 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
              }
     end
 
+    test "propose_affected_package packs repo_unreachable", %{poc: poc, case: case_record} do
+      proposal =
+        Cases.propose_affected_package!(
+          %{
+            case_id: case_record.id,
+            vendor: "dropbox",
+            product: "esaml",
+            repo_url: "https://github.com/dropbox/esaml",
+            repo_unreachable: true
+          },
+          actor: poc
+        )
+
+      assert proposal.proposed_value["value"]["repo_unreachable"] == true
+    end
+
     test "propose_affected_package packs inline channels and version events", %{
       poc: poc,
       case: case_record

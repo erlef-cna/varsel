@@ -104,21 +104,49 @@ defmodule Varsel.Cases.Derivation do
     {intros, fixes} = boundary_shas(events)
     explicit = explicit_versions(events)
 
-    if intros == [] and fixes == [] and explicit == [] do
-      empty_reachability()
-    else
-      case Reachability.derive(package.repo_url, intros, fixes,
-             comparator: platform.kind,
-             include_prereleases: package.include_prereleases,
-             explicit_versions: explicit
-           ) do
-        {:ok, result} ->
-          result
+    cond do
+      intros == [] and fixes == [] and explicit == [] ->
+        empty_reachability()
 
-        {:error, reason} ->
-          %{empty_reachability() | issues: ["cannot resolve versions: #{inspect(reason)}"]}
-      end
+      package.repo_unreachable ->
+        unreachable_reachability(package, platform, explicit)
+
+      true ->
+        derive_from_repo(package, platform, intros, fixes, explicit)
     end
+  end
+
+  defp derive_from_repo(package, platform, intros, fixes, explicit) do
+    case Reachability.derive(package.repo_url, intros, fixes,
+           comparator: platform.kind,
+           include_prereleases: package.include_prereleases,
+           explicit_versions: explicit
+         ) do
+      {:ok, result} ->
+        result
+
+      {:error, reason} ->
+        %{empty_reachability() | issues: ["cannot resolve versions: #{inspect(reason)}"]}
+    end
+  end
+
+  # Declaring the repository unreachable waives git, not the boundaries
+  # themselves: with no version stated, nothing is left to bound a range.
+  defp unreachable_reachability(_package, _platform, []) do
+    %{
+      empty_reachability()
+      | issues: ["repository is unreachable and no version boundaries were given"]
+    }
+  end
+
+  defp unreachable_reachability(package, platform, explicit) do
+    {:ok, result} =
+      Reachability.derive_from_versions(explicit,
+        comparator: platform.kind,
+        include_prereleases: package.include_prereleases
+      )
+
+    result
   end
 
   defp empty_reachability do
