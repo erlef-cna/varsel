@@ -439,6 +439,121 @@ defmodule VarselWeb.CaseCommentsLiveTest do
       refute has_element?(lv, "#comment-#{synced.id}", "Deleted user")
     end
 
+    test "offers the cross-post checkbox, unticked", %{
+      conn: conn,
+      poc: poc,
+      case_record: case_record
+    } do
+      link_with_comments!(case_record, poc, [])
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      assert has_element?(lv, "#case-comment-form input[type=checkbox][name='form[cross_post]']")
+
+      refute has_element?(
+               lv,
+               "#case-comment-form input[type=checkbox][name='form[cross_post]'][checked]"
+             )
+    end
+
+    test "a case with no advisory offers no cross-post", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      assert has_element?(lv, "#case-comment-form")
+      refute has_element?(lv, "#case-comment-form input[name='form[cross_post]']")
+    end
+
+    test "cross-posting writes to GitHub and shows the comment", %{
+      conn: conn,
+      poc: poc,
+      case_record: case_record
+    } do
+      test = self()
+
+      GitHubApi.stub(fn conn ->
+        case {conn.method, Enum.reverse(conn.path_info)} do
+          {"POST", ["comments" | _rest]} ->
+            send(test, :cross_posted)
+
+            conn
+            |> Plug.Conn.put_status(201)
+            |> Req.Test.json(%{"id" => 9001, "html_url" => "https://github.com/x#c-9001"})
+
+          {_method, ["comments" | _rest]} ->
+            Req.Test.json(conn, [])
+
+          {_method, ["users", login]} ->
+            Req.Test.json(conn, %{"login" => login, "name" => nil})
+
+          _advisory ->
+            Req.Test.json(conn, GitHubAdvisoryFixtures.hex_advisory())
+        end
+      end)
+
+      Cases.link_github_advisory!(
+        %{
+          case_id: case_record.id,
+          advisory_url: "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+        },
+        actor: poc
+      )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      lv
+      |> form("#case-comment-form", form: %{body: "Shared outward", cross_post: "true"})
+      |> render_submit()
+
+      assert_received :cross_posted
+      assert render(lv) =~ "Shared outward"
+    end
+
+    test "a GitHub refusal keeps the comment off the case and says so", %{
+      conn: conn,
+      poc: poc,
+      case_record: case_record
+    } do
+      GitHubApi.stub(fn conn ->
+        case {conn.method, Enum.reverse(conn.path_info)} do
+          {"POST", ["comments" | _rest]} ->
+            conn |> Plug.Conn.put_status(500) |> Req.Test.json(%{"message" => "nope"})
+
+          {_method, ["comments" | _rest]} ->
+            Req.Test.json(conn, [])
+
+          {_method, ["users", login]} ->
+            Req.Test.json(conn, %{"login" => login, "name" => nil})
+
+          _advisory ->
+            Req.Test.json(conn, GitHubAdvisoryFixtures.hex_advisory())
+        end
+      end)
+
+      Cases.link_github_advisory!(
+        %{
+          case_id: case_record.id,
+          advisory_url: "https://github.com/acme/acme_lib/security/advisories/GHSA-2cfg-hjmp-qrvw"
+        },
+        actor: poc
+      )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      lv
+      |> form("#case-comment-form", form: %{body: "Never landed", cross_post: "true"})
+      |> render_submit()
+
+      html = render(lv)
+
+      assert Cases.list_case_comments!(case_record.id, actor: poc) == []
+      assert html =~ "GitHub refused it. Nothing was posted"
+      # The author keeps what they wrote, to post again or post here alone.
+      assert html =~ "Never landed"
+      refute html =~ ":http"
+    end
+
     test "the rail names the account and where they wrote", %{
       conn: conn,
       poc: poc,

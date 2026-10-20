@@ -14,6 +14,9 @@ defmodule VarselWeb.CaseCommentsLive do
   A case linked to a GitHub advisory also shows the advisory's own comments,
   read every five minutes. GitHub keeps its confidential comments out of its
   API, so that part of the stream is never complete and says so.
+
+  A comment written here goes the other way when its author asks: the form
+  offers to write it to the advisory as well.
   """
   use VarselWeb, :live_view
 
@@ -77,6 +80,11 @@ defmodule VarselWeb.CaseCommentsLive do
   # the same POC-or-assigned question about a row that exists.
   defp can_comment?(case_record, actor), do: Ash.can?({case_record, :read}, actor)
 
+  defp cross_postable?(%{github_advisory_link: %{owner: owner, repo: repo}}) when is_binary(owner) and is_binary(repo),
+    do: true
+
+  defp cross_postable?(_case_record), do: false
+
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
@@ -100,7 +108,8 @@ defmodule VarselWeb.CaseCommentsLive do
       <.page_container class="space-y-4">
         <p :if={@case_record.github_advisory_link} class="text-xs text-base-content/60">
           <.icon name="hero-information-circle-micro" class="size-4 align-text-bottom" />
-          The comments on the linked GitHub advisory are read every five minutes and shown here.
+          The comments on the linked GitHub advisory are read every five minutes and shown here,
+          and a comment written here can be posted back to it.
           GitHub does not serve confidential comments, so its discussion may hold more than this.
         </p>
 
@@ -129,6 +138,13 @@ defmodule VarselWeb.CaseCommentsLive do
               rows={6}
               placeholder="Write a comment…"
             />
+            <.input
+              :if={cross_postable?(@case_record)}
+              field={@form[:cross_post]}
+              type="checkbox"
+            >
+              <:label>Also post this comment on the linked GitHub advisory</:label>
+            </.input>
             <button type="submit" class="btn btn-eef btn-sm" phx-disable-with="Posting…">
               Comment
             </button>

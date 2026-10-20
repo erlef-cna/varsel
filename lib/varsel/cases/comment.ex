@@ -17,6 +17,9 @@ defmodule Varsel.Cases.Comment do
   comment poll, which names its GitHub author by login. Such a comment also
   carries the `author` whose GitHub identity holds that login, named when the
   poll stores it or when they link the identity later.
+
+  A `:varsel` comment the author cross-posted holds the id GitHub gave it,
+  which is how the poll reads it back as the comment it already is.
   """
 
   use Ash.Resource,
@@ -30,6 +33,7 @@ defmodule Varsel.Cases.Comment do
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Accounts.Signals
   alias Varsel.Accounts.User
+  alias Varsel.Cases.Comment.Changes.CrossPostToGitHub
   alias Varsel.Cases.Comment.Changes.ResolveGitHubAuthor
   alias Varsel.Cases.Comment.Source
 
@@ -73,11 +77,25 @@ defmodule Varsel.Cases.Comment do
     end
 
     create :post do
-      description "Posts a comment on a case, optionally referencing one of its proposals."
+      description """
+      Posts a comment on a case, optionally referencing one of its proposals.
+
+      `cross_post` also writes the comment to the case's linked GitHub
+      advisory. GitHub refusing it refuses the whole post, so the case never
+      shows a comment the advisory does not hold.
+      """
+
       primary? true
       accept [:case_id, :proposal_id, :body]
 
+      argument :cross_post, :boolean do
+        description "Also write this comment to the case's linked GitHub advisory."
+        allow_nil? false
+        default false
+      end
+
       change relate_actor(:author)
+      change CrossPostToGitHub
       validate Varsel.Cases.Comment.Validations.ProposalBelongsToCase
     end
 
@@ -85,7 +103,8 @@ defmodule Varsel.Cases.Comment do
       description """
       Internal: records one comment read from the case's linked GitHub
       advisory. Keyed on the GitHub comment id, so re-reading a comment the
-      poll already stored updates its body instead of repeating it.
+      poll already stored updates its body instead of repeating it, and a
+      comment written here and cross-posted is recognized as the one it is.
       """
 
       public? false
@@ -99,7 +118,12 @@ defmodule Varsel.Cases.Comment do
       # GitHub answers `since` inclusively, so each poll re-reads the comment
       # it read last. Writing only a body that differs is what keeps a
       # re-read from raising the case's people a second time.
-      upsert_condition expr(body != ^atomic_ref(:body))
+      #
+      # A comment written here and cross-posted holds the id GitHub gave it,
+      # so the poll reads it back and matches this row. Its stored body is
+      # what its author typed, and the one GitHub answers carries the footer
+      # the cross-post added, so a `:varsel` comment keeps the body it has.
+      upsert_condition expr(source == :github and body != ^atomic_ref(:body))
       return_skipped_upsert? true
 
       change set_attribute(:source, :github)

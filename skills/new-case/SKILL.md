@@ -80,6 +80,10 @@ and shows them on the case's Comments tab. GitHub keeps confidential comments ou
 ask the user to check the advisory page when a handling instruction or a CVE number seems to be
 missing from the discussion.
 
+A comment written on the Comments tab can go the other way: the form offers to post it on the
+advisory as well, which is off unless the author ticks it. Tell the user when something they are
+writing belongs on the advisory thread, since the reporter and the maintainers read that one.
+
 **Do not take the report's framing as final.** Reporters and advisory authors are often unfamiliar
 with CVE conventions, so the scope, the severity, and the affected range often need correcting even
 when the underlying finding is sound.

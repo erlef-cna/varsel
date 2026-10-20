@@ -490,8 +490,8 @@ claims:
   `cwe.mitre.org`, `capec.mitre.org`), to GitHub and hex.pm as OAuth IdPs
   and for handle lookups, to the GitHub API for the OTP versions table,
   organization owner and team member listings, repository permission reads,
-  advisory reads and writes, the comments on a linked advisory, and the
-  App's installation syncs (`client.ex`, `app.ex`), to
+  advisory reads and writes, the comments on a linked advisory read and
+  written, and the App's installation syncs (`client.ex`, `app.ex`), to
   `repo.hex.pm` for the package registry, to
   the SMTP relay,
   **to the public https URL an anonymous caller hands `/oauth/authorize` as
@@ -657,6 +657,7 @@ a trusted integration partner.
 | Case invite email | Plain-text mail to a person with no account | Yes — same shape: the provider handle the invite names and a sign-in link, no case content and no inviter (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
 | Case fields → the linked GitHub advisory (`GitHubAdvisoryLink.push`), or a new private report or draft advisory on a repository (`Case.report_to_github`) | GitHub, as the acting user or as the App | JSON body of typed fields and the advisory description rendered from the case's own sections as markdown (`export.ex`). Written with the caller's own GitHub token, so GitHub attributes it to them and decides whether they may. A POC's write that their own token cannot make, or a write by a POC with no GitHub identity, goes with the App's installation token on that repository and GitHub attributes it to the App (`push.ex`, `report_to_github.ex`, `credentials.ex`, `advisories.ex`) | — |
+| A case comment → the comments on the linked GitHub advisory (`Comment.post` with `cross_post`) | GitHub, as the acting user or as the App | JSON body of the comment's own markdown, which its author asked to send: the cross-post is off unless they tick it. The same credential rule as the row above, and a write GitHub attributes to the App names the author in a footer. Every body carries the case's address. A refusal from GitHub refuses the whole post, so the case holds no comment the advisory does not (`cross_post_to_github.ex`, `credentials.ex`, `advisories.ex`) | — |
 | The `gh` command of a manual GitHub request (`gh_command/3`), and its request body (`/api/github/manual/:id/request`) | A POC's shell, then GitHub as the POC's own GitHub account | **Yes** — the command interpolates only the configured endpoint URL, the request's UUID, a JWT of URL-safe Base64 segments, and an API path whose owner and repository are refused unless they match GitHub's name characters and whose GHSA id is refused unless it parses as one (`build_request.ex`, `advisory_components.ex`). The body is the one the automatic push or report builds (`export.ex`, `report_to_github.ex`) | — |
 
 Every markdown/HTML render sink sanitizes (ammonia allow-list) before `raw/1`,

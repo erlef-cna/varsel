@@ -67,7 +67,10 @@ path from there to a published CVE.
    advisory thread is still where they hear what changed. The same holds for
    comments and proposals: keep anything time-sensitive on the advisory
    thread and use case comments for what should stay on record with the
-   case.
+   case. On a case linked to an advisory, a comment can be both: the comment
+   form offers to post it on the advisory as well. It posts as you where
+   your GitHub login may write there, and as the EEF CNA app naming you
+   where it may not.
 
 5. **Verify**
 
