@@ -101,7 +101,7 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTable do
       (token && [auth: {:bearer, token}])
       |> List.wrap()
       |> Client.api()
-      |> Req.merge(retry: :transient, headers: [accept: "application/vnd.github.raw+json"])
+      |> Req.merge(retry: :transient, headers: [accept: "application/vnd.github.raw"])
       |> Req.merge(Application.get_env(:varsel, :otp_versions_table, []))
       |> Req.get!(url: "/repos/erlang/otp/contents/otp_versions.table")
 

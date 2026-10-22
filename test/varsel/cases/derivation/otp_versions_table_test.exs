@@ -28,6 +28,6 @@ defmodule Varsel.Cases.Derivation.OtpVersionsTableTest do
 
     assert OtpVersionsTable.app_version("27.0", "ssh") == {:ok, "5.2"}
 
-    assert_received {:github, ["Bearer ghs_erlef_cna"], ["application/vnd.github.raw+json"]}
+    assert_received {:github, ["Bearer ghs_erlef_cna"], ["application/vnd.github.raw"]}
   end
 end
