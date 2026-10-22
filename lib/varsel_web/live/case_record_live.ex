@@ -21,6 +21,15 @@ defmodule VarselWeb.CaseRecordLive do
   alias Varsel.CVE.Advisory
   alias VarselWeb.CaseLifecycle
 
+  # The Publication tab is the one that states the validation verdict, so it
+  # is the only one that pays for it.
+  @preview_loads %{
+    cve: [:preview],
+    osv: [:preview],
+    advisory: [:preview],
+    publication: [:preview, :validation]
+  }
+
   @impl Phoenix.LiveView
   def mount(%{"id" => id}, _session, socket) do
     socket =
@@ -83,7 +92,13 @@ defmodule VarselWeb.CaseRecordLive do
 
   @impl Phoenix.LiveView
   def handle_async(:preview, {:ok, case_record}, socket) do
-    {:noreply, assign(socket, preview: case_record.preview, validation: case_record.validation)}
+    validation =
+      case case_record.validation do
+        %Ash.NotLoaded{} -> nil
+        validation -> validation
+      end
+
+    {:noreply, assign(socket, preview: case_record.preview, validation: validation)}
   end
 
   def handle_async(:preview, {:exit, reason}, socket) do
@@ -123,12 +138,13 @@ defmodule VarselWeb.CaseRecordLive do
   # The static render has no case to render yet when the mount redirected.
   defp render_preview(%{assigns: %{case_record: %{} = case_record}} = socket) do
     actor = socket.assigns.current_user
+    load = Map.fetch!(@preview_loads, socket.assigns.live_action)
 
     if connected?(socket) do
       socket
       |> assign(preview: :loading, diffs: %{})
       |> start_async(:preview, fn ->
-        Cases.get_case!(case_record.id, load: [:preview, :validation], actor: actor)
+        Cases.get_case!(case_record.id, load: load, actor: actor)
       end)
     else
       socket
