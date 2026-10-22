@@ -139,11 +139,12 @@ defmodule Varsel.Notifications.Notification do
         constraints min_length: 1
       end
 
-      change filter(expr(case_id == ^arg(:case_id) and is_nil(read_at)))
-
-      change filter(expr(kind in ^arg(:kinds))) do
-        where present(:kinds)
-      end
+      change filter(
+               expr(
+                 case_id == ^arg(:case_id) and is_nil(read_at) and
+                   (is_nil(^arg(:kinds)) or kind in ^arg(:kinds))
+               )
+             )
 
       change set_attribute(:read_at, &DateTime.utc_now/0)
     end
