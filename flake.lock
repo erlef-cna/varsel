@@ -448,11 +448,11 @@
         "vulnix": "vulnix"
       },
       "locked": {
-        "lastModified": 1792557214,
-        "narHash": "sha256-n9+GU0CMtUD67ZUGsIfgEnQFdJOP6ewvc1HjP0hlAwk=",
+        "lastModified": 1792647277,
+        "narHash": "sha256-plFhUQ5fih+sqY7bWxEVLeuCMNGwu+akZPiBGEfisVA=",
         "owner": "tiiuae",
         "repo": "sbomnix",
-        "rev": "5f7f2dc8c2b381248ea21eb92aa653bea5403141",
+        "rev": "0b1be82f3d23c54f555dff95be519cd9fa04b4b3",
         "type": "github"
       },
       "original": {
