@@ -843,9 +843,12 @@ defmodule VarselWeb.CaseComponents do
         />
       </div>
 
-      <p :if={@report.triage_notes} class="mt-2 text-sm text-base-content/70 italic">
-        {@report.triage_notes}
-      </p>
+      <section :if={@report.triage_notes} class="mt-3 border-l-2 border-base-300 pl-3">
+        <h4 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/60 mb-1">
+          Triage notes
+        </h4>
+        <.markdown content={@report.triage_notes} class="prose-xs text-base-content/80" />
+      </section>
 
       {render_slot(@inner_block)}
     </article>

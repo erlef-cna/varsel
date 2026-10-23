@@ -243,6 +243,30 @@ defmodule VarselWeb.ReportTriageLiveTest do
     assert report.triage_notes == "out of scope"
   end
 
+  test "triage notes render as Markdown", %{conn: conn, poc: poc, reporter: reporter} do
+    report = submit_report(reporter, "markdown notes")
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/reports")
+
+    form = decide(lv, report, :triage)
+    render_change(form, %{"triage_notes" => "**Recommendation:** accept"})
+
+    lv
+    |> element("#decision-notes-#{report.id} button[phx-value-mode=preview]")
+    |> render_click()
+
+    assert has_element?(lv, "#decision-notes-#{report.id} strong", "Recommendation:")
+
+    render_submit(form, %{"triage_notes" => "**Recommendation:** accept"})
+
+    assert lv
+           |> render()
+           |> LazyHTML.from_document()
+           |> LazyHTML.query("#report-#{report.id} strong")
+           |> LazyHTML.text() ==
+             "Recommendation:"
+  end
+
   describe "the people a sender named" do
     setup do
       report =

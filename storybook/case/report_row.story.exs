@@ -46,13 +46,17 @@ defmodule VarselWeb.Storybook.Case.ReportRow do
       },
       %Variation{
         id: :accepted_with_notes,
-        description: "A resolved report quiets down; triage notes follow the body.",
+        description: "A resolved report quiets down. Triage notes follow the body as Markdown.",
         attributes: %{
           report:
             report(%{
               id: "story-accepted",
               state: :accepted,
-              triage_notes: "Confirmed against 3.12.13."
+              triage_notes: """
+              **Recommendation:** accept into a new case.
+
+              **Grounds:** reproduced against `3.12.13`. Fixed in `3.12.14`.
+              """
             })
         }
       },

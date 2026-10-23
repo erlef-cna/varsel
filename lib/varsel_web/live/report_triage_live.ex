@@ -44,7 +44,8 @@ defmodule VarselWeb.ReportTriageLive do
         filter: "open",
         expanded_payloads: MapSet.new(),
         # The decision being taken, as {report_id, :accept | :triage | :reject}.
-        deciding: nil
+        deciding: nil,
+        decision_form: to_form(%{})
       )
       |> keep_live(:reports, &list_reports/1,
         subscribe: "vulnerability_report:all",
@@ -79,7 +80,17 @@ defmodule VarselWeb.ReportTriageLive do
   end
 
   def handle_event("decide", %{"report_id" => report_id, "decision" => decision}, socket) do
-    {:noreply, assign(socket, deciding: {report_id, String.to_existing_atom(decision)})}
+    {:noreply,
+     assign(socket,
+       deciding: {report_id, String.to_existing_atom(decision)},
+       decision_form: to_form(%{})
+     )}
+  end
+
+  # The Markdown preview renders what the form holds, so the form tracks
+  # every keystroke.
+  def handle_event("decision_change", params, socket) do
+    {:noreply, assign(socket, decision_form: to_form(params))}
   end
 
   def handle_event("cancel_decision", _params, socket) do
@@ -264,6 +275,7 @@ defmodule VarselWeb.ReportTriageLive do
           :for={report <- deciding_report(@reports, @deciding)}
           report={report}
           decision={elem(@deciding, 1)}
+          form={@decision_form}
           open_cases={@open_cases}
         />
       </.page_container>
@@ -308,6 +320,7 @@ defmodule VarselWeb.ReportTriageLive do
   defp queue_row(assigns) do
     ~H"""
     <.report_row
+      id={"report-#{@report.id}"}
       report={@report}
       reporter?={@triage? and reporter_known?(@report)}
       payload?={@triage?}
@@ -402,6 +415,7 @@ defmodule VarselWeb.ReportTriageLive do
 
   attr :report, :any, required: true
   attr :decision, :atom, required: true, values: [:accept, :triage, :reject]
+  attr :form, :any, required: true
   attr :open_cases, :list, required: true
 
   defp decision_modal(assigns) do
@@ -409,29 +423,37 @@ defmodule VarselWeb.ReportTriageLive do
     <.modal id={"decide-#{@report.id}"} title={decision_title(@decision)} on_cancel="cancel_decision">
       <p class="text-sm text-base-content/60 -mt-1 mb-4">{@report.summary}</p>
 
-      <form id={"decision-form-#{@report.id}"} phx-submit={to_string(@decision)} class="space-y-3">
+      <.form
+        for={@form}
+        id={"decision-form-#{@report.id}"}
+        phx-change="decision_change"
+        phx-submit={to_string(@decision)}
+        class="space-y-3"
+      >
         <input type="hidden" name="report_id" value={@report.id} />
 
         <label :if={@decision == :accept} class="block">
           <span class="label mb-1">Case</span>
           <select name="case_id" class="w-full select select-bordered select-sm">
             <option value="">New draft case from this report</option>
-            <option :for={case_record <- @open_cases} value={case_record.id}>
+            <option
+              :for={case_record <- @open_cases}
+              value={case_record.id}
+              selected={@form[:case_id].value == case_record.id}
+            >
               {case_label(case_record)}
             </option>
           </select>
         </label>
 
-        <label class="block">
-          <span class="label mb-1">{note_label(@decision)}</span>
-          <input
-            type="text"
-            name="triage_notes"
-            autocomplete="off"
-            placeholder={note_placeholder(@decision)}
-            class="w-full input input-bordered input-sm"
-          />
-        </label>
+        <.live_component
+          module={VarselWeb.MarkdownInput}
+          id={"decision-notes-#{@report.id}"}
+          field={@form[:triage_notes]}
+          label={note_label(@decision)}
+          rows={4}
+          placeholder={note_placeholder(@decision)}
+        />
 
         <div class="modal-action">
           <button type="button" phx-click="cancel_decision" class="btn btn-ghost btn-sm">
@@ -441,7 +463,7 @@ defmodule VarselWeb.ReportTriageLive do
             {decision_commit(@decision)}
           </button>
         </div>
-      </form>
+      </.form>
     </.modal>
     """
   end
