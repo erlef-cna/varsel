@@ -746,22 +746,26 @@ defmodule VarselWeb.CaseComponents do
       )
 
     ~H"""
-    <.markdown
-      :if={@body}
-      content={@body}
-      class={["prose-xs rounded-lg border border-base-300 bg-base-100 px-3 py-2", @body_class]}
-    />
+    <div :if={@body} class="codebox">
+      <.markdown
+        content={@body}
+        class={["prose-xs rounded-lg border border-base-300 bg-base-100 px-3 py-2", @body_class]}
+      />
+      <.copy_button value={@body} label="Copy report Markdown" class="codebox-copy" />
+    </div>
 
     <div :if={@json} class={[@body && "mt-2"]}>
-      <button
-        :if={not @always_open?}
-        type="button"
-        class="text-xs font-semibold text-base-content/60 hover:text-base-content cursor-pointer"
-        phx-click={@toggle}
-        phx-value-report_id={@report_id}
-      >
-        {if @expanded?, do: "Report payload ▴", else: "Report payload ▾"}
-      </button>
+      <div :if={not @always_open?} class="flex items-center gap-2">
+        <button
+          type="button"
+          class="text-xs font-semibold text-base-content/60 hover:text-base-content cursor-pointer"
+          phx-click={@toggle}
+          phx-value-report_id={@report_id}
+        >
+          {if @expanded?, do: "Report payload ▴", else: "Report payload ▾"}
+        </button>
+        <.copy_button value={pretty_json(@payload)} label="Copy report JSON" />
+      </div>
       <.code_block
         :if={@always_open? or @expanded?}
         source={pretty_json(@json)}
