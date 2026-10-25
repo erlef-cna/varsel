@@ -996,6 +996,52 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
       assert entry["repo"] == "https://git.sr.ht/~acme/acme_lib"
     end
 
+    defp commit_reference(poc, case_record, repo_url, sha) do
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{
+          vendor: "acme",
+          product: "acme_commit_lib",
+          repo_url: repo_url
+        })
+
+      Cases.add_version_event!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          event: :fixed,
+          commit_sha: sha
+        },
+        actor: poc
+      )
+
+      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      result = render!(case_record, poc)
+
+      result |> cna() |> Map.fetch!("references") |> Enum.find(&String.ends_with?(&1["url"], sha))
+    end
+
+    test "a GitLab commit link uses GitLab's /-/commit/ path, .git suffix stripped", %{
+      poc: poc,
+      forge_case: case_record
+    } do
+      sha = "2222222222222222222222222222222222222222"
+
+      reference =
+        commit_reference(poc, case_record, "https://gitlab.com/group/acme_commit_lib.git", sha)
+
+      assert reference["url"] == "https://gitlab.com/group/acme_commit_lib/-/commit/#{sha}"
+      assert reference["name"] =~ "group/acme_commit_lib"
+    end
+
+    test "an unrecognized forge gets no commit reference rather than a guessed-at one", %{
+      poc: poc,
+      forge_case: case_record
+    } do
+      sha = "3333333333333333333333333333333333333333"
+
+      refute commit_reference(poc, case_record, "https://git.sr.ht/~acme/acme_lib", sha)
+    end
+
     test "a package without a repository gets no repository channel", %{
       poc: poc,
       forge_case: case_record

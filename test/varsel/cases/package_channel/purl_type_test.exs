@@ -35,6 +35,11 @@ defmodule Varsel.Cases.PackageChannel.PurlTypeTest do
                PurlType.for_repository("https://git.example.com/team/thing")
     end
 
+    test "a generic forge's name has its .git suffix stripped too" do
+      assert {"generic", nil, "acme_lib", _qualifiers} =
+               PurlType.for_repository("https://gitlab.com/group/sub/acme_lib.git")
+    end
+
     test "no version is pinned — a channel names no single version" do
       {_type, _namespace, name, _qualifiers} =
         PurlType.for_repository("https://github.com/erlang/otp")

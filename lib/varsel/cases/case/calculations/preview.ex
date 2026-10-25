@@ -38,6 +38,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   alias Varsel.Cases.Description.AffectedSummary
   alias Varsel.Cases.Markdown
   alias Varsel.Cases.PackageChannel
+  alias Varsel.Cases.RepoUrl
   alias Varsel.Cases.VersionEvent
   alias Varsel.CVE.OsvConverter
   alias Varsel.HexPm
@@ -404,21 +405,22 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
 
   # One link per boundary commit: the introducing ones as `related`, the fixes
   # as `patch`. The erlang/otp root commit stands for "since creation" and
-  # links nothing.
+  # links nothing. A forge RepoUrl does not know how to link into (no
+  # `commit_url/2` clause) gets no reference rather than a guessed-at one.
   defp commit_links(case_record) do
     for package <- case_record.affected_packages,
         package.repo_url,
+        repo <- [RepoUrl.parse(package.repo_url)],
         event_kind <- [:introduced, :fixed],
         event <- package.version_events,
         event.event == event_kind,
         event.commit_sha,
-        not Preset.otp_root_commit?(event.commit_sha) do
-      repo_url = to_string(package.repo_url)
-
+        not Preset.otp_root_commit?(event.commit_sha),
+        url <- List.wrap(RepoUrl.commit_url(repo, event.commit_sha)) do
       render_reference(
-        "#{repo_url}/commit/#{event.commit_sha}",
+        url,
         commit_tags(event_kind, package.repo_unreachable),
-        "#{commit_label(event_kind)} #{String.slice(event.commit_sha, 0, 7)} in #{repo_label(repo_url)}"
+        "#{commit_label(event_kind)} #{String.slice(event.commit_sha, 0, 7)} in #{RepoUrl.label(repo)}"
       )
     end
   end
@@ -429,17 +431,6 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
 
   defp commit_label(:introduced), do: "Introducing commit"
   defp commit_label(:fixed), do: "Fix commit"
-
-  # `owner/repo` for a GitHub-shaped URL, the host and path otherwise.
-  defp repo_label(repo_url) do
-    case URI.parse(repo_url) do
-      %URI{path: path} when is_binary(path) and path != "" ->
-        path |> String.trim("/") |> String.replace_suffix(".git", "")
-
-      %URI{host: host} ->
-        host
-    end
-  end
 
   ## --------------------------------------------------------------- affected
 

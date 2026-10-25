@@ -32,6 +32,7 @@ defmodule Varsel.Cases.PackageChannel.PurlType do
   use Ash.Type
 
   alias Varsel.Cases.PackageChannel.VersionType
+  alias Varsel.Cases.RepoUrl
 
   # What the purl spec allows as a type, after normalization.
   @format ~r{^[a-z0-9][a-z0-9._-]*$}
@@ -173,13 +174,12 @@ defmodule Varsel.Cases.PackageChannel.PurlType do
   # An untyped forge still needs a name: the last path segment is the repository
   # ("repo" of git.example.com/team/repo.git), the host when there is no path.
   defp generic_repo_name(repo_url) do
-    %URI{host: host, path: path} = URI.parse(repo_url)
+    repo = RepoUrl.parse(repo_url)
 
-    (path || "")
-    |> String.replace_suffix(".git", "")
+    repo.path
     |> String.split("/", trim: true)
     |> List.last()
-    |> Kernel.||(host)
+    |> Kernel.||(repo.host)
   end
 
   # Types built straight from a repository rather than published to a registry.
