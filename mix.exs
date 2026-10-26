@@ -72,7 +72,7 @@ defmodule Varsel.MixProject do
     # styler:sort
     [
       {:absinthe_phoenix, "~> 2.0"},
-      {:ash, "~> 3.36.1"},
+      {:ash, "~> 3.37"},
       {:ash_admin, "~> 1.0", runtime: Mix.env() in [:dev, :test]},
       {:ash_ai, "~> 1.0"},
       # The ref is 5.0.0-rc.14 plus team-alembic/ash_authentication#1241, which

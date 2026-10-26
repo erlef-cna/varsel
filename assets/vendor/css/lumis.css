@@ -81,9 +81,15 @@
   color: #d1242f;
   background-color: #e4b7be;
 }
+.l-diff-minus-word {
+  background-color: #e7867f;
+}
 .l-diff-plus {
   color: #1a7f37;
   background-color: #b8d0bf;
+}
+.l-diff-plus-word {
+  background-color: #85b88b;
 }
 .l-function {
   color: #6639ba;
@@ -522,9 +528,15 @@
   color: #f85149;
   background-color: #2c171b;
 }
+[data-theme="dark"] .l-diff-minus-word {
+  background-color: #671010;
+}
 [data-theme="dark"] .l-diff-plus {
   color: #3fb950;
   background-color: #10231c;
+}
+[data-theme="dark"] .l-diff-plus-word {
+  background-color: #00450c;
 }
 [data-theme="dark"] .l-function {
   color: #d2a8ff;
@@ -946,9 +958,15 @@
   color: #f85149;
   background-color: #2c171b;
 }
+:root:not([data-theme="light"]) .l-diff-minus-word {
+  background-color: #671010;
+}
 :root:not([data-theme="light"]) .l-diff-plus {
   color: #3fb950;
   background-color: #10231c;
+}
+:root:not([data-theme="light"]) .l-diff-plus-word {
+  background-color: #00450c;
 }
 :root:not([data-theme="light"]) .l-function {
   color: #d2a8ff;
