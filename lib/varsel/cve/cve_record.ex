@@ -107,7 +107,12 @@ defmodule Varsel.CVE.CveRecord do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
-    notifiers: [Varsel.CVE.OsvRecord.Notifier, Varsel.Cases.Case.Notifier, Ash.Notifier.PubSub]
+    notifiers: [
+      Varsel.CVE.OsvRecord.Notifier,
+      Varsel.Cases.Case.Notifier,
+      Varsel.CVE.CveRecord.PoolNotifier,
+      Ash.Notifier.PubSub
+    ]
 
   import Ash.Expr
 

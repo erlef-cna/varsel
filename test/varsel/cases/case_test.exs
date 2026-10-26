@@ -384,6 +384,16 @@ defmodule Varsel.Cases.CaseTest do
       assert cve_record.state == :draft
     end
 
+    test "enqueues a pool top-up", %{supporter: supporter} do
+      year = Date.utc_today().year
+      Fixtures.reserved_cve_record("CVE-#{year}-11120")
+
+      case_record = Fixtures.open_case(supporter)
+      Cases.assign_case_cve_id!(case_record, %{}, actor: supporter)
+
+      assert_enqueued(worker: CveRecord.TopUpPoolWorker)
+    end
+
     test "refuses a second assignment", %{poc: poc} do
       year = Date.utc_today().year
       Fixtures.reserved_cve_record("CVE-#{year}-11112")

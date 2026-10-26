@@ -256,6 +256,23 @@ defmodule Varsel.CVE.CveRecordTest do
       assert {:error, %Invalid{errors: [%StaleRecord{}]}} =
                Ash.update(record, %{}, action: :assign, authorize?: false)
     end
+
+    test "enqueues a pool top-up that refills the taken ID" do
+      record = reserved_record("CVE-#{@year}-4001")
+
+      Ash.update!(record, %{}, action: :assign, authorize?: false)
+
+      assert_enqueued(worker: CveRecord.TopUpPoolWorker)
+
+      min_size = Application.get_env(:varsel, :cve_pool_min_size, 10)
+      stub_mitre_reserve(Enum.map(1..min_size, &"CVE-#{@year}-#{4100 + &1}"))
+
+      assert %{success: 1, failure: 0} = Oban.drain_queue(queue: :cve_pool)
+
+      assert @year
+             |> Varsel.CVE.query_to_available_cve_records(authorize?: false)
+             |> Ash.count!(authorize?: false) == min_size
+    end
   end
 
   describe "withhold" do
