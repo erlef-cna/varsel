@@ -17,13 +17,20 @@ defmodule Varsel.Cases.RepoUrl do
   @enforce_keys [:host, :path, :forge]
   defstruct [:host, :path, :forge]
 
-  @type forge :: :github | :gitlab | :unknown
+  @type forge :: :github | :gitlab | :bitbucket | :codeberg | :sourcehut | :gitee | :unknown
   @type t :: %__MODULE__{host: String.t(), path: String.t(), forge: forge()}
 
   # Forges whose commit-URL shape this module knows. Anything else is
   # :unknown rather than a guess at a path shape some other forge might not
   # use.
-  @forges %{"github.com" => :github, "gitlab.com" => :gitlab}
+  @forges %{
+    "github.com" => :github,
+    "gitlab.com" => :gitlab,
+    "bitbucket.org" => :bitbucket,
+    "codeberg.org" => :codeberg,
+    "git.sr.ht" => :sourcehut,
+    "gitee.com" => :gitee
+  }
 
   @doc "Parses an absolute `https://` repo URL into its forge and path."
   @spec parse(String.t()) :: t()
@@ -42,9 +49,21 @@ defmodule Varsel.Cases.RepoUrl do
   commit-path shape is unknown rather than guessing at one.
   """
   @spec commit_url(t(), String.t()) :: String.t() | nil
-  def commit_url(%__MODULE__{forge: :github} = repo, sha), do: "#{web_url(repo)}/commit/#{sha}"
-  def commit_url(%__MODULE__{forge: :gitlab} = repo, sha), do: "#{web_url(repo)}/-/commit/#{sha}"
-  def commit_url(%__MODULE__{forge: :unknown}, _sha), do: nil
+  def commit_url(%__MODULE__{forge: forge} = repo, sha) do
+    case forge do
+      forge when forge in [:github, :codeberg, :sourcehut, :gitee] ->
+        "#{web_url(repo)}/commit/#{sha}"
+
+      :gitlab ->
+        "#{web_url(repo)}/-/commit/#{sha}"
+
+      :bitbucket ->
+        "#{web_url(repo)}/commits/#{sha}"
+
+      :unknown ->
+        nil
+    end
+  end
 
   @doc "The repository's own page."
   @spec web_url(t()) :: String.t()

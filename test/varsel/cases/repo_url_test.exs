@@ -16,6 +16,13 @@ defmodule Varsel.Cases.RepoUrlTest do
                %RepoUrl{host: "gitlab.com", path: "group/sub/widget", forge: :gitlab}
     end
 
+    test "detects Bitbucket, Codeberg, SourceHut and Gitee too" do
+      assert %RepoUrl{forge: :bitbucket} = RepoUrl.parse("https://bitbucket.org/acme/widget")
+      assert %RepoUrl{forge: :codeberg} = RepoUrl.parse("https://codeberg.org/acme/widget")
+      assert %RepoUrl{forge: :sourcehut} = RepoUrl.parse("https://git.sr.ht/~acme/widget")
+      assert %RepoUrl{forge: :gitee} = RepoUrl.parse("https://gitee.com/acme/widget")
+    end
+
     test "an unrecognized host parses as :unknown rather than guessing a shape" do
       assert RepoUrl.parse("https://git.example.com/team/widget") ==
                %RepoUrl{host: "git.example.com", path: "team/widget", forge: :unknown}
@@ -42,6 +49,26 @@ defmodule Varsel.Cases.RepoUrlTest do
     test "GitLab commits sit under /-/commit/" do
       repo = RepoUrl.parse("https://gitlab.com/group/widget")
       assert RepoUrl.commit_url(repo, @sha) == "https://gitlab.com/group/widget/-/commit/#{@sha}"
+    end
+
+    test "Bitbucket commits sit under the plural /commits/" do
+      repo = RepoUrl.parse("https://bitbucket.org/acme/widget")
+      assert RepoUrl.commit_url(repo, @sha) == "https://bitbucket.org/acme/widget/commits/#{@sha}"
+    end
+
+    test "Codeberg commits sit under /commit/, like GitHub" do
+      repo = RepoUrl.parse("https://codeberg.org/acme/widget")
+      assert RepoUrl.commit_url(repo, @sha) == "https://codeberg.org/acme/widget/commit/#{@sha}"
+    end
+
+    test "SourceHut commits sit under /commit/, like GitHub" do
+      repo = RepoUrl.parse("https://git.sr.ht/~acme/widget")
+      assert RepoUrl.commit_url(repo, @sha) == "https://git.sr.ht/~acme/widget/commit/#{@sha}"
+    end
+
+    test "Gitee commits sit under /commit/, like GitHub" do
+      repo = RepoUrl.parse("https://gitee.com/acme/widget")
+      assert RepoUrl.commit_url(repo, @sha) == "https://gitee.com/acme/widget/commit/#{@sha}"
     end
 
     test "an unknown forge gets no commit URL" do

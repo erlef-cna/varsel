@@ -1039,7 +1039,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     } do
       sha = "3333333333333333333333333333333333333333"
 
-      refute commit_reference(poc, case_record, "https://git.sr.ht/~acme/acme_lib", sha)
+      refute commit_reference(poc, case_record, "https://example.com/team/acme_lib", sha)
     end
 
     test "a package without a repository gets no repository channel", %{
