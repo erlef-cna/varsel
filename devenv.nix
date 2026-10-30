@@ -7,6 +7,12 @@ let
   # Shared with the production container (see flake.nix / nix/container.nix)
   # so shell and image always run the same cvelint.
   cvelint = pkgs.callPackage ./nix/cvelint.nix { };
+
+  # The Sphinx man builder fails to produce the "man" output.
+  reuse = pkgs.reuse.overridePythonAttrs (old: {
+    outputs = [ "out" ];
+    dontUseSphinx = true;
+  });
 in
 {
   packages = with pkgs; [
@@ -87,7 +93,10 @@ in
       excludes = [ "config/test.exs" ];
     };
     dialyzer.enable = true;
-    reuse.enable = true;
+    reuse = {
+      enable = true;
+      package = reuse;
+    };
     zizmor.enable = true;
 
     # The built-in mix-format hook only matches `\.exs?$`, which skips the HEEX

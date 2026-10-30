@@ -28,5 +28,7 @@ defmodule Varsel.Expr.Md5 do
 
   @doc false
   def hex_digest(nil), do: nil
+  # Gravatar keys avatars by MD5. The digest is an address, not a security hash.
+  # sobelow_skip ["Crypto.WeakHash"]
   def hex_digest(value), do: :md5 |> :crypto.hash(value) |> Base.encode16(case: :lower)
 end

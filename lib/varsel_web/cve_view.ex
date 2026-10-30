@@ -620,7 +620,7 @@ defmodule VarselWeb.CveView do
   """
   @spec markdown(String.t()) :: String.t()
   def markdown(text) when is_binary(text) do
-    MDExNative.Comrak.markdown_to_html(text,
+    MDEx.to_html!(text,
       extension: [table: true, autolink: true, strikethrough: true],
       render: [hardbreaks: false, unsafe: true],
       sanitize: MDEx.Document.default_sanitize_options()
