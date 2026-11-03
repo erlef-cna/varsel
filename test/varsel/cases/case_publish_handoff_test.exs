@@ -5,6 +5,7 @@
 defmodule Varsel.Cases.CasePublishHandoffTest do
   use Varsel.DataCase, async: false
 
+  alias AshOban.Signals.Worker
   alias Varsel.CVE.MitreCveApi
   alias Varsel.Fixtures
 
@@ -83,7 +84,7 @@ defmodule Varsel.Cases.CasePublishHandoffTest do
     on_exit(fn -> Application.delete_env(:varsel, :hex_stub_packages) end)
   end
 
-  test "the record's publish enqueues mark_published for its publishing case" do
+  test "the record's publish marks its publishing case published" do
     poc = Fixtures.register_user("handoff_poc_#{System.unique_integer([:positive])}", :poc)
     record = Fixtures.reserved_cve_record(@cve_id)
     record = Ash.update!(record, %{}, action: :assign, authorize?: false)
@@ -107,9 +108,33 @@ defmodule Varsel.Cases.CasePublishHandoffTest do
 
     assert published.state == :published
 
-    jobs = all_enqueued(worker: Varsel.Cases.Case.MarkPublishedWorker)
+    assert_enqueued(worker: Worker, args: %{"listener" => "mark_published"})
 
-    assert Enum.any?(jobs, &(&1.args["primary_key"]["id"] == case_record.id)),
-           "no mark_published job enqueued for the case; enqueued: #{inspect(Enum.map(jobs, & &1.args))}"
+    Oban.drain_queue(queue: :cve_publishing, with_recursion: true)
+
+    assert Ash.reload!(case_record, authorize?: false).state == :published
+  end
+
+  test "a rolled-back publish leaves no job" do
+    record = Fixtures.reserved_cve_record(@cve_id)
+    record = Ash.Seed.update!(record, %{state: :publishing, cve_json: @cve_json})
+
+    Req.Test.stub(MitreCveApi, fn conn ->
+      Req.Test.json(conn, @published_cve_json)
+    end)
+
+    assert {:error, :rolled_back} =
+             Varsel.Repo.transaction(fn ->
+               Ash.update!(record, %{},
+                 action: :publish,
+                 authorize?: false,
+                 context: %{private: %{ash_oban?: true}},
+                 return_notifications?: true
+               )
+
+               Varsel.Repo.rollback(:rolled_back)
+             end)
+
+    refute_enqueued(worker: Worker)
   end
 end

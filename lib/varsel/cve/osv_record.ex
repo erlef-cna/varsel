@@ -20,10 +20,9 @@ defmodule Varsel.CVE.OsvRecord do
     (refreshing the enumerated hex.pm versions), or when the parent was
     rejected. There is no bulk resync.
 
-  - `Varsel.CVE.OsvRecord.Notifier` (attached to `CveRecord`) enqueues
-    both checks the moment a CVE record changes; the 15-minute schedulers are
-    the safety net for changes that produce no notification (bulk imports,
-    external MITRE edits).
+  - A CVE record that is published or rejected (`Varsel.CVE.Signals`)
+    runs both in a job right away. The 15-minute schedulers catch the
+    changes no signal reports, such as external MITRE edits.
 
   `modified_at` mirrors the document's `modified` timestamp and only
   advances when `content_hash` — the hash of the document without
@@ -49,8 +48,16 @@ defmodule Varsel.CVE.OsvRecord do
   alias Varsel.CVE.CveRecord
   alias Varsel.CVE.OsvConverter
   alias Varsel.CVE.OsvRecord.Actions.CreateMissing
+  alias Varsel.CVE.Signals
   alias Varsel.HexPm
   alias Varsel.Types.OkResult
+
+  # An executing job does not count toward uniqueness: it may have read the
+  # CVE record before the newest change committed.
+  @sync_delivery {AshOban.Signals,
+                  queue: :osv_sync,
+                  max_attempts: 3,
+                  unique: [keys: [:cve_record_id], states: [:available, :scheduled, :retryable]]}
 
   graphql do
     type :osv_record
@@ -130,6 +137,11 @@ defmodule Varsel.CVE.OsvRecord do
       raises (for the Oban retry) after all records were attempted.
       """
 
+      argument :signal, Signals.CveRecordPublished do
+        description "The publish that left a record without an OSV document, when one runs the action."
+        allow_nil? true
+      end
+
       run CreateMissing
     end
 
@@ -201,6 +213,27 @@ defmodule Varsel.CVE.OsvRecord do
   relationships do
     belongs_to :cve_record, CveRecord do
       allow_nil? false
+    end
+  end
+
+  signals_in do
+    from Signals do
+      on :cve_record_published, :sync_published,
+        action: :sync,
+        get_by: [cve_record_id: :cve_record_id],
+        delivery: @sync_delivery
+
+      on :cve_record_rejected, :sync_rejected,
+        action: :sync,
+        get_by: [cve_record_id: :cve_record_id],
+        delivery: @sync_delivery
+
+      # Unique by listener alone: one waiting run covers every record
+      # published before it starts.
+      on :cve_record_published, :create_missing,
+        delivery:
+          {AshOban.Signals,
+           queue: :osv_sync, max_attempts: 3, unique: [keys: [], states: [:available, :scheduled, :retryable]]}
     end
   end
 

@@ -156,9 +156,9 @@ defmodule Varsel.Cases.Case do
 
   oban do
     triggers do
-      # Safety net for the publish handoff: Varsel.Cases.Case.Notifier runs
-      # this trigger the moment the backing CveRecord changes; the scheduler
-      # catches anything the notifier missed (e.g. a node restart).
+      # Safety net for the publish handoff. The :cve_record_published listener
+      # runs :mark_published once the record is published; the scheduler
+      # catches a case that job could not finish.
       trigger :mark_published do
         action :mark_published
         where expr(state == :publishing and cve_record.state == :published)
@@ -188,6 +188,12 @@ defmodule Varsel.Cases.Case do
 
   actions do
     defaults [:read]
+
+    read :publishing do
+      description "Cases waiting for their CVE record to reach MITRE."
+      filter expr(state == :publishing)
+      pagination keyset?: true, required?: false
+    end
 
     read :list_cases do
       description "Lists cases in every state, most recently updated first."
@@ -852,6 +858,15 @@ defmodule Varsel.Cases.Case do
     has_one :github_advisory_link, Varsel.Cases.GitHubAdvisoryLink do
       description "The GitHub security advisory this case is linked to, if any."
       public? true
+    end
+  end
+
+  signals_in do
+    from Varsel.CVE.Signals do
+      on :cve_record_published, :mark_published,
+        read_action: :publishing,
+        get_by: [cve_record_id: :cve_record_id],
+        delivery: {AshOban.Signals, queue: :cve_publishing, max_attempts: 3, unique: [keys: [:cve_record_id]]}
     end
   end
 
