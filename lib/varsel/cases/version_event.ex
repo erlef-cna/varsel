@@ -75,6 +75,8 @@ defmodule Varsel.Cases.VersionEvent do
       primary? true
       accept [:case_id, :affected_package_id, :package_channel_id | Proposable.fields(__MODULE__)]
       validate ConsistentBoundary
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     update :edit do
@@ -83,6 +85,8 @@ defmodule Varsel.Cases.VersionEvent do
       accept Proposable.fields(__MODULE__)
       require_atomic? false
       validate ConsistentBoundary
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     destroy :remove do
@@ -90,6 +94,8 @@ defmodule Varsel.Cases.VersionEvent do
       primary? true
       require_atomic? false
       emit Signals, :proposal_target_destroyed, fields: [target_id: :id]
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     update :apply_proposal do
@@ -102,6 +108,8 @@ defmodule Varsel.Cases.VersionEvent do
       argument :proposal_id, :uuid, allow_nil?: false
       validate ConsistentBoundary
       change ApplyProposedField
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     create :apply_proposal_insert do
@@ -110,6 +118,8 @@ defmodule Varsel.Cases.VersionEvent do
 
       argument :proposal_id, :uuid, allow_nil?: false
       validate ConsistentBoundary
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     destroy :apply_proposal_delete do
@@ -121,11 +131,15 @@ defmodule Varsel.Cases.VersionEvent do
       emit Signals, :proposal_target_destroyed,
         fields: [target_id: :id],
         values: [driving_proposal_id: arg(:proposal_id)]
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
   end
 
   policies do
     policy action_type(:read) do
+      # The `:derive` trigger loads a package's facts with no actor.
+      authorize_if AshOban.Checks.AshObanInteraction
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end

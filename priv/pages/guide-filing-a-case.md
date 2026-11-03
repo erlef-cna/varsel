@@ -42,8 +42,8 @@ path from there to a published CVE.
    from those facts and the repository, so verify them: full commit SHAs,
    never trusted from the advisory.
 
-   After changing them, press **Derive the case**: derivation runs only on
-   demand, and an out-of-date one shows up as *no affected versions*. If the
+   After you change them, derivation runs again on its own within a few
+   seconds. An out-of-date derivation shows up as *no affected versions*. If the
    derived ranges disagree with the advisory, a boundary commit is wrong.
    [Affected Versions](/guide/affected-versions) covers the details and the
    odd cases: unreleased hotfixes, missing repositories, prereleases.

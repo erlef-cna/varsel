@@ -174,7 +174,8 @@ config :varsel, Oban,
     capec_sync: 1,
     osv_sync: 1,
     github_sync: 1,
-    github_comments: 1
+    github_comments: 1,
+    derivation: 2
   ],
   repo: Varsel.Repo,
   plugins: [

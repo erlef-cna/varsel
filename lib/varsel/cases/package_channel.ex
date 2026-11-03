@@ -82,6 +82,8 @@ defmodule Varsel.Cases.PackageChannel do
       description "Adds a distribution channel to a logical product."
       accept [:case_id, :affected_package_id | Proposable.fields(__MODULE__)]
       validate ConsistentWithPackage
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     update :edit do
@@ -90,6 +92,8 @@ defmodule Varsel.Cases.PackageChannel do
       accept Proposable.fields(__MODULE__)
       require_atomic? false
       validate ConsistentWithPackage
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     destroy :remove do
@@ -97,6 +101,8 @@ defmodule Varsel.Cases.PackageChannel do
       description "Removes a channel from a logical product."
       require_atomic? false
       emit Signals, :proposal_target_destroyed, fields: [target_id: :id]
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     update :apply_proposal do
@@ -109,6 +115,8 @@ defmodule Varsel.Cases.PackageChannel do
       argument :proposal_id, :uuid, allow_nil?: false
       validate ConsistentWithPackage
       change ApplyProposedField
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     create :apply_proposal_insert do
@@ -117,6 +125,8 @@ defmodule Varsel.Cases.PackageChannel do
 
       argument :proposal_id, :uuid, allow_nil?: false
       validate ConsistentWithPackage
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
 
     destroy :apply_proposal_delete do
@@ -128,11 +138,15 @@ defmodule Varsel.Cases.PackageChannel do
       emit Signals, :proposal_target_destroyed,
         fields: [target_id: :id],
         values: [driving_proposal_id: arg(:proposal_id)]
+
+      emit Signals, :package_facts_changed, fields: [affected_package_id: :affected_package_id]
     end
   end
 
   policies do
     policy action_type(:read) do
+      # The `:derive` trigger loads a package's facts with no actor.
+      authorize_if AshOban.Checks.AshObanInteraction
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end

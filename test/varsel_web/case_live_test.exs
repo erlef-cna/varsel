@@ -1164,9 +1164,13 @@ defmodule VarselWeb.CaseLiveTest do
         "issues" => ["no introduced boundary fact recorded"]
       }
 
-      package
-      |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: cache}, authorize?: false)
-      |> Ash.update!()
+      now = DateTime.utc_now()
+
+      Ash.Seed.update!(package, %{
+        derivation_cache: cache,
+        derivation_cached_at: now,
+        updated_at: now
+      })
 
       {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 

@@ -8,9 +8,10 @@ defmodule Varsel.Cases.DerivationFreshness do
   preview blockers (`Case.Calculations.Preview`) and the workspace section rail
   (`Readiness`) agree on when a package's derived version data is unusable.
 
-  Derivation is refreshed explicitly (`refresh_derivation`), never eagerly, so
-  the cache goes stale the moment a boundary fact, channel, or the package
-  itself is edited after the last refresh. A stale or empty derivation renders
+  Derivation runs a few seconds after a fact changes (the `:derive` trigger of
+  `AffectedPackage`), or at once through `refresh_derivation`. Until it has
+  run, the cache is stale: a boundary fact, channel, or the package itself
+  changed after the last derivation. A stale or empty derivation renders
   as *no affected versions* — a silently-wrong record — so both callers must
   treat it as needing attention rather than trusting the empty ranges.
 

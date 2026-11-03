@@ -433,7 +433,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
           actor: poc
         )
 
-      Ash.update!(
+      Ash.Seed.update!(
         package,
         %{
           derivation_cache: %{
@@ -445,9 +445,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
               }
             }
           }
-        },
-        action: :store_derivation,
-        authorize?: false
+        }
       )
 
       stub_update(hex_advisory())
@@ -505,7 +503,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
           )
         end
 
-      Ash.update!(
+      Ash.Seed.update!(
         package,
         %{
           derivation_cache: %{
@@ -518,9 +516,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
               extra.id => %{"github_ranges" => []}
             }
           }
-        },
-        action: :store_derivation,
-        authorize?: false
+        }
       )
 
       stub_update(advisory)

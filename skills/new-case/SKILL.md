@@ -487,8 +487,9 @@ always a wasted call.
 Once the affected package has been accepted:
 
 **Run `refresh_case_derivation` first.** The preview reads a cached derivation and does not
-recompute it, so a preview taken without refreshing shows stale or empty version data. Refresh
-after any affected-package change is accepted, every time. Pass `refresh: true` when the package
+recompute it. Derivation runs on its own a few seconds after an affected-package change is
+accepted, but a preview taken before that shows stale or empty version data. Refresh after any
+affected-package change is accepted, every time. Pass `refresh: true` when the package
 repository may have changed since the last derivation (a fix shows as unreleased but the tag
 should exist by now): it refetches the repository state before deriving.
 

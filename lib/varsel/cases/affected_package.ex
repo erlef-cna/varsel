@@ -28,10 +28,11 @@ defmodule Varsel.Cases.AffectedPackage do
     domain: Varsel.Cases,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
+    extensions: [AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel
+  alias Varsel.Cases.AffectedPackage.Changes.Derive
   alias Varsel.Cases.AffectedPackage.Changes.FromPreset
   alias Varsel.Cases.AffectedPackage.DefaultStatus
   alias Varsel.Cases.AffectedPackage.DerivationState
@@ -40,6 +41,10 @@ defmodule Varsel.Cases.AffectedPackage do
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Proposable
   alias Varsel.Cases.Signals
+
+  # Long enough to fold a run of edits, such as an accepted proposal batch,
+  # into one derivation. The trigger job stays unique while it waits.
+  @derive_debounce_seconds 5
 
   graphql do
     type :case_affected_package
@@ -73,6 +78,37 @@ defmodule Varsel.Cases.AffectedPackage do
       statement :add_search_vector_gin_index do
         up "CREATE INDEX case_affected_packages_search_vector_gin ON case_affected_packages USING GIN (search_vector)"
         down "DROP INDEX IF EXISTS case_affected_packages_search_vector_gin"
+      end
+    end
+  end
+
+  oban do
+    triggers do
+      trigger :derive do
+        action :derive
+
+        where expr(
+                derivation_state in [:never, :outdated] and
+                  case.state in [:draft, :review, :approved]
+              )
+
+        worker_module_name Varsel.Cases.AffectedPackage.DeriveWorker
+        scheduler_module_name Varsel.Cases.AffectedPackage.DeriveScheduler
+        queue :derivation
+        max_attempts 3
+        scheduler_cron "*/15 * * * *"
+
+        # A running derivation does not count: it may have read the facts
+        # before the newest write.
+        worker_opts unique: [
+                      period: :infinity,
+                      states: [:available, :scheduled, :retryable],
+                      keys: [:primary_key]
+                    ]
+
+        # Ash.Actions.Read.Relationships carries only context[:shared] into a
+        # related query, not context[:private].
+        shared_context [:ash_oban?]
       end
     end
   end
@@ -297,11 +333,17 @@ defmodule Varsel.Cases.AffectedPackage do
         values: [driving_proposal_id: arg(:proposal_id)]
     end
 
-    update :store_derivation do
-      description "Internal: caches the latest derivation result for previews."
-      accept [:derivation_cache]
+    update :derive do
+      description "Internal: derives the package from its current facts and caches the result for previews."
+      accept []
       require_atomic? false
-      change Varsel.Cases.AffectedPackage.Changes.StampDerivationCache
+      change Derive
+    end
+
+    update :note_facts_changed do
+      description "Internal: records that a channel or boundary fact of the package changed."
+      accept []
+      change set_attribute(:updated_at, &DateTime.utc_now/0)
     end
   end
 
@@ -340,8 +382,12 @@ defmodule Varsel.Cases.AffectedPackage do
       authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
     end
 
-    policy action(:store_derivation) do
+    policy action(:derive) do
       authorize_if context_equals([:private, :refresh_derivation?], true)
+    end
+
+    policy action(:note_facts_changed) do
+      authorize_if signal_in(Signals, :package_facts_changed)
     end
   end
 
@@ -352,6 +398,12 @@ defmodule Varsel.Cases.AffectedPackage do
     publish_all :create, [[:case_id]]
     publish_all :update, [[:case_id]]
     publish_all :destroy, [[:case_id]]
+  end
+
+  changes do
+    change run_oban_trigger(:derive, schedule_in: @derive_debounce_seconds),
+      on: [:create, :update],
+      where: [negate(action_is(:derive))]
   end
 
   attributes do
@@ -505,6 +557,12 @@ defmodule Varsel.Cases.AffectedPackage do
 
     has_many :version_events, Varsel.Cases.VersionEvent do
       public? true
+    end
+  end
+
+  signals_in do
+    from Signals do
+      on :package_facts_changed, :note_facts_changed, get_by: [id: :affected_package_id]
     end
   end
 

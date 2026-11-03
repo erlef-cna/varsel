@@ -21,7 +21,7 @@ Verify the case specified by the user (or the current working case). Fix any iss
 mcp__varsel__refresh_case_derivation(id: <case-id>)
 ```
 
-Refresh first: the preview renders from the *cached* derivation and does not recompute it, so a stale cache renders stale (often empty) version ranges. `refresh_case_derivation` recomputes **and** returns the freshly rendered preview, so you get the record to check from this one call — no separate `render_case_preview` needed (that tool exists too, but it would render the same cache without recomputing).
+Refresh first: the preview renders from the *cached* derivation and does not recompute it, so a stale cache renders stale (often empty) version ranges. Derivation also runs on its own a few seconds after a fact changes, but the refresh does not wait for that. `refresh_case_derivation` recomputes **and** returns the freshly rendered preview, so you get the record to check from this one call — no separate `render_case_preview` needed (that tool exists too, but it would render the same cache without recomputing).
 
 Pass `refresh: true` when the package repository may have changed since the last derivation, most often when a fix shows as unreleased and you are checking whether its tag has landed. It refetches the repository state before deriving; without it, derivation can reuse recently cached git state and miss tags pushed in the meantime.
 
