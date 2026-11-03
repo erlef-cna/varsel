@@ -10,6 +10,13 @@ defmodule Varsel.CVE.Signals do
   use Ash.Signals
 
   signals do
+    signal :report_submitted do
+      description "A vulnerability report arrived, from a reporter here or from hex.pm."
+      argument :report_id, :uuid, allow_nil?: false
+
+      argument :actor_id, :uuid, description: "The user who submitted the report, when a user did."
+    end
+
     signal :report_resolved do
       description """
       A report reached a terminal state: accepted onto a case, rejected, or

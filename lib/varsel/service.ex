@@ -30,7 +30,6 @@ defmodule Varsel.Service do
           | system_github_public_read()
           | system_hexpm_intake()
           | system_identity_claim()
-          | system_notifier()
           | system_release_console()
 
   @typedoc """
@@ -67,12 +66,6 @@ defmodule Varsel.Service do
   @type system_identity_claim() :: :identity_claim
 
   @typedoc """
-  Post-commit Ash notifiers raising `Varsel.Notifications.Event` rows for the
-  notification fan-out.
-  """
-  @type system_notifier() :: :notifier
-
-  @typedoc """
   Release tasks in `Varsel.Release`. What authorizes them is shell access to
   a fully configured server: someone who has that can already reach the
   database directly.
@@ -100,10 +93,6 @@ defmodule Varsel.Service do
   @doc "The actor the sign-in identity claim runs as."
   @spec identity_claim() :: t()
   def identity_claim, do: %__MODULE__{system: :identity_claim}
-
-  @doc "The actor a post-commit notifier loads related rows as."
-  @spec notifier() :: t()
-  def notifier, do: %__MODULE__{system: :notifier}
 
   @doc "The actor a release task runs as."
   @spec release_console() :: t()

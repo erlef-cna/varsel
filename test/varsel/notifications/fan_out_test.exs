@@ -4,18 +4,20 @@
 
 defmodule Varsel.Notifications.FanOutTest do
   @moduledoc """
-  Event -> FanOut -> Notification, per source kind: the right audience, the
+  Signal -> FanOut -> Notification, per source kind: the right audience, the
   actor excluded, preferences honoured.
   """
 
   use Varsel.DataCase, async: true
 
+  import Ash.Signals.Test
+
   alias Ash.Error.Forbidden
+  alias AshOban.Signals.Worker
   alias Varsel.Cases
   alias Varsel.CVE
   alias Varsel.Fixtures
   alias Varsel.Notifications
-  alias Varsel.Notifications.Event
   alias Varsel.Notifications.Notification
   alias Varsel.Service
   alias Varsel.Test.GitHubApi
@@ -189,15 +191,14 @@ defmodule Varsel.Notifications.FanOutTest do
       assert [%Notification{kind: :case_assigned}] = notifications_for(assignee)
     end
 
-    test "self-assignment (Case.open assigning its own opener) raises no event" do
+    test "self-assignment (Case.open assigning its own opener) notifies nobody" do
       poc = Fixtures.register_user("fanout_self_assign_poc", :poc)
 
       Fixtures.open_case(poc)
 
-      assert [] =
-               Event
-               |> Ash.Query.filter(kind == :case_assigned)
-               |> Ash.read!(authorize?: false)
+      drain()
+
+      assert [] = notifications_for(poc, :case_assigned)
     end
 
     test "the invite-claim path notifies the claimer" do
@@ -289,98 +290,90 @@ defmodule Varsel.Notifications.FanOutTest do
     end
   end
 
-  test "processed_at is stamped once the fan-out worker runs" do
-    poc = Fixtures.register_user("fanout_processed_poc", :poc)
-    other_poc = Fixtures.register_user("fanout_processed_other", :poc)
+  describe "the fan-out job" do
+    test "is enqueued with the source write and runs after it" do
+      poc = Fixtures.register_user("fanout_enqueued_poc", :poc)
+      other_poc = Fixtures.register_user("fanout_enqueued_other", :poc)
 
-    case_record = Fixtures.open_case(other_poc)
-    Cases.request_case_review!(case_record, actor: other_poc)
+      case_record = Fixtures.open_case(other_poc)
+      Cases.request_case_review!(case_record, actor: other_poc)
 
-    assert [%Event{kind: :review_requested} = event] =
-             Event
-             |> Ash.Query.filter(kind == :review_requested)
-             |> Ash.read!(authorize?: false)
+      assert_enqueued worker: Worker,
+                      queue: :default,
+                      args: %{"listener" => "notify_review_requested"}
 
-    assert is_nil(event.processed_at)
+      assert [] = notifications_for(poc)
 
-    drain()
+      drain()
 
-    reloaded = Ash.get!(Event, event.id, authorize?: false)
-    assert reloaded.processed_at
-
-    assert [%Notification{kind: :review_requested}] = notifications_for(poc, :review_requested)
-  end
-
-  test "a fan-out failure leaves processed_at nil and records no notifications" do
-    poc = Fixtures.register_user("fanout_failure_poc", :poc)
-    case_record = Fixtures.open_case(poc)
-
-    # Ash.Seed.seed! skips validations, so this can force the inconsistent
-    # row RecipientMatchesAudience would otherwise reject: a :case_assigned
-    # event (audience :recipient) with no recipient_id, which fails the
-    # fan-out's Ash.get!(User, nil, ...) lookup.
-    event =
-      Ash.Seed.seed!(Event, %{kind: :case_assigned, case_id: case_record.id, processed_at: nil})
-
-    AshOban.run_trigger(event, :fan_out)
-    result = Oban.drain_queue(queue: :default)
-
-    assert result.failure == 1
-
-    reloaded = Ash.get!(Event, event.id, authorize?: false)
-    assert is_nil(reloaded.processed_at)
-    assert [] = notifications_for(poc)
-  end
-
-  describe "recipient_id matches Kind.audience" do
-    test "a :recipient kind (case_assigned) without recipient_id is rejected" do
-      poc = Fixtures.register_user("fanout_missing_recipient_poc", :poc)
-      case_record = Fixtures.open_case(poc)
-
-      assert {:error, error} =
-               Notifications.emit_notification_event(
-                 %{kind: :case_assigned, case_id: case_record.id},
-                 actor: Service.notifier()
-               )
-
-      assert Exception.message(error) =~ "is required"
+      assert [%Notification{kind: :review_requested}] = notifications_for(poc, :review_requested)
     end
 
-    test "a non-:recipient kind (review_requested) with recipient_id is rejected" do
-      poc = Fixtures.register_user("fanout_extra_recipient_poc", :poc)
-      other = Fixtures.register_user("fanout_extra_recipient_other", :poc)
+    test "is rolled back with the source write" do
+      other_poc = Fixtures.register_user("fanout_rollback_other", :poc)
+      case_record = Fixtures.open_case(other_poc)
+
+      assert {:error, :rolled_back} =
+               Varsel.Repo.transaction(fn ->
+                 Cases.request_case_review!(case_record,
+                   actor: other_poc,
+                   return_notifications?: true
+                 )
+
+                 Varsel.Repo.rollback(:rolled_back)
+               end)
+
+      refute_enqueued worker: Worker,
+                      args: %{"listener" => "notify_review_requested"}
+    end
+
+    test "a failure fails the job and records no notifications" do
+      poc = Fixtures.register_user("fanout_failure_poc", :poc)
       case_record = Fixtures.open_case(poc)
 
-      assert {:error, error} =
-               Notifications.emit_notification_event(
-                 %{kind: :review_requested, case_id: case_record.id, recipient_id: other.id},
-                 actor: Service.notifier()
-               )
+      # Nobody holds this id, so the fan-out's lookup of the recipient raises.
+      :ok =
+        react_to_signal(
+          Cases.Signals,
+          :case_assigned,
+          %{case_id: case_record.id, user_id: Ash.UUID.generate()},
+          only: Notification
+        )
 
-      assert Exception.message(error) =~ "must be nil"
+      assert %{failure: 1} = Oban.drain_queue(queue: :default)
+      assert [] = notifications_for(poc)
     end
   end
 
-  describe "direct access to Event" do
-    test "emitting directly as a POC is Forbidden" do
-      poc = Fixtures.register_user("fanout_direct_emit_poc", :poc)
+  describe "direct access to :fan_out" do
+    setup do
+      poc = Fixtures.register_user("fanout_direct_poc", :poc)
       case_record = Fixtures.open_case(poc)
 
+      signal = %Cases.Signals.ReviewRequested{
+        signal_id: Ash.UUIDv7.generate(),
+        case_id: case_record.id
+      }
+
+      %{poc: poc, signal: signal}
+    end
+
+    test "is Forbidden to an anonymous caller", %{signal: signal} do
+      assert {:error, %Forbidden{}} = fan_out(signal, nil)
+    end
+
+    test "is Forbidden to a role-less user", %{signal: signal} do
       assert {:error, %Forbidden{}} =
-               Notifications.emit_notification_event(
-                 %{kind: :review_requested, case_id: case_record.id},
-                 actor: poc
-               )
+               fan_out(signal, Fixtures.register_user("fanout_direct_roleless"))
     end
 
-    test "Ash.can? denies :emit to a POC" do
-      poc = Fixtures.register_user("fanout_can_emit_poc", :poc)
-      refute Ash.can?({Event, :emit}, poc)
+    test "is Forbidden to a POC", %{poc: poc, signal: signal} do
+      assert {:error, %Forbidden{}} = fan_out(signal, poc)
+      refute Notifications.can_fan_out_notifications?(poc, signal)
     end
+  end
 
-    test "a POC reading events directly is Forbidden" do
-      poc = Fixtures.register_user("fanout_read_events_poc", :poc)
-      assert {:error, %Forbidden{}} = Notifications.read_notification_events(actor: poc)
-    end
+  defp fan_out(signal, actor) do
+    Notifications.fan_out_notifications(signal, actor: actor)
   end
 end

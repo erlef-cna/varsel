@@ -10,8 +10,9 @@ defmodule Varsel.Notifications.Notification do
   subject's unread row: `:record` upserts on `unread_per_subject` and bumps
   `count`. Once the row is read, the next matching event starts a new row.
 
-  `:record`, `:mark_emailed`, `:send_email` and `:send_digests` are reachable
-  only through the AshOban bypass (the fan-out, email and digest workers).
+  `:fan_out`, `:record`, `:mark_emailed`, `:send_email` and `:send_digests`
+  are reachable only through the AshOban bypass (the fan-out signal jobs and
+  the email and digest workers).
   """
 
   use Ash.Resource,
@@ -27,9 +28,14 @@ defmodule Varsel.Notifications.Notification do
   alias Varsel.Cases.Case
   alias Varsel.CVE.VulnerabilityReport
   alias Varsel.Notifications.Kind
+  alias Varsel.Notifications.Notification.Actions.FanOut
   alias Varsel.Notifications.Notification.Actions.SendDigests
   alias Varsel.Notifications.Notification.Changes.DeliverImmediate
   alias Varsel.Types.OkResult
+
+  # Ash.Actions.Read.Relationships carries only context[:shared] into a
+  # related query, not context[:private].
+  @delivery {AshOban.Signals, queue: :default, max_attempts: 3, shared_context: [:ash_oban?]}
 
   postgres do
     table "notifications"
@@ -184,6 +190,18 @@ defmodule Varsel.Notifications.Notification do
 
       run SendDigests
     end
+
+    action :fan_out do
+      description "Signal listener: records a notification for each user in the signal's audience."
+      transaction? true
+
+      argument :signal, :struct do
+        description "The signal that raised the notification. `FanOut` lists the ones it takes."
+        allow_nil? false
+      end
+
+      run FanOut
+    end
   end
 
   policies do
@@ -207,7 +225,7 @@ defmodule Varsel.Notifications.Notification do
       authorize_if expr(user_id == ^actor(:id))
     end
 
-    policy action([:record, :mark_emailed, :send_email, :send_digests]) do
+    policy action([:record, :fan_out, :mark_emailed, :send_email, :send_digests]) do
       access_type :strict
       authorize_if AshObanInteraction
     end
@@ -283,6 +301,20 @@ defmodule Varsel.Notifications.Notification do
       allow_nil? true
       public? true
       attribute_writable? true
+    end
+  end
+
+  signals_in do
+    from Varsel.CVE.Signals do
+      on :report_submitted, :notify_report_submitted, action: :fan_out, delivery: @delivery
+    end
+
+    from Varsel.Cases.Signals do
+      on :review_requested, :notify_review_requested, action: :fan_out, delivery: @delivery
+      on :case_published, :notify_case_published, action: :fan_out, delivery: @delivery
+      on :comment_posted, :notify_comment_posted, action: :fan_out, delivery: @delivery
+      on :proposal_opened, :notify_proposal_opened, action: :fan_out, delivery: @delivery
+      on :case_assigned, :notify_case_assigned, action: :fan_out, delivery: @delivery
     end
   end
 

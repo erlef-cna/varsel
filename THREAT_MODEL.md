@@ -1155,10 +1155,6 @@ number.
   accepted rather than pending. A report that a rolled-back publish still
   reached MITRE describes this, not a defect. (`cve_record.ex`,
   `mitre_cve_api.ex`)
-  `Varsel.Notifications.Notifier` raises its `Event` row *after* the source
-  action's transaction commits, so a crash in that window between commit and
-  the `Event` insert loses the notification for that action with no retry:
-  the source write stands, nobody is told. (`notifications/notifier.ex`)
 - **No allowlist on which public host `repo_url` may name.** `repo_url` is
   constrained to `https://` (rejecting exgit's `file://` local-file read and
   plaintext `http://`) and to a host that resolves to a public address —

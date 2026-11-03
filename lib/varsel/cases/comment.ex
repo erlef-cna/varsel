@@ -28,11 +28,12 @@ defmodule Varsel.Cases.Comment do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
-    notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
+    notifiers: [Ash.Notifier.PubSub]
 
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Accounts.Signals
   alias Varsel.Accounts.User
+  alias Varsel.Cases.Changes.EmitWhenWritten
   alias Varsel.Cases.Comment.Changes.CrossPostToGitHub
   alias Varsel.Cases.Comment.Changes.ResolveGitHubAuthor
   alias Varsel.Cases.Comment.Source
@@ -97,6 +98,8 @@ defmodule Varsel.Cases.Comment do
       change relate_actor(:author)
       change CrossPostToGitHub
       validate Varsel.Cases.Comment.Validations.ProposalBelongsToCase
+
+      emit Varsel.Cases.Signals, :comment_posted, values: [actor_id: actor(:id)]
     end
 
     create :sync_from_github do
@@ -128,6 +131,12 @@ defmodule Varsel.Cases.Comment do
 
       change set_attribute(:source, :github)
       change ResolveGitHubAuthor
+
+      emit Varsel.Cases.Signals, :comment_posted,
+        dynamic?: true,
+        description: "When the comment is new or its body changed."
+
+      change {EmitWhenWritten, signal: :comment_posted, fields: [:case_id]}
     end
 
     update :claim_for_identity do

@@ -17,7 +17,6 @@ defmodule Varsel.Cases.GitHubAdvisoryCommentSyncTest do
   alias Varsel.Cases.Comment
   alias Varsel.Cases.GitHubAdvisoryLink
   alias Varsel.Fixtures
-  alias Varsel.Notifications.Event
   alias Varsel.Test.GitHubApi
   alias Varsel.Test.GitHubApp
 
@@ -239,7 +238,7 @@ defmodule Varsel.Cases.GitHubAdvisoryCommentSyncTest do
         poll!(Ash.reload!(link, actor: poc))
       end
 
-      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+      Oban.drain_queue(queue: :default)
 
       assert [_one] = comments(case_record, poc)
       assert [%{count: 1}] = unread_comment_notifications(supporter)
@@ -256,7 +255,7 @@ defmodule Varsel.Cases.GitHubAdvisoryCommentSyncTest do
       stub_comments([comment(1, "Edited wording", "octocat")])
       poll!(Ash.reload!(link, actor: poc))
 
-      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+      Oban.drain_queue(queue: :default)
 
       assert [%{count: 2}] = unread_comment_notifications(supporter)
     end
@@ -271,7 +270,7 @@ defmodule Varsel.Cases.GitHubAdvisoryCommentSyncTest do
       stub_comments([comment(1, "From GitHub", "octocat")])
 
       poll!(link!(case_record, poc))
-      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+      Oban.drain_queue(queue: :default)
 
       assert [_notification] = unread_comment_notifications(supporter)
     end

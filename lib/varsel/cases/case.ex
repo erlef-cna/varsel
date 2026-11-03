@@ -52,7 +52,7 @@ defmodule Varsel.Cases.Case do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
-    notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
+    notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.AffectedPackage.DerivationState
   alias Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory
@@ -60,6 +60,7 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
   alias Varsel.Cases.Changes.AssignOpener
+  alias Varsel.Cases.Signals
   alias Varsel.Cases.Validations.CveIdAssignable
   alias Varsel.Types.TSVector
 
@@ -423,6 +424,10 @@ defmodule Varsel.Cases.Case do
       description "Marks a drafted case ready for POC review."
       accept []
       change transition_state(:review)
+
+      emit Signals, :review_requested,
+        fields: [case_id: :id],
+        values: [actor_id: actor(:id)]
     end
 
     update :request_changes do
@@ -477,6 +482,10 @@ defmodule Varsel.Cases.Case do
 
       change transition_state(:published)
       change Varsel.Cases.Case.Changes.StampPublishedAt
+
+      emit Signals, :case_published,
+        fields: [case_id: :id],
+        values: [actor_id: actor(:id)]
     end
 
     update :reopen do
@@ -505,7 +514,7 @@ defmodule Varsel.Cases.Case do
       change transition_state(:closed)
       change Varsel.Cases.Case.Changes.HandleCveRecordOnClose
 
-      emit Varsel.Cases.Signals, :case_closed, fields: [case_id: :id]
+      emit Signals, :case_closed, fields: [case_id: :id]
     end
   end
 
