@@ -6,9 +6,10 @@ defmodule Varsel.Cases.AffectedPackage.DerivationState do
   @moduledoc """
   What a product's cached derivation is worth right now.
 
-  Deriving is explicit — it walks a repository and the registries it publishes
-  to — so the version ranges on screen can be anything from authoritative to
-  actively misleading, and nothing about the ranges themselves says which.
+  Deriving walks a repository and the registries it publishes to, so it runs
+  in the background after a change. The version ranges on screen can be
+  anything from authoritative to actively misleading, and nothing about the
+  ranges themselves says which.
   This names the difference:
 
     * `:never` — nothing has run, so empty ranges mean "unknown", not "none".

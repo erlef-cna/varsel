@@ -33,6 +33,11 @@ defmodule Varsel.Cases.Signals do
       argument :field_name, :string
     end
 
+    signal :package_facts_changed do
+      description "A channel or boundary fact of an affected package was written or removed."
+      argument :affected_package_id, :uuid, allow_nil?: false
+    end
+
     signal :review_requested do
       description "A drafted case was marked ready for POC review."
       argument :case_id, :uuid, allow_nil?: false

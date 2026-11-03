@@ -42,12 +42,13 @@ on its own line and no others.
 
 ## Deriving
 
-Derivation runs when you press **Derive the case**, never on its own. The
-result goes stale the moment a boundary fact, a channel, or the package
-changes, and a stale or empty derivation renders as *no affected
-versions*. The case flags stale packages and the **Publication** tab refuses
-to publish over them; derive again after changing facts, and before trusting
-the rendered record on the **CVE** tab.
+Derivation runs on its own a few seconds after a boundary fact, a channel,
+or the package changes. Until it has run, the package is out of date, and a
+stale or empty derivation renders as *no affected versions*. The case flags
+stale packages and the **Publication** tab refuses to publish over them.
+Press **Derive the case** to derive at once. It also fetches each repository
+again, so tags pushed since the last fetch are seen. The automatic run does
+not fetch.
 
 If the derived ranges disagree with the advisory, a boundary commit is
 wrong. Investigate before trusting either side.

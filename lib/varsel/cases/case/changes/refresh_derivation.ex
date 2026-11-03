@@ -5,14 +5,13 @@
 defmodule Varsel.Cases.Case.Changes.RefreshDerivation do
   @moduledoc """
   Recomputes and caches the derivation result of every affected package of
-  the case. Runs after the (otherwise empty) update commits. With the
+  the case now, without waiting for the package's `:derive` trigger. With the
   `refresh` argument set, each package repository's cached git state is
   brought up to date with the remote first.
   """
 
   use Ash.Resource.Change
 
-  alias Varsel.Cases.Derivation
   alias Varsel.Cases.Derivation.GitBackend
 
   @impl Ash.Resource.Change
@@ -21,12 +20,11 @@ defmodule Varsel.Cases.Case.Changes.RefreshDerivation do
     refresh? = Ash.Changeset.get_argument(changeset, :refresh)
 
     Ash.Changeset.after_action(changeset, fn _changeset, case_record ->
-      loads = [affected_packages: [:channels, :version_events]]
-      loaded = Ash.load!(case_record, loads, actor: actor)
+      loaded = Ash.load!(case_record, :affected_packages, actor: actor)
 
       if refresh?, do: refresh_repos(loaded.affected_packages)
 
-      Enum.each(loaded.affected_packages, &recompute(&1, context))
+      Enum.each(loaded.affected_packages, &derive(&1, context))
 
       {:ok, case_record}
     end)
@@ -42,16 +40,12 @@ defmodule Varsel.Cases.Case.Changes.RefreshDerivation do
 
   @stamp %{private: %{refresh_derivation?: true}}
 
-  defp recompute(package, context) do
+  defp derive(package, context) do
     opts =
       context
       |> Ash.Context.to_opts()
       |> Keyword.update(:context, @stamp, &Ash.Helpers.deep_merge_maps(&1, @stamp))
 
-    {:ok, derivation} = Derivation.derive(package)
-
-    package
-    |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: derivation}, opts)
-    |> Ash.update!()
+    Varsel.Cases.derive_affected_package!(package, opts)
   end
 end

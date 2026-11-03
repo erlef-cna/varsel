@@ -389,7 +389,8 @@ defmodule Varsel.Cases do
       define :add_gleam_affected_package, action: :add_gleam
       define :edit_affected_package, action: :edit
       define :remove_affected_package, action: :remove
-      define :store_affected_package_derivation, action: :store_derivation
+      define :derive_affected_package, action: :derive
+      define :note_affected_package_facts_changed, action: :note_facts_changed
       define :apply_affected_package_proposal, action: :apply_proposal
       define :apply_affected_package_proposal_insert, action: :apply_proposal_insert
       define :apply_affected_package_proposal_insert_otp, action: :apply_proposal_insert_otp

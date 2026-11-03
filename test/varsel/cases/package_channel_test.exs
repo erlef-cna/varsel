@@ -137,11 +137,7 @@ defmodule Varsel.Cases.PackageChannelTest do
       Ash.load!(package, :derivation_state, authorize?: false).derivation_state
     end
 
-    defp derive(package) do
-      package
-      |> Ash.Changeset.for_update(:store_derivation, %{derivation_cache: %{}}, authorize?: false)
-      |> Ash.update!()
-    end
+    defp derive(package), do: Cases.derive_affected_package!(package, authorize?: false)
 
     # Backdates the whole product — its row, its channels and its facts — as if
     # the derivation had run `hours` ago and nothing had happened since. Moving
