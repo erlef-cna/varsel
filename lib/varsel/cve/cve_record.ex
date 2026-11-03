@@ -43,6 +43,33 @@ defmodule Varsel.CVE.CveRecord do
   | `pending_update` | Local edits to `cve_json` awaiting push to MITRE |
   | `rejected` | Terminal — rejected at MITRE; the ID is burned and never reused |
 
+  ## Upstream CVEs
+
+  A package can vendor code from a project outside this CNA's scope, such as
+  a C library. The CNA Operational Rules forbid this CNA to assign a CVE for
+  a vulnerability in that code: the CNA responsible for the vendored project
+  assigns it. A case may instead enrich that upstream CVE for the affected
+  packages. Such a row has `upstream` set and uses only these transitions:
+
+  ```mermaid
+  stateDiagram-v2
+    [*] --> draft : link_upstream
+    draft --> published : publish_enrichment
+    published --> published : publish_enrichment
+    draft --> rejected : sync_upstream (Oban)
+    published --> rejected : sync_upstream (Oban)
+  ```
+
+  Another CNA owns the ID, so every action that writes to MITRE or to the
+  pool refuses an upstream row. `cve_json` holds MITRE's record and stays
+  empty while the upstream ID is RESERVED. This CNA's enrichment is its ADP
+  container in that record (see `Varsel.CVE.OwnContainer`), which
+  `sync_upstream` keeps when it adopts a newer record from MITRE.
+  Search, purl lookup and CWE filters read every container of a record.
+  Titles, purls and CVSS scores in listings come from `content_container`,
+  the container this CNA authored. The publication statistics count only the
+  CVEs this CNA assigned.
+
   At MITRE `reserved`, `withheld` and `draft` are all simply `RESERVED`; the
   distinction is purely local. A `draft` returns to the open pool only through
   `release`: by hand when no case holds it, or when its case closes without
@@ -97,6 +124,9 @@ defmodule Varsel.CVE.CveRecord do
   - `:top_up_pool` / `:sync_reserved_from_mitre` / `:run_reject_stale` — Scheduled pool
     maintenance (see ADR-014).
 
+  - `:link_upstream` (create) / `:sync_upstream` / `:publish_enrichment` /
+    `:unlink_upstream` (destroy) — The upstream CVE lifecycle (see above).
+
   Published records additionally have a derived OSV document; that lifecycle lives
   entirely on `Varsel.CVE.OsvRecord`, which observes this resource through
   its own Oban triggers.
@@ -115,7 +145,11 @@ defmodule Varsel.CVE.CveRecord do
   alias Varsel.CVE.CveRecord.Actions.RefillPool
   alias Varsel.CVE.CveRecord.Actions.RunRejectStale
   alias Varsel.CVE.CveRecord.Actions.SyncReservedFromMitre
+  alias Varsel.CVE.CveRecord.Changes.LinkUpstream
+  alias Varsel.CVE.CveRecord.Changes.PutEnrichment
   alias Varsel.CVE.CveRecord.Changes.RejectAtMitre
+  alias Varsel.CVE.CveRecord.Changes.SetContentContainer
+  alias Varsel.CVE.CveRecord.Changes.SyncUpstream
   alias Varsel.CVE.CveRecord.Preparations.FilterByCwe
   alias Varsel.CVE.CveRecord.Validations.ValidCveRecord
   alias Varsel.CVE.Signals
@@ -130,7 +164,7 @@ defmodule Varsel.CVE.CveRecord do
     repo Varsel.Repo
 
     calculations_to_sql cve_id: "coalesce(cve_json->'cveMetadata'->>'cveId', reservation_json->>'cve_id')",
-                        title: "cve_json->'containers'->'cna'->>'title'",
+                        title: "content_container->>'title'",
                         reserved_at: "(reservation_json->>'reserved')::timestamptz",
                         date_published: "cve_record_published(cve_json)",
                         year: "(reservation_json->>'cve_year')::integer",
@@ -142,6 +176,37 @@ defmodule Varsel.CVE.CveRecord do
     migration_ignore_attributes [:search_vector]
 
     custom_statements do
+      # The indexes cover every container: the CNA's and each ADP's.
+      statement :cve_record_containers_fn do
+        up """
+        CREATE FUNCTION cve_record_containers(cve_json jsonb)
+        RETURNS jsonb
+        LANGUAGE sql
+        IMMUTABLE PARALLEL SAFE
+        AS $$
+          SELECT jsonb_path_query_array(cve_json, '$.containers.cna')
+            || jsonb_path_query_array(cve_json, '$.containers.adp[*]')
+        $$
+        """
+
+        down "DROP FUNCTION IF EXISTS cve_record_containers(jsonb)"
+      end
+
+      statement :cve_record_affected_fn do
+        up """
+        CREATE FUNCTION cve_record_affected(cve_json jsonb)
+        RETURNS jsonb
+        LANGUAGE sql
+        IMMUTABLE PARALLEL SAFE
+        AS $$
+          SELECT jsonb_path_query_array(cve_json, '$.containers.cna.affected[*]')
+            || jsonb_path_query_array(cve_json, '$.containers.adp[*].affected[*]')
+        $$
+        """
+
+        down "DROP FUNCTION IF EXISTS cve_record_affected(jsonb)"
+      end
+
       statement :cve_record_search_vector_fn do
         up """
         CREATE FUNCTION cve_record_search_vector(cve_json jsonb)
@@ -151,10 +216,15 @@ defmodule Varsel.CVE.CveRecord do
         AS $$
           SELECT
             setweight(to_tsvector('english', coalesce(cve_json->'cveMetadata'->>'cveId', '')), 'A') ||
-            setweight(to_tsvector('english', coalesce(cve_json->'containers'->'cna'->>'title', '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(
+              (SELECT string_agg(c->>'title', ' ')
+               FROM jsonb_array_elements(public.cve_record_containers(cve_json)) AS c),
+              ''
+            )), 'A') ||
             setweight(to_tsvector('english', coalesce(
               (SELECT string_agg(d->>'value', ' ')
-               FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'descriptions', '[]'::jsonb)) AS d),
+               FROM jsonb_array_elements(public.cve_record_containers(cve_json)) AS c,
+                    jsonb_array_elements(coalesce(c->'descriptions', '[]'::jsonb)) AS d),
               ''
             )), 'B') ||
             setweight(to_tsvector('english', coalesce(
@@ -163,17 +233,19 @@ defmodule Varsel.CVE.CveRecord do
                  coalesce(a->>'product', '') || ' ' ||
                  coalesce(a->>'vendor', ''),
                  ' ')
-               FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'affected', '[]'::jsonb)) AS a),
+               FROM jsonb_array_elements(public.cve_record_affected(cve_json)) AS a),
               ''
             )), 'B') ||
             setweight(to_tsvector('english', coalesce(
               (SELECT string_agg(w->>'value', ' ')
-               FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'workarounds', '[]'::jsonb)) AS w),
+               FROM jsonb_array_elements(public.cve_record_containers(cve_json)) AS c,
+                    jsonb_array_elements(coalesce(c->'workarounds', '[]'::jsonb)) AS w),
               ''
             )), 'C') ||
             setweight(to_tsvector('english', coalesce(
-              (SELECT string_agg(c->>'value', ' ')
-               FROM jsonb_array_elements(coalesce(cve_json->'containers'->'cna'->'configurations', '[]'::jsonb)) AS c),
+              (SELECT string_agg(g->>'value', ' ')
+               FROM jsonb_array_elements(public.cve_record_containers(cve_json)) AS c,
+                    jsonb_array_elements(coalesce(c->'configurations', '[]'::jsonb)) AS g),
               ''
             )), 'C') ||
             setweight(to_tsvector('simple', regexp_replace(cve_json::text, '[^a-zA-Z0-9\s]', ' ', 'g')), 'D')
@@ -232,7 +304,7 @@ defmodule Varsel.CVE.CveRecord do
       end
 
       statement :add_affected_gin_index do
-        up "CREATE INDEX cve_records_affected_gin ON cve_records USING GIN ((cve_json->'containers'->'cna'->'affected'))"
+        up "CREATE INDEX cve_records_affected_gin ON cve_records USING GIN (cve_record_affected(cve_json))"
         down "DROP INDEX IF EXISTS cve_records_affected_gin"
       end
 
@@ -249,9 +321,10 @@ defmodule Varsel.CVE.CveRecord do
             array_agg(DISTINCT cwe_id ORDER BY cwe_id),
             ARRAY[]::bigint[]
           )
-          FROM jsonb_array_elements(
+          FROM jsonb_array_elements(public.cve_record_containers(document)) AS container
+          CROSS JOIN LATERAL jsonb_array_elements(
             COALESCE(
-              document #> '{containers,cna,problemTypes}',
+              container -> 'problemTypes',
               '[]'::jsonb
             )
           ) AS problem_type
@@ -289,9 +362,10 @@ defmodule Varsel.CVE.CveRecord do
             array_agg(DISTINCT capec_id ORDER BY capec_id),
             ARRAY[]::bigint[]
           )
-          FROM jsonb_array_elements(
+          FROM jsonb_array_elements(public.cve_record_containers(document)) AS container
+          CROSS JOIN LATERAL jsonb_array_elements(
             COALESCE(
-              document #> '{containers,cna,impacts}',
+              container -> 'impacts',
               '[]'::jsonb
             )
           ) AS impact
@@ -313,7 +387,7 @@ defmodule Varsel.CVE.CveRecord do
   end
 
   state_machine do
-    initial_states [:reserved, :published]
+    initial_states [:reserved, :published, :draft]
     default_initial_state :reserved
 
     transitions do
@@ -327,6 +401,8 @@ defmodule Varsel.CVE.CveRecord do
       transition :push_update, from: :pending_update, to: :published
       transition :reject, from: [:reserved, :withheld, :draft, :published], to: :rejected
       transition :mark_rejected, from: [:reserved, :withheld, :draft, :published], to: :rejected
+      transition :sync_upstream, from: [:draft, :published], to: :rejected
+      transition :publish_enrichment, from: [:draft, :published], to: :published
     end
   end
 
@@ -334,7 +410,7 @@ defmodule Varsel.CVE.CveRecord do
     triggers do
       trigger :publish do
         action :publish
-        where expr(state == :publishing)
+        where expr(state == :publishing and not upstream)
         worker_module_name Varsel.CVE.CveRecord.PublishWorker
         scheduler_module_name Varsel.CVE.CveRecord.PublishScheduler
         queue :cve_publishing
@@ -345,7 +421,7 @@ defmodule Varsel.CVE.CveRecord do
 
       trigger :push_update do
         action :push_update
-        where expr(state == :pending_update)
+        where expr(state == :pending_update and not upstream)
         worker_module_name Varsel.CVE.CveRecord.PushUpdateWorker
         scheduler_module_name Varsel.CVE.CveRecord.PushUpdateScheduler
         queue :cve_publishing
@@ -356,12 +432,25 @@ defmodule Varsel.CVE.CveRecord do
 
       trigger :sync_from_mitre do
         action :sync_from_mitre
-        where expr(state == :published)
+        where expr(state == :published and not upstream)
         worker_module_name Varsel.CVE.CveRecord.SyncFromMitreWorker
         scheduler_module_name Varsel.CVE.CveRecord.SyncFromMitreScheduler
         queue :cve_publishing
         max_attempts 3
         scheduler_cron "0 2 * * *"
+        worker_opts unique: [period: :infinity, states: :incomplete, keys: [:primary_key]]
+      end
+
+      # Hourly so an embargoed upstream CVE unblocks its case soon after the
+      # upstream CNA publishes it.
+      trigger :sync_upstream do
+        action :sync_upstream
+        where expr(upstream and state in [:draft, :published])
+        worker_module_name Varsel.CVE.CveRecord.SyncUpstreamWorker
+        scheduler_module_name Varsel.CVE.CveRecord.SyncUpstreamScheduler
+        queue :cve_publishing
+        max_attempts 3
+        scheduler_cron "0 * * * *"
         worker_opts unique: [period: :infinity, states: :incomplete, keys: [:primary_key]]
       end
     end
@@ -399,6 +488,7 @@ defmodule Varsel.CVE.CveRecord do
 
   paper_trail do
     change_tracking_mode :changes_only
+    reference_source? false
     attributes_as_attributes [:state]
     ignore_attributes [:last_synced_at, :inserted_at, :updated_at, :version]
     only_when_changed? true
@@ -550,7 +640,8 @@ defmodule Varsel.CVE.CveRecord do
 
       filter expr(
                fragment(
-                 "cve_json->'containers'->'cna'->'affected' @> jsonb_build_array(jsonb_build_object('packageURL', ?::text))",
+                 "cve_record_affected(?) @> jsonb_build_array(jsonb_build_object('packageURL', ?::text))",
+                 cve_json,
                  ^arg(:purl)
                ) and state == :published
              )
@@ -602,7 +693,7 @@ defmodule Varsel.CVE.CveRecord do
       accept [:cve_json]
       upsert? true
       upsert_identity :unique_cve_id
-      upsert_fields [:state, :cve_json]
+      upsert_fields [:state, :cve_json, :content_container]
 
       # In-flight local work (:draft, :publishing, :pending_update) and
       # :rejected tombstones must never be overwritten by the import sweep.
@@ -758,6 +849,81 @@ defmodule Varsel.CVE.CveRecord do
       emit Signals, :cve_record_rejected, fields: [cve_record_id: :id]
     end
 
+    create :link_upstream do
+      description """
+      Tracks a CVE ID that another CNA assigned, so a case can publish an
+      enrichment for it. MITRE must hold the ID as RESERVED or PUBLISHED, and
+      another org must own it. The row enters :draft with `upstream` set, and
+      with its full record when the ID is PUBLISHED.
+      """
+
+      argument :cve_id, :string do
+        allow_nil? false
+        description "The upstream CVE ID, e.g. CVE-2026-111497."
+      end
+
+      validate match(:cve_id, ~r/\ACVE-\d{4}-\d{4,19}\z/) do
+        message "must be a CVE ID like CVE-2026-12345"
+      end
+
+      change LinkUpstream
+    end
+
+    update :sync_upstream do
+      description """
+      Oban worker action: refreshes an upstream CVE from MITRE. Fills
+      `cve_json` once the upstream CNA publishes, adopts newer records, and
+      moves the row to :rejected once MITRE rejects the ID.
+      """
+
+      accept []
+      require_atomic? false
+
+      change SyncUpstream
+
+      emit Signals, :cve_record_published,
+        fields: [cve_record_id: :id],
+        where: [changing(:cve_json), attribute_equals(:state, :published)]
+
+      emit Signals, :cve_record_rejected,
+        fields: [cve_record_id: :id],
+        where: [attribute_equals(:state, :rejected)]
+    end
+
+    update :publish_enrichment do
+      description """
+      Puts this CNA's ADP container into an upstream CVE's record and makes
+      the enrichment public. Refused while the upstream ID is RESERVED.
+      Nothing is sent to MITRE.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :adp_container, :map do
+        allow_nil? false
+        description "This CNA's ADP container. Its providerMetadata is set to this CNA's."
+      end
+
+      validate present(:cve_json) do
+        message "the upstream CVE is not published at MITRE yet"
+      end
+
+      change PutEnrichment
+      change transition_state(:published)
+      validate ValidCveRecord
+      emit Signals, :cve_record_published, fields: [cve_record_id: :id]
+    end
+
+    destroy :unlink_upstream do
+      description """
+      Stops tracking an upstream CVE whose enrichment was never published.
+      A published enrichment stays, like any published record.
+      """
+
+      require_atomic? false
+    end
+
     action :top_up_pool, OkResult do
       description """
       Ensures the open pool for the given year meets the configured minimum size.
@@ -817,6 +983,26 @@ defmodule Varsel.CVE.CveRecord do
       authorize_if AshStateMachine.Checks.ValidNextState
     end
 
+    # Another CNA owns an upstream ID, so MITRE and the pool are not this
+    # CNA's to write for it. Above the bypass, so it binds the Oban workers.
+    policy action([
+             :assign,
+             :release,
+             :withhold,
+             :request_publish,
+             :publish,
+             :update,
+             :push_update,
+             :reject
+           ]) do
+      forbid_if expr(upstream)
+      authorize_if always()
+    end
+
+    policy action([:sync_upstream, :publish_enrichment]) do
+      authorize_if expr(upstream)
+    end
+
     bypass AshOban.Checks.AshObanInteraction do
       authorize_if always()
     end
@@ -852,9 +1038,18 @@ defmodule Varsel.CVE.CveRecord do
              :reject,
              :import_from_mitre,
              :sync_from_mitre,
-             :sync_reserved_from_mitre
+             :sync_reserved_from_mitre,
+             :link_upstream,
+             :sync_upstream,
+             :publish_enrichment
            ]) do
       authorize_if actor_attribute_equals(:role, :poc)
+    end
+
+    # A published enrichment is public data and stays, like a published CVE.
+    policy action(:unlink_upstream) do
+      forbid_unless actor_attribute_equals(:role, :poc)
+      authorize_if expr(upstream and state == :draft)
     end
 
     # An ID a case holds returns to the pool through that case's close.
@@ -901,6 +1096,8 @@ defmodule Varsel.CVE.CveRecord do
     # No exemptions: no CveRecord update runs nested inside another update on
     # the same row (the Oban worker changes mutate the current changeset only).
     change optimistic_lock(:version), on: [:update]
+
+    change SetContentContainer, on: [:create, :update]
   end
 
   validations do
@@ -936,6 +1133,23 @@ defmodule Varsel.CVE.CveRecord do
     attribute :cve_json, :map do
       description "Full MITRE CVE record. Populated once the record is published."
       public? true
+    end
+
+    attribute :upstream, :boolean do
+      description "Another CNA assigned this CVE ID. This CNA only publishes an enrichment for it."
+      allow_nil? false
+      default false
+      public? true
+    end
+
+    attribute :content_container, :map do
+      description """
+      The container this CNA authored in `cve_json`, as `Varsel.CVE.OwnContainer.get/1`
+      finds it. The values the UI shows come from it.
+      """
+
+      writable? false
+      public? false
     end
 
     attribute :last_synced_at, :utc_datetime do
@@ -1013,7 +1227,7 @@ defmodule Varsel.CVE.CveRecord do
       public? true
     end
 
-    calculate :title, :string, expr(fragment("?->'containers'->'cna'->>'title'", cve_json)) do
+    calculate :title, :string, expr(fragment("?->>'title'", content_container)) do
       public? true
     end
 
@@ -1061,8 +1275,8 @@ defmodule Varsel.CVE.CveRecord do
               {:array, :string},
               expr(
                 fragment(
-                  "ARRAY(SELECT a->>'packageURL' FROM jsonb_array_elements(coalesce(?->'containers'->'cna'->'affected', '[]'::jsonb)) AS a WHERE a->>'packageURL' IS NOT NULL)",
-                  cve_json
+                  "ARRAY(SELECT a->>'packageURL' FROM jsonb_array_elements(coalesce(?->'affected', '[]'::jsonb)) AS a WHERE a->>'packageURL' IS NOT NULL)",
+                  content_container
                 )
               ) do
       public? true
@@ -1074,14 +1288,14 @@ defmodule Varsel.CVE.CveRecord do
                 fragment(
                   """
                   coalesce(
-                    jsonb_path_query_first(?, '$.containers.cna.metrics[*].cvssV4_0.vectorString'),
-                    jsonb_path_query_first(?, '$.containers.cna.metrics[*].cvssV3_1.vectorString'),
-                    jsonb_path_query_first(?, '$.containers.cna.metrics[*].cvssV3_0.vectorString')
+                    jsonb_path_query_first(?, '$.metrics[*].cvssV4_0.vectorString'),
+                    jsonb_path_query_first(?, '$.metrics[*].cvssV3_1.vectorString'),
+                    jsonb_path_query_first(?, '$.metrics[*].cvssV3_0.vectorString')
                   )
                   """,
-                  cve_json,
-                  cve_json,
-                  cve_json
+                  content_container,
+                  content_container,
+                  content_container
                 )
               ) do
       public? true

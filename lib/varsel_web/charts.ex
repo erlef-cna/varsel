@@ -94,7 +94,7 @@ defmodule VarselWeb.Charts do
 
     [actor: nil]
     |> CVE.query_to_list_published_cve_records()
-    |> Ash.Query.filter(date_published >= ^cutoff)
+    |> Ash.Query.filter(not upstream and date_published >= ^cutoff)
     |> Ash.count!()
   end
 

@@ -8,6 +8,7 @@ defmodule VarselWeb.CveHtmlTest do
   import Varsel.Fixtures, only: [seed_weakness: 2, seed_attack_pattern: 2]
 
   alias Varsel.CVE.CveRecord
+  alias Varsel.CVE.OwnContainer
 
   @cve_id "CVE-2025-48042"
 
@@ -787,4 +788,89 @@ defmodule VarselWeb.CveHtmlTest do
   end
 
   defp card_position(body, id), do: pos(body, ~s(id="#{id}"))
+
+  describe "an upstream CVE" do
+    @upstream_org_id "1ad8a6c6-5a6e-4a3b-9b1e-6c2b2c8e4d10"
+
+    defp publish_upstream do
+      enrichment =
+        @cve_json["containers"]["cna"]
+        |> Map.put("providerMetadata", OwnContainer.provider_metadata())
+        |> Map.put("title", "brotli heap overflow reaches the brotli hex package")
+
+      cve_json =
+        @cve_json
+        |> put_in(["cveMetadata", "assignerOrgId"], @upstream_org_id)
+        |> put_in(["containers"], %{
+          "cna" => %{
+            "providerMetadata" => %{"orgId" => @upstream_org_id},
+            "title" => "<b>Heap overflow</b> in brotli",
+            "descriptions" => [
+              %{
+                "lang" => "en",
+                "value" => "A <script>x</script> heap overflow.\n\nUPSTREAM-ONLY detail paragraph."
+              }
+            ],
+            "affected" => [%{"vendor" => "Google", "product" => "UPSTREAM-PRODUCT"}],
+            "references" => [%{"url" => "https://example.com/upstream-only"}]
+          },
+          "adp" => [enrichment]
+        })
+
+      publish(cve_json)
+    end
+
+    test "renders this CNA's enrichment with the upstream title and summary as text", %{
+      conn: conn
+    } do
+      publish_upstream()
+
+      doc =
+        conn
+        |> get(~p"/cves/#{@cve_id <> ".html"}")
+        |> html_response(200)
+        |> LazyHTML.from_document()
+
+      assert doc |> LazyHTML.query("h1") |> LazyHTML.text() =~
+               "brotli heap overflow reaches the brotli hex package"
+
+      notice = LazyHTML.query(doc, "#upstream-cve")
+      assert LazyHTML.text(notice) =~ "<b>Heap overflow</b> in brotli"
+      assert LazyHTML.text(notice) =~ "A <script>x</script> heap overflow."
+      assert notice |> LazyHTML.query("b, script") |> Enum.to_list() == []
+
+      assert notice |> LazyHTML.query("a") |> LazyHTML.attribute("href") == [
+               "https://www.cve.org/CVERecord?id=#{@cve_id}"
+             ]
+
+      page_text = LazyHTML.text(doc)
+      refute page_text =~ "UPSTREAM-ONLY"
+      refute page_text =~ "UPSTREAM-PRODUCT"
+      refute doc |> LazyHTML.query(~s(a[href="https://example.com/upstream-only"])) |> Enum.any?()
+      assert doc |> LazyHTML.query("#am-i-affected") |> Enum.any?()
+    end
+
+    test "a CVE this CNA assigned shows no upstream notice", %{conn: conn} do
+      publish()
+
+      doc =
+        conn
+        |> get(~p"/cves/#{@cve_id <> ".html"}")
+        |> html_response(200)
+        |> LazyHTML.from_document()
+
+      refute doc |> LazyHTML.query("#upstream-cve") |> Enum.any?()
+    end
+
+    test "the JSON is the whole record, the upstream CNA's container included", %{conn: conn} do
+      publish_upstream()
+
+      json = conn |> get("/cves/#{@cve_id}.json") |> json_response(200)
+
+      assert json["containers"]["cna"]["title"] == "<b>Heap overflow</b> in brotli"
+
+      assert [%{"title" => "brotli heap overflow reaches the brotli hex package"}] =
+               json["containers"]["adp"]
+    end
+  end
 end

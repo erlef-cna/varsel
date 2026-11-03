@@ -6,6 +6,7 @@ defmodule VarselWeb.FeedControllerTest do
   use VarselWeb.ConnCase, async: true
 
   alias Varsel.CVE.CveRecord
+  alias Varsel.CVE.OwnContainer
 
   @cve_id "CVE-2025-12345"
 
@@ -211,6 +212,47 @@ defmodule VarselWeb.FeedControllerTest do
 
   # Parses the document and returns every text node, which doubles as a
   # well-formedness check: malformed XML fails here rather than in a browser.
+  describe "an upstream CVE" do
+    test "its entry carries this CNA's title and summary, not the upstream CNA's", %{conn: conn} do
+      upstream_org_id = "1ad8a6c6-5a6e-4a3b-9b1e-6c2b2c8e4d10"
+
+      cve_json = %{
+        "dataType" => "CVE_RECORD",
+        "dataVersion" => "5.2",
+        "cveMetadata" => %{
+          "cveId" => @cve_id,
+          "assignerOrgId" => upstream_org_id,
+          "state" => "PUBLISHED",
+          "datePublished" => "2025-06-16T11:00:00.000Z",
+          "dateUpdated" => "2025-06-17T12:00:00.000Z"
+        },
+        "containers" => %{
+          "cna" => %{
+            "providerMetadata" => %{"orgId" => upstream_org_id},
+            "title" => "UPSTREAM-TITLE",
+            "descriptions" => [%{"lang" => "en", "value" => "UPSTREAM-DESCRIPTION"}]
+          },
+          "adp" => [
+            %{
+              "providerMetadata" => OwnContainer.provider_metadata(),
+              "title" => "EEF-TITLE",
+              "descriptions" => [%{"lang" => "en", "value" => "EEF-DESCRIPTION"}]
+            }
+          ]
+        }
+      }
+
+      Ash.create!(CveRecord, %{cve_json: cve_json}, action: :import, authorize?: false)
+
+      assert {:ok, texts} = conn |> get("/feed.rss") |> response(200) |> text_nodes()
+      text = Enum.join(texts, " ")
+
+      assert text =~ "EEF-TITLE"
+      assert text =~ "EEF-DESCRIPTION"
+      refute text =~ "UPSTREAM-"
+    end
+  end
+
   defp text_nodes(xml) do
     with {:ok, tree} <- Saxy.SimpleForm.parse_string(xml) do
       {:ok, collect_text(tree)}

@@ -644,11 +644,16 @@ imported prose rendered unsanitized is `VALID`; a finding that MITRE *could
 alter* a record is `OUT-OF-MODEL: adversary-not-in-scope` (§7), since MITRE is
 a trusted integration partner.
 
+The record of an **upstream CVE** also carries the container of another CNA,
+which neither Varsel nor MITRE wrote. A finding that its text renders
+unescaped or unsanitized is `VALID`.
+
 | Output | Expected sink | Sink-safe? | If not, caller must |
 | --- | --- | --- | --- |
 | Case markdown → on-site HTML (`Markdown.to_display_html`) | Browser HTML | **Yes** — rendered `unsafe: true` then run through the `sanitize` (ammonia) allow-list, so scripts/handlers/dangerous URLs are stripped while safe author HTML survives (`markdown.ex`) | — (sanitized) |
 | Case markdown → `supportingMedia` text/html in published CVE (`Markdown.to_html`) | MITRE + downstream CVE consumers | Yes — same sanitized Comrak output | — |
 | CVE record prose → on-site HTML (`cve_view.ex` `prose/1`) | Browser HTML | **Yes** — `markdown/1` sanitizes its output; a `supportingMedia` HTML value (may be MITRE-imported) is run through `MDExNative.Ammonia.safe_html/1` before render (`cve_view.ex`) | — (sanitized) |
+| An upstream CNA's title and summary → the CVE page (`upstream_cve_notice/1`) | Browser HTML | **Yes** — HEEx text interpolation, so markup renders inert; no `raw/1` (`cve_view.ex`) | — |
 | CVE JSON / OSV JSON | Machine consumers, cross-origin | N/A (data) — CORP dropped deliberately for these (`public_resource.ex`) | — |
 | Atom/RSS feeds | Feed readers, cross-origin | **Yes** — built as an XML tree and encoded (`Saxy`), never concatenated, so every value is escaped as text or as an attribute by construction. Links are `~p` routes resolved against the endpoint, so they name the configured host and the request's `Host` never reaches the document (`feed_controller.ex`) | — |
 | Sitemap XML | Crawlers | **Yes** — same as the feeds: an XML tree, encoded (`Saxy`). The host is the configured `Endpoint.url()`, not the request's (`sitemap_controller.ex`) | — |
@@ -806,12 +811,13 @@ none of the authorization properties, by construction rather than by defect.
 
 2. **Publish authority is POC-only and cannot be reached below POC.**
    Only a POC can move a CVE toward MITRE (`request_publish`, `update`,
-   `reject`) or a case toward publication (`approve`, `publish`). The Oban
-   worker actions that actually call MITRE (`:publish`, `:push_update`,
-   `mark_published`) are reachable *only* through the AshOban bypass — never
-   from a request.
-   - *Violation symptom:* a non-POC causes a write to MITRE, or an
-     un-approved case reaches `publishing`.
+   `reject`), publish the enrichment of an upstream CVE
+   (`publish_enrichment`), or move a case toward publication (`approve`,
+   `publish`). The Oban worker actions that actually call MITRE (`:publish`,
+   `:push_update`, `mark_published`) are reachable *only* through the AshOban
+   bypass — never from a request.
+   - *Violation symptom:* a non-POC causes a write to MITRE or publishes an
+     enrichment, or an un-approved case reaches `publishing`.
    - *Severity:* `critical`.
    - (`cve_record.ex`, `case.ex`)
 

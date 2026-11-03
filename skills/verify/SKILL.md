@@ -27,6 +27,8 @@ Pass `refresh: true` when the package repository may have changed since the last
 
 The returned `preview` holds the full CVE record (`preview.cve_record`, using a `CVE-0000-0000` placeholder until an ID is assigned) and **publish blockers** (`preview.blockers`). Any publish blocker is an automatic FAIL — resolve it before anything else. Use the CNA container at `preview.cve_record.containers.cna` as the record under test for the convention checklist.
 
+**Upstream CVEs.** When the case links an upstream CVE (`upstream_cve: true`), another CNA assigned the ID, and `containers.cna` is that CNA's container: never check or propose changes to it. The record under test is then the entry in `preview.cve_record.containers.adp` whose `providerMetadata.orgId` is this CNA's. It follows the same conventions, except that it has no `dateAssigned`. Validation of an upstream record checks the CVE schema only, so the convention checklist is the only check of the EEF rules: work through it in full. While the upstream ID is RESERVED, `containers.cna` is a stand-in and the preview carries a blocker for it. That blocker is expected during an embargo: report it, but do not count it as a defect of the case.
+
 A `cannot resolve versions` blocker means git could not be reached. Retry with `refresh: true`
 first. When the repository is gone for good (deleted or taken private), the package needs
 `repo_unreachable: true` and a `version` on every boundary, which derives the ranges from those

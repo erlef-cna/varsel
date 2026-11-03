@@ -15,11 +15,14 @@ defmodule VarselWeb.CaseRecordLive do
   use VarselWeb, :live_view
 
   import VarselWeb.CaseComponents, only: [case_header: 1, validation_checklist: 1]
+  import VarselWeb.CveView, only: [upstream_cve_notice: 1]
 
   alias Varsel.Cases
   alias Varsel.Cases.Case.Calculations.Preview.Diff
   alias Varsel.CVE.Advisory
+  alias Varsel.CVE.OwnContainer
   alias VarselWeb.CaseLifecycle
+  alias VarselWeb.CveView
 
   # The Publication tab is the one that states the validation verdict, so it
   # is the only one that pays for it.
@@ -163,15 +166,15 @@ defmodule VarselWeb.CaseRecordLive do
       # as authorized as the page load.
       case_record =
         Cases.get_case!(case_record.id,
-          load: [:preview, :published_cna, :published_osv],
+          load: [:preview, :published_container, :published_osv],
           actor: actor
         )
 
       case tab do
         :cve ->
           Diff.lines(
-            case_record.published_cna || %{},
-            get_in(case_record.preview.cve_record, ["containers", "cna"])
+            case_record.published_container || %{},
+            OwnContainer.get(case_record.preview.cve_record)
           )
 
         :osv ->
@@ -180,12 +183,12 @@ defmodule VarselWeb.CaseRecordLive do
     end)
   end
 
-  # An amendment: the backing CVE record already carries a published CNA
+  # An amendment: the backing CVE record already carries this CNA's published
   # container, so publishing pushes an update and a diff against it is
   # meaningful.
-  defp amendment?(case_record) do
-    match?(%{cve_record: %{cve_json: %{"containers" => %{"cna" => %{}}}}}, case_record)
-  end
+  defp amendment?(%{cve_record: %{cve_json: %{} = cve_json}}), do: OwnContainer.get(cve_json) != nil
+
+  defp amendment?(_case_record), do: false
 
   # The +/- prefixes make the joined text valid diff syntax, so the
   # code_block's Lumis "diff" grammar colors the lines.
@@ -193,6 +196,12 @@ defmodule VarselWeb.CaseRecordLive do
   defp diff_line_text({:ins, line}), do: "+ " <> line
   defp diff_line_text({:eq, line}), do: "  " <> line
   defp diff_line_text({:skip, count}), do: "  ⋯ #{count} unchanged lines"
+
+  # The stand-in record of a RESERVED upstream CVE carries no upstream text.
+  defp upstream_summary(%{upstream_cve_reserved: false}, %{cve_record: %{} = cve_record}),
+    do: CveView.upstream_summary(cve_record) || %{}
+
+  defp upstream_summary(_case_record, _preview), do: %{}
 
   # Jason, not the stdlib JSON module: only Jason has a pretty printer.
   defp pretty_json(value), do: Jason.encode!(value, pretty: true)
@@ -224,6 +233,23 @@ defmodule VarselWeb.CaseRecordLive do
       </.case_header>
 
       <.page_container>
+        <.upstream_cve_notice
+          :if={@live_action == :cve and @case_record.upstream_cve}
+          id="upstream-cve"
+          class="mb-4"
+          cve_id={@case_record.cve_id}
+          {upstream_summary(@case_record, @preview)}
+        >
+          <span :if={@case_record.upstream_cve_reserved}>
+            The ID is still RESERVED at MITRE, so the record below holds a stand-in for the
+            upstream CNA's container. Publishing waits until its CNA publishes the CVE.
+          </span>
+          <span :if={!@case_record.upstream_cve_reserved}>
+            This CNA's container is the ADP entry with its orgId in containers.adp.
+            Publishing puts it into the stored record and sends nothing to MITRE.
+          </span>
+        </.upstream_cve_notice>
+
         <.record_pane
           :if={@live_action == :cve}
           tab={:cve}
@@ -251,7 +277,7 @@ defmodule VarselWeb.CaseRecordLive do
         <.advisory_pane
           :if={@live_action == :advisory}
           loading={@preview == :loading}
-          cna={if(is_map(@preview), do: get_in(@preview.cve_record, ["containers", "cna"]))}
+          container={if(is_map(@preview), do: OwnContainer.get(@preview.cve_record))}
           included={@advisory_sections}
         />
 
@@ -342,12 +368,16 @@ defmodule VarselWeb.CaseRecordLive do
   end
 
   attr :loading, :boolean, required: true
-  attr :cna, :map, required: true, doc: "the rendered CNA container, nil while absent"
+  attr :container, :map, required: true, doc: "this CNA's rendered container, nil while absent"
   attr :included, :list, required: true, doc: "the Advisory section keys to render"
 
   defp advisory_pane(assigns) do
     assigns =
-      assign(assigns, :markdown, assigns.cna && Advisory.render(assigns.cna, assigns.included))
+      assign(
+        assigns,
+        :markdown,
+        assigns.container && Advisory.render(assigns.container, assigns.included)
+      )
 
     ~H"""
     <div class="space-y-3">

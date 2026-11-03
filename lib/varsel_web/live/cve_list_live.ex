@@ -448,7 +448,7 @@ defmodule VarselWeb.CveListLive do
     CveRecord
     |> Ash.Query.load(loads)
     |> Ash.Query.filter(state in ^@table_states)
-    |> Ash.Query.select([:id, :state, :version])
+    |> Ash.Query.select([:id, :state, :version, :upstream])
     |> filter_state(filter)
     |> filter_search(query)
   end
@@ -517,7 +517,8 @@ defmodule VarselWeb.CveListLive do
   # `:case` is only loaded for an actor who may read cases, so an unloaded
   # value means "not for you to know", not "no case" (see records_query/3).
   defp adoptable?(record) do
-    match?(nil, Map.get(record, :case)) and record.state in @adoptable_states
+    match?(nil, Map.get(record, :case)) and record.state in @adoptable_states and
+      record.upstream == false
   end
 
   # The `:release` policy is the authority. Asked in two halves so the table
@@ -661,6 +662,13 @@ defmodule VarselWeb.CveListLive do
                 >
                   <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
                     {record.cve_id || "—"}
+                    <span
+                      :if={record.upstream == true}
+                      class="badge badge-info badge-xs mt-1 flex w-fit"
+                      title="Another CNA assigned this CVE. The EEF CNA publishes an enrichment."
+                    >
+                      upstream
+                    </span>
                   </td>
                   <td>
                     <.link

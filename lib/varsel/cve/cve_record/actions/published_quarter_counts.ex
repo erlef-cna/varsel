@@ -7,12 +7,15 @@ defmodule Varsel.CVE.CveRecord.Actions.PublishedQuarterCounts do
   Counts published CVE records per quarter of publication.
 
   Groups the `:list_published` query in SQL, so the corpus stays in the
-  database and one row per quarter comes back.
+  database and one row per quarter comes back. Only CVEs this CNA assigned
+  count, so enrichments of upstream CVEs are left out.
   """
 
   use Ash.Resource.Actions.Implementation
 
   import Ecto.Query
+
+  require Ash.Query
 
   @impl Ash.Resource.Actions.Implementation
   def run(_input, _opts, context) do
@@ -21,6 +24,7 @@ defmodule Varsel.CVE.CveRecord.Actions.PublishedQuarterCounts do
     with {:ok, ecto_query} <-
            opts
            |> Varsel.CVE.query_to_list_published_cve_records()
+           |> Ash.Query.filter(not upstream)
            |> Ash.Query.data_layer_query() do
       {:ok, count_by_quarter(ecto_query)}
     end

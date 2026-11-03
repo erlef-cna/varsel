@@ -16,6 +16,13 @@ defmodule Varsel.Cases.Case do
   `Varsel.CVE.CveRecord` stays the MITRE-facing shell: a case renders to a CNA
   container and hands it to the existing publish machinery.
 
+  A case about a vulnerability in code that a package vendors from a project
+  outside this CNA's scope links the CVE that the project's CNA assigned
+  (`link_upstream_cve`), because the CNA Operational Rules forbid this CNA to
+  assign one. Such a case renders the same container as this CNA's
+  ADP container in the upstream CVE's record. Publishing puts it into the
+  stored record and writes nothing to MITRE.
+
   ## State machine
 
   ```mermaid
@@ -466,6 +473,26 @@ defmodule Varsel.Cases.Case do
       change Varsel.Cases.Case.Changes.AssignCveRecord
     end
 
+    update :link_upstream_cve do
+      description """
+      Links the case to a CVE ID that another CNA assigned, for an issue this
+      CNA must not assign a CVE for. Publishing the case then publishes an
+      enrichment of that CVE, not a CVE of its own. Takes the place of
+      assign_cve_id.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :cve_id, :string do
+        allow_nil? false
+        description "The upstream CVE ID, e.g. CVE-2026-111497."
+      end
+
+      validate CveIdAssignable
+      change Varsel.Cases.Case.Changes.LinkUpstreamCve
+    end
+
     update :publish do
       description """
       Renders the case to a CNA container, validates it, and hands it to the
@@ -508,8 +535,9 @@ defmodule Varsel.Cases.Case do
       description """
       Terminally closes a case that will not (or no longer) result in a
       published CVE. A drafted CVE ID returns to the pool, unless the caller
-      rejects it at MITRE (reject_cve_id: true). A published record stays
-      linked to the case.
+      rejects it at MITRE (reject_cve_id: true). An upstream CVE whose
+      enrichment was never published is unlinked, and cannot be rejected. A
+      published record stays linked to the case.
       """
 
       accept [:closed_reason]
@@ -621,6 +649,7 @@ defmodule Varsel.Cases.Case do
     # CNA's own responsibility and stays with POCs.
     policy action([
              :adopt_cve_record,
+             :link_upstream_cve,
              :request_changes,
              :approve,
              :publish,
@@ -876,6 +905,23 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
+    calculate :upstream_cve, :boolean, expr(cve_record.upstream == true) do
+      description "Another CNA assigned the case's CVE ID. The case publishes an enrichment of it."
+      public? true
+    end
+
+    calculate :upstream_cve_reserved,
+              :boolean,
+              expr(cve_record.upstream == true and is_nil(cve_record.cve_json)) do
+      description "The upstream CVE ID is still RESERVED at MITRE, so the enrichment cannot be published yet."
+      public? true
+    end
+
+    calculate :cve_json, :map, expr(cve_record.cve_json) do
+      description "The stored CVE record of the assigned CVE ID, if any."
+      public? true
+    end
+
     # websearch_to_tsquery tolerates arbitrary input without raising, and
     # honors the OR and quoted-phrase operators a caller may type.
     #
@@ -1010,17 +1056,19 @@ defmodule Varsel.Cases.Case do
       filterable? false
 
       description """
-      The schema/cvelint/hex validation result (`valid` + `errors`) for the
-      case's rendered record. Loadable only on a case the actor may read.
+      The validation result (`valid` + `errors`) for the case's rendered
+      record: schema, cvelint, hex and EEF checks, or only the schema for an
+      upstream CVE. Loadable only on a case the actor may read.
       """
     end
 
-    calculate :published_cna, :map, Varsel.Cases.Case.Calculations.PublishedCna do
+    calculate :published_container, :map, Varsel.Cases.Case.Calculations.PublishedContainer do
       filterable? false
 
       description """
-      The CNA container currently published on the case's CVE record, or nil
-      when the case was never published — for diffing against :preview.
+      This CNA's container currently published on the case's CVE record (the
+      ADP container for an upstream CVE), or nil when the case was never
+      published — for diffing against :preview.
       """
     end
 

@@ -9,13 +9,13 @@ SPDX-License-Identifier: Apache-2.0
   socket={@conn}
 >
   <% cve_id = @cve["cveMetadata"]["cveId"] %>
-  <% cvss = best_cvss(@cna) %>
-  <% description = prose(@cna["descriptions"]) %>
-  <% weaknesses = cwe_descriptions(@cna) %>
-  <% attack_patterns = capec_items(@cna) %>
-  <% affected = @cna["affected"] || [] %>
-  <% references = visible_references(@cna, cve_id) %>
-  <% sections = sections(@cna, cve_id, description, cvss) %>
+  <% cvss = best_cvss(@container) %>
+  <% description = prose(@container["descriptions"]) %>
+  <% weaknesses = cwe_descriptions(@container) %>
+  <% attack_patterns = capec_items(@container) %>
+  <% affected = @container["affected"] || [] %>
+  <% references = visible_references(@container, cve_id) %>
+  <% sections = sections(@container, cve_id, description, cvss) %>
   <% present = Map.new(sections, &{&1.id, &1.present?}) %>
 
   <.page_header>
@@ -24,7 +24,7 @@ SPDX-License-Identifier: Apache-2.0
         @cve["cveMetadata"]["dateUpdated"]
       )}
     </:eyebrow>
-    <:title>{wrap_title(@cna["title"] || cve_id)}</:title>
+    <:title>{wrap_title(@container["title"] || cve_id)}</:title>
     <:meta>
       <div class="mt-2.5 flex flex-wrap items-center gap-2">
         <.severity_chip score={cvss && cvss["baseScore"] / 1} variant={:full} />
@@ -59,6 +59,19 @@ SPDX-License-Identifier: Apache-2.0
     </:right>
 
     <div class="flex min-w-0 flex-col gap-4">
+      <.upstream_cve_notice
+        :if={@upstream}
+        id="upstream-cve"
+        cve_id={cve_id}
+        title={@upstream.title}
+        summary={@upstream.summary}
+      >
+        The vulnerability is in code that packages in the Erlang ecosystem vendor
+        from a project outside the EEF CNA's scope, so that project's CNA assigned
+        the CVE. This page shows the EEF CNA's enrichment of {cve_id}: the affected
+        packages and the analysis below.
+      </.upstream_cve_notice>
+
       <.panel :if={present["am-i-affected"]} id="am-i-affected">
         <:title>Am I affected?</:title>
         {live_render(@conn, VarselWeb.AffectedCheckerLive,
@@ -75,14 +88,14 @@ SPDX-License-Identifier: Apache-2.0
       <.panel :if={present["technical-analysis"]} id="technical-analysis">
         <:title>Technical analysis</:title>
         <div class="prose max-w-none text-sm">
-          {prose(@cna["x_technicalAnalysis"])}
+          {prose(@container["x_technicalAnalysis"])}
         </div>
       </.panel>
 
       <.panel :if={present["proof-of-concept"]} id="proof-of-concept">
         <:title>Proof of concept</:title>
         <div class="prose max-w-none text-sm">
-          {prose(@cna["x_proofOfConcept"])}
+          {prose(@container["x_proofOfConcept"])}
         </div>
       </.panel>
 
@@ -202,21 +215,21 @@ SPDX-License-Identifier: Apache-2.0
       <.panel :if={present["workarounds"]} id="workarounds">
         <:title>Workarounds</:title>
         <div class="prose max-w-none text-sm">
-          {prose(@cna["workarounds"])}
+          {prose(@container["workarounds"])}
         </div>
       </.panel>
 
       <.panel :if={present["configurations"]} id="configurations">
         <:title>Configurations</:title>
         <div class="prose max-w-none text-sm">
-          {prose(@cna["configurations"])}
+          {prose(@container["configurations"])}
         </div>
       </.panel>
 
       <.panel :if={present["solutions"]} id="solutions">
         <:title>Solutions</:title>
         <div class="prose max-w-none text-sm">
-          {prose(@cna["solutions"])}
+          {prose(@container["solutions"])}
         </div>
       </.panel>
 
@@ -237,7 +250,7 @@ SPDX-License-Identifier: Apache-2.0
         <:title>Credits</:title>
         <div class="flex flex-col gap-1.5 text-sm">
           <div
-            :for={{value, types} <- credit_roles(@cna["credits"])}
+            :for={{value, types} <- credit_roles(@container["credits"])}
             class="flex items-center gap-2"
           >
             <span>{value}</span>

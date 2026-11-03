@@ -26,6 +26,7 @@ defmodule Varsel.Cases.Case.Calculations.DerivedReferences do
   alias Ash.Resource.Calculation
   alias Varsel.Cases.Case.Calculations.Preview
   alias Varsel.Cases.Case.DerivedReference
+  alias Varsel.CVE.OwnContainer
 
   @impl Calculation
   def load(_query, _opts, _context), do: [:preview, :references]
@@ -38,8 +39,8 @@ defmodule Varsel.Cases.Case.Calculations.DerivedReferences do
     Enum.map(cases, fn %{preview: %Preview.Result{cve_record: cve_record}, references: stored} ->
       stored_urls = MapSet.new(stored, & &1.url)
 
-      cve_record
-      |> get_in(["containers", "cna", "references"])
+      (OwnContainer.get(cve_record) || %{})
+      |> Map.get("references")
       |> List.wrap()
       |> Enum.reject(&MapSet.member?(stored_urls, &1["url"]))
       |> Enum.map(&%DerivedReference{url: &1["url"], tags: &1["tags"] || [], name: &1["name"]})

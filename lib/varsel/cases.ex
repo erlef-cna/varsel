@@ -251,6 +251,7 @@ defmodule Varsel.Cases do
       update Case, :request_case_changes, :request_changes
       update Case, :approve_case, :approve
       update Case, :assign_case_cve_id, :assign_cve_id
+      update Case, :link_case_upstream_cve, :link_upstream_cve
       update Case, :publish_case, :publish
       update Case, :reopen_case, :reopen
       update Case, :close_case, :close
@@ -343,6 +344,7 @@ defmodule Varsel.Cases do
       define :request_case_changes, action: :request_changes
       define :approve_case, action: :approve
       define :assign_case_cve_id, action: :assign_cve_id
+      define :link_case_upstream_cve, action: :link_upstream_cve, args: [:cve_id]
       define :publish_case, action: :publish
       define :mark_case_published, action: :mark_published
       define :list_publishing_cases, action: :publishing

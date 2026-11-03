@@ -41,6 +41,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   alias Varsel.Cases.RepoUrl
   alias Varsel.Cases.VersionEvent
   alias Varsel.CVE.OsvConverter
+  alias Varsel.CVE.OwnContainer
   alias Varsel.HexPm
 
   # The relationship tree the render reads. Calculation loads are strict — a
@@ -52,6 +53,9 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     all_fields(query.resource) ++
       [
         :cve_id,
+        :upstream_cve,
+        :upstream_cve_reserved,
+        :cve_json,
         references: all_fields(CaseReference),
         github_advisory_link: [:html_url, :title, :ghsa_id],
         credits: all_fields(CaseCredit),
@@ -83,7 +87,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     {affected, affected_overrides, affected_blockers} = affected(case_record, derivations)
 
     cna =
-      %{"providerMetadata" => provider_metadata()}
+      %{"providerMetadata" => OwnContainer.provider_metadata()}
       |> put_present("title", case_record.title)
       |> put_prose("descriptions", description_markdown(case_record.description_md, affected))
       |> put_prose("workarounds", case_record.workarounds_md)
@@ -94,7 +98,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       |> Map.put("source", %{
         "discovery" => case_record.discovery |> to_string() |> String.upcase()
       })
-      |> put_present("dateAssigned", format_time(case_record.cve_assigned_at))
+      |> put_present("dateAssigned", date_assigned(case_record))
       |> put_present("datePublic", format_time(case_record.date_public))
       |> put_timeline(case_record.timeline)
       |> put_metrics(case_record.cvss_v4)
@@ -118,21 +122,22 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       cve_record: cve_record,
       overrides_applied: affected_overrides ++ cna_override_applied,
       # Derivation-level problems: pending fixes and git/channel issues.
-      blockers: affected_blockers,
+      blockers: upstream_blockers(case_record) ++ affected_blockers,
       osv_record: osv_record,
       osv_status: osv_status
     }
   end
 
   # The converter expects a record as MITRE returns it, so the preview stamps
-  # the datePublished MITRE would. A cna_override can hand it any shape, and
-  # the schema validator reports that; here it only costs the OSV document.
+  # the datePublished MITRE would, unless MITRE's record of an upstream CVE
+  # already holds it. A cna_override can hand it any shape, and the schema
+  # validator reports that; here it only costs the OSV document.
   defp osv(cve_record, date_public) do
-    published_at = date_public || DateTime.utc_now()
+    published_at = DateTime.to_iso8601(date_public || DateTime.utc_now())
 
     with {:ok, osv} <-
            cve_record
-           |> put_in(["cveMetadata", "datePublished"], DateTime.to_iso8601(published_at))
+           |> Map.update!("cveMetadata", &Map.put_new(&1, "datePublished", published_at))
            |> OsvConverter.convert(),
          {:ok, osv} <- OsvConverter.enumerate_affected_versions(osv, &HexPm.package_versions/1) do
       {osv, nil}
@@ -144,6 +149,17 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     error -> {nil, "OSV derivation failed: " <> Exception.message(error)}
   end
 
+  # This CNA did not assign an upstream CVE ID, and an ADP container has no
+  # dateAssigned.
+  defp date_assigned(%{upstream_cve: true}), do: nil
+  defp date_assigned(case_record), do: format_time(case_record.cve_assigned_at)
+
+  defp upstream_blockers(%{upstream_cve_reserved: true}) do
+    ["the upstream CVE is still RESERVED at MITRE; publish once its CNA has published it"]
+  end
+
+  defp upstream_blockers(_case_record), do: []
+
   # Cached derivation per affected package, keyed by id. A nil or stale cache
   # renders as empty ranges; the staleness/missing-versions blockers in
   # package_blockers/2 (via DerivationFreshness) catch that silent emptiness.
@@ -153,18 +169,51 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     end)
   end
 
-  # Wraps the CNA container into the full CVE 5.2 record.
-  defp cve_record(case_record, cna) do
+  # Puts this CNA's container into the full CVE 5.2 record: the CNA container
+  # of its own CVE, or its ADP container in an upstream CVE's record.
+  defp cve_record(%{upstream_cve: true} = case_record, container) do
+    OwnContainer.put(
+      case_record.cve_json || reserved_upstream_record(case_record.cve_id),
+      container
+    )
+  end
+
+  defp cve_record(case_record, container) do
     %{
       "dataType" => "CVE_RECORD",
       "dataVersion" => "5.2",
       "cveMetadata" => %{
         "cveId" => case_record.cve_id || @placeholder_cve_id,
-        "assignerOrgId" => Application.fetch_env!(:varsel, :cna_org_id),
+        "assignerOrgId" => OwnContainer.org_id(),
         "assignerShortName" => Application.get_env(:varsel, :cna_short_name, "EEF"),
         "state" => "PUBLISHED"
       },
-      "containers" => %{"cna" => cna}
+      "containers" => %{"cna" => container}
+    }
+  end
+
+  # MITRE has no record of a RESERVED upstream CVE. This stand-in passes the
+  # schema, so validation reports only this CNA's ADP container. Publishing
+  # waits for the real record (upstream_blockers/1).
+  @placeholder_org_id "00000000-0000-4000-8000-000000000000"
+
+  defp reserved_upstream_record(cve_id) do
+    %{
+      "dataType" => "CVE_RECORD",
+      "dataVersion" => "5.2",
+      "cveMetadata" => %{
+        "cveId" => cve_id,
+        "assignerOrgId" => @placeholder_org_id,
+        "state" => "PUBLISHED"
+      },
+      "containers" => %{
+        "cna" => %{
+          "providerMetadata" => %{"orgId" => @placeholder_org_id},
+          "descriptions" => [%{"lang" => "en", "value" => "#{cve_id} is RESERVED at MITRE."}],
+          "affected" => [%{"vendor" => "n/a", "product" => "n/a", "defaultStatus" => "unknown"}],
+          "references" => [%{"url" => "https://www.cve.org/CVERecord?id=#{cve_id}"}]
+        }
+      }
     }
   end
 
@@ -567,13 +616,6 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   end
 
   ## ---------------------------------------------------------------- helpers
-
-  defp provider_metadata do
-    %{
-      "orgId" => Application.fetch_env!(:varsel, :cna_org_id),
-      "shortName" => Application.get_env(:varsel, :cna_short_name, "EEF")
-    }
-  end
 
   defp put_present(map, _key, nil), do: map
   defp put_present(map, key, value), do: Map.put(map, key, value)

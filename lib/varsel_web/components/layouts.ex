@@ -425,7 +425,7 @@ defmodule VarselWeb.Layouts do
       <div class="border-t border-white/10">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/50">
           <span>
-            © {Date.utc_today().year} Erlang Ecosystem Foundation. CVE data licensed <.link href={
+            © {Date.utc_today().year} Erlang Ecosystem Foundation. EEF CNA data licensed <.link href={
               ~p"/data-licensing"
             }>CC-BY 4.0</.link>.
           </span>

@@ -11,6 +11,9 @@ defmodule Varsel.Cases.Case.Changes.HandleCveRecordOnClose do
     rejected record.
   * otherwise a drafted ID returns to the pool via `:release`, and the case
     lets go of it. A record in any other state stays linked as it is.
+
+  An upstream CVE belongs to another CNA: this CNA can neither reject it nor
+  pool it. Closing lets go of an upstream draft through `:unlink_upstream`.
   """
 
   use Ash.Resource.Change
@@ -38,11 +41,18 @@ defmodule Varsel.Cases.Case.Changes.HandleCveRecordOnClose do
   defp reject(changeset, context) do
     reason = Changeset.get_attribute(changeset, :closed_reason) || "Case closed"
 
-    cve_record = CVE.get_cve_record!(changeset.data.cve_record_id, Ash.Context.to_opts(context))
+    case CVE.get_cve_record!(changeset.data.cve_record_id, Ash.Context.to_opts(context)) do
+      %{upstream: true} ->
+        Changeset.add_error(changeset,
+          field: :reject_cve_id,
+          message: "another CNA owns the upstream CVE, so this CNA cannot reject it"
+        )
 
-    case CVE.reject_cve_record(cve_record, %{rejection_reason: reason}, actor: context.actor) do
-      {:ok, _} -> changeset
-      {:error, error} -> Changeset.add_error(changeset, error)
+      cve_record ->
+        case CVE.reject_cve_record(cve_record, %{rejection_reason: reason}, actor: context.actor) do
+          {:ok, _} -> changeset
+          {:error, error} -> Changeset.add_error(changeset, error)
+        end
     end
   end
 
@@ -61,6 +71,13 @@ defmodule Varsel.Cases.Case.Changes.HandleCveRecordOnClose do
 
       {:error, error} ->
         Changeset.add_error(changeset, error)
+    end
+  end
+
+  defp release(%{context: %{releasing_cve_record: %{upstream: true} = record}}, case_record, context) do
+    case CVE.unlink_upstream_cve_record(record, Ash.Context.to_opts(context)) do
+      :ok -> {:ok, case_record}
+      {:error, error} -> {:error, error}
     end
   end
 

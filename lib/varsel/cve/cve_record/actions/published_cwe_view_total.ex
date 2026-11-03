@@ -12,12 +12,15 @@ defmodule Varsel.CVE.CveRecord.Actions.PublishedCweViewTotal do
   One query, same shape as `PublishedCweSubtreeCounts`: every published
   record's CWE ids are unnested and joined to the closure rows for
   `view_id`, `count(DISTINCT r.id)` because a CVE can reach the subject
-  through more than one of its own CWE ids or descendant path.
+  through more than one of its own CWE ids or descendant path. Only CVEs this
+  CNA assigned count, so enrichments of upstream CVEs are left out.
   """
 
   use Ash.Resource.Actions.Implementation
 
   import Ecto.Query
+
+  require Ash.Query
 
   @impl Ash.Resource.Actions.Implementation
   def run(input, _opts, context) do
@@ -28,6 +31,7 @@ defmodule Varsel.CVE.CveRecord.Actions.PublishedCweViewTotal do
     with {:ok, ecto_query} <-
            opts
            |> Varsel.CVE.query_to_list_published_cve_records()
+           |> Ash.Query.filter(not upstream)
            |> Ash.Query.data_layer_query() do
       {:ok, total(ecto_query, view_id, cwe_id)}
     end

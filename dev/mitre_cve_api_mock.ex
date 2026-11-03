@@ -26,6 +26,10 @@ defmodule Varsel.Dev.MitreCveApiMock do
       MITRE moving IDs out of that state), so `sync_reserved_from_mitre` seeds
       an empty pool. PUBLISHED and REJECTED listings are empty, making
       `import_from_mitre` and rejection sync no-ops; reject always succeeds.
+    * IDs outside the mock range that no local record of this org holds
+      belong to another CNA. `CVE-<year>-8xxxxx` IDs stay RESERVED, with the
+      owner redacted as MITRE does. Any other such ID is PUBLISHED, and `get`
+      returns a synthetic record from that CNA.
   """
 
   @behaviour Plug
@@ -49,6 +53,7 @@ defmodule Varsel.Dev.MitreCveApiMock do
     case {conn.method, conn.path_info} do
       {"POST", ["cve-id"]} -> reserve(conn)
       {"GET", ["cve-id"]} -> list_ids(conn)
+      {"GET", ["cve-id", cve_id]} -> get_id(conn, cve_id)
       {"PUT", ["cve-id", cve_id]} -> Req.Test.json(conn, %{"message" => "#{cve_id} rejected"})
       {"POST", ["cve", cve_id, "cna"]} -> put_record(conn, cve_id)
       {"PUT", ["cve", cve_id, "cna"]} -> put_record(conn, cve_id)
@@ -165,11 +170,106 @@ defmodule Varsel.Dev.MitreCveApiMock do
   end
 
   defp get_record(conn, cve_id) do
-    case :persistent_term.get({__MODULE__, cve_id}, nil) || db_record(cve_id) do
+    case :persistent_term.get({__MODULE__, cve_id}, nil) || db_record(cve_id) ||
+           upstream_record(cve_id) do
       nil -> not_found(conn)
       record -> Req.Test.json(conn, record)
     end
   end
+
+  @upstream_cna "MockUpstreamCNA"
+  @upstream_org_id "00000000-0000-4000-8000-000000000001"
+
+  defp get_id(conn, cve_id) do
+    case upstream_kind(cve_id) do
+      :own ->
+        Req.Test.json(conn, %{
+          "cve_id" => cve_id,
+          "cve_year" => cve_year(cve_id),
+          "state" => own_state(cve_id),
+          "owning_cna" => Application.get_env(:varsel, :cna_short_name, "EEF")
+        })
+
+      :reserved ->
+        Req.Test.json(conn, %{
+          "cve_id" => cve_id,
+          "cve_year" => cve_year(cve_id),
+          "state" => "RESERVED",
+          "owning_cna" => "[REDACTED]"
+        })
+
+      :published ->
+        Req.Test.json(conn, %{
+          "cve_id" => cve_id,
+          "cve_year" => cve_year(cve_id),
+          "state" => "PUBLISHED",
+          "owning_cna" => @upstream_cna,
+          "dateUpdated" => "2026-01-01T00:00:00.000Z"
+        })
+    end
+  end
+
+  defp upstream_record(cve_id) do
+    if upstream_kind(cve_id) == :published do
+      %{
+        "dataType" => "CVE_RECORD",
+        "dataVersion" => "5.2",
+        "cveMetadata" => %{
+          "cveId" => cve_id,
+          "assignerOrgId" => @upstream_org_id,
+          "assignerShortName" => @upstream_cna,
+          "state" => "PUBLISHED",
+          "datePublished" => "2026-01-01T00:00:00.000Z",
+          "dateUpdated" => "2026-01-01T00:00:00.000Z"
+        },
+        "containers" => %{
+          "cna" => %{
+            "providerMetadata" => %{"orgId" => @upstream_org_id, "shortName" => @upstream_cna},
+            "title" => "Mock upstream vulnerability in libmock",
+            "descriptions" => [
+              %{
+                "lang" => "en",
+                "value" => "A mock vulnerability in the upstream library libmock."
+              }
+            ],
+            "affected" => [
+              %{"vendor" => "Mock", "product" => "libmock", "defaultStatus" => "affected"}
+            ],
+            "references" => [%{"url" => "https://example.com/libmock/advisory"}]
+          }
+        }
+      }
+    end
+  end
+
+  # An ID this org holds is one the database knows as not upstream, or one in
+  # the mock range.
+  defp upstream_kind(cve_id) do
+    local_record =
+      CveRecord
+      |> Ash.Query.filter(cve_id == ^cve_id)
+      |> Ash.read_one!(authorize?: false)
+
+    cond do
+      match?(%{upstream: false}, local_record) -> :own
+      mock_range?(cve_id) -> :own
+      String.match?(cve_id, ~r/\ACVE-\d{4}-8\d{5}\z/) -> :reserved
+      true -> :published
+    end
+  end
+
+  defp own_state(cve_id) do
+    if db_record(cve_id), do: "PUBLISHED", else: "RESERVED"
+  end
+
+  defp mock_range?(cve_id) do
+    case Regex.run(~r/\ACVE-\d{4}-(\d+)\z/, cve_id) do
+      [_match, number] -> String.to_integer(number) in @mock_id_range
+      nil -> false
+    end
+  end
+
+  defp cve_year(cve_id), do: cve_id |> String.split("-") |> Enum.at(1)
 
   defp prior_date_published(cve_id) do
     case :persistent_term.get({__MODULE__, cve_id}, nil) || db_record(cve_id) do

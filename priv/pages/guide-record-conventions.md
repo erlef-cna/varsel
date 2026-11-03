@@ -9,6 +9,12 @@ These conventions keep the CNA's records consistent. The
 the [AI tooling](/guide/ai-tooling) runs encodes the same rules; this page is
 the human-readable form.
 
+The conventions apply to the container the CNA authors. For an
+[upstream CVE](/guide/review-and-publication#upstream-cves) that is the CNA's
+ADP container, never the upstream CNA's container. Validation of an upstream
+record checks the CVE schema only, so review holds the ADP container to these
+conventions by hand.
+
 ## Descriptions
 
 A description is a report, not a blog post. Target 100 to 150 words, hard

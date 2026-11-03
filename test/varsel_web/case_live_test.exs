@@ -1036,7 +1036,7 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Assign CVE ID") |> render_click()
 
       lv
-      |> form(~s{#cve-picker-modal form}, %{cve_record_id: chosen.id})
+      |> form("#choose-cve-id", %{cve_record_id: chosen.id})
       |> render_submit()
 
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == chosen.id
@@ -1070,7 +1070,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Assign the next free ID"
 
       lv
-      |> form(~s{#cve-picker-modal form}, %{cve_record_id: held.id})
+      |> form("#choose-cve-id", %{cve_record_id: held.id})
       |> render_submit()
 
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == held.id
@@ -1101,6 +1101,75 @@ defmodule VarselWeb.CaseLiveTest do
       html = render(lv)
       refute html =~ "cve-picker-modal"
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == nil
+    end
+  end
+
+  describe "linking an upstream CVE" do
+    @upstream_cve_id "CVE-2026-111497"
+
+    defp stub_upstream_mitre do
+      Req.Test.stub(Varsel.CVE.MitreCveApi, fn conn ->
+        {"GET", ["api", "cve-id", @upstream_cve_id]} = {conn.method, conn.path_info}
+
+        Req.Test.json(conn, %{
+          "cve_id" => @upstream_cve_id,
+          "cve_year" => "2026",
+          "state" => "RESERVED",
+          "owning_cna" => "[REDACTED]"
+        })
+      end)
+    end
+
+    test "a POC links a RESERVED upstream CVE from the picker", %{conn: conn, poc: poc} do
+      stub_upstream_mitre()
+      case_record = Fixtures.open_case(poc, %{title: "Upstream case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      lv |> element("button", "Assign CVE ID") |> render_click()
+      lv |> form("#link-upstream-cve", %{cve_id: " #{@upstream_cve_id} "}) |> render_submit()
+
+      case_record = Ash.load!(case_record, [:cve_id, :upstream_cve], authorize?: false)
+      assert case_record.cve_id == @upstream_cve_id
+      assert case_record.upstream_cve
+
+      html = render(lv)
+      refute html =~ "cve-picker-modal"
+      assert html =~ ~s(title="Another CNA assigned this CVE.)
+    end
+
+    test "a supporter is not offered the upstream link", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Supporter upstream"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+
+      lv |> element("button", "Assign CVE ID") |> render_click()
+
+      refute has_element?(lv, "#link-upstream-cve")
+    end
+
+    test "closing an upstream case offers no rejection at MITRE", %{conn: conn, poc: poc} do
+      stub_upstream_mitre()
+      case_record = Fixtures.open_case(poc, %{title: "Close upstream"})
+      Cases.link_case_upstream_cve!(case_record, @upstream_cve_id, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      refute has_element?(lv, ~s(input[name="cve_decision"][value="reject"]))
+
+      lv
+      |> form(~s{form[phx-submit="close_case"]}, %{closed_reason: "Not affected"})
+      |> render_submit()
+
+      assert %{state: :closed, cve_record_id: nil} =
+               Ash.get!(Cases.Case, case_record.id, authorize?: false)
+
+      assert render(lv) =~ "Case closed."
     end
   end
 

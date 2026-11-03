@@ -13,12 +13,15 @@ defmodule Varsel.CVE.CveRecord.Actions.PublishedCweSubtreeCounts do
   by that parent. `count(DISTINCT r.id)` because a single CVE can reach the
   same parent through more than one of its own CWE ids or via more than one
   descendant path. A parent with zero matching CVEs has no group and simply
-  does not appear in the result — the caller fills in the zero.
+  does not appear in the result — the caller fills in the zero. Only CVEs this
+  CNA assigned count, so enrichments of upstream CVEs are left out.
   """
 
   use Ash.Resource.Actions.Implementation
 
   import Ecto.Query
+
+  require Ash.Query
 
   @impl Ash.Resource.Actions.Implementation
   def run(input, _opts, context) do
@@ -29,6 +32,7 @@ defmodule Varsel.CVE.CveRecord.Actions.PublishedCweSubtreeCounts do
     with {:ok, ecto_query} <-
            opts
            |> Varsel.CVE.query_to_list_published_cve_records()
+           |> Ash.Query.filter(not upstream)
            |> Ash.Query.data_layer_query() do
       {:ok, count_by_parent(ecto_query, view_id, cwe_ids)}
     end

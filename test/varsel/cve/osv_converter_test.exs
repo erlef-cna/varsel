@@ -6,6 +6,7 @@ defmodule Varsel.CVE.OsvConverterTest do
   use ExUnit.Case, async: true
 
   alias Varsel.CVE.OsvConverter
+  alias Varsel.CVE.OwnContainer
 
   @cve_id "CVE-2025-48042"
 
@@ -135,6 +136,42 @@ defmodule Varsel.CVE.OsvConverterTest do
 
       # no modified timestamp — owned by the sync flow
       refute Map.has_key?(osv, "modified")
+    end
+
+    test "converts this CNA's ADP container of an upstream CVE" do
+      {:ok, own} = OsvConverter.convert(@cve_json)
+      upstream_org_id = "1ad8a6c6-5a6e-4a3b-9b1e-6c2b2c8e4d10"
+
+      adp =
+        Map.put(
+          @cve_json["containers"]["cna"],
+          "providerMetadata",
+          OwnContainer.provider_metadata()
+        )
+
+      cve_json =
+        @cve_json
+        |> put_in(["cveMetadata", "assignerOrgId"], upstream_org_id)
+        |> put_in(["containers"], %{
+          "cna" => %{
+            "providerMetadata" => %{"orgId" => upstream_org_id},
+            "title" => "Upstream title",
+            "affected" => [
+              %{"vendor" => "upstream", "product" => "lib", "defaultStatus" => "affected"}
+            ]
+          },
+          "adp" => [
+            %{"providerMetadata" => %{"orgId" => "8254265b-2729-46b6-b9e3-3dfca2d5bfca"}},
+            adp
+          ]
+        })
+
+      assert {:ok, osv} = OsvConverter.convert(cve_json)
+
+      assert osv["id"] == "EEF-#{@cve_id}"
+      assert osv["aliases"] == ["GHSA-jj4j-x5ww-cwh9"]
+      assert osv["upstream"] == [@cve_id]
+      assert Map.drop(osv, ["aliases", "upstream"]) == Map.drop(own, ["aliases", "upstream"])
     end
 
     test "converts hex and git affected entries" do
