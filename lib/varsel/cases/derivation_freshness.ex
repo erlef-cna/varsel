@@ -15,25 +15,18 @@ defmodule Varsel.Cases.DerivationFreshness do
   as *no affected versions* — a silently-wrong record — so both callers must
   treat it as needing attention rather than trusting the empty ranges.
 
-  The package must have `:channels` and `:version_events` loaded, with their
-  `updated_at` timestamps (the preview calc and readiness both load the full
-  attribute set).
+  The package must have `:derivation_state` and `:version_events` loaded.
   """
 
   alias Varsel.Cases.AffectedPackage
 
   @doc """
-  Whether the package's `derivation_cache` predates the facts it derives from
-  — a nil cache (never refreshed) counts as stale. Compares
-  `derivation_cached_at` against the newest `updated_at` across the package and
-  its channels and version events.
+  Whether the package's `derivation_cache` cannot be believed yet: nothing
+  was derived, or a fact changed after the last derivation. See
+  `AffectedPackage`'s `:derivation_state`.
   """
   @spec stale?(AffectedPackage.t()) :: boolean()
-  def stale?(%{derivation_cached_at: nil}), do: true
-
-  def stale?(%{derivation_cached_at: cached_at} = package) do
-    DateTime.before?(cached_at, newest_fact(package))
-  end
+  def stale?(%{derivation_state: state}) when is_atom(state), do: state in [:never, :outdated]
 
   @doc """
   Whether a *fresh* derivation yields no affected versions on any channel,
@@ -65,12 +58,5 @@ defmodule Varsel.Cases.DerivationFreshness do
     |> Map.get("channels", %{})
     |> Map.values()
     |> Enum.flat_map(&(&1["versions"] || []))
-  end
-
-  defp newest_fact(package) do
-    [package | package.channels ++ package.version_events]
-    |> Enum.map(& &1.updated_at)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.max(DateTime)
   end
 end

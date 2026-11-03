@@ -67,7 +67,7 @@ defmodule Varsel.Cases.DerivationFreshnessTest do
   defp reload(case_record, poc) do
     [package] =
       Cases.get_case!(case_record.id,
-        load: [affected_packages: [:channels, :version_events]],
+        load: [affected_packages: [:derivation_state, :channels, :version_events]],
         actor: poc
       ).affected_packages
 
@@ -117,7 +117,7 @@ defmodule Varsel.Cases.DerivationFreshnessTest do
     [projected] =
       case_record.id
       |> Cases.get_case!(
-        load: [:proposals, affected_packages: [:channels, :version_events]],
+        load: [:proposals, affected_packages: [:derivation_state, :channels, :version_events]],
         actor: poc
       )
       |> Projection.project()
