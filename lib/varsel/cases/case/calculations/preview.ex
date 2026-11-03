@@ -59,7 +59,11 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
         impacts: all_fields(CaseImpact) ++ [attack_pattern: [:name]],
         affected_packages:
           all_fields(AffectedPackage) ++
-            [channels: all_fields(PackageChannel), version_events: all_fields(VersionEvent)]
+            [
+              :derivation_state,
+              channels: all_fields(PackageChannel),
+              version_events: all_fields(VersionEvent)
+            ]
       ]
   end
 
@@ -498,8 +502,8 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     cond do
       DerivationFreshness.stale?(package) ->
         [
-          "#{package.product}: version derivation is out of date — " <>
-            "run refresh_derivation before publishing"
+          "#{package.product}: version derivation is out of date. While the case is editable, " <>
+            "it runs again on its own within seconds. Run refresh_derivation to derive now"
         ]
 
       DerivationFreshness.missing_versions?(package) ->
