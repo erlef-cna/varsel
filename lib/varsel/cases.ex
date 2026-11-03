@@ -345,6 +345,7 @@ defmodule Varsel.Cases do
       define :assign_case_cve_id, action: :assign_cve_id
       define :publish_case, action: :publish
       define :mark_case_published, action: :mark_published
+      define :list_publishing_cases, action: :publishing
       define :reopen_case, action: :reopen
       define :close_case, action: :close
       define :refresh_case_derivation, action: :refresh_derivation

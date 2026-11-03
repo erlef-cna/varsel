@@ -67,6 +67,11 @@ defmodule Varsel.CVE.OsvRecordTest do
     |> Ash.run_action!(authorize?: false)
   end
 
+  # Runs the OSV jobs that importing a published record started.
+  defp run_signal_jobs do
+    Oban.drain_queue(queue: :osv_sync, with_recursion: true)
+  end
+
   defp run_sync_triggers do
     AshOban.Test.schedule_and_run_triggers({OsvRecord, :sync})
   end
@@ -162,7 +167,7 @@ defmodule Varsel.CVE.OsvRecordTest do
   describe "sync trigger" do
     test "does not touch a freshly synced record" do
       import_cve(cve_json())
-      create_missing()
+      run_signal_jobs()
       osv = get_osv()
 
       run_sync_triggers()
@@ -172,7 +177,7 @@ defmodule Varsel.CVE.OsvRecordTest do
 
     test "re-syncs when the parent CVE record changed and advances modified" do
       import_cve(cve_json())
-      create_missing()
+      run_signal_jobs()
       osv = get_osv()
 
       future = DateTime.utc_now() |> DateTime.shift(minute: 1) |> DateTime.to_iso8601()
@@ -188,7 +193,7 @@ defmodule Varsel.CVE.OsvRecordTest do
 
     test "refreshes hex.pm versions after 24 hours without advancing modified on no change" do
       import_cve(cve_json())
-      create_missing()
+      run_signal_jobs()
       osv = get_osv()
 
       backdate_sync(25)
@@ -201,7 +206,7 @@ defmodule Varsel.CVE.OsvRecordTest do
 
     test "advances modified when a new hex.pm release lands inside an affected range" do
       import_cve(cve_json())
-      create_missing()
+      run_signal_jobs()
       osv = get_osv()
 
       Application.put_env(:varsel, :hex_stub_packages, %{
@@ -218,7 +223,7 @@ defmodule Varsel.CVE.OsvRecordTest do
 
     test "does not re-sync before 24 hours have passed" do
       import_cve(cve_json())
-      create_missing()
+      run_signal_jobs()
       osv = get_osv()
 
       backdate_sync(23)
@@ -229,7 +234,7 @@ defmodule Varsel.CVE.OsvRecordTest do
 
     test "withdraws the OSV record when the CVE record leaves the published state" do
       cve_record = import_cve(cve_json())
-      create_missing()
+      run_signal_jobs()
       osv = get_osv()
 
       stub_mitre_reject()
@@ -239,10 +244,7 @@ defmodule Varsel.CVE.OsvRecordTest do
         authorize?: false
       )
 
-      assert Enum.any?(
-               all_enqueued(worker: Varsel.CVE.OsvRecord.SyncWorker),
-               &(&1.args["primary_key"]["id"] == osv.id)
-             )
+      assert_enqueued(worker: AshOban.Signals.Worker, args: %{"listener" => "sync_rejected"})
 
       run_sync_triggers()
 
@@ -258,7 +260,7 @@ defmodule Varsel.CVE.OsvRecordTest do
 
     test "leaves the OSV record untouched while the parent is pending_update" do
       import_cve(cve_json())
-      create_missing()
+      run_signal_jobs()
       osv = get_osv()
 
       Varsel.Repo.update_all("cve_records", set: [state: "pending_update"])
@@ -275,7 +277,7 @@ defmodule Varsel.CVE.OsvRecordTest do
 
     test "withdraws when an update makes the record non-convertible and un-withdraws on revert" do
       import_cve(cve_json())
-      create_missing()
+      run_signal_jobs()
 
       future = DateTime.utc_now() |> DateTime.shift(minute: 1) |> DateTime.to_iso8601()
       import_cve(cve_json(%{affected: [], date_updated: future}))
@@ -299,18 +301,18 @@ defmodule Varsel.CVE.OsvRecordTest do
     end
   end
 
-  describe "notifier" do
+  describe "CVE record signals" do
     test "creates the OSV record right after a CVE record is imported" do
       import_cve(cve_json())
 
-      Oban.drain_queue(queue: :osv_sync)
+      run_signal_jobs()
 
       assert get_osv()
     end
 
     test "withdraws the OSV record right after a published CVE record is rejected" do
       cve_record = import_cve(cve_json())
-      Oban.drain_queue(queue: :osv_sync)
+      run_signal_jobs()
       assert get_osv().withdrawn_at == nil
 
       stub_mitre_reject()
@@ -320,7 +322,7 @@ defmodule Varsel.CVE.OsvRecordTest do
         authorize?: false
       )
 
-      Oban.drain_queue(queue: :osv_sync)
+      run_signal_jobs()
 
       assert get_osv().withdrawn_at
     end

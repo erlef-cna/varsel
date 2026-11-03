@@ -107,12 +107,7 @@ defmodule Varsel.CVE.CveRecord do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
-    notifiers: [
-      Varsel.CVE.OsvRecord.Notifier,
-      Varsel.Cases.Case.Notifier,
-      Varsel.CVE.CveRecord.PoolNotifier,
-      Ash.Notifier.PubSub
-    ]
+    notifiers: [Ash.Notifier.PubSub]
 
   import Ash.Expr
 
@@ -123,6 +118,7 @@ defmodule Varsel.CVE.CveRecord do
   alias Varsel.CVE.CveRecord.Changes.RejectAtMitre
   alias Varsel.CVE.CveRecord.Preparations.FilterByCwe
   alias Varsel.CVE.CveRecord.Validations.ValidCveRecord
+  alias Varsel.CVE.Signals
   alias Varsel.Types.OkResult
 
   graphql do
@@ -620,6 +616,7 @@ defmodule Varsel.CVE.CveRecord do
       upsert_condition expr(state in [:reserved, :withheld, :published])
 
       change set_attribute(:state, :published)
+      emit Signals, :cve_record_published, fields: [cve_record_id: :id]
     end
 
     action :import_from_mitre, OkResult do
@@ -641,6 +638,7 @@ defmodule Varsel.CVE.CveRecord do
 
       accept []
       change transition_state(:draft)
+      emit Signals, :cve_record_assigned, fields: [cve_record_id: :id]
     end
 
     update :release do
@@ -694,6 +692,7 @@ defmodule Varsel.CVE.CveRecord do
       require_atomic? false
 
       change Varsel.CVE.CveRecord.Changes.PushUpdate
+      emit Signals, :cve_record_published, fields: [cve_record_id: :id]
     end
 
     update :sync_from_mitre do
@@ -702,6 +701,10 @@ defmodule Varsel.CVE.CveRecord do
       require_atomic? false
 
       change Varsel.CVE.CveRecord.Changes.SyncFromMitre
+
+      emit Signals, :cve_record_published,
+        fields: [cve_record_id: :id],
+        where: [changing(:cve_json)]
     end
 
     update :request_publish do
@@ -723,6 +726,7 @@ defmodule Varsel.CVE.CveRecord do
       require_atomic? false
 
       change Varsel.CVE.CveRecord.Changes.Publish
+      emit Signals, :cve_record_published, fields: [cve_record_id: :id]
     end
 
     update :reject do
@@ -738,6 +742,7 @@ defmodule Varsel.CVE.CveRecord do
       change set_attribute(:rejected_at, &DateTime.utc_now/0)
 
       change RejectAtMitre
+      emit Signals, :cve_record_rejected, fields: [cve_record_id: :id]
     end
 
     update :mark_rejected do
@@ -750,6 +755,7 @@ defmodule Varsel.CVE.CveRecord do
 
       change transition_state(:rejected)
       change set_attribute(:rejected_at, &DateTime.utc_now/0)
+      emit Signals, :cve_record_rejected, fields: [cve_record_id: :id]
     end
 
     action :top_up_pool, OkResult do
@@ -774,6 +780,11 @@ defmodule Varsel.CVE.CveRecord do
         allow_nil? true
         default false
         description "Skip (no MITRE call) when no CVE records exist locally at all."
+      end
+
+      argument :signal, Signals.CveRecordAssigned do
+        description "The assignment that took an ID out of the pool, when one runs the top-up."
+        allow_nil? true
       end
 
       run RefillPool
@@ -962,6 +973,18 @@ defmodule Varsel.CVE.CveRecord do
     has_one :case, Varsel.Cases.Case do
       description "The editorial case this CVE record backs, if any."
       public? true
+    end
+  end
+
+  # Unique by listener alone, so a burst of assignments collapses into one
+  # waiting job. An executing job does not count: it may have counted the pool
+  # before the newest assignment committed.
+  signals_in do
+    from Signals do
+      on :cve_record_assigned, :top_up_pool,
+        delivery:
+          {AshOban.Signals,
+           queue: :cve_pool, max_attempts: 3, unique: [keys: [], states: [:available, :scheduled, :retryable]]}
     end
   end
 

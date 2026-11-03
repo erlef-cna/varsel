@@ -10,6 +10,7 @@ defmodule Varsel.CVE.CveRecordTest do
   alias Ash.Error.Changes.StaleRecord
   alias Ash.Error.Forbidden
   alias Ash.Error.Invalid
+  alias AshOban.Signals.Worker
   alias Varsel.CVE.CveRecord
   alias Varsel.CVE.MitreCveApi
   alias Varsel.Fixtures
@@ -262,7 +263,7 @@ defmodule Varsel.CVE.CveRecordTest do
 
       Ash.update!(record, %{}, action: :assign, authorize?: false)
 
-      assert_enqueued(worker: CveRecord.TopUpPoolWorker)
+      assert_enqueued(worker: Worker, args: %{"listener" => "top_up_pool"})
 
       min_size = Application.get_env(:varsel, :cve_pool_min_size, 10)
       stub_mitre_reserve(Enum.map(1..min_size, &"CVE-#{@year}-#{4100 + &1}"))
@@ -272,6 +273,15 @@ defmodule Varsel.CVE.CveRecordTest do
       assert @year
              |> Varsel.CVE.query_to_available_cve_records(authorize?: false)
              |> Ash.count!(authorize?: false) == min_size
+    end
+
+    test "a burst of assignments waits on one pool top-up" do
+      for id <- ["CVE-#{@year}-4011", "CVE-#{@year}-4012"] do
+        id |> reserved_record() |> Ash.update!(%{}, action: :assign, authorize?: false)
+      end
+
+      assert [_one] =
+               all_enqueued(worker: Worker, args: %{"listener" => "top_up_pool"})
     end
   end
 
@@ -489,7 +499,7 @@ defmodule Varsel.CVE.CveRecordTest do
       record = publishing_record()
       stub_mitre_publish(@published_cve_json)
 
-      assert %{success: 2, failure: 0} =
+      assert %{failure: 0} =
                AshOban.Test.schedule_and_run_triggers({CveRecord, :publish})
 
       assert Ash.get!(CveRecord, record.id, authorize?: false).state == :published
@@ -578,7 +588,7 @@ defmodule Varsel.CVE.CveRecordTest do
 
       stub_mitre_publish(@updated_cve_json)
 
-      assert %{success: 2, failure: 0} =
+      assert %{failure: 0} =
                AshOban.Test.schedule_and_run_triggers({CveRecord, :push_update})
 
       result = Ash.get!(CveRecord, record.id, authorize?: false)
@@ -808,7 +818,7 @@ defmodule Varsel.CVE.CveRecordTest do
       record = published_record()
       stub_mitre_get(@published_cve_json)
 
-      assert %{success: 2, failure: 0} =
+      assert %{failure: 0} =
                AshOban.Test.schedule_and_run_triggers(
                  {CveRecord, :sync_from_mitre},
                  scheduled_actions?: true

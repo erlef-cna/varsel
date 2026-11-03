@@ -391,7 +391,7 @@ defmodule Varsel.Cases.CaseTest do
       case_record = Fixtures.open_case(supporter)
       Cases.assign_case_cve_id!(case_record, %{}, actor: supporter)
 
-      assert_enqueued(worker: CveRecord.TopUpPoolWorker)
+      assert_enqueued(worker: AshOban.Signals.Worker, args: %{"listener" => "top_up_pool"})
     end
 
     test "refuses a second assignment", %{poc: poc} do
