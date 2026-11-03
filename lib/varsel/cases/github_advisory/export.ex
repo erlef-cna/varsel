@@ -34,6 +34,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
   alias Varsel.Cases.GitHubAdvisory.Import
   alias Varsel.Cases.GitHubAdvisory.People
   alias Varsel.CVE.Advisory
+  alias Varsel.CVE.OwnContainer
 
   @type field :: :title | :description | :cve_id | :cvss_v4 | :weaknesses | :credits | :affected
 
@@ -74,8 +75,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
   yet.
   """
   @spec description(Case.t()) :: String.t() | nil
-  def description(%{preview: %{cve_record: %{"containers" => %{"cna" => cna}}}}) do
-    case Advisory.render(cna, Advisory.keys(), heading_level: 3) do
+  def description(%{preview: %{cve_record: %{} = cve_record}}) do
+    case Advisory.render(OwnContainer.get(cve_record) || %{}, Advisory.keys(), heading_level: 3) do
       "" -> nil
       text -> text
     end

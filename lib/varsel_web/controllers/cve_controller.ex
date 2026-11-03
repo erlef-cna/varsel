@@ -8,6 +8,7 @@ defmodule VarselWeb.CveController do
   alias Ash.Error.Invalid
   alias Varsel.CAPEC
   alias Varsel.CVE
+  alias Varsel.CVE.OwnContainer
   alias Varsel.CWE
   alias VarselWeb.CveView
 
@@ -44,11 +45,17 @@ defmodule VarselWeb.CveController do
   def show_html(conn, %{"cve_id" => cve_id}) do
     record = CVE.get_cve_record_by_cve_id!(cve_id, actor: nil)
     cve = record.cve_json
-    cna = cve["containers"]["cna"] || %{}
+    container = OwnContainer.get(cve) || %{}
 
     conn
     |> assign(:page_title, cve["cveMetadata"]["cveId"])
-    |> render(:show, cve: cve, cna: cna, cwe_names: cwe_names(cna), capec_names: capec_names(cna))
+    |> render(:show,
+      cve: cve,
+      container: container,
+      upstream: CveView.upstream_summary(cve),
+      cwe_names: cwe_names(container),
+      capec_names: capec_names(container)
+    )
   rescue
     Invalid -> render_404(conn, :html, cve_id)
   end
@@ -66,9 +73,9 @@ defmodule VarselWeb.CveController do
 
   # id -> catalog name maps, one query each regardless of how many
   # CWE/CAPEC ids the record carries (N+1 safety).
-  defp cwe_names(cna) do
+  defp cwe_names(container) do
     ids =
-      cna
+      container
       |> CveView.cwe_descriptions()
       |> Enum.map(&CveView.cwe_id_number(&1["cweId"]))
       |> Enum.uniq()
@@ -86,9 +93,9 @@ defmodule VarselWeb.CveController do
     end
   end
 
-  defp capec_names(cna) do
+  defp capec_names(container) do
     ids =
-      cna
+      container
       |> CveView.capec_items()
       |> Enum.map(&CveView.capec_id_number(&1["capecId"]))
       |> Enum.uniq()

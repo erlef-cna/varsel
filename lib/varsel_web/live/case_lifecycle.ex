@@ -43,7 +43,14 @@ defmodule VarselWeb.CaseLifecycle do
   @spec mount(Socket.t(), String.t(), load: list(), after_fetch: fun(), marks_read: [atom()]) ::
           Socket.t()
   def mount(socket, case_id, opts) do
-    load = [:report_count, :comment_count, :unseen_comment_count | Keyword.fetch!(opts, :load)]
+    load = [
+      :report_count,
+      :comment_count,
+      :unseen_comment_count,
+      :upstream_cve,
+      :upstream_cve_reserved | Keyword.fetch!(opts, :load)
+    ]
+
     after_fetch = Keyword.fetch!(opts, :after_fetch)
     marks_read = @lifecycle_kinds ++ Keyword.get(opts, :marks_read, [])
 
@@ -200,6 +207,20 @@ defmodule VarselWeb.CaseLifecycle do
     {:halt, socket}
   end
 
+  defp handle_event("link_upstream_cve", %{"cve_id" => cve_id}, socket) do
+    socket =
+      case Cases.link_case_upstream_cve(
+             socket.assigns.case_record,
+             String.trim(cve_id),
+             actor: socket.assigns.current_user
+           ) do
+        {:ok, _case_record} -> assign(socket, :cve_picker, nil)
+        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
+      end
+
+    {:halt, socket}
+  end
+
   defp handle_event("close_case", params, socket) do
     args = %{
       closed_reason: params["closed_reason"],
@@ -300,7 +321,17 @@ defmodule VarselWeb.CaseLifecycle do
             placeholder="Why is this case being closed?"
             class="input input-bordered input-sm w-full"
           />
-          <div :if={@case_record.cve_id} class="text-sm space-y-1">
+          <div :if={@case_record.cve_id && Map.get(@case_record, :upstream_cve)} class="text-sm">
+            <input type="hidden" name="cve_decision" value="release" />
+            <p>
+              {@case_record.cve_id} is an upstream CVE that another CNA owns. Closing unlinks it
+              unless this CNA's enrichment is already published.
+            </p>
+          </div>
+          <div
+            :if={@case_record.cve_id && !Map.get(@case_record, :upstream_cve)}
+            class="text-sm space-y-1"
+          >
             <p class="font-semibold">{@case_record.cve_id} is assigned to this case:</p>
             <label class="flex items-center gap-2">
               <input type="radio" name="cve_decision" value="reject" class="radio radio-sm" required />
@@ -352,7 +383,21 @@ defmodule VarselWeb.CaseLifecycle do
         validate?: false
       )
 
-    assigns = assign(assigns, free: free, withheld: withheld, can_choose?: can_choose?)
+    can_link_upstream? =
+      Cases.can_link_case_upstream_cve?(
+        assigns.current_user,
+        assigns.case_record,
+        "CVE-0000-0000",
+        validate?: false
+      )
+
+    assigns =
+      assign(assigns,
+        free: free,
+        withheld: withheld,
+        can_choose?: can_choose?,
+        can_link_upstream?: can_link_upstream?
+      )
 
     ~H"""
     <.modal id="cve-picker-modal" title="Assign a CVE ID" on_cancel="cancel_cve_picker">
@@ -379,6 +424,7 @@ defmodule VarselWeb.CaseLifecycle do
 
         <form
           :if={@can_choose? and (@free != [] or @withheld != [])}
+          id="choose-cve-id"
           phx-submit="confirm_assign_cve_id"
           class="rounded-lg border border-base-300 p-3"
         >
@@ -444,6 +490,34 @@ defmodule VarselWeb.CaseLifecycle do
         >
           No CVE IDs are available to assign.
         </p>
+
+        <form
+          :if={@can_link_upstream?}
+          id="link-upstream-cve"
+          phx-submit="link_upstream_cve"
+          class="rounded-lg border border-info/40 bg-info/5 p-3"
+        >
+          <p class="text-sm font-semibold">Or link an upstream CVE</p>
+          <p class="text-xs text-base-content/60 mt-0.5">
+            For a vulnerability in code a package vendors from a project outside this CNA's
+            scope. The CNA rules forbid this CNA to assign a CVE for it: the CNA responsible
+            for that project assigns it. Publishing adds this CNA's enrichment to the
+            upstream record as an ADP container and sends nothing to MITRE. A RESERVED ID
+            can be linked during an embargo. Publishing waits until its CNA publishes it.
+          </p>
+          <div class="mt-2 flex gap-2">
+            <input
+              type="text"
+              name="cve_id"
+              required
+              pattern="CVE-\d{4}-\d{4,19}"
+              placeholder="CVE-2026-12345"
+              aria-label="Upstream CVE ID"
+              class="input input-bordered input-sm w-48 font-mono"
+            />
+            <button type="submit" class="btn btn-eef-quiet btn-sm">Link upstream CVE</button>
+          </div>
+        </form>
       </div>
 
       <:actions>

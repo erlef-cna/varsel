@@ -51,6 +51,7 @@ defmodule VarselWeb.FeedController do
   import Saxy.XML
 
   alias Varsel.CVE
+  alias Varsel.CVE.OwnContainer
 
   @title "Erlang Ecosystem Foundation CNA CVEs"
   @description "CVE records published by the Erlang Ecosystem Foundation CNA."
@@ -125,8 +126,8 @@ defmodule VarselWeb.FeedController do
   end
 
   defp description(record) do
-    record.cve_json
-    |> get_in(["containers", "cna", "descriptions"])
+    (OwnContainer.get(record.cve_json) || %{})
+    |> Map.get("descriptions")
     |> List.wrap()
     |> Enum.find_value("", fn d -> if d["lang"] == "en", do: d["value"] end)
   end

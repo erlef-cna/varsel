@@ -16,7 +16,11 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Result do
 
   attributes do
     attribute :cve_record, :map do
-      description "The full CVE 5.2 record (with a placeholder cveId until one is assigned)."
+      description """
+      The full CVE 5.2 record (with a placeholder cveId until one is assigned).
+      While an upstream CVE is RESERVED, a stand-in replaces MITRE's record.
+      """
+
       allow_nil? false
       public? true
     end

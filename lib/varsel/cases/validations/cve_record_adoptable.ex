@@ -44,6 +44,9 @@ defmodule Varsel.Cases.Validations.CveRecordAdoptable do
       {:ok, %{case: %{}}} ->
         {:error, field: :cve_record_id, message: "already has a case"}
 
+      {:ok, %{upstream: true}} ->
+        {:error, field: :cve_record_id, message: "is an upstream CVE and cannot be adopted"}
+
       {:ok, %{state: state}} when state not in @adoptable_states ->
         {:error,
          field: :cve_record_id, message: "a %{state} CVE record has nothing to manage as a case", vars: [state: state]}

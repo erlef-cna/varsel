@@ -54,7 +54,30 @@ the CNA.
 
 Supporters take the next free ID of the year; everything else is yours:
 assigning a specific reserved record, a withheld ID, or one out of sequence,
-and adopting an already-existing CVE record into a new case.
+adopting an already-existing CVE record into a new case, and linking an
+upstream CVE.
+
+## Upstream CVEs
+
+A package can vendor code from a project outside the CNA's [scope](/scope),
+for example a C library. The CNA rules forbid the CNA to assign a CVE for a
+vulnerability in that code: the CNA responsible for the vendored project
+assigns it. Link that CVE ID to the case from **Assign CVE ID**
+instead of taking one from the pool. The ID can still be RESERVED, so a case
+can follow an embargo.
+
+The case is written and reviewed as usual. Publishing adds the case's content
+to the upstream CVE record as the CNA's ADP container, and sends nothing to
+MITRE. The CVE page shows that enrichment, with the upstream CNA's title and
+summary and a link to cve.org. The OSV record keeps the `EEF-` ID and names
+the CVE as `upstream`. Validation checks the CVE schema only, so review the
+[conventions](/guide/record-conventions) in full.
+
+Publishing waits until the upstream CNA publishes the CVE: while the ID is
+RESERVED at MITRE, the case shows a blocker. Varsel checks the upstream record
+at MITRE on a schedule, so publish once the blocker is gone. Closing an
+upstream case unlinks the ID. Another CNA owns it, so there is nothing to
+reject.
 
 ## People
 

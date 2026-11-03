@@ -6,10 +6,12 @@ defmodule Varsel.CVE.CveRecord.Validations.ValidCveRecord do
   @moduledoc """
   Validates the changeset's `cve_json` via the CVE domain's
   `validate_cve_record/1` code interface (schema, cvelint, hex.pm package, and
-  EEF policy checks — see `Varsel.CVE.CveValidation`).
+  EEF policy checks), or `validate_cve_record_schema/1` for an upstream CVE
+  (see `Varsel.CVE.CveValidation`).
 
-  Used on the actions that hand a record to MITRE (`request_publish` and
-  `update`); records in earlier lifecycle states may hold invalid JSON.
+  Used on the actions that publish a record (`request_publish`, `update` and
+  `publish_enrichment`); records in earlier lifecycle states may hold invalid
+  JSON.
   """
 
   use Ash.Resource.Validation
@@ -32,12 +34,19 @@ defmodule Varsel.CVE.CveRecord.Validations.ValidCveRecord do
       # from calling the external validators with no data.
       nil -> :ok
       %Ash.NotLoaded{} -> :ok
-      cve_json -> validate_cve_json(cve_json)
+      cve_json -> validate_cve_json(cve_json, changeset.data.upstream)
     end
   end
 
-  defp validate_cve_json(cve_json) do
-    case Varsel.CVE.validate_cve_record!(cve_json) do
+  # The row's flag decides, not the record's assignerOrgId, so a record of
+  # this CNA's own CVE always gets every check.
+  defp validate_cve_json(cve_json, upstream?) do
+    result =
+      if upstream?,
+        do: Varsel.CVE.validate_cve_record_schema!(cve_json),
+        else: Varsel.CVE.validate_cve_record!(cve_json)
+
+    case result do
       %{valid: true} ->
         :ok
 

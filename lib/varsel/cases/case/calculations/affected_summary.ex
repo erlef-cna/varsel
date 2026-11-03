@@ -18,6 +18,7 @@ defmodule Varsel.Cases.Case.Calculations.AffectedSummary do
   alias Ash.Resource.Calculation
   alias Varsel.Cases.Case.Calculations.Preview
   alias Varsel.Cases.Description.AffectedSummary
+  alias Varsel.CVE.OwnContainer
 
   @impl Calculation
   def load(_query, _opts, _context), do: [:preview]
@@ -28,8 +29,8 @@ defmodule Varsel.Cases.Case.Calculations.AffectedSummary do
   @impl Calculation
   def calculate(cases, _opts, _context) do
     Enum.map(cases, fn %{preview: %Preview.Result{cve_record: cve_record}} ->
-      cve_record
-      |> get_in(["containers", "cna", "affected"])
+      (OwnContainer.get(cve_record) || %{})
+      |> Map.get("affected")
       |> List.wrap()
       |> AffectedSummary.summarize()
     end)

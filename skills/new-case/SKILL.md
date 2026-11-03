@@ -567,6 +567,12 @@ Hand off with the case ready for review: the proposals are authored, the derived
 and verification passes. **CVE ID assignment, proposal acceptance, and publishing all happen in the
 UI, by a human.** Never assign an ID, never accept your own proposals, and never publish.
 
+When the vulnerability is in code a package vendors from a project outside this CNA's scope (for
+example a C library), the CNA responsible for that project assigns the CVE: this CNA must not.
+Say so in the hand-off, with the upstream CVE ID when the advisory names one, so a Point of
+Contact links the upstream CVE instead of taking an ID from the pool. The case content is written
+to the same conventions.
+
 ---
 
 ## Writing style

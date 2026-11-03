@@ -43,7 +43,7 @@ defmodule VarselWeb.CaseComponents do
   """
   attr :case_record, :map,
     required: true,
-    doc: "needs `:cve_id`, `:title`, `:inserted_at` and `:state`"
+    doc: "needs `:cve_id`, `:title`, `:inserted_at` and `:state`, and `:upstream_cve` for the upstream badge"
 
   attr :public_href, :string,
     default: nil,
@@ -71,6 +71,13 @@ defmodule VarselWeb.CaseComponents do
             class="link link-hover"
           >{@case_record.cve_id}</.link>
           <span :if={is_nil(@public_href)}>{@case_record.cve_id}</span>
+        </span>
+        <span
+          :if={Map.get(@case_record, :upstream_cve) == true}
+          class="badge badge-info badge-xs align-middle"
+          title="Another CNA assigned this CVE. Publishing adds this CNA's enrichment as an ADP container."
+        >
+          upstream
         </span>
         <.copy_button
           :if={@case_record.cve_id}

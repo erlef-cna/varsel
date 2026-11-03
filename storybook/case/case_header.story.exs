@@ -64,6 +64,28 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
         ]
       },
       %Variation{
+        id: :upstream,
+        description: "A case that enriches an upstream CVE marks the ID as upstream.",
+        attributes: %{
+          case_record: %{
+            cve_id: "CVE-2026-111497",
+            title: "brotli heap overflow reaches the brotli hex package",
+            inserted_at: ~U[2026-08-12 09:30:00Z],
+            state: :review,
+            upstream_cve: true
+          },
+          tabs: @tabs,
+          active: :cve
+        },
+        slots: [
+          """
+          <:actions>
+            <button class="btn btn-sm btn-eef">Approve</button>
+          </:actions>
+          """
+        ]
+      },
+      %Variation{
         id: :every_tab,
         description: """
         Every tab a case can have, with counts. Past the width that fits them

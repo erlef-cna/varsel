@@ -140,6 +140,12 @@ path from there to a published CVE.
    advisory is public, [publishes](/guide/review-and-publication): Varsel
    pushes the record to MITRE, and the OSV feed and hex.pm advisories follow
    automatically.
+
+   Is the vulnerability in code the package vendors from a project outside
+   the CNA's [scope](/scope), such as a C library? Then the CNA responsible
+   for that project assigns the CVE, not this CNA. Take no ID from the pool:
+   a Point of Contact links the
+   [upstream CVE](/guide/review-and-publication#upstream-cves) to the case.
 :::
 
 ## When Plans Change

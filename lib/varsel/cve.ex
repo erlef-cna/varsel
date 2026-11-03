@@ -156,6 +156,12 @@ defmodule Varsel.CVE do
       define :sync_cve_record_from_mitre, action: :sync_from_mitre
       define :reject_cve_record, action: :reject
       define :mark_cve_record_rejected, action: :mark_rejected
+
+      # Upstream CVEs that a case enriches.
+      define :link_upstream_cve_record, action: :link_upstream, args: [:cve_id]
+      define :sync_upstream_cve_record, action: :sync_upstream
+      define :publish_cve_record_enrichment, action: :publish_enrichment, args: [:adp_container]
+      define :unlink_upstream_cve_record, action: :unlink_upstream
     end
 
     resource CveValidation do

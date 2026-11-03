@@ -8,6 +8,7 @@ defmodule VarselWeb.CveListLiveTest do
   import Phoenix.LiveViewTest
 
   alias Varsel.CVE.CveRecord
+  alias Varsel.CVE.OwnContainer
 
   defp published(cve_id, title, metrics \\ [], date_published \\ "2025-06-16T11:00:00.000Z") do
     cve_json = %{
@@ -42,6 +43,57 @@ defmodule VarselWeb.CveListLiveTest do
     assert html =~ "CVE-2025-0001"
     assert html =~ "Alpha"
     assert html =~ "CVE-2025-0002"
+  end
+
+  test "an enrichment lists with this CNA's title and an upstream badge", %{conn: conn} do
+    upstream_org_id = "1ad8a6c6-5a6e-4a3b-9b1e-6c2b2c8e4d10"
+
+    cve_json = %{
+      "dataType" => "CVE_RECORD",
+      "dataVersion" => "5.2",
+      "cveMetadata" => %{
+        "cveId" => "CVE-2025-0003",
+        "assignerOrgId" => upstream_org_id,
+        "state" => "PUBLISHED",
+        "datePublished" => "2025-06-16T11:00:00.000Z",
+        "dateUpdated" => "2025-06-17T12:00:00.000Z"
+      },
+      "containers" => %{
+        "cna" => %{
+          "providerMetadata" => %{"orgId" => upstream_org_id},
+          "title" => "Upstream title"
+        },
+        "adp" => [
+          %{
+            "providerMetadata" => OwnContainer.provider_metadata(),
+            "title" => "Enrichment title",
+            "affected" => [%{"packageURL" => "pkg:hex/brotli"}]
+          }
+        ]
+      }
+    }
+
+    CveRecord
+    |> Ash.create!(%{cve_json: cve_json}, action: :import, authorize?: false)
+    |> Ash.Seed.update!(%{upstream: true})
+
+    published("CVE-2025-0001", "Alpha")
+
+    {:ok, lv, _html} = live(conn, ~p"/cves")
+
+    assert has_element?(lv, ~s{a[href="/cves/CVE-2025-0003.html"]}, "Enrichment title")
+    refute render(lv) =~ "Upstream title"
+
+    badges =
+      lv
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("td.font-mono")
+      |> Enum.map(&{&1 |> LazyHTML.text() |> String.split() |> hd(), &1 |> LazyHTML.query(".badge") |> LazyHTML.text()})
+
+    badges = Enum.map(badges, fn {id, badge} -> {id, String.trim(badge)} end)
+    assert {"CVE-2025-0003", "upstream"} in badges
+    assert {"CVE-2025-0001", ""} in badges
   end
 
   test "the card's toolbar carries the count and the feeds", %{conn: conn} do

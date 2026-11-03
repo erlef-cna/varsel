@@ -17,7 +17,10 @@ defmodule VarselWeb.CveView do
   """
   use Phoenix.Component
 
+  import VarselWeb.CoreComponents, only: [icon: 1]
+
   alias Phoenix.HTML.Engine
+  alias Varsel.CVE.OwnContainer
   alias VarselWeb.CveView.AffectedChecker
 
   ## ---------------------------------------------------------------- CVSS
@@ -83,6 +86,79 @@ defmodule VarselWeb.CveView do
       |> Enum.map_intersperse("/<wbr>", &Engine.html_escape/1)
 
     {:safe, iodata}
+  end
+
+  ## ---------------------------------------------------------------- Upstream
+
+  @doc """
+  The upstream CNA's title and summary of an upstream CVE, as plain text, or
+  nil for a CVE this CNA assigned. The summary is the first paragraph of the
+  English description. This is the only content of the upstream CNA's
+  container that the page renders.
+  """
+  @spec upstream_summary(map()) :: %{title: String.t() | nil, summary: String.t() | nil} | nil
+  def upstream_summary(cve) when is_map(cve) do
+    if OwnContainer.upstream?(cve) do
+      cna = get_in(cve, ["containers", "cna"]) || %{}
+      %{title: string_or_nil(cna["title"]), summary: upstream_description(cna["descriptions"])}
+    end
+  end
+
+  defp upstream_description(descriptions) when is_list(descriptions) do
+    Enum.find_value(descriptions, fn
+      %{"lang" => "en" <> _, "value" => value} when is_binary(value) ->
+        value |> String.split(~r/\R\s*\R/, parts: 2) |> hd() |> String.trim() |> string_or_nil()
+
+      _other ->
+        nil
+    end)
+  end
+
+  defp upstream_description(_missing), do: nil
+
+  defp string_or_nil(value) when is_binary(value) and value != "", do: value
+  defp string_or_nil(_value), do: nil
+
+  @doc """
+  Notes that another CNA assigned the CVE, with the upstream CNA's title and
+  summary as escaped text and a link to its record on cve.org. The inner
+  block says what this CNA adds.
+  """
+  attr :cve_id, :string, required: true
+
+  attr :title, :string,
+    default: nil,
+    doc: "the upstream CNA's title, nil when absent or still RESERVED"
+
+  attr :summary, :string,
+    default: nil,
+    doc: "the upstream CNA's summary, nil when absent or still RESERVED"
+
+  attr :rest, :global
+  slot :inner_block, required: true
+
+  def upstream_cve_notice(assigns) do
+    ~H"""
+    <div class="alert alert-info items-start text-sm" role="note" {@rest}>
+      <.icon name="hero-arrow-up-on-square" class="size-5 shrink-0" />
+      <div class="flex min-w-0 flex-col gap-2">
+        <p class="font-semibold">Upstream CVE assigned by another CNA</p>
+        <p>{render_slot(@inner_block)}</p>
+        <div :if={@title || @summary} class="flex flex-col gap-0.5 border-l-2 border-current/30 pl-3">
+          <p :if={@title} class="font-medium">{@title}</p>
+          <p :if={@summary} class="whitespace-pre-line opacity-80">{@summary}</p>
+        </div>
+        <.link
+          href={"https://www.cve.org/CVERecord?id=#{URI.encode_www_form(@cve_id)}"}
+          target="_blank"
+          rel="noopener"
+          class="link font-medium"
+        >
+          {@cve_id} on cve.org ↗
+        </.link>
+      </div>
+    </div>
+    """
   end
 
   @doc """

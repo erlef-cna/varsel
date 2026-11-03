@@ -162,6 +162,30 @@ defmodule Varsel.CVE.MitreCveApi do
   end
 
   @doc """
+  Fetches the ID object of any CVE ID from MITRE.
+
+  For an ID another org owns, MITRE returns only `cve_id`, `cve_year`, `state`
+  and `owning_cna`. While the ID is `RESERVED`, `owning_cna` is `"[REDACTED]"`.
+
+  Returns `{:ok, response_body}` on HTTP 200, `{:error, reason}` otherwise.
+  """
+  @spec get_id(cve_id()) :: {:ok, map()} | {:error, String.t()}
+  def get_id(cve_id) do
+    req = build_req()
+
+    case Req.get(req, url: "/cve-id/#{cve_id}") do
+      {:ok, %{status: 200, body: body}} ->
+        {:ok, body}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, format_error(status, body)}
+
+      {:error, exception} ->
+        {:error, Exception.message(exception)}
+    end
+  end
+
+  @doc """
   Fetches the full CVE record from MITRE.
 
   Returns `{:ok, response_body}` on HTTP 200, `{:error, reason}` otherwise.

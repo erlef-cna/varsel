@@ -16,9 +16,16 @@ defmodule Varsel.CVE.OsvConverter do
   A CVE record is convertible when it is `PUBLISHED` at MITRE and has at
   least one affected entry describing a hex or npm package with semver
   version information or a git repository with commit version information.
+
+  The document describes the container this CNA authored (see
+  `Varsel.CVE.OwnContainer`). For an upstream CVE that is this CNA's ADP
+  container, and the document names the CVE in `upstream`, because the CVE
+  describes the vendored project and the document the packages that vendor
+  it.
   """
 
   alias Varsel.CVE.Advisory
+  alias Varsel.CVE.OwnContainer
 
   @schema_version "1.7.3"
 
@@ -70,7 +77,7 @@ defmodule Varsel.CVE.OsvConverter do
   end
 
   defp convertible(cve_json) do
-    affected = get_in(cve_json, ["containers", "cna", "affected"]) || []
+    affected = (OwnContainer.get(cve_json) || %{})["affected"] || []
 
     cond do
       get_in(cve_json, ["cveMetadata", "state"]) != "PUBLISHED" ->
@@ -89,15 +96,18 @@ defmodule Varsel.CVE.OsvConverter do
 
   defp do_convert(cve_json) do
     cve_id = get_in(cve_json, ["cveMetadata", "cveId"])
-    cna = get_in(cve_json, ["containers", "cna"]) || %{}
+    cna = OwnContainer.get(cve_json) || %{}
     references = convert_references(cna)
+
+    {aliases, upstream} =
+      if OwnContainer.upstream?(cve_json), do: {[], [cve_id]}, else: {[cve_id], []}
 
     %{
       "schema_version" => @schema_version,
       "id" => "EEF-#{cve_id}",
       "published" => format_timestamp(get_in(cve_json, ["cveMetadata", "datePublished"])),
-      "aliases" => add_github_advisory_alias([cve_id], references),
-      "upstream" => [],
+      "aliases" => add_github_advisory_alias(aliases, references),
+      "upstream" => upstream,
       "related" => [],
       "summary" => extract_summary(cna),
       "details" => extract_details(cna),
