@@ -310,12 +310,13 @@ defmodule Varsel.Notifications.EmailsTest do
       case_record = Fixtures.open_case(other_poc)
       Cases.request_case_review!(case_record, actor: other_poc)
 
-      # Run only the fan-out job (the single job queued so far), so the row
-      # (and its freshly-enqueued :email trigger job) exists while the user
-      # is still in :immediate mode, without running that trigger job yet.
+      # Run only the two fan-out jobs queued so far (the opener's own
+      # assignment and the review request), so the row (and its
+      # freshly-enqueued :email trigger job) exists while the user is still
+      # in :immediate mode, without running that trigger job yet.
       # with_recursion must be off here or the newly-enqueued :email job
       # runs in the same call.
-      drain(with_limit: 1, with_recursion: false)
+      drain(with_limit: 2, with_recursion: false)
 
       [notification] = notifications_for(poc)
       assert notification.emailed_at == nil

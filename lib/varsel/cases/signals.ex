@@ -32,5 +32,37 @@ defmodule Varsel.Cases.Signals do
       argument :target_id, :uuid
       argument :field_name, :string
     end
+
+    signal :review_requested do
+      description "A drafted case was marked ready for POC review."
+      argument :case_id, :uuid, allow_nil?: false
+      argument :actor_id, :uuid, description: "The user who asked for review, when a user did."
+    end
+
+    signal :case_published do
+      description "A case's CVE record reached MITRE and the case is published."
+      argument :case_id, :uuid, allow_nil?: false
+      argument :actor_id, :uuid, description: "The user who marked it published, when a user did."
+    end
+
+    signal :comment_posted do
+      description "A comment was written on a case, here or on its linked GitHub advisory."
+      argument :case_id, :uuid, allow_nil?: false
+
+      argument :actor_id, :uuid, description: "The user who wrote the comment here, when a user did."
+    end
+
+    signal :proposal_opened do
+      description "A proposal was opened on a case."
+      argument :case_id, :uuid, allow_nil?: false
+      argument :actor_id, :uuid, description: "The user who proposed, when a user did."
+    end
+
+    signal :case_assigned do
+      description "A user was granted access to a case they did not have."
+      argument :case_id, :uuid, allow_nil?: false
+      argument :user_id, :uuid, allow_nil?: false
+      argument :actor_id, :uuid, description: "The user who granted the access, when a user did."
+    end
   end
 end

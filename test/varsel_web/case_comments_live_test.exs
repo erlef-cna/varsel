@@ -10,7 +10,6 @@ defmodule VarselWeb.CaseCommentsLiveTest do
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Cases
   alias Varsel.Fixtures
-  alias Varsel.Notifications.Event
   alias Varsel.Test.GitHubAdvisoryFixtures
   alias Varsel.Test.GitHubApi
   alias Varsel.Test.GitHubApp
@@ -183,7 +182,7 @@ defmodule VarselWeb.CaseCommentsLiveTest do
         actor: supporter
       )
 
-      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+      Oban.drain_queue(queue: :default)
 
       %{case_record: case_record}
     end
@@ -228,7 +227,7 @@ defmodule VarselWeb.CaseCommentsLiveTest do
         Cases.post_case_comment!(%{case_id: case_record.id, body: body}, actor: poc)
       end
 
-      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+      Oban.drain_queue(queue: :default)
 
       %{case_record: case_record}
     end
@@ -279,7 +278,7 @@ defmodule VarselWeb.CaseCommentsLiveTest do
       assert unseen_label(render(lv)) == "3 new comments"
 
       Cases.post_case_comment!(%{case_id: case_record.id, body: "four"}, actor: poc)
-      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+      Oban.drain_queue(queue: :default)
 
       assert unseen_label(render(lv)) == "4 new comments"
     end
@@ -292,7 +291,7 @@ defmodule VarselWeb.CaseCommentsLiveTest do
       case_record = Fixtures.open_case(poc)
       Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
       Cases.post_case_comment!(%{case_id: case_record.id, body: "only"}, actor: poc)
-      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+      Oban.drain_queue(queue: :default)
 
       {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/cve")
 

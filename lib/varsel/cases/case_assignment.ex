@@ -18,12 +18,13 @@ defmodule Varsel.Cases.CaseAssignment do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
     extensions: [AshPaperTrail.Resource, AshGraphql.Resource],
-    notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
+    notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.Signals
   alias Varsel.Accounts.User
   alias Varsel.Cases.Case
   alias Varsel.Cases.CaseAssignment.Changes.ClaimInvites
+  alias Varsel.Cases.Changes.EmitWhenWritten
 
   graphql do
     type :case_assignment
@@ -63,6 +64,12 @@ defmodule Varsel.Cases.CaseAssignment do
       upsert_identity :unique_case_user
       upsert_condition expr(false)
       return_skipped_upsert? true
+
+      emit Varsel.Cases.Signals, :case_assigned,
+        dynamic?: true,
+        description: "When the user did not have access to the case yet."
+
+      change {EmitWhenWritten, signal: :case_assigned, fields: [:case_id, :user_id]}
     end
 
     destroy :unassign do

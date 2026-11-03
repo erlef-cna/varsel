@@ -13,8 +13,9 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
   `Varsel.Cases.Proposal.Changes.PackProposal` folds its typed arguments into
   the generic proposal shape. The shared author change and the
   CaseState / ValidTarget validations live on the parent resource's
-  `changes`/`validations` blocks (`on: [:create]`), so they apply here too and
-  nothing is repeated per action. These actions are the public MCP/GraphQL
+  `changes`/`validations` blocks (`on: [:create]`), so they apply here too.
+  Only the `:proposal_opened` emit repeats, because Ash takes an `emit` per
+  action and has no resource-wide form. These actions are the public MCP/GraphQL
   surface; the generic `:propose` stays private.
   """
 
@@ -23,6 +24,7 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
   alias Varsel.Cases.AffectedPackage.ProgramFile
   alias Varsel.Cases.PackageChannel.ChannelInput
   alias Varsel.Cases.Proposal.Changes.PackProposal
+  alias Varsel.Cases.Signals
   alias Varsel.Cases.VersionEvent.EventInput
 
   actions do
@@ -46,6 +48,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       end
 
       change {PackProposal, target: :credit, operation: :insert}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_description do
@@ -59,6 +63,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :string, allow_nil?: false
       change {PackProposal, target: :case, operation: :set, field: :description_md}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_title do
@@ -66,6 +72,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :string, allow_nil?: false
       change {PackProposal, target: :case, operation: :set, field: :title}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_workarounds do
@@ -77,6 +85,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :string, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :workarounds_md}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_configurations do
@@ -88,6 +98,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :string, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :configurations_md}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_solutions do
@@ -99,6 +111,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :string, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :solutions_md}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_technical_analysis do
@@ -112,6 +126,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :string, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :technical_analysis_md}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_proof_of_concept do
@@ -125,6 +141,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :string, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :proof_of_concept_md}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_internal_notes do
@@ -138,6 +156,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :string, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :internal_notes}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_discovery do
@@ -145,6 +165,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, Varsel.Cases.Case.Discovery, allow_nil?: false
       change {PackProposal, target: :case, operation: :set, field: :discovery}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_cvss do
@@ -167,6 +189,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
           %{"value" => dumped} -> %{"value" => dumped["vector"]}
         end)
       end
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_date_public do
@@ -178,6 +202,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :utc_datetime, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :date_public}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_timeline do
@@ -185,6 +211,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, {:array, Varsel.Cases.Case.TimelineEntry}, allow_nil?: false
       change {PackProposal, target: :case, operation: :set, field: :timeline}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_cna_override do
@@ -196,6 +224,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :value, :map, allow_nil?: true
       change {PackProposal, target: :case, operation: :set, field: :cna_override}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_weakness do
@@ -203,6 +233,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :reasoning]
       argument :cwe_id, :integer, allow_nil?: false
       change {PackProposal, target: :weakness, operation: :insert}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_impact do
@@ -217,6 +249,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :capec_id, :integer, allow_nil?: false
       argument :description_md, :string
       change {PackProposal, target: :impact, operation: :insert}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_impact_description do
@@ -229,6 +263,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       accept [:case_id, :target_id, :reasoning]
       argument :value, :string, allow_nil?: true
       change {PackProposal, target: :impact, operation: :set, field: :description_md}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_reference do
@@ -248,6 +284,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
 
       argument :tags, {:array, :string}
       change {PackProposal, target: :reference, operation: :insert}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_affected_package do
@@ -280,6 +318,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :channels, {:array, ChannelInput}
       argument :version_events, {:array, EventInput}
       change {PackProposal, target: :affected_package, operation: :insert}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_otp_affected_package do
@@ -298,6 +338,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :fixed_commits, {:array, :string}
       argument :program_files, {:array, ProgramFile}
       change {PackProposal, target: :affected_package, operation: :insert, preset: :otp}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_elixir_affected_package do
@@ -308,6 +350,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :fixed_commits, {:array, :string}
       argument :program_files, {:array, ProgramFile}
       change {PackProposal, target: :affected_package, operation: :insert, preset: :elixir}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_gleam_affected_package do
@@ -317,6 +361,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :fixed_commits, {:array, :string}
       argument :program_files, {:array, ProgramFile}
       change {PackProposal, target: :affected_package, operation: :insert, preset: :gleam}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_package_channel do
@@ -342,6 +388,8 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :versions_override, {:array, :map}
       argument :entry_override, :map
       change {PackProposal, target: :package_channel, operation: :insert}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_version_event do
@@ -359,12 +407,16 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       argument :package_channel_id, :uuid
       argument :note, :string
       change {PackProposal, target: :version_event, operation: :insert}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     create :propose_delete do
       description "Proposes removing a child row (addressed by target/target_id)."
       accept [:case_id, :target, :target_id, :reasoning]
       change {PackProposal, operation: :delete}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
   end
 end

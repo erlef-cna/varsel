@@ -14,7 +14,6 @@ defmodule Varsel.Cases.GitHubAdvisoryCrossPostTest do
 
   alias Varsel.Cases
   alias Varsel.Fixtures
-  alias Varsel.Notifications.Event
   alias Varsel.Test.GitHubApi
   alias Varsel.Test.GitHubApp
 
@@ -251,7 +250,7 @@ defmodule Varsel.Cases.GitHubAdvisoryCrossPostTest do
       post!(case_record, poc, "Shared outward", true)
       for _poll <- 1..3, do: poll!(link, poc)
 
-      AshOban.Test.schedule_and_run_triggers({Event, :fan_out})
+      Oban.drain_queue(queue: :default)
 
       assert [%{count: 1}] = unread_comment_notifications(supporter)
     end

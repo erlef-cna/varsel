@@ -32,7 +32,7 @@ defmodule Varsel.Cases.Proposal do
     data_layer: AshPostgres.DataLayer,
     extensions: [AshStateMachine, AshPaperTrail.Resource, AshGraphql.Resource],
     fragments: [Varsel.Cases.Proposal.ProposeActions],
-    notifiers: [Varsel.Notifications.Notifier, Ash.Notifier.PubSub]
+    notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Accounts.User
   alias Varsel.Cases.Proposal.Changes.ApplyToTarget
@@ -192,6 +192,8 @@ defmodule Varsel.Cases.Proposal do
         :reasoning,
         :parent_proposal_id
       ]
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
     # The specialized, strongly-typed propose_* create actions live in the

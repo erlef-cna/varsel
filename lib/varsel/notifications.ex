@@ -8,7 +8,6 @@ defmodule Varsel.Notifications do
     otp_app: :varsel,
     extensions: [AshAdmin.Domain]
 
-  alias Varsel.Notifications.Event
   alias Varsel.Notifications.Notification
 
   admin do
@@ -62,12 +61,7 @@ defmodule Varsel.Notifications do
       define :mark_notification_emailed, action: :mark_emailed
       define :send_notification_email, action: :send_email
       define :send_notification_digests, action: :send_digests
-    end
-
-    resource Event do
-      define :emit_notification_event, action: :emit
-      define :fan_out_notification_event, action: :fan_out
-      define :read_notification_events, action: :read
+      define :fan_out_notifications, action: :fan_out, args: [:signal]
     end
   end
 
