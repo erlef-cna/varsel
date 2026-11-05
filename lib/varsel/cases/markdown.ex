@@ -39,9 +39,15 @@ defmodule Varsel.Cases.Markdown do
   published CVE records stays free of site-specific `.l-*` token markup.
 
   The result is sanitized, so it is safe to render unescaped.
+
+  `button` says how the copy button renders: `:live` (the default) for a
+  LiveView page, `:dead` for a page a controller serves. See
+  `Varsel.Markdown.CodeBlock.highlight/2`.
   """
-  @spec to_display_html(String.t()) :: String.t()
-  def to_display_html(markdown) when is_binary(markdown) do
+  @spec to_display_html(String.t(), button: :live | :dead) :: String.t()
+  def to_display_html(markdown, opts \\ []) when is_binary(markdown) do
+    button = Keyword.get(opts, :button, :live)
+
     # The sanitizer drops `button`, so each block reserves its place with a
     # token and the button is spliced in afterwards. The token is random per
     # render, which is what keeps author markdown from naming one.
@@ -55,7 +61,7 @@ defmodule Varsel.Cases.Markdown do
     |> MDEx.parse_document!(@options)
     |> MDEx.traverse_and_update(&CodeBlock.highlight(&1, {:deferred, placeholder}))
     |> MDEx.to_html!(@options)
-    |> String.replace(placeholder, CodeBlock.deferred_button())
+    |> String.replace(placeholder, CodeBlock.deferred_button(button))
     |> String.trim()
   end
 

@@ -621,6 +621,33 @@ defmodule VarselWeb.CveHtmlTest do
       assert body =~ "Upgrade to a patched release"
     end
 
+    test "a code block in Workarounds is highlighted", %{conn: conn} do
+      workarounds = [
+        %{
+          "lang" => "en",
+          "value" => "Use a safe decoder.",
+          "supportingMedia" => [
+            %{
+              "base64" => false,
+              "type" => "text/markdown",
+              "value" => "Use a safe decoder:\n\n```elixir\ndef decode!(binary), do: binary\n```"
+            }
+          ]
+        }
+      ]
+
+      publish(put_in(@cve_json, ["containers", "cna", "workarounds"], workarounds))
+
+      code =
+        conn
+        |> get(~p"/cves/#{@cve_id <> ".html"}")
+        |> html_response(200)
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("#workarounds .codebox pre.lumis")
+
+      assert LazyHTML.text(LazyHTML.query(code, ".l-keyword-function")) == "def"
+    end
+
     test "references are one flat list, advisory before patch before the rest", %{conn: conn} do
       cve_json =
         put_in(@cve_json, ["containers", "cna", "references"], [

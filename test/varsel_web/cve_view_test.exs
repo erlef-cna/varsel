@@ -124,6 +124,21 @@ defmodule VarselWeb.CveViewTest do
       refute render(entry([media])) =~ "onerror"
     end
 
+    test "highlights fenced code blocks in markdown media, with a copy button app.js binds" do
+      media = %{"type" => "text/markdown", "value" => "```elixir\ndef f, do: 1\n```"}
+
+      codebox =
+        [media]
+        |> entry()
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(".codebox")
+
+      assert LazyHTML.attribute(LazyHTML.query(codebox, "pre"), "class") == ["lumis"]
+      assert LazyHTML.text(LazyHTML.query(codebox, ".l-keyword-function")) == "def"
+      assert LazyHTML.attribute(LazyHTML.query(codebox, "button"), "data-clipcode") == [""]
+    end
+
     test "decodes base64 media" do
       media = %{
         "type" => "text/markdown",

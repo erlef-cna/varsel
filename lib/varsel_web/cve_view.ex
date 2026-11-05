@@ -20,6 +20,7 @@ defmodule VarselWeb.CveView do
   import VarselWeb.CoreComponents, only: [icon: 1]
 
   alias Phoenix.HTML.Engine
+  alias Varsel.Cases.Markdown
   alias Varsel.CVE.OwnContainer
   alias VarselWeb.CveView.AffectedChecker
 
@@ -689,18 +690,12 @@ defmodule VarselWeb.CveView do
   end
 
   @doc """
-  Renders a markdown string to HTML.
-
-  `unsafe: true` passes literal HTML through Comrak; `sanitize` then strips
-  scripts and dangerous attributes so the result is safe for `raw/1`.
+  Renders a markdown string to sanitized HTML with highlighted code blocks,
+  for a page a controller serves.
   """
   @spec markdown(String.t()) :: String.t()
   def markdown(text) when is_binary(text) do
-    MDEx.to_html!(text,
-      extension: [table: true, autolink: true, strikethrough: true],
-      render: [hardbreaks: false, unsafe: true],
-      sanitize: MDEx.Document.default_sanitize_options()
-    )
+    Markdown.to_display_html(text, button: :dead)
   end
 
   ## ---------------------------------------------------------------- Tags
