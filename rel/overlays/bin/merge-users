@@ -1,0 +1,18 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+# Merge the first user into the second, by id. Everything that references the
+# first account moves to the second, including its linked providers. Then the
+# first account is deleted.
+set -eu
+
+if [ $# -ne 2 ]; then
+	echo "usage: $(basename -- "$0") <from-user-id> <into-user-id>" >&2
+	exit 2
+fi
+
+cd -P -- "$(dirname -- "$0")"
+# The ids are passed as arguments rather than interpolated into the evaluated
+# expression, so a quote in one cannot close that string and run something else.
+exec ./varsel eval Varsel.Release.merge_users "$1" "$2"

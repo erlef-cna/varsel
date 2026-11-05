@@ -59,6 +59,37 @@ defmodule Varsel.Release do
     |> Varsel.Accounts.set_user_role!(:poc, actor: Varsel.Service.release_console())
   end
 
+  @doc """
+  Merges the account with the first id given on the command line into the
+  account with the second id:
+
+      bin/merge-users 0199… 0198…
+
+  For one person who signed in with two providers before linking them. Every
+  row that references the first account moves to the second, including its
+  linked providers. Then the first account is deleted and its sessions
+  revoked. The second account keeps its own name, role and settings.
+
+  The ids are read from `System.argv/0` for the same reason as in
+  `promote_to_poc/0`.
+  """
+  def merge_users do
+    case System.argv() do
+      [from_id, into_id] -> merge_users(from_id, into_id)
+      _otherwise -> raise ArgumentError, "expected exactly two arguments, two user ids"
+    end
+  end
+
+  @doc "Merges the user with `from_id` into the user with `into_id`. See `merge_users/0`."
+  def merge_users(from_id, into_id) when is_binary(from_id) and is_binary(into_id) do
+    load_app()
+    {:ok, _} = Application.ensure_all_started(@app)
+
+    from_id
+    |> Varsel.Accounts.get_user_by_id!(actor: Varsel.Service.release_console())
+    |> Varsel.Accounts.merge_user_into!(into_id, actor: Varsel.Service.release_console())
+  end
+
   defp repos do
     Application.fetch_env!(@app, :ecto_repos)
   end

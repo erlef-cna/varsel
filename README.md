@@ -118,6 +118,16 @@ bin/promote-to-poc <user-id>
 
 That user can then set everyone else's role from the app.
 
+A person who signed in with two providers before linking them has two
+accounts. Merge the first into the second from a shell on the release:
+
+```shell
+bin/merge-users <from-user-id> <into-user-id>
+```
+
+Everything that references the first account moves to the second, including
+its linked providers. Then the first account is deleted.
+
 ## License
 
 Apache-2.0. The repository follows the [REUSE](https://reuse.software/)
