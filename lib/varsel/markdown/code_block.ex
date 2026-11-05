@@ -28,7 +28,7 @@ defmodule Varsel.Markdown.CodeBlock do
       `phx-click`
     * `:dead` for a page served by a controller, where app.js binds it
     * `{:deferred, placeholder}` to leave a marker in its place, for a caller
-      that sanitizes afterwards and substitutes `deferred_button/0` once the
+      that sanitizes afterwards and substitutes `deferred_button/1` once the
       sanitizer has run
   """
   @spec highlight(MDEx.Document.md_node(), :live | :dead | {:deferred, String.t()}) ::
@@ -52,10 +52,11 @@ defmodule Varsel.Markdown.CodeBlock do
   def highlight(node, _button), do: node
 
   @doc """
-  The copy button a `{:deferred, placeholder}` block left room for.
+  The copy button a `{:deferred, placeholder}` block left room for, as
+  `highlight/2` renders it for `mode`.
   """
-  @spec deferred_button() :: String.t()
-  def deferred_button, do: trailer(:live)
+  @spec deferred_button(:live | :dead) :: String.t()
+  def deferred_button(mode) when mode in [:live, :dead], do: trailer(mode)
 
   defp trailer({:deferred, placeholder}), do: placeholder
 

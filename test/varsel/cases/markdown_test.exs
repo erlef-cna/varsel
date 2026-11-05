@@ -48,6 +48,20 @@ defmodule Varsel.Cases.MarkdownTest do
     refute published =~ "<button"
   end
 
+  test "display HTML for a controller page binds the copy button through app.js" do
+    markdown = "```elixir\ndef f, do: 1\n```"
+
+    live = copy_button(Markdown.to_display_html(markdown))
+    assert LazyHTML.attribute(live, "data-clipcode") == []
+    assert [_click] = LazyHTML.attribute(live, "phx-click")
+
+    dead = copy_button(Markdown.to_display_html(markdown, button: :dead))
+    assert LazyHTML.attribute(dead, "data-clipcode") == [""]
+    assert LazyHTML.attribute(dead, "phx-click") == []
+  end
+
+  defp copy_button(html), do: html |> LazyHTML.from_fragment() |> LazyHTML.query(".codebox-copy")
+
   test "a code block gets one copy button however many the markdown asks for" do
     markdown = """
     <button class="copy-button codebox-copy">mine</button>
