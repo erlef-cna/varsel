@@ -27,7 +27,9 @@ defmodule Varsel.Accounts.User do
   alias AshAuthentication.Checks.AshAuthenticationInteraction
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Accounts.User.Changes.ApplyProviderProfile
+  alias Varsel.Accounts.User.Changes.RepointToMergeTarget
   alias Varsel.Accounts.User.Changes.ResolveOauthIdentity
+  alias Varsel.Accounts.User.Changes.RevokeTokens
   alias Varsel.Accounts.User.Changes.SyncGitHubInstallations
   alias Varsel.Accounts.User.Role
   alias Varsel.Accounts.UserIdentity
@@ -337,7 +339,17 @@ defmodule Varsel.Accounts.User do
       #
       # Tokens are the exception to the cascade: they are keyed by subject
       # rather than by a foreign key, so nothing removes them on their own.
-      change Varsel.Accounts.User.Changes.RevokeTokens
+      change RevokeTokens
+    end
+
+    destroy :merge_into do
+      description "Hands everything that references this account to another account, then deletes it."
+      require_atomic? false
+
+      argument :into_id, :uuid, allow_nil?: false
+
+      change RepointToMergeTarget
+      change RevokeTokens
     end
 
     update :sync_github_installations do
@@ -471,9 +483,15 @@ defmodule Varsel.Accounts.User do
 
     # Your own account, or a POC removing someone from the team — the same
     # reach `:set_role` already grants, including over other POCs.
-    policy action_type(:destroy) do
+    policy action(:destroy) do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
+    end
+
+    # Moving a provider between accounts hands over the way in, so no session
+    # decides it: only an operator with a shell on the release.
+    policy action(:merge_into) do
+      authorize_if actor_attribute_equals(:system, :release_console)
     end
   end
 
