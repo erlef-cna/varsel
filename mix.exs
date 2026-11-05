@@ -81,7 +81,7 @@ defmodule Varsel.MixProject do
       # ash_authentication_oauth2_server require the hex package, and a git
       # dependency satisfies none of them.
       {:ash_authentication,
-       github: "maennchen/ash_authentication", ref: "9510533dddc960194ec5261566a1deea3c010529", override: true},
+       github: "maennchen/ash_authentication", ref: "a2132c0a7753c3ff5283c4ca3cd34f4d79fb8e96", override: true},
       {:ash_authentication_oauth2_server, "~> 0.4.0"},
       {:ash_authentication_phoenix, "~> 3.0-rc"},
       {:ash_cloak, "~> 0.4"},
