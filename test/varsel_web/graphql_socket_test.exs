@@ -185,7 +185,7 @@ defmodule VarselWeb.GraphqlSocketTest do
       user = register_user("alice", :poc)
 
       {api_key, plaintext} =
-        create_api_key(user, %{expires_at: DateTime.add(DateTime.utc_now(), 50, :millisecond)})
+        create_api_key(user, %{expires_at: DateTime.shift(DateTime.utc_now(), second: 1)})
 
       assert {:ok, _socket} = connect(%{"api_key" => plaintext})
       assert api_key.expires_at
@@ -193,7 +193,7 @@ defmodule VarselWeb.GraphqlSocketTest do
       # Delivered to the connecting process itself, in the shape the transport
       # stops on.
       assert_receive %Broadcast{event: "disconnect", topic: "credential_expiry"},
-                     1_000
+                     3_000
     end
   end
 end

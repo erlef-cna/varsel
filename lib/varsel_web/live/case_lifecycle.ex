@@ -58,10 +58,18 @@ defmodule VarselWeb.CaseLifecycle do
     |> assign(case_id: case_id, cve_picker: nil)
     |> attach_hook(__MODULE__, :handle_event, &handle_event/3)
     |> keep_live(:case_record, &load_case(&1, load),
-      subscribe: Enum.map(@topics, &"#{&1}:#{case_id}"),
+      subscribe:
+        Enum.map(@topics, &"#{&1}:#{case_id}") ++
+          notification_topics(socket.assigns.current_user),
       after_fetch: &fetched(&1, &2, after_fetch, marks_read)
     )
   end
+
+  # `:unseen_comment_count` reads notification rows. A background job writes
+  # them after the comment's own broadcast, so the comment topic alone can
+  # refetch before they exist.
+  defp notification_topics(%{id: user_id}), do: ["notification:#{user_id}"]
+  defp notification_topics(nil), do: []
 
   @doc """
   The tabs of a case, in display order. The Reports tab shows only when
