@@ -44,41 +44,38 @@ the reported package**, each as a name, a hex.pm username, and the email address
 hex.pm holds for them. We did not collect this from those people, and they may
 have no account here.
 
-That information exists so a coordinator can bring the right people into the
-case. Accordingly:
+That information exists so the right people work on the case together.
+Accordingly:
 
-- **While a report is being triaged, only the CNA's points of contact see it.**
-  A reporter is not shown the package's maintainers, and maintainers are not
-  shown who reported.
-- **Coordinating a vulnerability means working together.** If a report becomes
-  a case, the reporter and the maintainers are invited onto it, and from then on
-  they can see each other's names and provider usernames, the same details
-  anyone signed in here shows their collaborators.
+- **A report opens a case, and its people are invited.** The reporter
+  and the maintainers hex.pm named are invited onto the case the report opens,
+  while the CNA decides whether to accept it.
+- **Coordinating a vulnerability means working together.** Everyone on the
+  case can see each other's names and provider usernames.
 - **Email addresses are never part of that.** The address hex.pm gave us is
   visible only to points of contact, and is never shown to anyone else on the
   case.
-- **An invite tells you once, by email.** When a coordinator invites you onto
-  a case by your hex.pm username, we ask hex.pm for the primary address of
-  that account and send one email with a sign-in link. That address is sent
-  even when you hide it on your public hex.pm profile. For a GitHub username
-  we use the public address on the profile. When the provider lists no
-  address, the coordinator may enter one they found for you. The invite holds
-  that address, visible to points of contact only, and drops it when you sign
-  in or the invite is withdrawn.
-- **It is deleted as soon as the report is resolved.** When a report becomes a
-  case, is rejected, or is withdrawn, the contact details we were given are
-  erased. What remains is the case and the people who joined it.
+- **An invite tells you once, by email.** When you are invited onto a case by
+  your hex.pm username, we ask hex.pm for the primary address of that account
+  and send one email with a sign-in link. That address is sent even when you
+  hide it on your public hex.pm profile. For a GitHub username we use the
+  public address on the profile. When the provider lists no address, a
+  coordinator may enter one they found for you. Each case you are invited to
+  sends its own email.
+- **The invite holds the address until you sign in.** The address is visible
+  to points of contact only. The invite drops it when you sign in or a
+  coordinator withdraws the invite. A case that the CNA declines, that the
+  reporter withdraws, or that the CNA merges into another case withdraws its
+  open invites. After a merge, the other case invites you in your own right.
 - **Deleting your hex.pm account erases it here too.** When someone whose
   details hex.pm sent us deletes their hex.pm account, hex.pm tells us their
-  username and primary email address. We then erase the name and email address
-  from every report and invite that names them, and the name from the audit
-  trail of those reports, keeping only the hex.pm username. An invite that
-  hasn't been emailed yet is not sent. Credits on published CVE records keep
-  the name the person approved.
+  username and primary email address. We then erase the email address from
+  every invite that names them, keeping only the hex.pm username. An invite
+  that hasn't been emailed yet is not sent. Credits on published CVE records
+  keep the name the person approved.
 - **If you have an account here, it becomes yours.** A forwarded report naming
-  your username is linked to your account, and the separately reported contact
-  details are dropped. Your account holds them from then on, under your
-  control.
+  your username puts your account on the case, and no separately reported
+  contact details are kept. Your account holds them, under your control.
 
 ## Data we collect automatically
 
@@ -143,9 +140,10 @@ has entered into them with us, and they extend to the sub-processors it uses.
 
 ## How long we keep it
 
-- **Forwarded contact details:** deleted when the report they came with is
-  accepted, rejected or withdrawn, or earlier when hex.pm tells us the person
-  deleted their hex.pm account.
+- **Forwarded contact details:** deleted when the person signs in, when their
+  invite is withdrawn, or when the case is declined, withdrawn or merged before
+  the CNA accepts it. Also deleted when hex.pm tells us the person deleted their
+  hex.pm account.
 - **Your account:** kept while the account exists. Delete it and it goes, apart
   from the audit-trail entries described below.
 - **Server logs:** kept only as long as running and securing the service
@@ -189,7 +187,7 @@ We process personal data on the basis of our **legitimate interest** in
 coordinating vulnerability disclosure, which is work in the public interest.
 That covers both people who signed in here, whose data goes when they delete
 their account, and people an upstream system named to us, whose details we hold
-only until the report they came with is resolved and then erase.
+only while their invite is open and then erase.
 
 The rights above are open to anyone who asks, wherever they live. **We do not
 sell or share personal information**, to anyone, for any purpose.

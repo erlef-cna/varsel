@@ -134,15 +134,11 @@ defmodule VarselWeb.NotificationComponents do
     """
   end
 
-  @doc "Where a notification's `View` link goes: its case or its report."
-  @spec subject_path(%{kind: Kind.t(), case_id: Ash.UUID.t() | nil}) :: String.t()
-  def subject_path(%{case_id: case_id}) when not is_nil(case_id), do: ~p"/cases/#{case_id}"
-  def subject_path(%{kind: :report_submitted}), do: ~p"/reports"
-  def subject_path(_notification), do: ~p"/notifications"
+  @doc "Where a notification's `View` link goes: its case."
+  @spec subject_path(%{case_id: Ash.UUID.t()}) :: String.t()
+  def subject_path(%{case_id: case_id}), do: ~p"/cases/#{case_id}"
 
   @doc "The subject-link label paired with `subject_path/1`."
-  @spec subject_label(%{kind: Kind.t(), case_id: Ash.UUID.t() | nil}) :: String.t()
-  def subject_label(%{case_id: case_id}) when not is_nil(case_id), do: "Open case →"
-  def subject_label(%{kind: :report_submitted}), do: "Open triage queue →"
-  def subject_label(_notification), do: "Open →"
+  @spec subject_label(%{case_id: Ash.UUID.t()}) :: String.t()
+  def subject_label(_notification), do: "Open case →"
 end

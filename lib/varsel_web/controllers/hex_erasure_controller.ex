@@ -6,7 +6,6 @@ defmodule VarselWeb.HexErasureController do
   use VarselWeb, :controller
 
   alias Varsel.Cases
-  alias Varsel.CVE
 
   require Logger
 
@@ -21,12 +20,10 @@ defmodule VarselWeb.HexErasureController do
   defp erase(conn, username, email) do
     actor = Ash.PlugHelpers.get_actor(conn)
 
-    with %Ash.BulkResult{status: :success} <-
-           CVE.erase_hex_report_participants(username, email, actor: actor),
-         %Ash.BulkResult{status: :success} <-
-           Cases.erase_hex_case_invites(username, email, actor: actor) do
-      send_resp(conn, :no_content, "")
-    else
+    case Cases.erase_hex_case_invites(username, email, actor: actor) do
+      %Ash.BulkResult{status: :success} ->
+        send_resp(conn, :no_content, "")
+
       # The errors can carry the erased person's details, so only their kinds are logged.
       %Ash.BulkResult{errors: errors} ->
         kinds = Enum.map_join(errors, ", ", &inspect(&1.__struct__))

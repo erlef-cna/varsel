@@ -5,7 +5,7 @@
 defmodule VarselWeb.HexReportController do
   use VarselWeb, :controller
 
-  alias Varsel.CVE
+  alias Varsel.Cases
 
   require Logger
 
@@ -18,9 +18,9 @@ defmodule VarselWeb.HexReportController do
   end
 
   defp submit(conn, attrs) do
-    case CVE.submit_hex_vulnerability_report(attrs, actor: Ash.PlugHelpers.get_actor(conn)) do
-      {:ok, report} ->
-        url = url(~p"/reports")
+    case Cases.submit_hex_vulnerability_report(attrs, actor: Ash.PlugHelpers.get_actor(conn)) do
+      {:ok, %{id: case_id, vulnerability_reports: [report]}} ->
+        url = url(~p"/cases/#{case_id}")
 
         conn
         |> put_resp_header("location", url)
@@ -28,7 +28,7 @@ defmodule VarselWeb.HexReportController do
         |> json(%{
           id: report.id,
           url: url,
-          sign_in_url: url(~p"/auth/user/hex?#{%{return_to: ~p"/reports"}}")
+          sign_in_url: url(~p"/auth/user/hex?#{%{return_to: ~p"/cases/#{case_id}"}}")
         })
 
       {:error, error} ->
@@ -54,7 +54,9 @@ defmodule VarselWeb.HexReportController do
        %{
          summary: summary,
          report_json: %{"report" => description, "package" => package},
-         participants: [reporter | maintainers]
+         reporter_username: reporter.username,
+         reporter_email: reporter.email,
+         maintainers: maintainers
        }}
     end
   end
@@ -66,7 +68,7 @@ defmodule VarselWeb.HexReportController do
   defp people(maintainers) when is_list(maintainers) do
     Enum.reduce_while(maintainers, {:ok, []}, fn maintainer, {:ok, acc} ->
       case person(maintainer, :maintainer) do
-        {:ok, participant} -> {:cont, {:ok, acc ++ [participant]}}
+        {:ok, maintainer} -> {:cont, {:ok, acc ++ [maintainer]}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
@@ -74,15 +76,8 @@ defmodule VarselWeb.HexReportController do
 
   defp people(_maintainers), do: {:error, "maintainers must be a list"}
 
-  defp person(%{"username" => username} = person, role) when is_binary(username) and username != "" do
-    {:ok,
-     %{
-       role: role,
-       strategy: :hex,
-       username: username,
-       name: person["name"],
-       email: person["email"]
-     }}
+  defp person(%{"username" => username} = person, _role) when is_binary(username) and username != "" do
+    {:ok, %{username: username, email: person["email"]}}
   end
 
   defp person(_person, role), do: {:error, "#{role} must carry a username"}

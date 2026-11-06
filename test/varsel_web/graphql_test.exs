@@ -195,7 +195,7 @@ defmodule VarselWeb.GraphqlTest do
                }
              } = body
 
-      assert Ash.read!(Varsel.CVE.VulnerabilityReport, authorize?: false) == []
+      assert Ash.read!(Varsel.Cases.VulnerabilityReport, authorize?: false) == []
     end
 
     test "setUserRole updates a user's role", %{conn: conn} do

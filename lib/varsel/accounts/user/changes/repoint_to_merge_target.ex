@@ -6,8 +6,8 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
   @moduledoc """
   Hands every row that references the account being merged away to the
   account it merges into, before the destroy deletes it: its linked providers,
-  API keys, assignments, credits, comments, proposals, reports, report
-  participations, notifications, GitHub installations and manual requests.
+  API keys, assignments, credits, comments, proposals, reports,
+  notifications, GitHub installations and manual requests.
 
   Paper-trail versions are not foreign keys
   (`Varsel.Accounts.VersionActorReference`) and keep the id of the account
@@ -26,8 +26,7 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
   alias Varsel.Cases.Comment
   alias Varsel.Cases.GitHubManualRequest
   alias Varsel.Cases.Proposal
-  alias Varsel.CVE.ReportParticipant
-  alias Varsel.CVE.VulnerabilityReport
+  alias Varsel.Cases.VulnerabilityReport
   alias Varsel.GitHub.UserInstallation
   alias Varsel.Notifications.Notification
   alias Varsel.Repo
@@ -41,7 +40,6 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
     {Proposal, :author_id},
     {Proposal, :resolved_by_id},
     {VulnerabilityReport, :reporter_id},
-    {ReportParticipant, :user_id},
     {Notification, :user_id},
     {UserInstallation, :user_id},
     {GitHubManualRequest, :user_id}
@@ -124,11 +122,6 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
                     "? IS NOT DISTINCT FROM ?",
                     kept.case_id,
                     parent_as(:merged).case_id
-                  ) and
-                  fragment(
-                    "? IS NOT DISTINCT FROM ?",
-                    kept.vulnerability_report_id,
-                    parent_as(:merged).vulnerability_report_id
                   )
             )
           )

@@ -66,6 +66,16 @@ defmodule DevSeed.DocsScreenshots do
     report_ids =
       Repo.all(from(r in "vulnerability_reports", where: r.summary == ^@report_summary, select: r.id))
 
+    report_case_ids =
+      Repo.all(
+        from(cr in "case_reports",
+          where: cr.vulnerability_report_id in ^report_ids,
+          select: cr.case_id
+        )
+      )
+
+    Repo.delete_all(from(c in "cases", where: c.id in ^report_case_ids))
+
     Repo.delete_all(from(v in "vulnerability_reports_versions", where: v.version_source_id in ^report_ids))
 
     Repo.delete_all(from(r in "vulnerability_reports", where: r.id in ^report_ids))
@@ -230,9 +240,16 @@ defmodule DevSeed.DocsScreenshots do
     # A hand-built cache in place of a real refresh: the fictional repository
     # has nothing to clone, and the stamp lands after the facts above, so the
     # workspace renders the ranges without a staleness flag.
-    Varsel.Cases.store_affected_package_derivation!(
+    # The package's own `updated_at` counts as a fact change, so the cache
+    # stamp matches it; a later write would mark the cache outdated and queue
+    # a real derivation of the fictional repository.
+    now = DateTime.utc_now()
+
+    Ash.Seed.update!(
       package,
       %{
+        updated_at: now,
+        derivation_cached_at: now,
         derivation_cache: %{
           "channels" => %{
             hex_channel.id => %{
@@ -266,8 +283,7 @@ defmodule DevSeed.DocsScreenshots do
           "call_outs" => [],
           "issues" => []
         }
-      },
-      authorize?: false
+      }
     )
 
     ensure_catalog_rows()
@@ -424,10 +440,10 @@ defmodule DevSeed.DocsScreenshots do
     Varsel.Cases.request_case_review!(kase, actor: supporter)
   end
 
-  # ── an untriaged report for the POC queue ─────────────────────────────────
+  # ── an untriaged report, whose case fills the POC's submitted lane ────────
 
   defp seed_report(reporter) do
-    Varsel.CVE.submit_vulnerability_report!(
+    Varsel.Cases.submit_vulnerability_report!(
       %{
         summary: @report_summary,
         report_body: """

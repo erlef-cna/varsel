@@ -4,14 +4,13 @@
 
 defmodule VarselWeb.CaseReportsLive do
   @moduledoc """
-  The Reports tab of a case: the vulnerability reports that led to it, in
-  the triage queue's row shape. Reports are acted on in triage and read here.
+  The Reports tab of a case: the vulnerability reports that led to it, as
+  each arrived. The case carries the decision.
   """
   use VarselWeb, :live_view
 
   import VarselWeb.CaseComponents, only: [case_header: 1, report_row: 1]
 
-  alias Varsel.CVE.VulnerabilityReport
   alias VarselWeb.CaseLifecycle
 
   @impl Phoenix.LiveView
@@ -23,10 +22,13 @@ defmodule VarselWeb.CaseReportsLive do
         load: [
           :cve_id,
           :cve_record,
-          vulnerability_reports: [reporter: [:avatar_url, :display_name]]
+          vulnerability_reports: [
+            :reporter_username,
+            reporter: [:avatar_url, :display_name],
+            cases: [:state, :accepted_at]
+          ]
         ],
-        after_fetch: &after_fetch/2,
-        marks_read: [:report_submitted]
+        after_fetch: &after_fetch/2
       )
 
     {:ok, socket}
@@ -78,13 +80,6 @@ defmodule VarselWeb.CaseReportsLive do
         <.list_card empty?={@case_record.vulnerability_reports == []}>
           <:note>
             <.count_label count={length(@case_record.vulnerability_reports)} singular="report" />
-            <.link
-              :if={Ash.can?({VulnerabilityReport, :triage}, @current_user)}
-              navigate={~p"/reports"}
-              class="link link-hover text-primary ml-2"
-            >
-              Report triage
-            </.link>
           </:note>
           <:empty>No reports led to this case.</:empty>
 

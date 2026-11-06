@@ -15,7 +15,6 @@ defmodule Varsel.Notifications.FanOutTest do
   alias Ash.Error.Forbidden
   alias AshOban.Signals.Worker
   alias Varsel.Cases
-  alias Varsel.CVE
   alias Varsel.Fixtures
   alias Varsel.Notifications
   alias Varsel.Notifications.Notification
@@ -46,7 +45,7 @@ defmodule Varsel.Notifications.FanOutTest do
       reporter = Fixtures.register_user("fanout_reporter", :supporter)
 
       {:ok, _report} =
-        CVE.submit_vulnerability_report(
+        Cases.submit_vulnerability_report(
           %{
             report_json: %{"x" => 1},
             summary: "a bug",
@@ -66,14 +65,17 @@ defmodule Varsel.Notifications.FanOutTest do
     test "hex.pm intake notifies every POC too" do
       poc = Fixtures.register_user("fanout_hex_poc", :poc)
 
+      Req.Test.stub(Varsel.HexPm, fn conn ->
+        Req.Test.json(conn, %{"username" => "somebody", "name" => "somebody", "email" => nil})
+      end)
+
       {:ok, _report} =
-        CVE.submit_hex_vulnerability_report(
+        Cases.submit_hex_vulnerability_report(
           %{
             report_json: %{"x" => 1},
             summary: "a bug",
-            participants: [
-              %{role: :reporter, strategy: :hex, username: "somebody"}
-            ]
+            reporter_username: "somebody",
+            maintainers: []
           },
           actor: Service.hexpm_intake()
         )

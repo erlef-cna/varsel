@@ -35,18 +35,6 @@ defmodule Varsel.Notifications do
           ]
         ]
 
-      define :mark_kind_notifications_read,
-        action: :mark_kind_read,
-        args: [:kind],
-        require_reference?: false,
-        default_options: [
-          bulk_options: [
-            notify?: true,
-            return_errors?: true,
-            strategy: [:atomic, :atomic_batches, :stream]
-          ]
-        ]
-
       define :mark_all_notifications_read,
         action: :mark_read,
         require_reference?: false,

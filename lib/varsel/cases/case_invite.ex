@@ -86,7 +86,8 @@ defmodule Varsel.Cases.CaseInvite do
 
   # Both updates are single-purpose system writes (the Oban send and hex.pm's
   # erasure), so neither is a default update to fall back on.
-  # credo:disable-for-next-line AshCredo.Check.Design.MissingPrimaryAction
+  # `:on_unaccepted_case` is reached only by the `:case_closed` listener.
+  # credo:disable-for-next-line /MissingPrimaryAction|MissingCodeInterface/
   actions do
     defaults [:read]
 
@@ -168,6 +169,15 @@ defmodule Varsel.Cases.CaseInvite do
 
       filter expr(strategy == ^arg(:strategy) and username == ^arg(:username))
     end
+
+    read :on_unaccepted_case do
+      description "Internal: the invites of a case the CNA never accepted, for withdrawal when it closes."
+      public? false
+
+      argument :case_id, :uuid, allow_nil?: false
+
+      filter expr(case_id == ^arg(:case_id) and is_nil(case.accepted_at))
+    end
   end
 
   policies do
@@ -178,14 +188,18 @@ defmodule Varsel.Cases.CaseInvite do
       authorize_if AshObanInteraction
     end
 
+    # A case that closes before acceptance withdraws its open invites, and the
+    # reporter's own withdrawal is one such close.
     policy action_type([:read, :destroy]) do
       authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
+      authorize_if signal_in(Varsel.Cases.Signals, :case_closed)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
 
-    # Inviting stays with people.
+    # Inviting stays with people, apart from those a report's intake named.
     policy action_type(:create) do
+      authorize_if accessing_from(Case, :invites)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
@@ -256,6 +270,15 @@ defmodule Varsel.Cases.CaseInvite do
       allow_nil? false
       public? true
       attribute_writable? true
+    end
+  end
+
+  signals_in do
+    from Varsel.Cases.Signals do
+      on :case_closed, :withdraw_on_close,
+        action: :withdraw,
+        read_action: :on_unaccepted_case,
+        args: [:case_id]
     end
   end
 

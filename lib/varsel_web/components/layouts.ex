@@ -212,9 +212,6 @@ defmodule VarselWeb.Layouts do
           <li :if={Varsel.Cases.can_list_cases?(@current_user)} class="shrink-0">
             <.nav_link href={~p"/cases"} current_path={@current_path}>Cases</.nav_link>
           </li>
-          <li :if={Varsel.CVE.can_list_vulnerability_reports?(@current_user)} class="shrink-0">
-            <.nav_link href={~p"/reports"} current_path={@current_path}>Reports</.nav_link>
-          </li>
           <li :if={Varsel.Accounts.can_list_users?(@current_user)} class="shrink-0">
             <.nav_link href={~p"/users"} current_path={@current_path}>Users</.nav_link>
           </li>
@@ -289,9 +286,6 @@ defmodule VarselWeb.Layouts do
               <li :if={Varsel.Cases.can_list_cases?(@current_user)}>
                 <.more_link href={~p"/cases"} current_path={@current_path}>Cases</.more_link>
               </li>
-              <li :if={Varsel.CVE.can_list_vulnerability_reports?(@current_user)}>
-                <.more_link href={~p"/reports"} current_path={@current_path}>Reports</.more_link>
-              </li>
               <li :if={Varsel.Accounts.can_list_users?(@current_user)}>
                 <.more_link href={~p"/users"} current_path={@current_path}>Users</.more_link>
               </li>
@@ -324,7 +318,6 @@ defmodule VarselWeb.Layouts do
     "/cves",
     "/common-weaknesses",
     "/cases",
-    "/reports",
     "/users",
     "/settings/tokens",
     "/settings/notifications",

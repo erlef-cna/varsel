@@ -119,8 +119,8 @@ defmodule Varsel.Accounts.UserDeletionTest do
     test "reports keep their contents and lose their reporter" do
       reporter = register_user("reporter")
 
-      report =
-        Varsel.CVE.submit_vulnerability_report!(
+      %{vulnerability_reports: [report]} =
+        Cases.submit_vulnerability_report!(
           %{
             report_json: %{"package" => "acme_lib", "details" => "leaks secrets"},
             summary: "Leaks secrets",
@@ -132,7 +132,7 @@ defmodule Varsel.Accounts.UserDeletionTest do
 
       Accounts.delete_user!(reporter, actor: reporter)
 
-      kept = Ash.get!(Varsel.CVE.VulnerabilityReport, report.id, authorize?: false)
+      kept = Ash.get!(Varsel.Cases.VulnerabilityReport, report.id, authorize?: false)
 
       assert kept.reporter_id == nil
     end

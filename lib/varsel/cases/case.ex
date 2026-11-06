@@ -27,6 +27,14 @@ defmodule Varsel.Cases.Case do
 
   ```mermaid
   stateDiagram-v2
+    [*] --> submitted : report submitted
+    submitted --> triage : triage (POC / assigned supporter)
+    submitted --> draft : accept (POC / assigned supporter)
+    triage --> draft : accept (POC / assigned supporter)
+    submitted --> closed : reject (POC / assigned supporter) / withdraw (reporter)
+    triage --> closed : reject (POC / assigned supporter) / withdraw (reporter)
+    submitted --> merged : merge (POC / assigned supporter)
+    triage --> merged : merge (POC / assigned supporter)
     [*] --> draft : open
     draft --> review : request_review
     review --> draft : request_changes
@@ -40,8 +48,12 @@ defmodule Varsel.Cases.Case do
     review --> closed : close
   ```
 
-  Content (case fields and all child rows) is editable in `:draft` and
-  `:review`, and in `:approved` by a POC — enforced by the content-freeze
+  A submitted report opens a case in `:submitted`. Until a POC or an assigned
+  supporter accepts it, nothing about it leaves for GitHub or MITRE, and no
+  CVE ID is assigned.
+
+  Content (case fields and all child rows) is editable in `:submitted`,
+  `:triage`, `:draft` and `:review`, and in `:approved` by a POC — enforced by the content-freeze
   policy on `:edit` / `:apply_proposal`, with the `:version` optimistic lock
   rejecting writes from stale snapshots. Amending a published case means
   reopening it; the next publish pushes a MITRE update.
@@ -58,17 +70,26 @@ defmodule Varsel.Cases.Case do
     domain: Varsel.Cases,
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer,
-    extensions: [AshStateMachine, AshOban, AshPaperTrail.Resource, AshGraphql.Resource],
+    extensions: [
+      AshStateMachine,
+      AshOban,
+      AshPaperTrail.Resource,
+      AshGraphql.Resource,
+      AshRateLimiter
+    ],
     notifiers: [Ash.Notifier.PubSub]
 
   alias Varsel.Cases.AffectedPackage.DerivationState
+  alias Varsel.Cases.Case.Changes.InheritFromSource
   alias Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory
+  alias Varsel.Cases.Case.Changes.TakeReport
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
   alias Varsel.Cases.Changes.AssignOpener
   alias Varsel.Cases.Signals
   alias Varsel.Cases.Validations.CveIdAssignable
+  alias Varsel.Cases.VulnerabilityReport
   alias Varsel.Types.TSVector
 
   @content_fields [
@@ -97,6 +118,7 @@ defmodule Varsel.Cases.Case do
 
     references do
       reference :cve_record, on_delete: :nilify
+      reference :merged_into, on_delete: :nilify
     end
 
     # The migration generator cannot express GENERATED ALWAYS.
@@ -147,10 +169,15 @@ defmodule Varsel.Cases.Case do
   end
 
   state_machine do
-    initial_states [:draft]
+    initial_states [:submitted, :triage, :draft]
     default_initial_state :draft
 
     transitions do
+      transition :triage, from: :submitted, to: :triage
+      transition :accept, from: [:submitted, :triage], to: :draft
+      transition :reject, from: [:submitted, :triage], to: :closed
+      transition :withdraw, from: [:submitted, :triage], to: :closed
+      transition :merge, from: [:submitted, :triage], to: :merged
       transition :request_review, from: :draft, to: :review
       transition :request_changes, from: :review, to: :draft
       transition :approve, from: :review, to: :approved
@@ -193,6 +220,12 @@ defmodule Varsel.Cases.Case do
     version_extensions extensions: [Varsel.Accounts.VersionActorReference]
   end
 
+  rate_limit do
+    backend Varsel.Hammer
+  end
+
+  # `:absorb_merged` is reached only by the `:case_merged` listener.
+  # credo:disable-for-next-line AshCredo.Check.Design.MissingCodeInterface
   actions do
     defaults [:read]
 
@@ -550,6 +583,214 @@ defmodule Varsel.Cases.Case do
 
       emit Signals, :case_closed, fields: [case_id: :id]
     end
+
+    create :submit_report do
+      description """
+      A signed-in reporter submits a vulnerability report, which opens a case
+      in :submitted that they are assigned to. The report is free-form:
+      either arbitrary `report_json`, or a free-text `report_body` stored as
+      `%{"report" => body}`. The reporter must confirm both that the report
+      matches the CVE criteria and that the vulnerability is in scope for
+      the CNA. These are submission-time affirmations, validated but not
+      stored. Reporters without a role are rate limited to 25 submissions per
+      day.
+      """
+
+      accept []
+
+      argument :summary, :string do
+        allow_nil? false
+        description "Human-readable summary of the report. It titles the case."
+      end
+
+      argument :report_json, :map do
+        description "The free-form report payload. Arbitrary JSON."
+      end
+
+      argument :report_body, :string do
+        description "Free-text report body, used when no structured report_json is provided."
+        constraints allow_empty?: true, trim?: false, max_length: 200_000
+      end
+
+      argument :confirms_criteria, :boolean, allow_nil?: false
+      argument :confirms_in_scope, :boolean, allow_nil?: false
+
+      argument :report, :map, public?: false
+      argument :assignments, {:array, :map}, public?: false
+
+      validate argument_equals(:confirms_criteria, true) do
+        message "You must confirm the report matches the CVE criteria."
+      end
+
+      validate argument_equals(:confirms_in_scope, true) do
+        message "You must confirm the vulnerability is in scope for the CNA."
+      end
+
+      change set_attribute(:state, :submitted)
+      change Varsel.Cases.Case.Changes.RateLimitReports
+      change TakeReport
+      change AssignOpener
+      change manage_relationship(:report, :vulnerability_reports, type: :create)
+      change manage_relationship(:assignments, type: :create)
+
+      emit Signals, :report_submitted, fields: [case_id: :id], values: [actor_id: actor(:id)]
+    end
+
+    create :submit_report_from_hex do
+      description """
+      hex.pm's package reporting submits a report on a reporter's behalf
+      rather than as them, which opens a case in :submitted. The sender
+      proved it was hex.pm with a service token. The reporter and the
+      maintainers hex.pm named are on the case at once, by their hex.pm
+      handles. The submission fails as a whole when one of them cannot be
+      given access.
+      """
+
+      accept []
+
+      argument :summary, :string, allow_nil?: false
+      argument :report_json, :map, allow_nil?: false
+      argument :reporter_username, :string, allow_nil?: false
+
+      argument :reporter_email, :string do
+        description "The address hex.pm holds for the reporter."
+      end
+
+      argument :maintainers, {:array, :map} do
+        description "The package's maintainers as hex.pm named them: `username` and `email`."
+        allow_nil? false
+      end
+
+      argument :report, :map, public?: false
+      argument :people, {:array, :map}, public?: false
+      argument :assignments, {:array, :map}, public?: false
+      argument :invites, {:array, :map}, public?: false
+
+      change set_attribute(:state, :submitted)
+      change TakeReport
+      change Varsel.Cases.Case.Changes.AdmitNamedPeople
+      change manage_relationship(:report, :vulnerability_reports, type: :create)
+      change manage_relationship(:assignments, type: :create)
+      change manage_relationship(:invites, type: :create)
+
+      emit Signals, :report_submitted, fields: [case_id: :id], values: [actor_id: actor(:id)]
+    end
+
+    create :split do
+      description """
+      Opens a further case from the reports of an existing one, for a report
+      that holds more than one finding. The new case cites the same reports,
+      starts in :triage, and gives access to everyone on the source case.
+      """
+
+      accept [:title]
+
+      argument :source_case_id, :uuid do
+        allow_nil? false
+        description "The case whose reports hold the finding to split out."
+      end
+
+      argument :reports, {:array, :struct},
+        public?: false,
+        constraints: [items: [instance_of: VulnerabilityReport]]
+
+      argument :assignments, {:array, :map}, public?: false
+      argument :invites, {:array, :map}, public?: false
+
+      change set_attribute(:state, :triage)
+      change {InheritFromSource, open_source?: true}
+      change manage_relationship(:reports, :vulnerability_reports, type: :append)
+      change manage_relationship(:assignments, type: :create)
+      change manage_relationship(:invites, type: :create)
+    end
+
+    update :triage do
+      description "POC marks a submitted case as under triage."
+      accept []
+      change transition_state(:triage)
+    end
+
+    update :accept do
+      description "POC takes the case on. It moves to :draft, and its content opens for editing."
+      accept []
+      change transition_state(:draft)
+      change set_attribute(:accepted_at, &DateTime.utc_now/0)
+    end
+
+    update :reject do
+      description """
+      POC declines a case that is not accepted yet, optionally recording why.
+      Its open invites are withdrawn.
+      """
+
+      accept [:closed_reason]
+      change transition_state(:closed)
+
+      emit Signals, :case_closed, fields: [case_id: :id]
+    end
+
+    update :withdraw do
+      description """
+      The reporter retracts their report before the CNA accepted it. The case
+      closes, its closed reason records the withdrawal, and its open invites
+      are withdrawn.
+      """
+
+      accept []
+
+      change set_attribute(:closed_reason, "Withdrawn by the reporter.")
+      change transition_state(:closed)
+
+      emit Signals, :case_closed, fields: [case_id: :id]
+    end
+
+    update :merge do
+      description """
+      POC folds a case that is not accepted yet into another case that covers
+      the same finding. The other case then cites this case's reports and
+      gives access to everyone on this case. This case ends as :merged and
+      points at the other case, and its own invites are withdrawn.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :into_case_id, :uuid do
+        allow_nil? false
+        description "The case that takes over this case's reports."
+      end
+
+      change Varsel.Cases.Case.Changes.Merge
+      change transition_state(:merged)
+
+      # The other case takes over before this case's invites are withdrawn.
+      emit Signals, :case_merged, fields: [case_id: :id, into_case_id: :merged_into_id]
+      emit Signals, :case_closed, fields: [case_id: :id]
+    end
+
+    update :absorb_merged do
+      description """
+      Internal: takes over the reports and people of a case merged into this
+      one. Reached only through the `:case_merged` signal.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :source_case_id, :uuid, allow_nil?: false
+
+      argument :reports, {:array, :struct},
+        public?: false,
+        constraints: [items: [instance_of: VulnerabilityReport]]
+
+      argument :assignments, {:array, :map}, public?: false
+      argument :invites, {:array, :map}, public?: false
+
+      change InheritFromSource
+      change manage_relationship(:reports, :vulnerability_reports, type: :append)
+      change manage_relationship(:assignments, type: :create)
+      change manage_relationship(:invites, type: :create)
+    end
   end
 
   policies do
@@ -593,11 +834,12 @@ defmodule Varsel.Cases.Case do
                    )
     end
 
-    # Content freeze: case content may only change in :draft or :review, or in
-    # :approved by a POC, so late detail lands without a reopen. From
-    # :publishing on the record is MITRE's and an amendment reopens.
+    # Content freeze: case content may change while the case is triaged and
+    # while it is in :draft or :review, or in :approved by a POC, so late
+    # detail lands without a reopen. From :publishing on the record is MITRE's
+    # and an amendment reopens.
     policy action([:edit, :apply_proposal, :report_to_github]) do
-      authorize_if expr(state in [:draft, :review])
+      authorize_if expr(state in [:submitted, :triage, :draft, :review])
 
       authorize_if expr(state == :approved and ^actor(:role) == :poc)
     end
@@ -667,6 +909,58 @@ defmodule Varsel.Cases.Case do
                    )
     end
 
+    # Whether the CNA takes a reported case on is a CNA decision: a POC's, or
+    # a supporter's on a case they work.
+    policy action([:triage, :accept, :reject, :merge]) do
+      authorize_if actor_attribute_equals(:role, :poc)
+
+      authorize_if expr(
+                     ^actor(:role) == :supporter and
+                       exists(assignments, user_id == ^actor(:id))
+                   )
+    end
+
+    # The new case has no assignments to ask about yet. `InheritFromSource` reads
+    # the source case as the actor, so a supporter splits only a case they
+    # work.
+    policy action(:split) do
+      authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if actor_attribute_equals(:role, :supporter)
+    end
+
+    # The merge's own policy decided on both cases.
+    policy action(:absorb_merged) do
+      authorize_if signal_in(Signals, :case_merged)
+    end
+
+    # Withdrawal belongs to the reporter alone. A POC rejects instead.
+    policy action(:withdraw) do
+      authorize_if relates_to_actor_via([:vulnerability_reports, :reporter])
+    end
+
+    # Any signed-in user may report a vulnerability, and is recorded as the
+    # reporter.
+    policy action(:submit_report) do
+      authorize_if actor_present()
+    end
+
+    # hex.pm submits as itself rather than as the reporter. Only
+    # `VarselWeb.Plugs.HexServiceAuth` builds that actor, and only after
+    # verifying the service token.
+    policy action(:submit_report_from_hex) do
+      authorize_if actor_attribute_equals(:system, :hexpm_intake)
+    end
+
+    # Before acceptance the CNA has not taken the case on. What leaves for
+    # GitHub or MITRE waits for that decision.
+    policy action([:report_to_github, :assign_cve_id, :link_upstream_cve]) do
+      authorize_if expr(state not in [:submitted, :triage, :merged])
+    end
+
+    policy action(:grant_access) do
+      authorize_if expr(state != :merged)
+    end
+
     # :mark_published runs only through the AshOban bypass above.
     policy action(:mark_published) do
       forbid_if always()
@@ -696,6 +990,10 @@ defmodule Varsel.Cases.Case do
     change optimistic_lock(:version),
       on: [:update],
       where: [negate(action_is([:refresh_derivation, :grant_access, :report_to_github]))]
+
+    change set_attribute(:accepted_at, &DateTime.utc_now/0),
+      on: [:create],
+      where: [negate(action_is([:submit_report, :submit_report_from_hex, :split]))]
   end
 
   attributes do
@@ -823,6 +1121,15 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
+    attribute :accepted_at, :utc_datetime_usec do
+      description """
+      When the CNA took the case on. Nil while a reported case waits for that
+      decision, and for good on one that was rejected, withdrawn or merged.
+      """
+
+      public? true
+    end
+
     attribute :published_at, :utc_datetime do
       description "When the case was first successfully published to MITRE."
       public? true
@@ -879,8 +1186,17 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
-    has_many :vulnerability_reports, Varsel.CVE.VulnerabilityReport do
-      description "Inbound reports consolidated into this case."
+    many_to_many :vulnerability_reports, VulnerabilityReport do
+      description "The inbound reports this case came from or took over."
+      through Varsel.Cases.CaseReport
+      source_attribute_on_join_resource :case_id
+      destination_attribute_on_join_resource :vulnerability_report_id
+      public? true
+    end
+
+    belongs_to :merged_into, __MODULE__ do
+      description "The case that took over this case's reports, once merged."
+      allow_nil? true
       public? true
     end
 
@@ -891,6 +1207,12 @@ defmodule Varsel.Cases.Case do
   end
 
   signals_in do
+    from Signals do
+      on :case_merged, :absorb_merged,
+        get_by: [id: :into_case_id],
+        inputs: [source_case_id: :case_id]
+    end
+
     from Varsel.CVE.Signals do
       on :cve_record_published, :mark_published,
         read_action: :publishing,

@@ -44,8 +44,8 @@ defmodule VarselWeb.Storybook.Board.Board do
       %Variation{
         id: :pipeline,
         description:
-          "The case pipeline: four lanes across, wrapping to one column on a narrow " <>
-            "screen. An empty lane keeps its place, so the shape holds steady as work moves.",
+          "Four lanes in one row, sharing the width. An empty lane keeps its place, " <>
+            "so the shape holds steady as work moves.",
         slots: [
           lane("Draft", "bg-warning", 2, [
             card("Heap overflow in the packet parser", 8.8, "CVE-2026-20013"),
@@ -57,6 +57,24 @@ defmodule VarselWeb.Storybook.Board.Board do
           lane("Approved", "bg-[color:var(--violet)]", 1, [
             card("Timing oracle in constant_time_compare", 2.3, "CVE-2026-20011")
           ]),
+          lane("Publishing", "bg-info", 0, [])
+        ]
+      },
+      %Variation{
+        id: :with_triage,
+        description:
+          "The case pipeline: six lanes, the two triage lanes first. Each is at least " <>
+            "17rem wide, so the board scrolls sideways when the page is narrower.",
+        slots: [
+          lane("Submitted", "bg-warning", 1, [
+            card("Forged webhook events accepted", 7.5, "no CVE yet")
+          ]),
+          lane("Triage", "bg-info", 0, []),
+          lane("Draft", "bg-warning", 1, [
+            card("Heap overflow in the packet parser", 8.8, "CVE-2026-20013")
+          ]),
+          lane("Review", "bg-info", 0, []),
+          lane("Approved", "bg-[color:var(--violet)]", 0, []),
           lane("Publishing", "bg-info", 0, [])
         ]
       }

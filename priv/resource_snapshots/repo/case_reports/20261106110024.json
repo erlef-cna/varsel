@@ -14,66 +14,6 @@
     },
     {
       "allow_nil?": false,
-      "default": "nil",
-      "generated?": false,
-      "precision": null,
-      "primary_key?": false,
-      "references": null,
-      "scale": null,
-      "size": null,
-      "source": "role",
-      "type": "text"
-    },
-    {
-      "allow_nil?": false,
-      "default": "nil",
-      "generated?": false,
-      "precision": null,
-      "primary_key?": false,
-      "references": null,
-      "scale": null,
-      "size": null,
-      "source": "strategy",
-      "type": "text"
-    },
-    {
-      "allow_nil?": false,
-      "default": "nil",
-      "generated?": false,
-      "precision": null,
-      "primary_key?": false,
-      "references": null,
-      "scale": null,
-      "size": null,
-      "source": "username",
-      "type": "citext"
-    },
-    {
-      "allow_nil?": true,
-      "default": "nil",
-      "generated?": false,
-      "precision": null,
-      "primary_key?": false,
-      "references": null,
-      "scale": null,
-      "size": null,
-      "source": "name",
-      "type": "text"
-    },
-    {
-      "allow_nil?": true,
-      "default": "nil",
-      "generated?": false,
-      "precision": null,
-      "primary_key?": false,
-      "references": null,
-      "scale": null,
-      "size": null,
-      "source": "email",
-      "type": "text"
-    },
-    {
-      "allow_nil?": false,
       "default": "fragment(\"(now() AT TIME ZONE 'utc')\")",
       "generated?": false,
       "precision": null,
@@ -109,6 +49,7 @@
         "destination_attribute_generated": null,
         "index?": false,
         "index_where": null,
+        "match_tenant?": false,
         "match_type": null,
         "match_with": null,
         "multitenancy": {
@@ -116,20 +57,20 @@
           "global": null,
           "strategy": null
         },
-        "name": "report_participants_report_id_fkey",
+        "name": "case_reports_case_id_fkey",
         "on_delete": "delete",
         "on_update": null,
         "primary_key?": true,
         "schema": "public",
-        "table": "vulnerability_reports"
+        "table": "cases"
       },
       "scale": null,
       "size": null,
-      "source": "report_id",
+      "source": "case_id",
       "type": "uuid"
     },
     {
-      "allow_nil?": true,
+      "allow_nil?": false,
       "default": "nil",
       "generated?": false,
       "precision": null,
@@ -141,6 +82,7 @@
         "destination_attribute_generated": null,
         "index?": false,
         "index_where": null,
+        "match_tenant?": false,
         "match_type": null,
         "match_with": null,
         "multitenancy": {
@@ -148,16 +90,16 @@
           "global": null,
           "strategy": null
         },
-        "name": "report_participants_user_id_fkey",
-        "on_delete": "nilify",
+        "name": "case_reports_vulnerability_report_id_fkey",
+        "on_delete": "delete",
         "on_update": null,
         "primary_key?": true,
         "schema": "public",
-        "table": "users"
+        "table": "vulnerability_reports"
       },
       "scale": null,
       "size": null,
-      "source": "user_id",
+      "source": "vulnerability_report_id",
       "type": "uuid"
     }
   ],
@@ -167,31 +109,23 @@
   "custom_indexes": [],
   "custom_statements": [],
   "has_create_action": true,
-  "hash": "D0BC24E9737AE3D8727CDCB68D2C7D7C4A68D5CD2BDE286A7CCF738ED5C1EBCC",
+  "hash": "5F3D5A44BBC793717FA7BDD75307110E486E59B46C8414CABEA0846310397493",
   "identities": [
     {
       "all_tenants?": false,
       "base_filter": null,
-      "index_name": "report_participants_unique_report_handle_index",
+      "index_name": "case_reports_unique_case_report_index",
       "keys": [
         {
           "type": "atom",
-          "value": "report_id"
+          "value": "case_id"
         },
         {
           "type": "atom",
-          "value": "role"
-        },
-        {
-          "type": "atom",
-          "value": "strategy"
-        },
-        {
-          "type": "atom",
-          "value": "username"
+          "value": "vulnerability_report_id"
         }
       ],
-      "name": "unique_report_handle",
+      "name": "unique_case_report",
       "nils_distinct?": true,
       "where": null
     }
@@ -203,5 +137,6 @@
   },
   "repo": "Elixir.Varsel.Repo",
   "schema": null,
-  "table": "report_participants"
+  "table": "case_reports",
+  "temporal": null
 }
