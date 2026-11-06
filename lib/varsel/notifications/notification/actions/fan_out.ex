@@ -6,7 +6,7 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   @moduledoc """
   Records a `Varsel.Notifications.Notification` for every user in a signal's
   audience, honouring each recipient's per-kind preferences and excluding the
-  user who acted.
+  user who acted. A mention reaches only the mentioned who may read the case.
 
   Implements `Varsel.Notifications.Notification`'s `:fan_out` action, the
   listener of every signal that raises a notification. A failure raises, so
@@ -62,6 +62,9 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   defp event(%Cases.Signals.CommentPosted{} = signal),
     do: %{kind: :comment_posted, case_id: signal.case_id, actor_id: signal.actor_id}
 
+  defp event(%Cases.Signals.UsersMentioned{} = signal),
+    do: %{kind: :mentioned, case_id: signal.case_id, recipient_ids: signal.user_ids, actor_id: signal.actor_id}
+
   defp event(%Cases.Signals.ProposalOpened{} = signal),
     do: %{kind: :proposal_opened, case_id: signal.case_id, actor_id: signal.actor_id}
 
@@ -84,6 +87,19 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
 
       :recipient ->
         [Ash.get!(User, event.recipient_id, opts)]
+
+      # A comment names whoever its writer typed, so only the mentioned who
+      # can read the case hear about it.
+      :mentioned ->
+        assigned =
+          CaseAssignment
+          |> Ash.Query.filter(case_id == ^event.case_id and user_id in ^event.recipient_ids)
+          |> Ash.read!(opts)
+          |> Enum.map(& &1.user_id)
+
+        User
+        |> Ash.Query.filter(id in ^event.recipient_ids and (role == :poc or id in ^assigned))
+        |> Ash.read!(opts)
     end
   end
 

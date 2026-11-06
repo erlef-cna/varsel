@@ -17,11 +17,16 @@ defmodule VarselWeb.CaseCommentsLive do
 
   A comment written here goes the other way when its author asks: the form
   offers to write it to the advisory as well.
+
+  Typing `@` in the form offers the people in the case to mention. The
+  people a reader may see are the case's assignees and everyone who wrote in
+  it, and for a POC every POC too.
   """
   use VarselWeb, :live_view
 
   import VarselWeb.CaseComponents, only: [case_header: 1, comment_card: 1]
 
+  alias Varsel.Accounts
   alias Varsel.Cases.Comment
   alias VarselWeb.CaseLifecycle
 
@@ -33,10 +38,12 @@ defmodule VarselWeb.CaseCommentsLive do
           :cve_id,
           :cve_record,
           :github_advisory_link,
-          comments: [author: [:avatar_url, :display_name]]
+          assignments: [user: [:display_name]],
+          proposals: [author: [:display_name]],
+          comments: [author: [:avatar_url, :display_name], reactions: [user: [:display_name]]]
         ],
         after_fetch: &after_fetch/2,
-        marks_read: [:comment_posted]
+        marks_read: [:comment_posted, :mentioned]
       )
 
     {:ok, socket}
@@ -46,9 +53,26 @@ defmodule VarselWeb.CaseCommentsLive do
     socket
     |> assign(
       page_title: case_record.title || "Case",
-      comments: Enum.sort_by(case_record.comments, & &1.inserted_at, DateTime)
+      comments: Enum.sort_by(case_record.comments, & &1.inserted_at, DateTime),
+      can_comment: can_comment?(case_record, socket.assigns.current_user),
+      mentionable: mentionable(case_record, socket.assigns.current_user)
     )
     |> assign_new(:form, fn -> comment_form(socket.assigns.current_user) end)
+  end
+
+  defp mentionable(case_record, actor) do
+    pocs =
+      Accounts.list_users!(actor: actor, query: [filter: [role: :poc]], load: [:display_name])
+
+    case_record.assignments
+    |> Enum.map(& &1.user)
+    |> Enum.concat(Enum.map(case_record.comments, & &1.author))
+    |> Enum.concat(Enum.map(case_record.proposals, & &1.author))
+    |> Enum.concat(pocs)
+    |> Enum.reject(&(is_nil(&1) or &1.id == actor.id))
+    |> Enum.uniq_by(& &1.id)
+    |> Enum.map(&%{id: &1.id, name: &1.display_name})
+    |> Enum.sort_by(&String.downcase(&1.name))
   end
 
   defp comment_form(actor) do
@@ -118,11 +142,13 @@ defmodule VarselWeb.CaseCommentsLive do
             :for={comment <- @comments}
             row_id={"comment-#{comment.id}"}
             comment={comment}
+            viewer_id={@current_user.id}
+            can_react={@can_comment}
           />
           <p :if={@comments == []} class="text-sm text-base-content/60">No comments yet.</p>
         </div>
 
-        <.panel :if={can_comment?(@case_record, @current_user)}>
+        <.panel :if={@can_comment}>
           <:title>Add a comment</:title>
           <.form
             for={@form}
@@ -137,6 +163,9 @@ defmodule VarselWeb.CaseCommentsLive do
               label="Comment"
               rows={6}
               placeholder="Write a comment…"
+              flavor={:comment}
+              mentionable={@mentionable}
+              viewer_id={@current_user.id}
             />
             <.input
               :if={cross_postable?(@case_record)}

@@ -70,6 +70,18 @@ defmodule Varsel.Cases.Signals do
       argument :actor_id, :uuid, description: "The user who wrote the comment here, when a user did."
     end
 
+    signal :users_mentioned do
+      description "A comment written on a case mentioned users by name."
+      argument :case_id, :uuid, allow_nil?: false
+
+      argument :user_ids, {:array, :uuid} do
+        description "The users the comment mentions."
+        allow_nil? false
+      end
+
+      argument :actor_id, :uuid, description: "The user who wrote the comment."
+    end
+
     signal :proposal_opened do
       description "A proposal was opened on a case."
       argument :case_id, :uuid, allow_nil?: false

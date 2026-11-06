@@ -6,8 +6,8 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
   @moduledoc """
   Hands every row that references the account being merged away to the
   account it merges into, before the destroy deletes it: its linked providers,
-  API keys, assignments, credits, comments, proposals, reports,
-  notifications, GitHub installations and manual requests.
+  API keys, assignments, credits, comments, comment reactions, proposals,
+  reports, notifications, GitHub installations and manual requests.
 
   Paper-trail versions are not foreign keys
   (`Varsel.Accounts.VersionActorReference`) and keep the id of the account
@@ -24,6 +24,7 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
   alias Varsel.Cases.CaseAssignment
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.Comment
+  alias Varsel.Cases.CommentReaction
   alias Varsel.Cases.GitHubManualRequest
   alias Varsel.Cases.Proposal
   alias Varsel.Cases.VulnerabilityReport
@@ -37,6 +38,7 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
     {CaseAssignment, :user_id},
     {CaseCredit, :user_id},
     {Comment, :author_id},
+    {CommentReaction, :user_id},
     {Proposal, :author_id},
     {Proposal, :resolved_by_id},
     {VulnerabilityReport, :reporter_id},
@@ -69,6 +71,7 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
 
   defp repoint(from_id, into_id) do
     drop_duplicates(from_id, into_id)
+    drop_duplicate_reactions(from_id, into_id)
 
     Enum.each(@references, fn {schema, field} ->
       Repo.update_all(from(row in schema, where: field(row, ^field) == ^from_id),
@@ -123,6 +126,23 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
                     kept.case_id,
                     parent_as(:merged).case_id
                   )
+            )
+          )
+      )
+    )
+  end
+
+  defp drop_duplicate_reactions(from_id, into_id) do
+    Repo.delete_all(
+      from(merged in CommentReaction,
+        as: :merged,
+        where: merged.user_id == ^from_id,
+        where:
+          exists(
+            from(kept in CommentReaction,
+              where:
+                kept.user_id == ^into_id and kept.comment_id == parent_as(:merged).comment_id and
+                  kept.emoji == parent_as(:merged).emoji
             )
           )
       )

@@ -291,6 +291,7 @@ defmodule Varsel.Notifications.Notification do
       on :review_requested, :notify_review_requested, action: :fan_out, delivery: @delivery
       on :case_published, :notify_case_published, action: :fan_out, delivery: @delivery
       on :comment_posted, :notify_comment_posted, action: :fan_out, delivery: @delivery
+      on :users_mentioned, :notify_users_mentioned, action: :fan_out, delivery: @delivery
       on :proposal_opened, :notify_proposal_opened, action: :fan_out, delivery: @delivery
       on :case_assigned, :notify_case_assigned, action: :fan_out, delivery: @delivery
     end

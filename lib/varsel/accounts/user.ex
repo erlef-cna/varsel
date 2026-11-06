@@ -422,13 +422,14 @@ defmodule Varsel.Accounts.User do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
       # Users are also visible when loaded through a row the actor can read
-      # (report reporter, proposal/comment authors, case workers/credits) —
+      # (report reporter, proposal/comment authors, reactors, case workers/credits) —
       # the parent's own policy decided visibility, and the field policies
       # below restrict non-POC viewers to the display name.
       authorize_if accessing_from(Varsel.Cases.VulnerabilityReport, :reporter)
       authorize_if accessing_from(Proposal, :author)
       authorize_if accessing_from(Proposal, :resolved_by)
       authorize_if accessing_from(Varsel.Cases.Comment, :author)
+      authorize_if accessing_from(Varsel.Cases.CommentReaction, :user)
       authorize_if accessing_from(Varsel.Cases.CaseAssignment, :user)
       authorize_if accessing_from(Varsel.Cases.CaseCredit, :user)
       authorize_if accessing_from(UserIdentity, :user)

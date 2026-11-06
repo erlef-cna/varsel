@@ -8,9 +8,9 @@ defmodule VarselWeb.CaseLifecycle do
   lifecycle actions in the header.
 
   A tab calls `mount/3` once. That keeps the case record fresh from pub_sub,
-  marks the case notifications read, and handles the lifecycle events its
-  components push. The header only links to publishing: the act stays on the
-  Publication tab, next to the validation it depends on.
+  marks the case notifications read, and handles the lifecycle and comment
+  reaction events its components push. The header only links to publishing:
+  the act stays on the Publication tab, next to the validation it depends on.
   """
   use VarselWeb, :html
 
@@ -19,6 +19,7 @@ defmodule VarselWeb.CaseLifecycle do
 
   alias Phoenix.LiveView.Socket
   alias Varsel.Cases
+  alias Varsel.Cases.CommentReaction.Emoji
   alias Varsel.CVE
   alias Varsel.Notifications
 
@@ -275,6 +276,35 @@ defmodule VarselWeb.CaseLifecycle do
       end
 
     {:halt, socket}
+  end
+
+  # A second click on an emoji the actor gave takes it back.
+  defp handle_event("toggle_reaction", %{"comment_id" => comment_id, "reaction" => reaction}, socket) do
+    actor = socket.assigns.current_user
+    case_record = socket.assigns.case_record
+
+    with {:ok, emoji} <- Emoji.match(reaction),
+         comments when is_list(comments) <- case_record.comments,
+         %{} = comment <- Enum.find(comments, &(&1.id == comment_id)) do
+      result =
+        case Enum.find(comment.reactions, &(&1.user_id == actor.id and &1.emoji == emoji)) do
+          nil ->
+            Cases.react_to_case_comment(
+              %{case_id: case_record.id, comment_id: comment.id, emoji: emoji},
+              actor: actor
+            )
+
+          reaction ->
+            Cases.take_back_case_comment_reaction(reaction, actor: actor)
+        end
+
+      case result do
+        {:error, error} -> {:halt, put_flash(socket, :error, errors_to_string(error))}
+        _done -> {:halt, socket}
+      end
+    else
+      _unknown -> {:halt, socket}
+    end
   end
 
   defp handle_event(_event, _params, socket), do: {:cont, socket}

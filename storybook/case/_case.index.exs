@@ -34,6 +34,8 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("comment_card"), do: [name: "Comment card", icon: {:local, "hero-chat-bubble-left"}]
 
+  def entry("comment_markdown"), do: [name: "Comment markdown", icon: {:local, "hero-at-symbol"}]
+
   def entry("credit_form"), do: [name: "Credit form", icon: {:local, "hero-user"}]
 
   def entry("derivation_marker"), do: [name: "Derivation marker", icon: {:local, "hero-flag"}]

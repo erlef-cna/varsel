@@ -134,8 +134,12 @@ defmodule VarselWeb.NotificationComponents do
     """
   end
 
-  @doc "Where a notification's `View` link goes: its case."
-  @spec subject_path(%{case_id: Ash.UUID.t()}) :: String.t()
+  @doc """
+  Where a notification's `View` link goes: its case, and a mention to the
+  comments it was made in.
+  """
+  @spec subject_path(%{kind: Kind.t(), case_id: Ash.UUID.t()}) :: String.t()
+  def subject_path(%{kind: :mentioned, case_id: case_id}), do: ~p"/cases/#{case_id}/comments"
   def subject_path(%{case_id: case_id}), do: ~p"/cases/#{case_id}"
 
   @doc "The subject-link label paired with `subject_path/1`."

@@ -75,7 +75,9 @@ path from there to a published CVE.
    case. On a case linked to an advisory, a comment can be both: the comment
    form offers to post it on the advisory as well. It posts as you where
    your GitHub login may write there, and as the EEF CNA app naming you
-   where it may not.
+   where it may not. Type `@` in a comment to mention someone on the case;
+   they are notified, and the advisory copy carries their name without
+   mentioning anyone on GitHub.
 
 5. **Verify**
 

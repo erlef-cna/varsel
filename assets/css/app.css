@@ -391,6 +391,23 @@
   }
 }
 
+/* --------------------------------------------------------------- Mentions */
+/* The chip is drawn into rendered comment HTML, which Tailwind does not scan.
+   A mention of the viewer is filled, so weight tells it apart without hue. */
+.mention {
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-info);
+  background-color: color-mix(in oklch, var(--color-info) 12%, transparent);
+}
+
+.mention.mention-self {
+  color: var(--color-info-content);
+  background-color: var(--color-info);
+}
+
 .eef-hero-glow {
   position: relative;
   isolation: isolate;

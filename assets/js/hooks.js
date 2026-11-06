@@ -115,6 +115,131 @@ export const AutoGrow = {
   },
 }
 
+// The comment composer's helpers, on the strip under its textarea.
+//
+// Typing `@` offers the people in `data-candidates` ([{id, name}]); picking
+// one writes the mention markdown the server reads back,
+// `[@Name](mention:<id>)`. A `[data-emoji]` button writes its emoji at the
+// caret. Both dispatch `input`, so the form's phx-change and AutoGrow see the
+// new value.
+//
+// The textarea is found through the composer root on every event: a LiveView
+// patch may swap it, and the strip itself is `phx-update="ignore"`.
+export const CommentAssist = {
+  mounted() {
+    this.root = this.el.closest("[data-comment-composer]")
+    this.menu = this.el.querySelector("[data-mention-menu]")
+    this.matches = []
+    this.active = 0
+    this.trigger = null
+
+    this.listeners = {
+      input: (e) => e.target.tagName === "TEXTAREA" && this.update(),
+      keydown: (e) => e.target.tagName === "TEXTAREA" && this.keydown(e),
+      focusout: (e) => e.target.tagName === "TEXTAREA" && this.close(),
+      click: (e) => {
+        const button = e.target.closest && e.target.closest("[data-emoji]")
+        if (button && this.el.contains(button)) this.insertEmoji(button.dataset.emoji)
+      },
+    }
+
+    for (const [event, listener] of Object.entries(this.listeners)) {
+      this.root.addEventListener(event, listener)
+    }
+  },
+  destroyed() {
+    for (const [event, listener] of Object.entries(this.listeners)) {
+      this.root.removeEventListener(event, listener)
+    }
+  },
+  textarea() {
+    return this.root.querySelector("textarea")
+  },
+  candidates() {
+    try {
+      return JSON.parse(this.el.dataset.candidates || "[]")
+    } catch (_error) {
+      return []
+    }
+  },
+  update() {
+    const textarea = this.textarea()
+    const before = textarea.value.slice(0, textarea.selectionStart)
+    const match = before.match(/(?:^|[\s(])@([^\s@[\]()]{0,40})$/)
+
+    if (!match) return this.close()
+
+    const query = match[1].toLowerCase()
+    this.trigger = textarea.selectionStart - match[1].length - 1
+    this.matches = this.candidates()
+      .filter((person) => person.name.toLowerCase().includes(query))
+      .slice(0, 8)
+    this.active = 0
+
+    this.matches.length ? this.render() : this.close()
+  },
+  keydown(e) {
+    if (!this.matches.length) return
+
+    const moves = {ArrowDown: 1, ArrowUp: -1}
+
+    if (e.key in moves) {
+      e.preventDefault()
+      this.active = (this.active + moves[e.key] + this.matches.length) % this.matches.length
+      this.render()
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault()
+      this.pick(this.active)
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      this.close()
+    }
+  },
+  render() {
+    this.menu.replaceChildren(
+      ...this.matches.map((person, index) => {
+        const option = document.createElement("li")
+        option.id = `${this.el.id}-option-${index}`
+        option.setAttribute("role", "option")
+        option.setAttribute("aria-selected", String(index === this.active))
+        option.className = `cursor-pointer rounded px-2 py-1 ${index === this.active ? "bg-base-200 font-semibold" : ""}`
+        option.textContent = person.name
+        // mousedown, so the textarea keeps its focus and caret.
+        option.addEventListener("mousedown", (e) => {
+          e.preventDefault()
+          this.pick(index)
+        })
+        return option
+      }),
+    )
+    this.menu.classList.remove("hidden")
+  },
+  close() {
+    this.matches = []
+    this.trigger = null
+    this.menu.classList.add("hidden")
+    this.menu.replaceChildren()
+  },
+  pick(index) {
+    const person = this.matches[index]
+    const textarea = this.textarea()
+    if (!person || this.trigger === null) return this.close()
+
+    const name = person.name.replace(/[[\]]/g, "")
+    this.replace(textarea, this.trigger, textarea.selectionStart, `[@${name}](mention:${person.id}) `)
+    this.close()
+  },
+  insertEmoji(emoji) {
+    const textarea = this.textarea()
+    this.replace(textarea, textarea.selectionStart, textarea.selectionEnd, emoji)
+  },
+  replace(textarea, from, to, text) {
+    textarea.focus()
+    textarea.setRangeText(text, from, to, "end")
+    textarea.dispatchEvent(new Event("input", {bubbles: true}))
+  },
+}
+
 // Workspace section rail. Two jobs:
 //
 // 1. Anchor navigation: on LiveView pages Chromium cancels the smooth

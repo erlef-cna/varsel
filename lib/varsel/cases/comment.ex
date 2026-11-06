@@ -20,6 +20,10 @@ defmodule Varsel.Cases.Comment do
 
   A `:varsel` comment the author cross-posted holds the id GitHub gave it,
   which is how the poll reads it back as the comment it already is.
+
+  A comment written here may mention people (`Varsel.Cases.Comment.Mentions`),
+  and the people in the case may react to any comment
+  (`Varsel.Cases.CommentReaction`).
   """
 
   use Ash.Resource,
@@ -35,6 +39,7 @@ defmodule Varsel.Cases.Comment do
   alias Varsel.Accounts.User
   alias Varsel.Cases.Changes.EmitWhenWritten
   alias Varsel.Cases.Comment.Changes.CrossPostToGitHub
+  alias Varsel.Cases.Comment.Changes.EmitMentions
   alias Varsel.Cases.Comment.Changes.ResolveGitHubAuthor
   alias Varsel.Cases.Comment.Source
 
@@ -100,6 +105,12 @@ defmodule Varsel.Cases.Comment do
       validate Varsel.Cases.Comment.Validations.ProposalBelongsToCase
 
       emit Varsel.Cases.Signals, :comment_posted, values: [actor_id: actor(:id)]
+
+      emit Varsel.Cases.Signals, :users_mentioned,
+        dynamic?: true,
+        description: "When the comment mentions anyone."
+
+      change EmitMentions
     end
 
     create :post_triage_recommendation do
@@ -267,6 +278,11 @@ defmodule Varsel.Cases.Comment do
       allow_nil? true
       public? true
       attribute_writable? true
+    end
+
+    has_many :reactions, Varsel.Cases.CommentReaction do
+      description "The emoji reactions the people in the case gave the comment."
+      sort inserted_at: :asc
     end
 
     belongs_to :proposal, Varsel.Cases.Proposal do

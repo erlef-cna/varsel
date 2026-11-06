@@ -103,6 +103,57 @@ defmodule Varsel.Notifications.FanOutTest do
     end
   end
 
+  describe ":mentioned" do
+    alias Varsel.Cases.Comment.Mentions
+
+    test "notifies the mentioned who may read the case, not the writer" do
+      poc = Fixtures.register_user("fanout_mention_poc", :poc)
+      assigned = Fixtures.register_user("fanout_mention_assigned", :supporter)
+      other_poc = Fixtures.register_user("fanout_mention_other_poc", :poc)
+      outsider = Fixtures.register_user("fanout_mention_outsider", :supporter)
+      bystander = Fixtures.register_user("fanout_mention_bystander", :supporter)
+
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: assigned.id}, actor: poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: bystander.id}, actor: poc)
+
+      body =
+        Enum.map_join(
+          [assigned, other_poc, outsider, poc],
+          " ",
+          &Mentions.token(&1.id, "someone")
+        )
+
+      Cases.post_case_comment!(%{case_id: case_record.id, body: body}, actor: poc)
+
+      drain()
+
+      assert [%Notification{case_id: case_id}] = notifications_for(assigned, :mentioned)
+      assert case_id == case_record.id
+      # A POC reads every case, so a mention reaches one who is not assigned.
+      assert [%Notification{}] = notifications_for(other_poc, :mentioned)
+      # Someone the case is hidden from learns nothing of it.
+      assert [] = notifications_for(outsider)
+      assert [] = notifications_for(bystander, :mentioned)
+      assert [] = notifications_for(poc, :mentioned)
+    end
+
+    test "a mention inside code mentions no one" do
+      poc = Fixtures.register_user("fanout_mention_code_poc", :poc)
+      other_poc = Fixtures.register_user("fanout_mention_code_other", :poc)
+      case_record = Fixtures.open_case(poc)
+
+      Cases.post_case_comment!(
+        %{case_id: case_record.id, body: "`#{Mentions.token(other_poc.id, "x")}`"},
+        actor: poc
+      )
+
+      drain()
+
+      assert [] = notifications_for(other_poc, :mentioned)
+    end
+  end
+
   describe ":comment_posted" do
     test "notifies assigned users, not an unassigned POC, not the commenter" do
       poc = Fixtures.register_user("fanout_comment_poc", :poc)

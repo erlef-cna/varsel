@@ -6,8 +6,9 @@ defmodule VarselWeb.CaseDetailLive do
   @moduledoc """
   The case workspace: edit case content, manage affected packages (channels
   and version boundary facts), references, credits and classifications,
-  review proposals, discuss in comments, and walk the lifecycle. The rendered
-  record lives on the other tabs, see `VarselWeb.CaseRecordLive`.
+  review proposals, read and react to the newest comments, and walk the
+  lifecycle. The rendered record lives on the other tabs, see
+  `VarselWeb.CaseRecordLive`.
 
   Content edits follow the content freeze (draft/review only); lifecycle
   decisions are POC-only — the same policies the API enforces, mirrored here
@@ -62,7 +63,7 @@ defmodule VarselWeb.CaseDetailLive do
     impacts: [attack_pattern: [:capec_id, :name]],
     proposals: [author: [:avatar_url, :display_name], resolved_by: [:display_name]],
     affected_packages: [:derivation_state, channels: [:purl], version_events: []],
-    comments: [author: [:display_name]]
+    comments: [author: [:avatar_url, :display_name], reactions: [user: [:display_name]]]
   ]
 
   # Modal child-form registry: UI type -> resource + labels. Every resource
@@ -1054,6 +1055,27 @@ defmodule VarselWeb.CaseDetailLive do
         </div>
 
         <:right width={:wide} class="space-y-4">
+          <.panel id="recent-comments">
+            <:title>Comments</:title>
+            <:actions :if={@case_record.comment_count > 0}>
+              <.link navigate={~p"/cases/#{@case_record.id}/comments"} class="link link-hover">
+                All {@case_record.comment_count}
+              </.link>
+            </:actions>
+            <div :if={recent_comments(@case_record) != []} class="space-y-2">
+              <.comment_card
+                :for={comment <- recent_comments(@case_record)}
+                row_id={"rail-comment-#{comment.id}"}
+                comment={comment}
+                viewer_id={@current_user.id}
+                can_react={can_comment?(@case_record, @current_user)}
+                collapsible
+              />
+            </div>
+            <p :if={recent_comments(@case_record) == []} class="text-sm text-base-content/60">
+              No comments yet.
+            </p>
+          </.panel>
           <.panel id="suggestions">
             <:title>Suggestions</:title>
             <ul :if={open_proposals(@case_record) != []} class="space-y-1.5 text-sm">
@@ -1161,6 +1183,12 @@ defmodule VarselWeb.CaseDetailLive do
     |> open_proposals()
     |> Enum.filter(&(section_for_proposal(&1) == section_id))
     |> Enum.sort_by(& &1.inserted_at, DateTime)
+  end
+
+  defp recent_comments(case_record) do
+    case_record.comments
+    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+    |> Enum.take(10)
   end
 
   defp comments_by_proposal(case_record) do

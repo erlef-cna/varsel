@@ -18,6 +18,7 @@ defmodule Varsel.Cases do
   alias Varsel.Cases.CaseReport
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.Comment
+  alias Varsel.Cases.CommentReaction
   alias Varsel.Cases.GitHubAdvisoryLink
   alias Varsel.Cases.GitHubManualRequest
   alias Varsel.Cases.PackageChannel
@@ -585,6 +586,7 @@ defmodule Varsel.Cases do
 
     resource Comment do
       define :list_case_comments_all, action: :read
+      define :get_case_comment, action: :read, get_by: [:id]
       define :post_case_comment, action: :post
       define :post_case_triage_recommendation, action: :post_triage_recommendation
       define :list_case_comments, action: :list_for_case, args: [:case_id]
@@ -594,6 +596,12 @@ defmodule Varsel.Cases do
       define :list_case_comments_for_github_login,
         action: :for_github_login,
         args: [:strategy, :username]
+    end
+
+    resource CommentReaction do
+      define :list_case_comment_reactions, action: :read
+      define :react_to_case_comment, action: :react
+      define :take_back_case_comment_reaction, action: :unreact
     end
   end
 end

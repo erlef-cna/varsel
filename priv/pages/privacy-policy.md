@@ -30,8 +30,8 @@ so you can see where your account is signed in and end a session you do not
 recognise. Look under *Sessions* in your account settings. A session's record
 goes when it expires or when you end it.
 
-**What you write.** Reports you submit, and the comments, proposals and case
-content you author. Vulnerability coordination is a written record, and that
+**What you write.** Reports you submit, and the comments, reactions, proposals
+and case content you author. Vulnerability coordination is a written record, and that
 record is the point of the service.
 
 ## Data other systems report to us

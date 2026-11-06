@@ -96,8 +96,8 @@ the platform edge, not in the app.
   API keys and sessions, set a notification address one of their own linked
   providers reported, and run the CVE **validation** actions (§6). On `Case`
   they see nothing until a POC assigns them to one; assignment then grants read,
-  propose and comment on **that case only** — never a direct write, never
-  resolving a proposal, never a lifecycle action.
+  propose, comment and react to comments on **that case only** — never a
+  direct write, never resolving a proposal, never a lifecycle action.
 - **Supporter** — a CNA collaborator. Opens cases, and on the cases they are
   assigned to edits content, resolves proposals, reopens, and takes the next
   free CVE ID. On an assigned case not accepted yet, takes the triage
@@ -286,8 +286,8 @@ check a report against, not the framework's default.
 `Case`'s strict policy asks only that someone is signed in; *which* cases they
 may see is decided by the filter policy after it, so a role-less caller is
 **filtered to the cases they are assigned to** — an empty list when they are
-assigned to none — rather than refused. `GitHubAdvisoryLink` carries the same
-strict gate. Every other private resource (case children, proposals,
+assigned to none — rather than refused. `GitHubAdvisoryLink` and
+`CommentReaction` carry the same strict gate. Every other private resource (case children, proposals,
 comments) is filter-scoped the same way. Reading each
 resource as an anonymous actor and as a role-less one bears this out: the
 strict resources refuse the anonymous caller, the filter-scoped ones return
@@ -569,6 +569,7 @@ from controlling only its size.
 | `Case.submit_report_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free notification emails as a web report. |
 | `Case.submit_report_from_hex` | `reporter` / `maintainers` (`username`, `email`) | data | **Yes — same** | Each handle becomes access to the report's case: read, propose and comment while a POC decides, the report payload included. The reporter's handle is stored on the report, and a later hex sign-in with it makes that account the reporter. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact (§8) |
 | `erase_hex_contact` (`/api/hex/erasures`) | `username`, `email` | data | **Yes — whoever holds a configured signing key** | Clears `email` on every hex.pm invite matching either, cancelling an invite email not yet sent. Nothing else is written and nothing is returned, so a key holder can blank any hex.pm-named person's address and learns nothing (§10 7a) |
+| `Comment.post` | the mentions in `body` (`[@name](mention:<id>)`) | resource name | **Yes — POC / assigned user**, naming any account id | Name who gets a `:mentioned` notification. Only a POC or a user assigned to the case is notified, so a mention tells no one outside the case that it exists, and the notification is content-free like every other (`fan_out.ex`, `mentions.ex`) |
 | `Case.grant_access` / `CaseInvite.invite` | `email` | data | **Yes — POC / assigned supporter only** | One outbound invite email to that address, accepted only when the handle's provider lists no address for the account and refused when it lists a different one. One email per address per case (`resolve_contact.ex`) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
@@ -654,7 +655,7 @@ unescaped or unsanitized is `VALID`.
 
 | Output | Expected sink | Sink-safe? | If not, caller must |
 | --- | --- | --- | --- |
-| Case markdown → on-site HTML (`Markdown.to_display_html`) | Browser HTML | **Yes** — rendered `unsafe: true` then run through the `sanitize` (ammonia) allow-list, so scripts/handlers/dangerous URLs are stripped while safe author HTML survives (`markdown.ex`) | — (sanitized) |
+| Case markdown → on-site HTML (`Markdown.to_display_html`, and `to_comment_html` for a comment) | Browser HTML | **Yes** — rendered `unsafe: true` then run through the `sanitize` (ammonia) allow-list, so scripts/handlers/dangerous URLs are stripped while safe author HTML survives. A comment's mention chips are built, name escaped, before that pass (`markdown.ex`) | — (sanitized) |
 | Case markdown → `supportingMedia` text/html in published CVE (`Markdown.to_html`) | MITRE + downstream CVE consumers | Yes — same sanitized Comrak output | — |
 | CVE record prose → on-site HTML (`cve_view.ex` `prose/1`) | Browser HTML | **Yes** — `markdown/1` sanitizes its output; a `supportingMedia` HTML value (may be MITRE-imported) is run through `MDExNative.Ammonia.safe_html/1` before render (`cve_view.ex`) | — (sanitized) |
 | An upstream CNA's title and summary → the CVE page (`upstream_cve_notice/1`) | Browser HTML | **Yes** — HEEx text interpolation, so markup renders inert; no `raw/1` (`cve_view.ex`) | — |
@@ -666,7 +667,7 @@ unescaped or unsanitized is `VALID`.
 | Case invite email | Mail client of a person with no account: a text part and an HTML part | Yes — same shape and escaping: the provider handle the invite names and a sign-in link, no case content and no inviter (`emails.ex`) | — |
 | Published CNA container → MITRE API | MITRE (trusted) | JSON body; MITRE is trusted sink | — |
 | Case fields → the linked GitHub advisory (`GitHubAdvisoryLink.push`), or a new private report or draft advisory on a repository (`Case.report_to_github`) | GitHub, as the acting user or as the App | JSON body of typed fields and the advisory description rendered from the case's own sections as markdown (`export.ex`). Written with the caller's own GitHub token, so GitHub attributes it to them and decides whether they may. A POC's write that their own token cannot make, or a write by a POC with no GitHub identity, goes with the App's installation token on that repository and GitHub attributes it to the App (`push.ex`, `report_to_github.ex`, `credentials.ex`, `advisories.ex`) | — |
-| A case comment → the comments on the linked GitHub advisory (`Comment.post` with `cross_post`) | GitHub, as the acting user or as the App | JSON body of the comment's own markdown, which its author asked to send: the cross-post is off unless they tick it. The same credential rule as the row above, and a write GitHub attributes to the App names the author in a footer. Every body carries the case's address. A refusal from GitHub refuses the whole post, so the case holds no comment the advisory does not (`cross_post_to_github.ex`, `credentials.ex`, `advisories.ex`) | — |
+| A case comment → the comments on the linked GitHub advisory (`Comment.post` with `cross_post`) | GitHub, as the acting user or as the App | JSON body of the comment's own markdown, which its author asked to send: the cross-post is off unless they tick it. The same credential rule as the row above, and a write GitHub attributes to the App names the author in a footer. Every body carries the case's address. A refusal from GitHub refuses the whole post, so the case holds no comment the advisory does not. A mention goes out as the bold name it carries, so the copy @-mentions no one on GitHub (`cross_post_to_github.ex`, `credentials.ex`, `advisories.ex`, `mentions.ex`) | — |
 | The `gh` command of a manual GitHub request (`gh_command/3`), and its request body (`/api/github/manual/:id/request`) | A POC's shell, then GitHub as the POC's own GitHub account | **Yes** — the command interpolates only the configured endpoint URL, the request's UUID, a JWT of URL-safe Base64 segments, and an API path whose owner and repository are refused unless they match GitHub's name characters and whose GHSA id is refused unless it parses as one (`build_request.ex`, `advisory_components.ex`). The body is the one the automatic push or report builds (`export.ex`, `report_to_github.ex`) | — |
 
 Every markdown/HTML render sink sanitizes (ammonia allow-list) before `raw/1`,
@@ -731,7 +732,7 @@ prioritization of a dependency bump; it does not change the disposition.
 - **Malicious / compromised assigned collaborator.** An authenticated user
   with **no role** whom a POC has assigned to a case — the intended shape for
   an outside reporter or vendor contact. Can read that case, propose changes
-  to it, and comment. Assumed to try: writing to the case directly rather than
+  to it, comment and react. Assumed to try: writing to the case directly rather than
   proposing, resolving their own proposal, and reaching any other case.
   **In scope** as a distinct actor.
 - **Byzantine OAuth client (MCP/GraphQL).** A registered OAuth 2.1 client
@@ -870,8 +871,8 @@ none of the authorization properties, by construction rather than by defect.
    additionally needs a role.**
    Reading a case and all its child rows requires POC or a `CaseAssignment`
    for that case. *Editing* it requires POC or a supporter who is assigned —
-   an assigned user with no role may propose and comment but never write
-   directly, and never resolve a proposal. Nobody below POC can create an
+   an assigned user with no role may propose, comment and react but never
+   write directly, and never resolve a proposal. Nobody below POC can create an
    assignment, so no one grants themselves either right.
    - *Violation symptom:* a supporter reads or edits a case they are not
      assigned to; an assigned role-less user edits a case, accepts a proposal,

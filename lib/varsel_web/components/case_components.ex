@@ -27,6 +27,7 @@ defmodule VarselWeb.CaseComponents do
   import VarselWeb.UserComponents, only: [avatar_disc: 1, user_badge: 1, user_name: 1]
 
   alias Phoenix.LiveView.JS
+  alias Varsel.Cases.CommentReaction.Emoji
   alias Varsel.Cases.Markdown
   alias Varsel.Cases.WordDiff
 
@@ -351,10 +352,19 @@ defmodule VarselWeb.CaseComponents do
   author by login and links to itself on GitHub, so a reader can tell the
   two streams apart and follow one back to where it was written.
 
-  Callers must load the author's `:avatar_url` and `:display_name`.
+  Mentions render as chips, and a mention of `viewer_id` stands out as the
+  viewer's own. Reactions sit under the body; with `can_react` a click on one
+  pushes `toggle_reaction` with the comment's `comment_id` and the emoji as
+  `reaction`. A `collapsible` card folds a long body behind a toggle.
+
+  Callers must load the author's `:avatar_url` and `:display_name`, and the
+  comment's `reactions` with each one's user `:display_name`.
   """
   attr :comment, :any, required: true
   attr :row_id, :string, default: nil, doc: "the card's DOM id, for an anchor"
+  attr :viewer_id, :string, default: nil, doc: "the signed-in user's id"
+  attr :can_react, :boolean, default: false
+  attr :collapsible, :boolean, default: false
 
   def comment_card(assigns) do
     ~H"""
@@ -400,11 +410,160 @@ defmodule VarselWeb.CaseComponents do
         />
       </div>
       <div class="px-3 py-2.5">
-        <.markdown content={@comment.body} class="prose-sm" />
+        <div
+          id={@row_id && "#{@row_id}-body"}
+          class={[
+            "relative",
+            @collapsible && long_comment?(@comment.body) && "max-h-40 overflow-hidden"
+          ]}
+        >
+          <.comment_markdown content={@comment.body} viewer_id={@viewer_id} />
+          <div
+            :if={@collapsible && long_comment?(@comment.body)}
+            id={@row_id && "#{@row_id}-fade"}
+            class="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-(--lane-card-bg)"
+          />
+        </div>
+        <button
+          :if={@collapsible && long_comment?(@comment.body)}
+          type="button"
+          id={@row_id && "#{@row_id}-toggle"}
+          class="link link-hover text-xs text-primary mt-1"
+          aria-expanded="false"
+          phx-click={
+            JS.toggle_class("max-h-40 overflow-hidden", to: "##{@row_id}-body")
+            |> JS.toggle(to: "##{@row_id}-fade")
+            |> JS.toggle(to: "##{@row_id}-toggle [data-more]")
+            |> JS.toggle(to: "##{@row_id}-toggle [data-less]")
+            |> JS.toggle_attribute({"aria-expanded", "true", "false"})
+          }
+        >
+          <span data-more>Show more</span>
+          <span data-less class="hidden">Show less</span>
+        </button>
+        <.comment_reactions
+          comment={@comment}
+          row_id={@row_id}
+          viewer_id={@viewer_id}
+          can_react={@can_react}
+        />
       </div>
     </article>
     """
   end
+
+  # A body past this folds in a collapsible card: a short paragraph or two
+  # stays whole.
+  defp long_comment?(body), do: String.length(body) > 600 or length(String.split(body, "\n")) > 8
+
+  @doc """
+  Renders a comment body: case markdown with emoji shortcodes and mention
+  chips. A mention of `viewer_id` is marked as the viewer's own.
+  """
+  attr :content, :string, required: true
+  attr :viewer_id, :string, default: nil
+  attr :class, :any, default: "prose-sm"
+
+  # `to_comment_html/2` sanitizes its output.
+  # sobelow_skip ["XSS.Raw"]
+  def comment_markdown(assigns) do
+    ~H"""
+    <div class={["prose prose-sm max-w-none", @class]}>
+      {raw(Markdown.to_comment_html(@content, viewer_id: @viewer_id))}
+    </div>
+    """
+  end
+
+  attr :comment, :any, required: true
+  attr :row_id, :string, default: nil
+  attr :viewer_id, :string, default: nil
+  attr :can_react, :boolean, default: false
+
+  defp comment_reactions(assigns) do
+    assigns = assign(assigns, :groups, reaction_groups(assigns.comment, assigns.viewer_id))
+
+    ~H"""
+    <div
+      :if={@groups != [] or @can_react}
+      id={@row_id && "#{@row_id}-reactions"}
+      class="mt-2 flex flex-wrap items-center gap-1"
+    >
+      <button
+        :for={group <- @groups}
+        type="button"
+        class={[
+          "btn btn-xs rounded-full gap-1 px-2 font-normal",
+          if(group.mine?, do: "btn-soft btn-info border-info/40", else: "btn-ghost border-base-300")
+        ]}
+        title={group.title}
+        aria-label={group.title}
+        aria-pressed={to_string(group.mine?)}
+        disabled={!@can_react}
+        phx-click="toggle_reaction"
+        phx-value-comment_id={@comment.id}
+        phx-value-reaction={group.emoji}
+        data-reaction={group.emoji}
+      >
+        <span>{Emoji.label(group.emoji)}</span>
+        <span class="tabular-nums">{group.count}</span>
+      </button>
+      <div :if={@can_react} class="dropdown dropdown-top">
+        <div
+          tabindex="0"
+          role="button"
+          class="btn btn-ghost btn-xs btn-circle text-base-content/50"
+          aria-label="Add a reaction"
+          title="Add a reaction"
+        >
+          <.icon name="hero-face-smile-micro" class="size-4" />
+        </div>
+        <div
+          tabindex="-1"
+          class="dropdown-content z-10 mb-1 flex gap-0.5 rounded-box border border-base-300 bg-base-100 p-1 shadow"
+        >
+          <button
+            :for={emoji <- Emoji.values()}
+            type="button"
+            class="btn btn-ghost btn-sm btn-square text-base"
+            title={Emoji.description(emoji)}
+            aria-label={Emoji.description(emoji)}
+            phx-click="toggle_reaction"
+            phx-value-comment_id={@comment.id}
+            phx-value-reaction={emoji}
+          >
+            {Emoji.label(emoji)}
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  # One chip per emoji given, in the picker's order.
+  defp reaction_groups(comment, viewer_id) do
+    by_emoji =
+      case Map.get(comment, :reactions) do
+        reactions when is_list(reactions) -> Enum.group_by(reactions, & &1.emoji)
+        _not_loaded -> %{}
+      end
+
+    for emoji <- Emoji.values(), reactions = Map.get(by_emoji, emoji), reactions != nil do
+      %{
+        emoji: emoji,
+        count: length(reactions),
+        mine?: viewer_id != nil and Enum.any?(reactions, &(&1.user_id == viewer_id)),
+        title: reaction_title(reactions, emoji)
+      }
+    end
+  end
+
+  defp reaction_title(reactions, emoji) do
+    names = Enum.map_join(reactions, ", ", &reactor_name/1)
+    "#{names} reacted with #{Emoji.description(emoji)}"
+  end
+
+  defp reactor_name(%{user: %{display_name: name}}) when is_binary(name), do: name
+  defp reactor_name(_reaction), do: "Someone"
 
   defp github_author(%{github_author_login: login}) when is_binary(login), do: "@" <> login
   defp github_author(_comment), do: "Unknown GitHub user"

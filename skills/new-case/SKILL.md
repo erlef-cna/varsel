@@ -82,7 +82,9 @@ ask the user to check the advisory page when a handling instruction or a CVE num
 missing from the discussion.
 
 A comment written on the Comments tab can go the other way: the form offers to post it on the
-advisory as well, which is off unless the author ticks it. Tell the user when something they are
+advisory as well, which is off unless the author ticks it. A mention of someone on the case
+(`@` in the form) notifies them, and the advisory copy carries only their name, so it mentions no
+one on GitHub. Tell the user when something they are
 writing belongs on the advisory thread, since the reporter and the maintainers read that one.
 
 **Do not take the report's framing as final.** Reporters and advisory authors are often unfamiliar

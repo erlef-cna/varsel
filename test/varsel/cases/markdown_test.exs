@@ -114,4 +114,28 @@ defmodule Varsel.Cases.MarkdownTest do
     js_link = "[x]" <> "(" <> js_scheme <> "alert" <> ")"
     refute Markdown.to_html(js_link) =~ js_scheme
   end
+
+  describe "comment HTML" do
+    @jane "0190c0de-0000-7000-8000-00000000000a"
+
+    test "draws a mention as a chip, filled for the viewer it names" do
+      body = "Ping [@Jane](mention:#{@jane})"
+
+      assert Markdown.to_comment_html(body) == ~s(<p>Ping <span class="mention">@Jane</span></p>)
+
+      assert Markdown.to_comment_html(body, viewer_id: @jane) ==
+               ~s(<p>Ping <span class="mention mention-self">@Jane</span></p>)
+    end
+
+    test "escapes the name a mention carries" do
+      html = Markdown.to_comment_html("[@<script>x</script>&](mention:#{@jane})")
+
+      assert html == ~s(<p><span class="mention">@x&amp;</span></p>)
+    end
+
+    test "turns emoji shortcodes into emoji; case markdown keeps them as text" do
+      assert Markdown.to_comment_html(":tada: :+1:") == "<p>🎉 👍</p>"
+      assert Markdown.to_display_html(":tada:") == "<p>:tada:</p>"
+    end
+  end
 end
