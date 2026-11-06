@@ -103,7 +103,7 @@
   "custom_indexes": [],
   "custom_statements": [],
   "has_create_action": true,
-  "hash": "308C9E8636F16A6ABFD3C3EA631234D76E42D08DDBD742EAF77BD9913FF4C7CD",
+  "hash": "9D381E07C8F248F74AE4DC9E8D130265B02809DC49DF7833A84D18ACA2483A1A",
   "identities": [],
   "multitenancy": {
     "attribute": null,
@@ -112,5 +112,6 @@
   },
   "repo": "Elixir.Varsel.Repo",
   "schema": null,
-  "table": "report_participants_versions"
+  "table": "case_reports_versions",
+  "temporal": null
 }

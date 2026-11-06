@@ -94,7 +94,7 @@ defmodule Varsel.Accounts.UserMergeTest do
       from = register_user("from")
       into = register_user("into")
 
-      Varsel.CVE.submit_vulnerability_report!(
+      Cases.submit_vulnerability_report!(
         %{
           report_json: %{"package" => "acme_lib", "details" => "leaks secrets"},
           summary: "Leaks secrets",
@@ -246,7 +246,6 @@ defmodule Varsel.Accounts.UserMergeTest do
              {"github_manual_requests", "user_id"},
              {"github_user_installations", "user_id"},
              {"notifications", "user_id"},
-             {"report_participants", "user_id"},
              {"user_identities", "user_id"},
              {"vulnerability_reports", "reporter_id"}
            ]

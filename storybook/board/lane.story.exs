@@ -44,9 +44,9 @@ defmodule VarselWeb.Storybook.Board.Lane do
       %Variation{
         id: :empty,
         description:
-          "A lane with nothing in it keeps its place in the row; the dash holds the " <>
-            "space a card would take.",
-        attributes: %{label: "Publishing", dot: "bg-info", count: 0, cards?: false, quiet?: true},
+          "A lane with no cards to show keeps its place in the row as a narrow strip, " <>
+            "its title running down it.",
+        attributes: %{label: "Publishing", dot: "bg-info", count: 0, cards?: false},
         slots: [""]
       },
       %Variation{

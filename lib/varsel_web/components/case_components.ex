@@ -159,6 +159,25 @@ defmodule VarselWeb.CaseComponents do
     """
   end
 
+  def lifecycle_stepper(%{state: :merged} = assigns) do
+    ~H"""
+    <div class="flex items-center gap-2 mt-2 text-sm text-base-content/60">
+      <span class="badge badge-neutral badge-sm">Merged</span> another case took over its reports
+    </div>
+    """
+  end
+
+  def lifecycle_stepper(%{state: state} = assigns) when state in [:submitted, :triage] do
+    ~H"""
+    <div class="flex items-center gap-2 mt-2 text-sm text-base-content/60">
+      <span class={["badge badge-sm", if(@state == :triage, do: "badge-info", else: "badge-warning")]}>
+        {if @state == :triage, do: "Under triage", else: "Submitted"}
+      </span>
+      the CNA decides whether to accept this case
+    </div>
+    """
+  end
+
   def lifecycle_stepper(assigns) do
     assigns = assign(assigns, :steps, lifecycle_steps(assigns.state))
 
@@ -784,14 +803,14 @@ defmodule VarselWeb.CaseComponents do
 
   @doc """
   Renders one vulnerability report as a row of a `list_card`: who said what
-  and when, its state, the body they wrote, and the triage notes.
+  and when, where its cases stand, and the body they wrote.
 
   The caller adds what its audience may do with the report: `actions` beside
-  the state, and the inner block at the foot of the row.
+  the status, and the inner block at the foot of the row.
   """
   attr :report, :map,
     required: true,
-    doc: "needs `:summary`, `:state`, `:inserted_at`, `:triage_notes` and `:report_json`"
+    doc: "needs `:summary`, `:inserted_at`, `:report_json` and `cases` with `:state` and `:accepted_at`"
 
   attr :reporter?, :boolean, default: true, doc: "whether to name the reporter, from `:reporter`"
   attr :payload?, :boolean, default: true
@@ -799,11 +818,18 @@ defmodule VarselWeb.CaseComponents do
   attr :toggle, :string, default: nil, doc: "the event a click on the payload disclosure pushes"
   attr :rest, :global
 
-  slot :actions, doc: "controls beside the state"
+  slot :actions, doc: "controls beside the status"
   slot :inner_block, doc: "content at the foot of the row"
 
   def report_row(assigns) do
-    assigns = assign(assigns, :open?, assigns.report.state in [:submitted, :triaged])
+    status = report_status(assigns.report)
+
+    assigns =
+      assign(assigns,
+        status: status,
+        open?: status in [:submitted, :triage],
+        reporter: shown_reporter(assigns.report)
+      )
 
     ~H"""
     <article
@@ -816,23 +842,22 @@ defmodule VarselWeb.CaseComponents do
             {@report.summary}
           </h3>
           <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-base-content/60">
-            <.user_badge
-              :if={@reporter?}
-              user={@report.reporter}
-              class="items-center"
-              name_class="text-base-content/60"
-            />
-            <span :if={@reporter?}>·</span>
+            <%= case @reporter? && @reporter do %>
+              <% {:user, user} -> %>
+                <.user_badge user={user} class="items-center" name_class="text-base-content/60" />
+                <span>·</span>
+              <% {:handle, handle} -> %>
+                <span class="font-mono">{handle}</span>
+                <span>·</span>
+              <% false -> %>
+            <% end %>
             <.relative_timestamp at={@report.inserted_at} />
           </div>
         </div>
 
         <div class="flex items-center gap-3 shrink-0">
-          <.state
-            dot={report_dot_class(@report.state)}
-            class={["text-sm", report_text_class(@report.state)]}
-          >
-            {Phoenix.Naming.humanize(@report.state)}
+          <.state dot={report_dot_class(@status)} class={["text-sm", report_text_class(@status)]}>
+            {report_status_label(@status)}
           </.state>
           {render_slot(@actions)}
         </div>
@@ -850,29 +875,43 @@ defmodule VarselWeb.CaseComponents do
         />
       </div>
 
-      <section :if={@report.triage_notes} class="mt-3 border-l-2 border-base-300 pl-3">
-        <h4 class="text-[0.68rem] font-bold uppercase tracking-wider text-base-content/60 mb-1">
-          Triage notes
-        </h4>
-        <.markdown content={@report.triage_notes} class="prose-xs text-base-content/80" />
-      </section>
-
       {render_slot(@inner_block)}
     </article>
     """
   end
 
+  # Where a report stands, from the cases it led to.
+  defp report_status(%{cases: cases}) do
+    states = MapSet.new(cases, & &1.state)
+
+    cond do
+      Enum.any?(cases, & &1.accepted_at) -> :accepted
+      MapSet.member?(states, :triage) -> :triage
+      MapSet.member?(states, :submitted) -> :submitted
+      true -> :closed
+    end
+  end
+
+  # A report submitted by handle names its reporter by that handle until they
+  # sign in. Neither the account nor a handle means the account went away.
+  defp shown_reporter(%{reporter: %{display_name: _name} = user}), do: {:user, user}
+  defp shown_reporter(%{reporter_username: nil}), do: {:user, nil}
+  defp shown_reporter(%{reporter_username: username}), do: {:handle, to_string(username)}
+
+  defp report_status_label(:submitted), do: "Submitted"
+  defp report_status_label(:triage), do: "Under triage"
+  defp report_status_label(:accepted), do: "Accepted"
+  defp report_status_label(:closed), do: "Closed"
+
   defp report_dot_class(:submitted), do: "bg-warning"
-  defp report_dot_class(:triaged), do: "bg-info"
+  defp report_dot_class(:triage), do: "bg-info"
   defp report_dot_class(:accepted), do: "bg-success"
-  defp report_dot_class(:rejected), do: "bg-error"
-  defp report_dot_class(_other), do: "bg-base-content/30"
+  defp report_dot_class(:closed), do: "bg-base-content/30"
 
   defp report_text_class(:submitted), do: "text-warning"
-  defp report_text_class(:triaged), do: "text-info"
+  defp report_text_class(:triage), do: "text-info"
   defp report_text_class(:accepted), do: "text-success"
-  defp report_text_class(:rejected), do: "text-base-content/50"
-  defp report_text_class(_other), do: "text-base-content/60"
+  defp report_text_class(:closed), do: "text-base-content/50"
 
   defp report_body(%{"report" => body}) when is_binary(body), do: body
   defp report_body(_payload), do: nil

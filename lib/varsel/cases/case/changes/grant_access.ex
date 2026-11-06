@@ -12,7 +12,7 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
   use Ash.Resource.Change
 
   alias Ash.Changeset
-  alias Varsel.Accounts.UserIdentity
+  alias Varsel.Accounts
   alias Varsel.Cases
   alias Varsel.Cases.CaseInvite
 
@@ -42,9 +42,12 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
       |> Ash.Context.to_opts()
       |> Keyword.update(:context, @stamp, &Ash.Helpers.deep_merge_maps(&1, @stamp))
 
-    case owner(strategy, username) do
-      nil -> invite(changeset, case_id, strategy, username, opts)
-      user_id -> Cases.assign_case_user(%{case_id: case_id, user_id: user_id}, opts)
+    case Accounts.get_identity_for_handle(to_string(strategy), username, actor: Varsel.Service.identity_claim()) do
+      {:ok, %{user_id: user_id}} ->
+        Cases.assign_case_user(%{case_id: case_id, user_id: user_id}, opts)
+
+      _no_owner ->
+        invite(changeset, case_id, strategy, username, opts)
     end
   end
 
@@ -72,18 +75,5 @@ defmodule Varsel.Cases.Case.Changes.GrantAccess do
     CaseInvite
     |> Ash.Query.filter(case_id == ^case_id and strategy == ^strategy and username == ^username)
     |> Ash.exists?(opts)
-  end
-
-  # The answer is never reported back: the caller sees an assignment or an
-  # invite, neither of which says who else exists here.
-  defp owner(strategy, username) do
-    UserIdentity
-    |> Ash.Query.filter(strategy == ^to_string(strategy) and username == ^username)
-    |> Ash.Query.select([:user_id])
-    |> Ash.read_one(actor: Varsel.Service.identity_claim())
-    |> case do
-      {:ok, %{user_id: user_id}} -> user_id
-      _none -> nil
-    end
   end
 end

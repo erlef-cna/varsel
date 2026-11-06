@@ -407,7 +407,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Archived case"
     end
 
-    test "lanes group by state, order newest-updated-first, and show empty lanes as \"—\"", %{
+    test "lanes group by state, order newest-updated-first, and keep empty lanes in place", %{
       conn: conn,
       poc: poc
     } do
@@ -419,19 +419,17 @@ defmodule VarselWeb.CaseLiveTest do
       review_case = Fixtures.open_case(poc, %{title: "In review"})
       Cases.request_case_review!(review_case, actor: poc)
 
-      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
 
       # The newer draft renders before the older one (newest-in-state first).
       [_before, after_newer] = String.split(html, "Newer draft", parts: 2)
       assert String.contains?(after_newer, "Older draft")
 
-      assert html =~ "In review"
-      # Approved is empty: the lane stays, its body shows "—" right after its
-      # own header (not the Publishing lane's, which follows Approved's). The
-      # violet dot class is unique to the Approved lane header.
-      [_before_approved, after_approved] = String.split(html, "var(--violet)", parts: 2)
-      [approved_lane, _rest] = String.split(after_approved, "Publishing", parts: 2)
-      assert approved_lane =~ "—"
+      assert has_element?(lv, "#lane-review", "In review")
+      # Approved is empty: the lane stays, as a strip holding its title and
+      # count and no cards.
+      assert has_element?(lv, "#lane-approved", "Approved")
+      refute has_element?(lv, "#lane-approved a")
     end
 
     test "a lane past 8 cards clips the tail with a \"Show all N\" footer that expands in place",
@@ -3302,19 +3300,21 @@ defmodule VarselWeb.CaseLiveTest do
     setup %{poc: poc} do
       reporter = Fixtures.register_user("case_report_reporter")
 
-      report =
-        Varsel.CVE.submit_vulnerability_report!(
+      case_record =
+        Cases.submit_vulnerability_report!(
           %{
             report_json: %{"package" => "acme_lib"},
             summary: "acme_lib leaks secrets",
             confirms_criteria: true,
             confirms_in_scope: true
           },
-          actor: reporter
+          actor: reporter,
+          load: [:vulnerability_reports]
         )
 
-      {:ok, report} = Varsel.CVE.accept_vulnerability_report(report, %{}, actor: poc)
-      %{report: report, case_id: report.case_id}
+      [report] = case_record.vulnerability_reports
+      Cases.accept_case!(case_record, actor: poc)
+      %{report: report, case_id: case_record.id}
     end
 
     test "the workspace links a Reports tab that lists the attached reports", %{
@@ -3333,7 +3333,6 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert has_element?(lv, "#case-report-#{report.id}", "acme_lib leaks secrets")
       assert has_element?(lv, "#case-report-#{report.id}", "case_report_reporter")
-      assert has_element?(lv, ~s(a[href="/reports"]), "Report triage")
     end
 
     test "an assigned supporter sees the report through the case, but not directly", %{
@@ -3356,14 +3355,12 @@ defmodule VarselWeb.CaseLiveTest do
       # … including the reporter's name, while field policies hide the rest.
       assert has_element?(lv, "#case-report-#{report.id}", "case_report_reporter name")
       refute html =~ "case_report_reporter@example.com"
-      # The triage queue is not theirs to work.
-      refute has_element?(lv, ~s(a[href="/reports"]), "Report triage")
 
       # … and direct report reads/lists stay POC-only.
-      assert Varsel.CVE.list_vulnerability_reports!(actor: supporter) == []
+      assert Cases.list_vulnerability_reports!(actor: supporter) == []
 
       assert {:error, %Ash.Error.Invalid{}} =
-               Ash.get(Varsel.CVE.VulnerabilityReport, report.id, actor: supporter)
+               Ash.get(Varsel.Cases.VulnerabilityReport, report.id, actor: supporter)
 
       # The same field scoping holds for a direct authorized load through the case.
       loaded_case =

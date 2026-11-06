@@ -11,8 +11,6 @@ defmodule Varsel.CVE do
   alias Varsel.CVE.CveRecord
   alias Varsel.CVE.CveValidation
   alias Varsel.CVE.OsvRecord
-  alias Varsel.CVE.ReportParticipant
-  alias Varsel.CVE.VulnerabilityReport
 
   admin do
     show? true
@@ -53,20 +51,6 @@ defmodule Varsel.CVE do
       get_by :osv_id
     end
 
-    tool :submit_vulnerability_report, VulnerabilityReport, :submit
-
-    tool :list_vulnerability_reports, VulnerabilityReport, :list_reports do
-      select [:id, :summary, :state, :source, :triage_notes, :case_id, :inserted_at, :updated_at]
-    end
-
-    tool :get_vulnerability_report, VulnerabilityReport, :read do
-      get_by :id
-      load [:participants, case: [:title, :cve_id]]
-      load_strict? true
-    end
-
-    tool :triage_vulnerability_report, VulnerabilityReport, :triage
-
     # POC-only lifecycle tooling (policy-gated; requires an API key actor).
     tool :list_all_cves, CveRecord, :list_all do
       load [:cve_id, :title, :date_published, :date_updated, :purls]
@@ -95,8 +79,6 @@ defmodule Varsel.CVE do
       list OsvRecord, :list_osv_records, :read
       get OsvRecord, :get_osv_record, :read, identity: :unique_osv_id
 
-      list VulnerabilityReport, :list_vulnerability_reports, :list_reports
-
       action CveValidation, :validate_cve, :validate
       action CveValidation, :validate_cve_schema, :validate_schema
       action CveValidation, :validate_cve_cvelint, :validate_cvelint
@@ -105,12 +87,6 @@ defmodule Varsel.CVE do
     end
 
     mutations do
-      create VulnerabilityReport, :submit_vulnerability_report, :submit
-      update VulnerabilityReport, :triage_vulnerability_report, :triage
-      update VulnerabilityReport, :accept_vulnerability_report, :accept
-      update VulnerabilityReport, :reject_vulnerability_report, :reject
-      update VulnerabilityReport, :withdraw_vulnerability_report, :withdraw
-
       update CveRecord, :assign_cve, :assign
       update CveRecord, :withhold_cve, :withhold
       update CveRecord, :update_cve, :update
@@ -179,43 +155,6 @@ defmodule Varsel.CVE do
       define :create_osv_record, action: :create
       define :create_missing_osv_records, action: :create_missing
       define :sync_osv_record, action: :sync
-    end
-
-    resource VulnerabilityReport do
-      define :submit_vulnerability_report, action: :submit
-      define :list_vulnerability_reports, action: :list_reports
-      define :get_vulnerability_report, action: :read, get_by: [:id]
-      define :triage_vulnerability_report, action: :triage
-      define :accept_vulnerability_report, action: :accept
-      define :reject_vulnerability_report, action: :reject
-      define :withdraw_vulnerability_report, action: :withdraw
-      define :submit_hex_vulnerability_report, action: :submit_from_hex
-      define :link_vulnerability_report_reporter, action: :link_reporter
-    end
-
-    resource ReportParticipant do
-      define :list_report_participants, action: :read
-      define :record_report_participant, action: :record
-
-      define :list_report_participants_for_identity,
-        action: :for_identity,
-        args: [:strategy, :username]
-
-      define :link_report_participant_user, action: :link_user
-      define :spend_report_participant, action: :spend
-
-      define :erase_hex_report_participants,
-        action: :erase_hex_person,
-        args: [:username, {:optional, :email}],
-        require_reference?: false,
-        default_options: [
-          bulk_options: [
-            authorize_query?: false,
-            notify?: true,
-            return_errors?: true,
-            strategy: :atomic
-          ]
-        ]
     end
   end
 end

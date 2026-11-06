@@ -2,10 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Varsel.CVE.VulnerabilityReport.Changes.RateLimitSubmit do
+defmodule Varsel.Cases.Case.Changes.RateLimitReports do
   @moduledoc """
-  Rate limits `:submit` to 25 reports per day and reporter for users without
-  a role. Users the CNA has vouched for (POC or supporter) are not limited.
+  Rate limits `:submit_report` to 25 reports per day and reporter for users
+  without a role. Users the CNA has vouched for (POC or supporter) are not
+  limited.
   """
 
   use Ash.Resource.Change

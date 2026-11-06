@@ -4,7 +4,7 @@
 
 defmodule Varsel.Notifications.Notification do
   @moduledoc """
-  One row per user, kind and subject (a case or a vulnerability report).
+  One row per user, kind and case.
 
   Repeated events of the same kind on the same subject absorb into the
   subject's unread row: `:record` upserts on `unread_per_subject` and bumps
@@ -26,7 +26,6 @@ defmodule Varsel.Notifications.Notification do
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Accounts.User
   alias Varsel.Cases.Case
-  alias Varsel.CVE.VulnerabilityReport
   alias Varsel.Notifications.Kind
   alias Varsel.Notifications.Notification.Actions.FanOut
   alias Varsel.Notifications.Notification.Actions.SendDigests
@@ -44,7 +43,6 @@ defmodule Varsel.Notifications.Notification do
     references do
       reference :user, on_delete: :delete
       reference :case, on_delete: :delete
-      reference :vulnerability_report, on_delete: :delete
     end
 
     identity_wheres_to_sql unread_per_subject: "read_at IS NULL"
@@ -88,7 +86,7 @@ defmodule Varsel.Notifications.Notification do
     create :record do
       description "Records one event, absorbing it into the subject's unread row if one exists."
       primary? true
-      accept [:kind, :user_id, :case_id, :vulnerability_report_id, :email_requested]
+      accept [:kind, :user_id, :case_id, :email_requested]
 
       upsert? true
       upsert_identity :unread_per_subject
@@ -155,16 +153,6 @@ defmodule Varsel.Notifications.Notification do
       change set_attribute(:read_at, &DateTime.utc_now/0)
     end
 
-    update :mark_kind_read do
-      description "Marks the acting user's unread notifications of one kind as read."
-      accept []
-
-      argument :kind, Kind, allow_nil?: false
-
-      change filter(expr(kind == ^arg(:kind) and is_nil(read_at)))
-      change set_attribute(:read_at, &DateTime.utc_now/0)
-    end
-
     update :mark_emailed do
       description "Stamps the notification as emailed."
       accept []
@@ -221,7 +209,7 @@ defmodule Varsel.Notifications.Notification do
       authorize_if expr(user_id == ^actor(:id))
     end
 
-    policy action([:mark_read, :mark_unread, :mark_case_read, :mark_kind_read]) do
+    policy action([:mark_read, :mark_unread, :mark_case_read]) do
       authorize_if expr(user_id == ^actor(:id))
     end
 
@@ -290,26 +278,16 @@ defmodule Varsel.Notifications.Notification do
     end
 
     belongs_to :case, Case do
-      description "The case this notification is about, if any."
-      allow_nil? true
-      public? true
-      attribute_writable? true
-    end
-
-    belongs_to :vulnerability_report, VulnerabilityReport do
-      description "The vulnerability report this notification is about, if any."
-      allow_nil? true
+      description "The case this notification is about."
+      allow_nil? false
       public? true
       attribute_writable? true
     end
   end
 
   signals_in do
-    from Varsel.CVE.Signals do
-      on :report_submitted, :notify_report_submitted, action: :fan_out, delivery: @delivery
-    end
-
     from Varsel.Cases.Signals do
+      on :report_submitted, :notify_report_submitted, action: :fan_out, delivery: @delivery
       on :review_requested, :notify_review_requested, action: :fan_out, delivery: @delivery
       on :case_published, :notify_case_published, action: :fan_out, delivery: @delivery
       on :comment_posted, :notify_comment_posted, action: :fan_out, delivery: @delivery
@@ -321,7 +299,7 @@ defmodule Varsel.Notifications.Notification do
   identities do
     # The partial index (unread rows only) is what keeps a read row from
     # being reopened by a later event.
-    identity :unread_per_subject, [:user_id, :kind, :case_id, :vulnerability_report_id],
+    identity :unread_per_subject, [:user_id, :kind, :case_id],
       where: expr(is_nil(read_at)),
       nils_distinct?: false
   end

@@ -774,12 +774,16 @@ defmodule VarselWeb.CaseDetailLive do
   # the action would mean inventing a whole proposal to ask about, since its
   # target validation runs first and rejects a shapeless one — so the state
   # itself is read, mirroring `Proposal.Validations.CaseState`.
-  defp can_propose?(case_record, user), do: can_comment?(case_record, user) and case_record.state != :closed
+  defp can_propose?(case_record, user),
+    do: can_comment?(case_record, user) and case_record.state not in [:closed, :merged]
 
   defp marks(nil), do: %{phantom: MapSet.new(), deleted: MapSet.new()}
   defp marks(projection), do: %{phantom: projection.phantom_ids, deleted: projection.deleted_ids}
 
   @doc "DaisyUI badge class for a case state."
+  def state_badge_class(:submitted), do: "badge-warning"
+  def state_badge_class(:triage), do: "badge-info"
+  def state_badge_class(:merged), do: "badge-neutral"
   def state_badge_class(:draft), do: "badge-warning"
   def state_badge_class(:review), do: "badge-info"
   def state_badge_class(:approved), do: "badge-accent"
@@ -1081,6 +1085,7 @@ defmodule VarselWeb.CaseDetailLive do
             <.activity_feed entries={activity_entries(@case_record)} />
           </.panel>
           <.assignments_section case_record={@case_record} current_user={@current_user} />
+          <CaseLifecycle.triage_panel case_record={@case_record} current_user={@current_user} />
           <CaseLifecycle.close_link
             :if={Cases.can_close_case?(@current_user, @case_record, validate?: true)}
             case_record={@case_record}
@@ -1102,6 +1107,12 @@ defmodule VarselWeb.CaseDetailLive do
         search={@credit_picker.search}
         credit_type={@credit_picker.credit_type}
         credit_form={@credit_picker.form}
+      />
+
+      <CaseLifecycle.merge_picker_modal
+        :if={@merge_picker}
+        case_record={@case_record}
+        choices={@merge_picker}
       />
 
       <CaseLifecycle.cve_picker_modal

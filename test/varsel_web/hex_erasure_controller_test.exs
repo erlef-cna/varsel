@@ -6,9 +6,10 @@ defmodule VarselWeb.HexErasureControllerTest do
   use VarselWeb.ConnCase, async: true
 
   alias Varsel.Cases
-  alias Varsel.CVE
+  alias Varsel.Cases.CaseInvite
   alias Varsel.Fixtures
   alias Varsel.HexPm
+  alias Varsel.Service
   alias Varsel.Test.GitHubApp
   alias VarselWeb.HexServiceTokenFixture
 
@@ -52,91 +53,44 @@ defmodule VarselWeb.HexErasureControllerTest do
     |> post(~p"/api/hex/erasures", payload)
   end
 
-  defp person(username, attrs \\ %{}) do
-    Map.merge(
-      %{
-        role: :maintainer,
-        strategy: :hex,
-        username: username,
-        name: "#{username} name",
-        email: "#{username}@example.com"
-      },
-      attrs
-    )
-  end
-
-  defp report!(participants) do
-    CVE.submit_hex_vulnerability_report!(
+  # A report hex.pm forwarded invites the people it names onto its case.
+  defp report!(reporter, maintainers) do
+    Cases.submit_hex_vulnerability_report!(
       %{
         report_json: %{"report" => "Bad."},
         summary: "Unsafe parsing",
-        participants: participants
+        reporter_username: reporter,
+        maintainers: Enum.map(maintainers, &%{username: &1})
       },
-      authorize?: false
+      actor: Service.hexpm_intake()
     )
   end
 
-  defp participants do
-    CVE.ReportParticipant
-    |> Ash.read!(authorize?: false)
-    |> Map.new(&{{&1.strategy, to_string(&1.username), &1.role}, &1})
+  defp invites do
+    Map.new(Ash.read!(CaseInvite, authorize?: false), &{to_string(&1.username), &1})
   end
 
   describe "an erasure hex.pm sends" do
-    test "clears the name and address on the participants hex.pm named", %{conn: conn} do
-      report!([
-        person("Gone", %{role: :reporter}),
-        person("gone"),
-        person("kept"),
-        person("gone", %{strategy: :github})
-      ])
+    test "clears the address on the invites a forwarded report made", %{conn: conn} do
+      report!("gone", ["kept"])
 
       conn = erase(conn, %{"username" => "gone", "email" => nil})
 
       assert response(conn, 204) == ""
 
-      rows = participants()
-
-      for key <- [{:hex, "Gone", :reporter}, {:hex, "gone", :maintainer}] do
-        assert %{name: nil, email: nil} = rows[key]
-      end
-
-      assert %{name: "kept name", email: "kept@example.com"} = rows[{:hex, "kept", :maintainer}]
-      assert %{name: "gone name"} = rows[{:github, "gone", :maintainer}]
+      rows = invites()
+      assert %{email: nil, email_status: :erased} = rows["gone"]
+      assert %{email_status: :pending} = rows["kept"]
+      assert to_string(rows["kept"].email) == "kept@example.com"
     end
 
-    test "also matches the address, whatever its casing", %{conn: conn} do
-      report!([person("renamed", %{email: "Gone@Example.com"})])
+    test "has no address to clear in any version" do
+      report!("gone", ["kept"])
 
-      assert conn |> erase(%{"username" => "gone"}) |> response(204)
-      assert %{name: "renamed name"} = participants()[{:hex, "renamed", :maintainer}]
-
-      assert build_conn()
-             |> erase(%{"username" => "gone", "email" => "gone@example.com"})
-             |> response(204)
-
-      assert %{name: nil, email: nil, username: username} =
-               participants()[{:hex, "renamed", :maintainer}]
-
-      assert to_string(username) == "renamed"
-    end
-
-    test "has no name to clear in any version, including those of spent participants" do
-      report!([person("gone"), person("kept")])
-
-      [spent] =
-        [person("gone", %{role: :reporter})]
-        |> report!()
-        |> Ash.load!([:participants], authorize?: false)
-        |> Map.fetch!(:participants)
-
-      CVE.spend_report_participant!(spent, authorize?: false)
-
-      versions = Ash.read!(CVE.ReportParticipant.Version)
-      assert Enum.any?(versions, &(&1.version_source_id == spent.id))
+      versions = Ash.read!(CaseInvite.Version)
+      assert [_ | _] = versions
 
       for version <- versions do
-        refute Map.has_key?(version.changes, "name")
         refute Map.has_key?(version.changes, "email")
       end
     end
@@ -179,24 +133,24 @@ defmodule VarselWeb.HexErasureControllerTest do
     end
 
     test "is answered the same when nothing matches, and when repeated", %{conn: conn} do
-      report!([person("gone")])
+      report!("kept", ["gone"])
 
       assert conn |> erase(%{"username" => "nobody"}) |> response(204)
       assert build_conn() |> erase(%{"username" => "gone"}) |> response(204)
       assert build_conn() |> erase(%{"username" => "gone"}) |> response(204)
 
-      assert %{name: nil} = participants()[{:hex, "gone", :maintainer}]
+      assert %{email: nil} = invites()["gone"]
     end
   end
 
   describe "is refused when" do
     setup do
-      report!([person("gone")])
+      report!("kept", ["gone"])
       :ok
     end
 
     defp untouched? do
-      match?(%{name: "gone name"}, participants()[{:hex, "gone", :maintainer}])
+      to_string(invites()["gone"].email) == "gone@example.com"
     end
 
     test "no token is presented", %{conn: conn} do

@@ -13,7 +13,6 @@ defmodule Varsel.Notifications.EmailsTest do
 
   alias Varsel.Accounts
   alias Varsel.Cases
-  alias Varsel.CVE
   alias Varsel.Fixtures
   alias Varsel.Notifications
   alias Varsel.Notifications.Notification
@@ -45,13 +44,13 @@ defmodule Varsel.Notifications.EmailsTest do
   end
 
   describe ":report_submitted" do
-    test "submitting a report emails every POC with a /reports link, not the reporter" do
+    test "submitting a report emails every POC with a link to its case, not the reporter" do
       Fixtures.register_user("emails_report_poc_one", :poc)
       Fixtures.register_user("emails_report_poc_two", :poc)
       reporter = Fixtures.register_user("emails_report_reporter", :supporter)
 
-      {:ok, _report} =
-        CVE.submit_vulnerability_report(
+      {:ok, case_record} =
+        Cases.submit_vulnerability_report(
           %{
             report_json: %{"affected" => "pkg"},
             summary: "a bug",
@@ -73,20 +72,26 @@ defmodule Varsel.Notifications.EmailsTest do
       refute "emails_report_reporter@example.com" in recipients
 
       body = hd(emails).text_body
-      assert body =~ "/reports"
+      assert body =~ "/cases/#{case_record.id}"
       refute body =~ "pkg"
       refute body =~ "emails_report_reporter@example.com"
     end
 
-    test "hex.pm intake emails every POC too, with no payload or participant text" do
+    test "hex.pm intake emails every POC too, with no payload or reporter text" do
       Fixtures.register_user("emails_hex_report_poc", :poc)
 
+      # No address, so the reporter's invite sends no email of its own.
+      Req.Test.stub(Varsel.HexPm, fn conn ->
+        Req.Test.json(conn, %{"username" => "somebody", "name" => "somebody", "email" => nil})
+      end)
+
       {:ok, _report} =
-        CVE.submit_hex_vulnerability_report(
+        Cases.submit_hex_vulnerability_report(
           %{
             report_json: %{"affected" => "secret_pkg"},
             summary: "a bug",
-            participants: [%{role: :reporter, strategy: :hex, username: "somebody"}]
+            reporter_username: "somebody",
+            maintainers: []
           },
           actor: Service.hexpm_intake()
         )
@@ -94,7 +99,7 @@ defmodule Varsel.Notifications.EmailsTest do
       drain()
 
       assert [%{to: [{_name, "emails_hex_report_poc@example.com"}]} = email] = sent_emails()
-      assert email.text_body =~ "/reports"
+      assert email.text_body =~ "/cases/"
       refute email.text_body =~ "secret_pkg"
       refute email.text_body =~ "somebody"
     end

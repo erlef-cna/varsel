@@ -10,9 +10,22 @@ defmodule Varsel.Cases.Signals do
   use Ash.Signals
 
   signals do
+    signal :report_submitted do
+      description "A vulnerability report arrived, from a reporter here or from hex.pm, and opened a case."
+      argument :case_id, :uuid, allow_nil?: false
+
+      argument :actor_id, :uuid, description: "The user who submitted the report, when a user did."
+    end
+
     signal :case_closed do
       description "A case reached its terminal state and will result in no published CVE."
       argument :case_id, :uuid, allow_nil?: false
+    end
+
+    signal :case_merged do
+      description "A case not accepted yet was merged into another case that covers the same finding."
+      argument :case_id, :uuid, allow_nil?: false, description: "The case that was merged."
+      argument :into_case_id, :uuid, allow_nil?: false, description: "The case that takes over."
     end
 
     signal :proposal_target_destroyed do

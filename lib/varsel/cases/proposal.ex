@@ -20,9 +20,9 @@ defmodule Varsel.Cases.Proposal do
   records a resolution note; authors can withdraw their own proposals.
   Counter-proposals link back via `parent_proposal_id`.
 
-  Proposals can be *created* in every case state except `:closed`; they can
-  only be *accepted* while the case content is editable (`:draft`/`:review`,
-  and `:approved` for a POC).
+  Proposals can be *created* in every case state except `:closed` and
+  `:merged`. They can only be *accepted* while the case content is editable
+  (`:draft`/`:review`, and `:approved` for a POC).
   """
 
   use Ash.Resource,
@@ -304,7 +304,7 @@ defmodule Varsel.Cases.Proposal do
     # Content freeze, mirroring the case and its child rows: a proposal applies
     # to content, so it may only be accepted while that content may change.
     policy action(:accept) do
-      authorize_if expr(case.state in [:draft, :review])
+      authorize_if expr(case.state in [:submitted, :triage, :draft, :review])
 
       authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
     end
@@ -343,8 +343,8 @@ defmodule Varsel.Cases.Proposal do
 
   validations do
     validate {CaseState,
-              states: [:draft, :review, :approved, :publishing, :published],
-              message: "proposals cannot be created on a closed case"},
+              states: [:submitted, :triage, :draft, :review, :approved, :publishing, :published],
+              message: "proposals cannot be created on a closed or merged case"},
              on: [:create]
 
     validate ValidTarget, on: [:create], only_when_valid?: true

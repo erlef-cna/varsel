@@ -102,6 +102,21 @@ defmodule Varsel.Cases.Comment do
       emit Varsel.Cases.Signals, :comment_posted, values: [actor_id: actor(:id)]
     end
 
+    create :post_triage_recommendation do
+      description """
+      Posts an automated triage recommendation on a case, for the POC or
+      assigned supporter who decides whether to accept it. The body opens with a fixed line that
+      marks it as automated, and the comment stays on the case.
+      """
+
+      accept [:case_id, :body]
+
+      change relate_actor(:author)
+      change Varsel.Cases.Comment.Changes.MarkTriageRecommendation
+
+      emit Varsel.Cases.Signals, :comment_posted, values: [actor_id: actor(:id)]
+    end
+
     create :sync_from_github do
       description """
       Internal: records one comment read from the case's linked GitHub
@@ -175,6 +190,14 @@ defmodule Varsel.Cases.Comment do
     policy action([:read, :list_for_case, :post, :for_github_login]) do
       authorize_if signal_in(Signals, :identity_linked)
       authorize_if actor_attribute_equals(:role, :poc)
+      authorize_if relates_to_actor_via([:case, :assignments, :user])
+    end
+
+    # Triage is a POC's job, or a supporter's on a case they work, and so is
+    # asking an agent to help with it.
+    policy action(:post_triage_recommendation) do
+      authorize_if actor_attribute_equals(:role, :poc)
+      forbid_unless actor_attribute_equals(:role, :supporter)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end
   end

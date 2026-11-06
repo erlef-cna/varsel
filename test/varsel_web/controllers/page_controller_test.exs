@@ -31,6 +31,12 @@ defmodule VarselWeb.PageControllerTest do
     assert html_response(conn, 200) =~ ~s(aria-label="Notifications")
   end
 
+  test "the retired report triage page redirects to the case board", %{conn: conn} do
+    conn = get(conn, "/reports")
+
+    assert redirected_to(conn, 301) == ~p"/cases"
+  end
+
   describe "test deployment (search indexing blocked)" do
     setup do
       previous = Application.fetch_env!(:varsel, :test_deployment?)

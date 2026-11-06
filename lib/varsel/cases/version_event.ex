@@ -158,7 +158,7 @@ defmodule Varsel.Cases.VersionEvent do
     # Content freeze: child rows may only change while the parent case is
     # editable, or when a POC corrects an approved one.
     policy action_type([:create, :update, :destroy]) do
-      authorize_if expr(case.state in [:draft, :review])
+      authorize_if expr(case.state in [:submitted, :triage, :draft, :review])
 
       authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
     end

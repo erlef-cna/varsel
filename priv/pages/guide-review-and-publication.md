@@ -10,12 +10,29 @@ user management.
 
 ## Triage
 
-Reports from [the form](/report), the API, and hex.pm queue under
-[Reports](/reports). Hold each against the
-[CVE criteria](/cve-criteria): accepting opens a case linked to the report,
-rejecting records why. Reporters follow the outcome on the same page.
+Each report from [the form](/report), the API, or hex.pm opens a case at
+once. It waits in the Submitted lane of the [Cases](/cases) board, and moves
+to the Triage lane when you mark it under triage. The reporter and the
+maintainers hex.pm named are on the case from the start. You and the
+supporters on it can edit the case while you triage it. The reporter and the
+maintainers comment and suggest.
 
-![The report triage queue with a submitted report awaiting a decision](/images/guide/report-triage.png)
+Hold each case against the [CVE criteria](/cve-criteria) and decide on the
+case page:
+
+- **Accept** it, and it opens for filing as a draft.
+- **Reject** it with a reason. Its open invites are withdrawn.
+- **Merge** it into a case for the same finding. That case cites the report
+  and takes over its people.
+- **Split** off a new case for each further finding the report holds.
+
+A supporter you assign to a reported case takes the same decisions on it. A
+merge needs them on both cases.
+
+A reporter may withdraw until you accept. Reporters follow the outcome on the
+case, which their own board shows.
+
+![The case board with a reported case in the Submitted lane](/images/guide/report-triage.png)
 
 ## Review
 

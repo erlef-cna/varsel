@@ -117,24 +117,6 @@ defmodule Varsel.Notifications.NotificationTest do
       reloaded_first = Enum.find(rows, &(&1.id == first.id))
       assert reloaded_first.count == 2
     end
-
-    test "dedups with a nil case_id against a vulnerability_report_id subject", %{poc: poc} do
-      report = report_fixture(poc)
-
-      Notifications.record_notification!(
-        %{kind: :report_submitted, user_id: poc.id, vulnerability_report_id: report.id},
-        authorize?: false
-      )
-
-      absorbed =
-        Notifications.record_notification!(
-          %{kind: :report_submitted, user_id: poc.id, vulnerability_report_id: report.id},
-          authorize?: false
-        )
-
-      assert absorbed.count == 2
-      assert [%Notification{}] = Ash.read!(Notification, actor: poc)
-    end
   end
 
   describe "policies" do
@@ -278,44 +260,6 @@ defmodule Varsel.Notifications.NotificationTest do
     end
   end
 
-  describe "mark_kind_notifications_read" do
-    test "marks only the actor's unread rows of that kind, leaving another kind and another user untouched",
-         %{poc: poc, other: other, case: case_record} do
-      report_submitted =
-        Notifications.record_notification!(
-          %{
-            kind: :report_submitted,
-            user_id: poc.id,
-            vulnerability_report_id: report_fixture(poc).id
-          },
-          authorize?: false
-        )
-
-      comment_posted =
-        Notifications.record_notification!(
-          %{kind: :comment_posted, user_id: poc.id, case_id: case_record.id},
-          authorize?: false
-        )
-
-      other_report_submitted =
-        Notifications.record_notification!(
-          %{
-            kind: :report_submitted,
-            user_id: other.id,
-            vulnerability_report_id: report_fixture(other).id
-          },
-          authorize?: false
-        )
-
-      assert %Ash.BulkResult{status: :success} =
-               Notifications.mark_kind_notifications_read(:report_submitted, actor: poc)
-
-      assert Ash.get!(Notification, report_submitted.id, authorize?: false).read_at
-      assert is_nil(Ash.get!(Notification, comment_posted.id, authorize?: false).read_at)
-      assert is_nil(Ash.get!(Notification, other_report_submitted.id, authorize?: false).read_at)
-    end
-  end
-
   describe "mark_all_notifications_read" do
     test "marks every unread row of the actor, leaving read rows and another user untouched", %{
       poc: poc,
@@ -357,17 +301,5 @@ defmodule Varsel.Notifications.NotificationTest do
       assert is_nil(Ash.get!(Notification, other_notification.id, authorize?: false).read_at)
       assert Notifications.unread_notification_count(actor: poc) == 0
     end
-  end
-
-  defp report_fixture(poc) do
-    Varsel.CVE.submit_vulnerability_report!(
-      %{
-        report_json: %{"x" => 1},
-        summary: "a bug",
-        confirms_criteria: true,
-        confirms_in_scope: true
-      },
-      actor: poc
-    )
   end
 end

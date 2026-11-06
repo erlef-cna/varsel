@@ -91,15 +91,18 @@ the platform edge, not in the app.
   data.
 - **Authenticated user (no role / `nil`)** — a logged-in user with no CNA
   role, which is what every new sign-in starts as. Rights: submit a
-  vulnerability report and read/withdraw their own, manage their own API keys
-  and sessions, set a notification address one of their own linked providers
-  reported, and run the CVE **validation** actions (§6). On `Case` they see
-  nothing until a POC assigns them to one; assignment then grants read,
+  vulnerability report, which opens a case they are assigned to, read their
+  own reports, and withdraw that case until a POC accepts it; manage their own
+  API keys and sessions, set a notification address one of their own linked
+  providers reported, and run the CVE **validation** actions (§6). On `Case`
+  they see nothing until a POC assigns them to one; assignment then grants read,
   propose and comment on **that case only** — never a direct write, never
   resolving a proposal, never a lifecycle action.
 - **Supporter** — a CNA collaborator. Opens cases, and on the cases they are
   assigned to edits content, resolves proposals, reopens, and takes the next
-  free CVE ID. Cannot approve or publish, cannot name which CVE ID they take,
+  free CVE ID. On an assigned case not accepted yet, takes the triage
+  decisions: accept, reject, split, and merge into another case they
+  are assigned to. Cannot approve or publish, cannot name which CVE ID they take,
   and cannot assign anyone (themselves included) to a case.
 - **POC (point of contact)** — privileged CNA operator. Full lifecycle
   authority, including publishing to MITRE, assigning roles, and granting
@@ -134,7 +137,7 @@ access says otherwise (`release.ex`).
 | CVE validation actions — any authenticated user | `validate_cve_record*` (GraphQL + MCP) | **cvelint subprocess**, **hex.pm egress** | **Yes — §6** |
 | Auth surface (GitHub **and Hex.pm** OAuth login, OAuth 2.1 server, API keys, sessions) | `/auth`, `/oauth/*`, `/sign-in`, `/settings/tokens`, `/settings/account` | GitHub + Hex.pm IdPs, DB, **CIMD egress** | **Yes — §6** |
 | Account linking (attach a second provider to an existing account) | `/settings/account/link/start/:strategy` | IdP, DB | **Yes — §6** |
-| CNA workbench (cases, reports, CVE lifecycle, user mgmt, notifications) — LiveView + GraphQL/MCP tools | `/cases`, `/reports`, `/users`, `/cves`, `/notifications`, `/settings/notifications`, GraphQL/MCP POC tools | DB, **MITRE API**, **git egress** | **Yes** |
+| CNA workbench (cases, reports, CVE lifecycle, user mgmt, notifications) — LiveView + GraphQL/MCP tools | `/cases`, `/users`, `/cves`, `/notifications`, `/settings/notifications`, GraphQL/MCP POC tools | DB, **MITRE API**, **git egress** | **Yes** |
 | Manual GitHub request steps (the command a POC runs with `gh` where the App is not installed), one-time bearer token | `GET /api/github/manual/:id/request`, `POST /api/github/manual/:id/result` | DB reads/writes | **Yes — §4, §6** |
 | Render-time derivation (`exgit` git clone/fetch of package repos) | `Varsel.Cases.Derivation` | **Outbound git to `repo_url`** | **Yes — key boundary (§4)** |
 | Catalog sync (CWE/CAPEC/OTP-versions) — Oban jobs | scheduled workers | Outbound HTTPS to fixed hosts | **Yes (trusted-source egress)** |
@@ -293,8 +296,8 @@ missing policy**, and
 a report premised on a private resource returning `{:ok, []}` rather than an
 error is out of model. (all `policies do` blocks)
 
-**A write can also fail because the row moved.** The four state-machine
-resources (`Case`, `CveRecord`, `VulnerabilityReport`, `Proposal`) carry an
+**A write can also fail because the row moved.** The three state-machine
+resources (`Case`, `CveRecord`, `Proposal`) carry an
 optimistic lock on their updates: a write binds to the version of the row the
 caller loaded, and if the row has changed since, the write fails with a
 stale-record error and the whole transaction rolls back — including anything a
@@ -304,8 +307,7 @@ concurrent editing, not races: the caller reloads and retries against current
 state. The updates outside the lock are `Case.refresh_derivation`, which
 rewrites only derived caches and runs nested inside `:publish`, and
 `Case.grant_access` and `Case.report_to_github`, which write a child row and
-nothing on the case. (`case.ex`, `cve_record.ex`, `vulnerability_report.ex`,
-`proposal.ex`)
+nothing on the case. (`case.ex`, `cve_record.ex`, `proposal.ex`)
 
 **The websocket carries the same login requirement as `/gql`.** A socket has
 no `conn`, so `/ws/gql` authenticates the connection itself in `connect/3`,
@@ -325,22 +327,24 @@ moment. (`socket_disconnect.ex`, `disconnect_sockets.ex`, `graphql_socket.ex`)
 1. **Public read** — anonymous request → read action → policy filters to
    `state == :published` (CVE) or `always()` (OSV/CWE/CAPEC) → serialized
    JSON/HTML. No write path. (`cve_record.ex`, `osv_record.ex`)
-2. **Report intake** — authenticated user → `VulnerabilityReport.submit`
-   (`actor_present()`) → arbitrary `report_json` persisted → a
-   `report_submitted` notification to every POC, in-app and as a content-free
-   email per their preferences; the payload itself never leaves the
-   authenticated console (`vulnerability_report.ex`, `notifications/`).
+2. **Report intake** — authenticated user → `Case.submit_report`
+   (`actor_present()`) → arbitrary `report_json` persisted, and a case in
+   `:submitted` opened with the submitter assigned → a `report_submitted`
+   notification to every POC, in-app and as a content-free email per their
+   preferences; the payload itself never leaves the authenticated console
+   (`case.ex`, `take_report.ex`, `notifications/`).
 2a. **hex.pm report intake** — hex.pm (service token, no actor) →
-   `submit_from_hex` → report plus a `report_participants` row per person
-   hex.pm named. Those rows carry **third-party names and email addresses for
-   people who never signed up here**: the app's only store of personal data
-   about non-users. POC-only (§8 property 10a).
-   (`hex_report_controller.ex`, `report_participant.ex`)
+   `Case.submit_report_from_hex` → report, and a case in `:submitted` that gives the
+   reporter and the maintainers hex.pm named access at once: an assignment
+   for a handle someone here owns, a case invite (and its email) for any
+   other. The invites carry **third-party email addresses for people who
+   never signed up here**: the app's only store of personal data about
+   non-users. (§8 property 10a; `hex_report_controller.ex`, `take_report.ex`,
+   `admit_named_people.ex`)
 2b. **hex.pm erasure notice** — hex.pm (service token, no actor) →
-   `erase_hex_person` / `erase_hex_contact` → clears the name and address on
-   the hex.pm participants matching the username or address, and the address
-   on matching hex.pm case invites.
-   (`hex_erasure_controller.ex`, `report_participant.ex`, `case_invite.ex`)
+   `erase_hex_contact` → clears the address on the hex.pm case invites
+   matching the username or address.
+   (`hex_erasure_controller.ex`, `case_invite.ex`)
 2c. **Manual GitHub request** — POC prepares a request on the GitHub tab of
    a case whose repository has no App installation → the POC's terminal
    fetches the body (`GET …/request`), sends it to GitHub with `gh api` as
@@ -388,7 +392,7 @@ claims:
   `POST /api/hex/erasures`) — reachable by **anyone holding a signing key
   from the configured key set**, and by no one else. The ES256 service token
   is checked by a plug on its own pipeline, which is the only thing that
-  builds the actor `submit_from_hex` and the erasure actions demand. Its
+  builds the actor `submit_report_from_hex` and the erasure actions demand. Its
   audience is the configured URL of the route it is posted to, so a token
   for one route is refused at the other. A finding
   premised on an *unauthenticated* caller reaching it is out of model unless
@@ -561,10 +565,10 @@ from controlling only its size.
 
 | Surface | Parameter | Control kind | Attacker-controllable? | Sink / caller must |
 | --- | --- | --- | --- | --- |
-| `VulnerabilityReport.submit` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The resulting notification emails are content-free (link only), so the payload never leaves the authenticated console. |
-| `submit_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free notification emails as a web report. |
-| `submit_from_hex` | `reporter` / `maintainers` (`name`, `username`, `email`) | data | **Yes — same** | `report_participants` rows. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact. A `username` later matches a hex sign-in and grants that account the participant row (§8) |
-| `erase_hex_person` / `erase_hex_contact` (`/api/hex/erasures`) | `username`, `email` | data | **Yes — whoever holds a configured signing key** | Clears `name` and `email` on every hex.pm participant matching either and `email` on every matching hex.pm invite, cancelling an invite email not yet sent. Nothing else is written and nothing is returned, so a key holder can blank any hex.pm-named person's contact details and learns nothing (§10 7a) |
+| `Case.submit_report` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The resulting notification emails are content-free (link only), so the payload never leaves the authenticated console. |
+| `Case.submit_report_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free notification emails as a web report. |
+| `Case.submit_report_from_hex` | `reporter` / `maintainers` (`username`, `email`) | data | **Yes — same** | Each handle becomes access to the report's case: read, propose and comment while a POC decides, the report payload included. The reporter's handle is stored on the report, and a later hex sign-in with it makes that account the reporter. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact (§8) |
+| `erase_hex_contact` (`/api/hex/erasures`) | `username`, `email` | data | **Yes — whoever holds a configured signing key** | Clears `email` on every hex.pm invite matching either, cancelling an invite email not yet sent. Nothing else is written and nothing is returned, so a key holder can blank any hex.pm-named person's address and learns nothing (§10 7a) |
 | `Case.grant_access` / `CaseInvite.invite` | `email` | data | **Yes — POC / assigned supporter only** | One outbound invite email to that address, accepted only when the handle's provider lists no address for the account and refused when it lists a different one. One email per address per case (`resolve_contact.ex`) |
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
@@ -973,42 +977,39 @@ none of the authorization properties, by construction rather than by defect.
    (`role == nil` — what every fresh sign-up is) additionally gets a daily
    submission allowance, counted per user (both values in the resource-bound
    table below).
-   The limit sits on the `:submit` action itself, so the form, GraphQL and
-   MCP all draw from the same budget; POCs and supporters are deliberately
+   The size cap sits on the report's only create, `:intake`, which both
+   intake actions on `Varsel.Cases.Case` reach. The rate limit sits on
+   `:submit_report` itself, so the form, GraphQL and MCP all draw from the
+   same budget; POCs and supporters are deliberately
    exempt. The counter is ETS (`Varsel.Hammer`), replicated across the cluster
    over PubSub: it resets on restart/deploy, and because replication is
    asynchronous, concurrent hits on different nodes can each be allowed before
    the other's broadcast lands.
    The rate cap is an **abuse mitigation, not a guarantee**: what is claimed
-   is that the two checks run on every path into `:submit`, not that the
+   is that the two checks run on every path into report intake, not that the
    counter is exact. A submission slipping past the cap — after a restart
    cleared the counters, or by racing two nodes — is not by itself a
    vulnerability, and report volume as a route to denial of service is out of
    scope entirely (§3).
    - *Violation symptom:* an oversized `report_json` is persisted, or a
      role-less reporter submits past the cap by a route that skips it — a
-     surface reaching `:submit` without the checks, not a counter reset.
+     surface reaching report intake without the checks, not a counter reset.
    - *Severity:* `moderate` (storage).
-   - (`report_json_size.ex`, `rate_limit_submit.ex`, `hammer.ex`)
+   - (`report_json_size.ex`, `rate_limit_reports.ex`, `hammer.ex`)
 
-10a. **People named on a report are visible to POCs only.**
-   A report forwarded by hex.pm names its reporter and the package's
-   maintainers, with the addresses hex.pm holds for them. Those rows are
-   readable at POC only — not by the reporter, not by a supporter, not through
-   the report they hang off. The reporter therefore cannot learn who maintains
-   the package they reported, and the maintainers cannot learn who reported,
-   until a POC opens a case that assigns them together.
-   Writing them is confined to the sending system's own actor and to POCs. A
-   reporter who could name maintainers would be writing the record that later
-   grants case access.
-   A case invite's `email` is the same kind of data and is a POC-only field:
-   an assigned supporter reads the invite and its email status, never the
-   address (`case_invite.ex`).
-   - *Violation symptom:* a non-POC reads a `report_participants` row by any
-     route, reads a `case_invites.email` value, or a caller attaches
-     participants through `:submit`.
+10a. **Contact details a report names are visible to POCs only.**
+   A report opens a case, and the people it names are on it from the start.
+   Everyone on the case sees the others' names and provider handles, as on
+   any case. A case invite's `email` is a POC-only field: anyone else on the
+   case reads the invite and its email status, never the address. A case
+   that closes or merges before acceptance withdraws its invites, and their
+   addresses with them.
+   Only the sending system's own actor names people at intake. A reporter who
+   could name them would grant case access by submitting.
+   - *Violation symptom:* a non-POC reads a `case_invites.email` value, or a
+     caller names people through `:submit_report`.
    - *Severity:* `moderate` (third-party PII disclosure).
-   - (`report_participant.ex`, `vulnerability_report.ex`)
+   - (`case_invite.ex`, `take_report.ex`)
 
 11. **CSRF / clickjacking / cross-origin hardening on the browser surface.**
    `protect_from_forgery` on browser pipelines; `x-frame-options: DENY` +
@@ -1065,11 +1066,11 @@ none of the authorization properties, by construction rather than by defect.
    - (`resolve_oauth_identity.ex`, `user_identity.ex`)
 
 15. **Editorial state binds to the database row, not a caller's snapshot.**
-   Case content may change only in `:draft` and `:review`, or in `:approved`
-   by a POC, and the freeze is a policy that reads the stored state — on the
+   Case content may change only in `:submitted`, `:triage`, `:draft` and
+   `:review`, or in `:approved` by a POC, and the freeze is a policy that reads the stored state — on the
    case and on every child row — so nothing past `:approved` changes without a
    reopen.
-   Every update on the four state-machine resources carries the optimistic
+   Every update on the three state-machine resources carries the optimistic
    lock described in §4: a write from a snapshot the database has moved past
    is refused and rolls back whole, so no lifecycle decision or content edit
    can silently overwrite a newer row. Transitions validate against the
@@ -1084,7 +1085,7 @@ none of the authorization properties, by construction rather than by defect.
      (milliseconds, two legitimate collaborators) can still land after it;
      that residue is accepted.
    - (`case.ex`, the case child resources' freeze policies, `cve_record.ex`,
-     `vulnerability_report.ex`, `proposal.ex`)
+     `proposal.ex`)
 
 16. **The scheduled MITRE import cannot overwrite local in-flight work.**
    The catalog sweep writes only rows that are absent locally or sit in

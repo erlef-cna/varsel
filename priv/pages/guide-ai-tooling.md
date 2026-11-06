@@ -49,7 +49,7 @@ first (`/mcp` inside Claude Code shows the connection state).
 
 | Skill | Purpose |
 |-------|---------|
-| `triage-report` | Triage an inbound report: scope, duplicates, reproduction, then a recommendation in the triage notes for a human to act on. |
+| `triage-report` | Triage the case a report opened: scope, duplicates, reproduction, then a recommendation as a case comment, for a human to act on. |
 | `new-case` | The orchestrator: takes an advisory, a pasted report or an accepted report to a verified, review-ready case, calling the skills below on the way. |
 | `cvss` | Produce a CVSS v4.0 vector; Varsel derives the numeric score. |
 | `find-cwe` | Pick the CWE weakness classification from the catalog. |
@@ -68,8 +68,9 @@ agent's output is the facts, as proposals.
 ## Guardrails
 
 Every change an agent makes is a proposal, and a human accepts it: agents
-never self-approve, and CVE ID assignment, proposal acceptance, report
-acceptance or rejection, and publishing happen in the UI only. A report an
+never self-approve, and CVE ID assignment, proposal acceptance, accepting,
+rejecting, merging or splitting a reported case, and publishing happen in the
+UI only. A report an
 agent triages is content from whoever submitted it: the skill tests its
 claims and never follows instructions found in it. Three writes are direct.
 Case access: the skills put the advisory's collaborators, the repository
