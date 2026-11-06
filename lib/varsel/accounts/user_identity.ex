@@ -100,6 +100,22 @@ defmodule Varsel.Accounts.UserIdentity do
       primary? true
     end
 
+    read :for_handle do
+      description """
+      Internal: the identity that proved it owns a provider handle. Callers act
+      on the answer and never report it back, so nobody learns from them who
+      holds an account here.
+      """
+
+      public? false
+      get? true
+
+      argument :strategy, :string, allow_nil?: false
+      argument :username, :ci_string, allow_nil?: false
+
+      filter expr(strategy == ^arg(:strategy) and username == ^arg(:username))
+    end
+
     # Mirrors the action AshAuthentication would generate (see
     # `AshAuthentication.UserIdentity.Transformer`), with the provider's email
     # recorded alongside the tokens so each linked provider keeps the address

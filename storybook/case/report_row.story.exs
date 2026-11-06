@@ -27,10 +27,11 @@ defmodule VarselWeb.Storybook.Case.ReportRow do
       %{
         id: "story-report",
         summary: "rabbit_common overflows on a crafted frame header",
-        state: :submitted,
+        cases: [%{state: :submitted, accepted_at: nil}],
         inserted_at: ~U[2026-08-12 09:30:00Z],
-        triage_notes: nil,
         report_json: %{"report" => @body},
+        reporter_id: "story-reporter",
+        reporter_username: nil,
         reporter: @reporter
       },
       attrs
@@ -41,30 +42,45 @@ defmodule VarselWeb.Storybook.Case.ReportRow do
     [
       %Variation{
         id: :submitted,
-        description: "An open report carries full weight.",
+        description: "A report whose case awaits a decision carries full weight.",
         attributes: %{report: report(%{id: "story-submitted"})}
       },
       %Variation{
-        id: :accepted_with_notes,
-        description: "A resolved report quiets down. Triage notes follow the body as Markdown.",
+        id: :under_triage,
+        description: "A POC marked its case under triage.",
+        attributes: %{
+          report: report(%{id: "story-triage", cases: [%{state: :triage, accepted_at: nil}]})
+        }
+      },
+      %Variation{
+        id: :accepted,
+        description: "A report quiets down once the CNA accepted one of its cases.",
         attributes: %{
           report:
             report(%{
               id: "story-accepted",
-              state: :accepted,
-              triage_notes: """
-              **Recommendation:** accept into a new case.
-
-              **Grounds:** reproduced against `3.12.13`. Fixed in `3.12.14`.
-              """
+              cases: [%{state: :draft, accepted_at: ~U[2026-08-13 10:00:00Z]}]
             })
         }
       },
       %Variation{
-        id: :rejected,
-        description: "A rejected report.",
+        id: :closed,
+        description: "Every case it opened closed or merged without acceptance.",
         attributes: %{
-          report: report(%{id: "story-rejected", state: :rejected, triage_notes: "Out of scope."})
+          report: report(%{id: "story-closed", cases: [%{state: :closed, accepted_at: nil}]})
+        }
+      },
+      %Variation{
+        id: :by_handle,
+        description: "hex.pm sent it, and the reporter has not signed in yet: the handle names them.",
+        attributes: %{
+          report:
+            report(%{
+              id: "story-handle",
+              reporter_id: nil,
+              reporter: nil,
+              reporter_username: Ash.CiString.new("ada_l")
+            })
         }
       },
       %Variation{
@@ -74,12 +90,12 @@ defmodule VarselWeb.Storybook.Case.ReportRow do
       },
       %Variation{
         id: :no_payload,
-        description: "`payload?` false shows only the head: a reporter's own list.",
+        description: "`payload?` false shows only the head.",
         attributes: %{report: report(%{id: "story-head"}), payload?: false}
       },
       %Variation{
         id: :with_actions,
-        description: "The caller adds controls beside the state and content at the foot.",
+        description: "The caller adds controls beside the status and content at the foot.",
         attributes: %{report: report(%{id: "story-actions"})},
         slots: [
           """
@@ -87,7 +103,7 @@ defmodule VarselWeb.Storybook.Case.ReportRow do
             <button class="btn btn-outline btn-error btn-xs">Withdraw</button>
           </:actions>
           <div class="mt-3 pt-3 border-t border-base-300">
-            <button class="btn btn-eef btn-sm">Accept into case</button>
+            <a class="link text-primary text-sm">Open the case →</a>
           </div>
           """
         ]

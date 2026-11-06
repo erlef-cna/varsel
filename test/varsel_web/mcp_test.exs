@@ -380,7 +380,7 @@ defmodule VarselWeb.McpTest do
     assert %{"result" => %{"isError" => true, "content" => [%{"text" => text}]}} = body
     assert text =~ "Rate limit exceeded"
 
-    assert Ash.read!(Varsel.CVE.VulnerabilityReport, authorize?: false) == []
+    assert Ash.read!(Varsel.Cases.VulnerabilityReport, authorize?: false) == []
   end
 
   test "a token without the mcp scope is rejected with insufficient_scope", %{conn: conn} do

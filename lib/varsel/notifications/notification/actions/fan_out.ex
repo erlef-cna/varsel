@@ -18,7 +18,6 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   alias Varsel.Accounts.User
   alias Varsel.Cases
   alias Varsel.Cases.CaseAssignment
-  alias Varsel.CVE
   alias Varsel.Notifications
   alias Varsel.Notifications.Kind
   alias Varsel.Notifications.Preference
@@ -51,8 +50,8 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
     end
   end
 
-  defp event(%CVE.Signals.ReportSubmitted{} = signal),
-    do: %{kind: :report_submitted, vulnerability_report_id: signal.report_id, actor_id: signal.actor_id}
+  defp event(%Cases.Signals.ReportSubmitted{} = signal),
+    do: %{kind: :report_submitted, case_id: signal.case_id, actor_id: signal.actor_id}
 
   defp event(%Cases.Signals.ReviewRequested{} = signal),
     do: %{kind: :review_requested, case_id: signal.case_id, actor_id: signal.actor_id}
@@ -98,7 +97,6 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
         kind: event.kind,
         user_id: user.id,
         case_id: event[:case_id],
-        vulnerability_report_id: event[:vulnerability_report_id],
         email_requested: preference.email
       }
     end)

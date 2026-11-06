@@ -52,7 +52,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
         # advisory: a global database entry has no discussion to read.
         where expr(
                 not is_nil(owner) and not is_nil(repo) and
-                  case.state in [:draft, :review, :approved] and
+                  case.state in [:submitted, :triage, :draft, :review, :approved] and
                   (is_nil(comments_polled_at) or comments_polled_at < ago(5, :minute))
               )
 
@@ -249,7 +249,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
     # Content freeze: the link and the case may only change while the case is
     # editable, or when a POC corrects an approved one.
     policy action([:link, :unlink, :pull, :link_attested]) do
-      authorize_if expr(case.state in [:draft, :review])
+      authorize_if expr(case.state in [:submitted, :triage, :draft, :review])
 
       authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
     end

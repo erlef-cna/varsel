@@ -5,9 +5,30 @@
 defmodule VarselWeb.HexReportControllerTest do
   use VarselWeb.ConnCase, async: true
 
-  alias Varsel.CVE
+  alias Varsel.Cases
   alias Varsel.Fixtures
+  alias Varsel.HexPm
   alias VarselWeb.HexServiceTokenFixture
+
+  # The case a report opens invites the people it names, which confirms
+  # each handle at hex.pm.
+  setup do
+    Req.Test.stub(HexPm, fn conn ->
+      case conn.path_info do
+        ["api", "users", username, "contact"] when username in ["reporter", "maintainer"] ->
+          Req.Test.json(conn, %{
+            "username" => username,
+            "name" => username,
+            "email" => "#{username}@example.com"
+          })
+
+        _unknown ->
+          Plug.Conn.send_resp(conn, 404, "{}")
+      end
+    end)
+
+    :ok
+  end
 
   # What the plug derives, so the token is addressed where the server listens.
   defp audience, do: url(~p"/api/hex/reports")
@@ -55,9 +76,14 @@ defmodule VarselWeb.HexReportControllerTest do
       # The sender refuses a response whose Location disagrees with the body,
       # or whose links point off its configured origin.
       assert [^url] = get_resp_header(conn, "location")
-      assert url == url(~p"/reports")
-      assert sign_in_url == url(~p"/auth/user/hex?#{%{return_to: ~p"/reports"}}")
       assert is_binary(id)
+
+      # Both links lead to the case the report opened.
+      %{cases: [case_record]} =
+        Cases.get_vulnerability_report!(id, authorize?: false, load: [:cases])
+
+      assert url == url(~p"/cases/#{case_record.id}")
+      assert sign_in_url == url(~p"/auth/user/hex?#{%{return_to: ~p"/cases/#{case_record.id}"}}")
     end
 
     test "keeps the payload and names its source", %{conn: conn} do
@@ -65,7 +91,7 @@ defmodule VarselWeb.HexReportControllerTest do
       conn = submit(conn, payload(), token())
       %{"id" => id} = json_response(conn, 201)
 
-      report = CVE.get_vulnerability_report!(id, actor: poc)
+      report = Cases.get_vulnerability_report!(id, actor: poc)
 
       assert report.source == :hex
       assert report.summary == "Unsafe parsing"
@@ -74,21 +100,30 @@ defmodule VarselWeb.HexReportControllerTest do
       assert report.reporter_id == nil
     end
 
-    test "records the reporter and the maintainers", %{conn: conn} do
-      poc = Fixtures.register_user("hex_participants_poc", :poc)
+    test "opens a case that invites the reporter and the maintainers", %{conn: conn} do
+      poc = Fixtures.register_user("hex_people_poc", :poc)
       conn = submit(conn, payload(), token())
       %{"id" => id} = json_response(conn, 201)
 
-      participants =
-        id
-        |> CVE.get_vulnerability_report!(actor: poc, load: [:participants])
-        |> Map.fetch!(:participants)
+      report = Cases.get_vulnerability_report!(id, actor: poc, load: [:cases])
+      assert to_string(report.reporter_username) == "reporter"
 
-      assert [maintainer] = Enum.filter(participants, &(&1.role == :maintainer))
-      assert [reporter] = Enum.filter(participants, &(&1.role == :reporter))
-      assert to_string(maintainer.username) == "maintainer"
-      assert to_string(reporter.username) == "reporter"
-      assert reporter.email == "reporter@example.com"
+      assert [case_record] = report.cases
+      invites = Cases.get_case!(case_record.id, actor: poc, load: [:invites]).invites
+
+      assert MapSet.new(invites, &{to_string(&1.username), to_string(&1.email)}) ==
+               MapSet.new([
+                 {"reporter", "reporter@example.com"},
+                 {"maintainer", "maintainer@example.com"}
+               ])
+    end
+
+    test "is refused as a whole when a named handle is not a hex.pm account", %{conn: conn} do
+      payload = payload(%{"maintainers" => [%{"username" => "nobody"}]})
+      conn = submit(conn, payload, token())
+
+      assert json_response(conn, 422)
+      assert Cases.list_vulnerability_reports!(authorize?: false) == []
     end
 
     test "is accepted with no maintainers at all", %{conn: conn} do
@@ -103,7 +138,7 @@ defmodule VarselWeb.HexReportControllerTest do
       conn = post(conn, ~p"/api/hex/reports", payload())
 
       assert json_response(conn, 401)
-      assert CVE.list_vulnerability_reports!(authorize?: false) == []
+      assert Cases.list_vulnerability_reports!(authorize?: false) == []
     end
 
     test "the token is signed by someone else", %{conn: conn} do
@@ -125,7 +160,7 @@ defmodule VarselWeb.HexReportControllerTest do
       conn = submit(conn, payload(), forged)
 
       assert json_response(conn, 401)
-      assert CVE.list_vulnerability_reports!(authorize?: false) == []
+      assert Cases.list_vulnerability_reports!(authorize?: false) == []
     end
 
     test "the token names a host the caller chose", %{conn: conn} do
@@ -147,14 +182,14 @@ defmodule VarselWeb.HexReportControllerTest do
       conn = submit(conn, Map.delete(payload(), "package"), token())
 
       assert json_response(conn, 400)
-      assert CVE.list_vulnerability_reports!(authorize?: false) == []
+      assert Cases.list_vulnerability_reports!(authorize?: false) == []
     end
 
     test "the summary is longer than the column takes", %{conn: conn} do
       conn = submit(conn, payload(%{"summary" => String.duplicate("a", 2_001)}), token())
 
       assert json_response(conn, 422)
-      assert CVE.list_vulnerability_reports!(authorize?: false) == []
+      assert Cases.list_vulnerability_reports!(authorize?: false) == []
     end
 
     test "the payload is larger than intake allows", %{conn: conn} do
@@ -162,7 +197,7 @@ defmodule VarselWeb.HexReportControllerTest do
       conn = submit(conn, payload, token())
 
       assert json_response(conn, 422)
-      assert CVE.list_vulnerability_reports!(authorize?: false) == []
+      assert Cases.list_vulnerability_reports!(authorize?: false) == []
     end
 
     test "a named person has no username to match on", %{conn: conn} do

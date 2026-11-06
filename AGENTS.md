@@ -250,8 +250,8 @@ default dev env recompiles the whole tree and disrupts the running dev server.
 
 ### Resource patterns
 
-**State integrity.** All four state-machine resources (Case, CveRecord,
-VulnerabilityReport, Proposal) carry `attribute :version, :integer` plus a
+**State integrity.** All three state-machine resources (Case, CveRecord,
+Proposal) carry `attribute :version, :integer` plus a
 resource-global `change optimistic_lock(:version), on: [:update]`, so a stale
 server-loaded snapshot fails with `StaleRecord`. That lock is what entitles
 policies and validations to trust `changeset.data`. `ValidNextState` sits
@@ -458,8 +458,8 @@ page.
 - Roles: the dev-tools launcher (bottom-right `</>` on any page) has a **MOCK SIGN
   IN** section — POC / Supporter / No role — but only when signed out; sign out via
   the user icon in the header first. Views that serve several audiences from one
-  route (`/reports` is a triage queue for a POC and a personal list for everyone
-  else) must be checked in each shape.
+  route (`/cases` shows a POC every case and everyone else their own, a
+  reporter's included) must be checked in each shape.
 - The three-column case workspace needs ≥1024 CSS px. Never resize the user's
   Chrome window; report the width you have instead.
 - Dev data is free to create. Publishing is safe only while the MITRE mock is

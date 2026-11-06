@@ -37,14 +37,14 @@ const caseUrl = `/cases/${manifest.main_case_id}`;
 // whose text contains the string into view before capturing; `height` clips
 // the viewport; `evaluate` runs before the capture.
 //
-// The reports and users shots must show seeded data only, whatever else the
-// local dev database holds: the queue is clipped to the first (just-seeded)
-// report, and every non-mock account is dropped from the users table.
+// The triage and users shots must show seeded data only, whatever else the
+// local dev database holds: the POC's board is searched down to the seeded
+// package, and every non-mock account is dropped from the users table.
 const shots = [
   { role: "supporter", path: "/cases", file: "case-board.png" },
   { role: "supporter", path: caseUrl, file: "case-workspace.png" },
   { role: "supporter", path: caseUrl, scrollTo: "Affected", file: "affected-packages.png" },
-  { role: "poc", path: "/reports", file: "report-triage.png", height: 560 },
+  { role: "poc", path: "/cases?q=webhook_relay", file: "report-triage.png", height: 560 },
   {
     role: "poc",
     path: "/users",

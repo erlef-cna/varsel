@@ -159,6 +159,10 @@ defmodule VarselWeb.Router do
 
     get "/common-weaknesses.html", PageController, :legacy_redirect, assigns: %{to: "/common-weaknesses"}
 
+    # Report triage moved onto the case board, and hex.pm's past responses
+    # link here.
+    get "/reports", PageController, :legacy_redirect, assigns: %{to: "/cases"}
+
     ash_authentication_live_session :auth,
       on_mount: [
         {VarselWeb.LiveUserAuth, :live_user},
@@ -169,7 +173,6 @@ defmodule VarselWeb.Router do
       live "/cves/manage/:id", VarselEditLive, :edit
 
       live "/report", VulnerabilityReportLive, :new
-      live "/reports", ReportTriageLive, :index
 
       live "/cases", CaseManagementLive, :index
       live "/cases/:id", CaseDetailLive, :view
@@ -287,7 +290,8 @@ defmodule VarselWeb.Router do
         :submit_vulnerability_report,
         :list_vulnerability_reports,
         :get_vulnerability_report,
-        :triage_vulnerability_report,
+        :triage_case,
+        :post_case_triage_recommendation,
         :list_all_cves,
         :available_cve_ids,
         :assign_cve,

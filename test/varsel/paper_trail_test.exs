@@ -6,37 +6,42 @@ defmodule Varsel.PaperTrailTest do
   use Varsel.DataCase, async: true
 
   alias Varsel.Accounts
-  alias Varsel.CVE
+  alias Varsel.Cases
   alias Varsel.Fixtures
+  alias Varsel.HexPm
+  alias Varsel.Service
 
   # The audit trail outlives the records it describes, so an address written
   # into it survives every deletion the privacy policy promises.
   test "no email address is written to the audit trail" do
+    Req.Test.stub(HexPm, fn conn ->
+      ["api", "users", username, "contact"] = conn.path_info
+
+      Req.Test.json(conn, %{
+        "username" => username,
+        "name" => username,
+        "email" => "#{username}@example.com"
+      })
+    end)
+
     Fixtures.sign_in_with_hex("trail_user", 7101)
 
-    CVE.submit_hex_vulnerability_report!(
+    Cases.submit_hex_vulnerability_report!(
       %{
         report_json: %{"report" => "x"},
         summary: "audited",
-        participants: [
-          %{
-            role: :maintainer,
-            strategy: :hex,
-            username: "trail_other",
-            email: "other@example.com"
-          }
-        ]
+        reporter_username: "trail_user",
+        reporter_email: "trail_user@example.com",
+        maintainers: [%{username: "trail_other", email: "trail_other@example.com"}]
       },
-      authorize?: false
+      actor: Service.hexpm_intake()
     )
-
-    [participant] = Ash.read!(CVE.ReportParticipant, authorize?: false)
-    CVE.spend_report_participant!(participant, authorize?: false)
 
     versions =
       Enum.flat_map(
         [
-          CVE.ReportParticipant.Version,
+          Cases.VulnerabilityReport.Version,
+          Cases.CaseInvite.Version,
           Accounts.UserIdentity.Version,
           Accounts.User.Version
         ],

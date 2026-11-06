@@ -22,7 +22,7 @@ defmodule VarselWeb.PageController do
     )
   end
 
-  @doc "301 an old Jekyll `<page>.html` URL to its extensionless canonical path."
+  @doc "301 a retired URL, such as an old Jekyll `<page>.html`, to the path that replaced it."
   def legacy_redirect(conn, _params) do
     conn
     |> put_status(:moved_permanently)

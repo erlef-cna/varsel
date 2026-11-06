@@ -27,7 +27,7 @@ and the maintainer process page). The seed creates the mock users in every
 role, a draft case with affected package, boundary facts, a cached
 derivation, open and accepted proposals, comments, an invite to `octocat`
 (skipped offline), a second case in review, and a submitted vulnerability
-report. Marker: `docs-screenshots-seed` in the cases' internal notes; the
+report with the case it opened. Marker: `docs-screenshots-seed` in the cases' internal notes; the
 reserved CVE ID is `CVE-2026-909090`.
 
 Regenerating the screenshots:
@@ -45,6 +45,6 @@ seed writes next to itself, signs in through the mock provider per role, and
 writes the PNGs straight into `priv/static/images/guide/`.
 
 The captures are safe to run against a dev database holding other data: the
-reports shot is clipped to the seeded report and the users shot drops every
-non-mock account before capturing. Check a regenerated shot anyway before
+triage shot searches the POC's case board down to the seeded package and the
+users shot drops every non-mock account before capturing. Check a regenerated shot anyway before
 committing it — a layout change can move real data into frame.

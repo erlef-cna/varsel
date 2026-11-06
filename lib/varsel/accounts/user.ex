@@ -425,7 +425,7 @@ defmodule Varsel.Accounts.User do
       # (report reporter, proposal/comment authors, case workers/credits) —
       # the parent's own policy decided visibility, and the field policies
       # below restrict non-POC viewers to the display name.
-      authorize_if accessing_from(Varsel.CVE.VulnerabilityReport, :reporter)
+      authorize_if accessing_from(Varsel.Cases.VulnerabilityReport, :reporter)
       authorize_if accessing_from(Proposal, :author)
       authorize_if accessing_from(Proposal, :resolved_by)
       authorize_if accessing_from(Varsel.Cases.Comment, :author)

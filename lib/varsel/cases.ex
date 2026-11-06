@@ -15,6 +15,7 @@ defmodule Varsel.Cases do
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseInvite
   alias Varsel.Cases.CaseReference
+  alias Varsel.Cases.CaseReport
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.Comment
   alias Varsel.Cases.GitHubAdvisoryLink
@@ -22,6 +23,7 @@ defmodule Varsel.Cases do
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Proposal
   alias Varsel.Cases.VersionEvent
+  alias Varsel.Cases.VulnerabilityReport
 
   admin do
     show? true
@@ -207,22 +209,39 @@ defmodule Varsel.Cases do
     tool :withdraw_case_proposal, Proposal, :withdraw
 
     tool :list_case_reports, Case, :read do
-      description "The original vulnerability reports accepted into a case, payloads included."
+      description "The vulnerability reports a case came from or took over, payloads included."
       get_by :id
       select [:id]
 
       load vulnerability_reports: [
              :id,
              :summary,
-             :state,
              :source,
-             :triage_notes,
              :report_json,
              :inserted_at
            ]
 
       load_strict? true
     end
+
+    tool :list_vulnerability_reports, VulnerabilityReport, :list_reports do
+      select [:id, :summary, :source, :inserted_at, :updated_at]
+      load cases: [:title, :state, :cve_id]
+    end
+
+    tool :get_vulnerability_report, VulnerabilityReport, :read do
+      get_by :id
+      load cases: [:title, :state, :cve_id]
+      load_strict? true
+    end
+
+    tool :submit_vulnerability_report, Case, :submit_report do
+      description "Reports a vulnerability to the CNA. It opens a case that the reporter is assigned to."
+      select [:id, :title, :state]
+    end
+
+    tool :triage_case, Case, :triage
+    tool :post_case_triage_recommendation, Comment, :post_triage_recommendation
 
     tool :list_case_comments, Comment, :list_for_case
 
@@ -235,6 +254,7 @@ defmodule Varsel.Cases do
   graphql do
     queries do
       list Case, :list_cases, :list_cases
+      list VulnerabilityReport, :list_vulnerability_reports, :list_reports
       get Case, :get_case, :read
 
       list Proposal, :list_case_proposals, :list_for_case
@@ -256,6 +276,13 @@ defmodule Varsel.Cases do
       update Case, :reopen_case, :reopen
       update Case, :close_case, :close
       update Case, :refresh_case_derivation, :refresh_derivation
+      update Case, :triage_case, :triage
+      update Case, :accept_case, :accept
+      update Case, :reject_case, :reject
+      update Case, :withdraw_case, :withdraw
+      update Case, :merge_case, :merge
+      create Case, :split_case, :split
+      create Case, :submit_vulnerability_report, :submit_report
 
       create CaseAssignment, :assign_case_user, :assign
       destroy CaseAssignment, :unassign_case_user, :unassign
@@ -330,6 +357,8 @@ defmodule Varsel.Cases do
   resources do
     resource Case do
       define :open_case, action: :open
+      define :submit_vulnerability_report, action: :submit_report
+      define :submit_hex_vulnerability_report, action: :submit_report_from_hex
       define :open_case_from_github_advisory, action: :open_from_github_advisory
 
       define :open_case_from_github_advisory_attested,
@@ -353,6 +382,24 @@ defmodule Varsel.Cases do
       define :refresh_case_derivation, action: :refresh_derivation
       define :grant_case_access, action: :grant_access, args: [:strategy, :username]
       define :apply_case_proposal, action: :apply_proposal
+      define :triage_case, action: :triage
+      define :accept_case, action: :accept
+      define :reject_case, action: :reject
+      define :withdraw_case, action: :withdraw
+      define :merge_case, action: :merge, args: [:into_case_id]
+      define :split_case, action: :split, args: [:source_case_id]
+    end
+
+    resource CaseReport
+
+    resource VulnerabilityReport do
+      define :list_vulnerability_reports, action: :list_reports
+      define :get_vulnerability_report, action: :read, get_by: [:id]
+      define :link_vulnerability_report_reporter, action: :link_reporter
+
+      define :list_vulnerability_reports_for_reporter_handle,
+        action: :for_reporter_handle,
+        args: [:strategy, :username]
     end
 
     resource CaseAssignment do
@@ -539,6 +586,7 @@ defmodule Varsel.Cases do
     resource Comment do
       define :list_case_comments_all, action: :read
       define :post_case_comment, action: :post
+      define :post_case_triage_recommendation, action: :post_triage_recommendation
       define :list_case_comments, action: :list_for_case, args: [:case_id]
       define :sync_case_comment_from_github, action: :sync_from_github
       define :claim_case_comment, action: :claim_for_identity

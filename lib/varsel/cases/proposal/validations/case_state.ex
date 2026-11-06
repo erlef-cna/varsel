@@ -5,8 +5,8 @@
 defmodule Varsel.Cases.Proposal.Validations.CaseState do
   @moduledoc """
   Guards `:propose` by the parent case's lifecycle state: allowed in every
-  state except the terminal `:closed`, since post-publish enrichment proposals
-  are a core flow.
+  state except the terminal `:closed` and `:merged`, since post-publish
+  enrichment proposals are a core flow.
 
   Resolving a proposal is governed by the content-freeze policy on `:accept`,
   which mirrors the case and its child rows.

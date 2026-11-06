@@ -12,15 +12,16 @@ defmodule VarselWeb.BoardComponents do
   use Phoenix.Component
 
   @doc """
-  Renders the board: its lanes in a row, wrapping to one column on a narrow
-  screen.
+  Renders the board: its lanes in one row. A lane with cards is at least
+  17rem wide, and those lanes share the width the page gives them. The board
+  scrolls sideways when they do not fit.
   """
   attr :class, :any, default: nil
   slot :inner_block, required: true
 
   def board(assigns) do
     ~H"""
-    <div class={["grid grid-cols-1 md:grid-cols-4 gap-3 items-start" | List.wrap(@class)]}>
+    <div class={["flex gap-3 items-start overflow-x-auto pb-2" | List.wrap(@class)]}>
       {render_slot(@inner_block)}
     </div>
     """
@@ -30,8 +31,9 @@ defmodule VarselWeb.BoardComponents do
   Renders one lane: a titled column of cards.
 
   `dot` is the colour that stands for the lane's state, `count` what it holds.
-  An empty lane keeps its place in the row, so the board's shape holds steady
-  as work moves through it; on a narrow screen its body folds away.
+  A lane with no cards to show keeps its place in the row as a narrow strip,
+  its title running down it, so the board's shape holds steady as work moves
+  through it.
 
   A lane showing only part of its cards puts the control for the rest in
   `footer`.
@@ -42,33 +44,32 @@ defmodule VarselWeb.BoardComponents do
   attr :count, :any, required: true, doc: "what the lane holds — shown at the head"
   attr :cards?, :boolean, default: true, doc: "the lane has cards to show"
 
-  attr :quiet?, :boolean,
-    default: false,
-    doc: "the lane holds nothing at all, so it folds away on a narrow screen"
-
   slot :inner_block, required: true, doc: "the lane's cards"
   slot :footer, doc: "a control for cards the lane is not showing"
 
+  def lane(%{cards?: false} = assigns) do
+    ~H"""
+    <div id={@id} class="flex-none rounded-box border border-base-300 bg-base-200">
+      <div class="flex items-center gap-2 px-2.5 py-3.5 text-[0.7rem] font-bold uppercase tracking-wider text-base-content/60 [writing-mode:vertical-rl]">
+        <span class={["size-1.5 rounded-full shrink-0", @dot]}></span>
+        {@label}
+        <span class="text-base-content/50 tabular-nums font-bold">{@count}</span>
+      </div>
+    </div>
+    """
+  end
+
   def lane(assigns) do
     ~H"""
-    <div id={@id} class="rounded-box border border-base-300 bg-base-200">
-      <div class={[
-        "flex items-center gap-2 px-3.5 py-2.5 text-[0.7rem] font-bold uppercase tracking-wider text-base-content/60 border-b border-base-300",
-        @quiet? && "max-md:border-b-0"
-      ]}>
+    <div id={@id} class="flex-1 basis-0 min-w-[17rem] rounded-box border border-base-300 bg-base-200">
+      <div class="flex items-center gap-2 px-3.5 py-2.5 text-[0.7rem] font-bold uppercase tracking-wider text-base-content/60 border-b border-base-300">
         <span class={["size-1.5 rounded-full shrink-0", @dot]}></span>
         {@label}
         <span class="ml-auto text-base-content/50 tabular-nums font-bold">{@count}</span>
       </div>
 
-      <div :if={@cards?} class="flex flex-col gap-2.5 p-2.5 min-h-12">
+      <div class="flex flex-col gap-2.5 p-2.5 min-h-12">
         {render_slot(@inner_block)}
-      </div>
-      <div
-        :if={not @cards?}
-        class={["text-center text-sm text-base-content/40 py-3", @quiet? && "max-md:hidden"]}
-      >
-        —
       </div>
 
       <div

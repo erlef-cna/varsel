@@ -151,9 +151,7 @@ defmodule Varsel.Notifications.Emails do
     """
   end
 
-  defp subject_url(%Notification{kind: :report_submitted}), do: url(~p"/reports")
-
-  defp subject_url(%Notification{case_id: case_id}) when not is_nil(case_id) do
+  defp subject_url(%Notification{case_id: case_id}) do
     url(~p"/cases/#{case_id}")
   end
 

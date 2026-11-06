@@ -6,12 +6,13 @@ defmodule VarselWeb.CaseManagementLive do
   @moduledoc """
   The /cases console — two faces sharing one band.
 
-  **Pipeline** (default) is a never-paginated kanban of the four active
-  states (draft/review/approved/publishing), policy-scoped same as before:
-  POCs see every case, supporters see only their assignments. **Archive** is
-  a paginated, searchable table scoped to published + closed, collated by
-  archived-at (published_at, or `updated_at` for closed rows — see
-  `archive_query/2`) descending.
+  **Pipeline** (default) is a never-paginated kanban of the active states,
+  triage (submitted/triage) through publishing, policy-scoped: POCs see
+  every case, everyone else only their assignments, which for a reporter is
+  the case their report opened. **Archive** is a paginated, searchable table
+  scoped to published, closed and merged, collated by archived-at
+  (published_at, or `updated_at` for the others — see `archive_query/2`)
+  descending.
 
   The face lives in `?face=` (`page`/`q`/`sort` ride along), so both faces,
   any search and the lane order are deep-linkable and survive a face switch.
@@ -39,12 +40,15 @@ defmodule VarselWeb.CaseManagementLive do
   require Ash.Query
   require Ash.Sort
 
-  @lane_states [:draft, :review, :approved, :publishing]
-  @archive_states [:published, :closed]
+  @lane_states [:submitted, :triage, :draft, :review, :approved, :publishing]
+  @archive_states [:published, :closed, :merged]
   @lane_clip 8
 
-  # Per-lane staleness thresholds, in seconds.
+  # Per-lane staleness thresholds, in seconds. The security policy page
+  # promises acknowledgment, and then assessment, within two business days.
   @stale_after %{
+    submitted: 2 * 86_400,
+    triage: 2 * 86_400,
     draft: 14 * 86_400,
     review: 5 * 86_400,
     approved: 3 * 86_400,
@@ -197,6 +201,8 @@ defmodule VarselWeb.CaseManagementLive do
   end
 
   # ------------------------------------------------------------- archive face
+  defp lane_dot(:submitted), do: "bg-warning"
+  defp lane_dot(:triage), do: "bg-info"
   defp lane_dot(:draft), do: "bg-warning"
   defp lane_dot(:review), do: "bg-info"
   defp lane_dot(:approved), do: "bg-[color:var(--violet)]"
@@ -267,7 +273,9 @@ defmodule VarselWeb.CaseManagementLive do
   end
 
   defp filter_archive_scope(base, "published"), do: Ash.Query.filter(base, state == :published)
-  defp filter_archive_scope(base, "closed"), do: Ash.Query.filter(base, state == :closed)
+
+  defp filter_archive_scope(base, "closed"), do: Ash.Query.filter(base, state in [:closed, :merged])
+
   defp filter_archive_scope(base, _all), do: base
 
   # `archive_count` stays unfiltered: an empty result reads differently when
@@ -282,7 +290,7 @@ defmodule VarselWeb.CaseManagementLive do
       |> Enum.frequencies_by(& &1.state)
 
     published = Map.get(counts, :published, 0)
-    closed = Map.get(counts, :closed, 0)
+    closed = Map.get(counts, :closed, 0) + Map.get(counts, :merged, 0)
 
     archive_count =
       Case
@@ -884,7 +892,6 @@ defmodule VarselWeb.CaseManagementLive do
     assigns =
       assign(assigns,
         visible_cards: visible_cards,
-        collapsed?: assigns.lane.count == 0,
         overflowing?: length(assigns.lane.cards) > @lane_clip
       )
 
@@ -895,7 +902,6 @@ defmodule VarselWeb.CaseManagementLive do
       dot={@lane.dot}
       count={@lane.display_count}
       cards?={@visible_cards != []}
-      quiet?={@collapsed?}
     >
       <.pipeline_card
         :for={case_record <- @visible_cards}
@@ -1046,11 +1052,11 @@ defmodule VarselWeb.CaseManagementLive do
               phx-click={JS.navigate(~p"/cases/#{case_record.id}")}
             >
               <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
-                {if case_record.state == :closed, do: "—", else: case_record.cve_id || "—"}
+                {if case_record.state != :published, do: "—", else: case_record.cve_id || "—"}
               </td>
               <td class={[
                 "max-w-md truncate",
-                if(case_record.state == :closed,
+                if(case_record.state != :published,
                   do: "text-base-content/50",
                   else: "font-semibold group-hover:text-primary"
                 )
@@ -1067,7 +1073,7 @@ defmodule VarselWeb.CaseManagementLive do
               </td>
               <td>
                 <.severity_chip
-                  :if={case_record.state != :closed and case_record.cvss_score}
+                  :if={case_record.state == :published and case_record.cvss_score}
                   score={case_record.cvss_score}
                 />
               </td>
@@ -1075,7 +1081,9 @@ defmodule VarselWeb.CaseManagementLive do
                 <.archive_state_cell case_record={case_record} />
               </td>
               <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
-                {if case_record.state == :closed, do: "—", else: format_date(case_record.published_at)}
+                {if case_record.state != :published,
+                  do: "—",
+                  else: format_date(case_record.published_at)}
               </td>
             </tr>
           </tbody>
@@ -1090,14 +1098,16 @@ defmodule VarselWeb.CaseManagementLive do
           <.link navigate={~p"/cases/#{case_record.id}"} class="block">
             <div class={[
               "text-[0.8rem] font-semibold leading-snug",
-              case_record.state == :closed && "text-base-content/50 font-normal"
+              case_record.state != :published && "text-base-content/50 font-normal"
             ]}>
               {case_record.title || "Untitled"}
             </div>
             <div class="flex items-center gap-2 flex-wrap mt-1">
-              <%= if case_record.state == :closed do %>
+              <%= if case_record.state != :published do %>
                 <span class="text-[0.72rem] text-base-content/50">
-                  ● Closed · {format_short_date(case_record.updated_at)}
+                  ● {Phoenix.Naming.humanize(case_record.state)} · {format_short_date(
+                    case_record.updated_at
+                  )}
                 </span>
               <% else %>
                 <.severity_chip :if={case_record.cvss_score} score={case_record.cvss_score} />
@@ -1134,8 +1144,11 @@ defmodule VarselWeb.CaseManagementLive do
     >
       ● Published
     </span>
-    <span :if={@case_record.state == :closed} class="whitespace-nowrap text-base-content/50 text-sm">
-      ● Closed · {format_short_date(@case_record.updated_at)}
+    <span
+      :if={@case_record.state != :published}
+      class="whitespace-nowrap text-base-content/50 text-sm"
+    >
+      ● {Phoenix.Naming.humanize(@case_record.state)} · {format_short_date(@case_record.updated_at)}
     </span>
     """
   end
