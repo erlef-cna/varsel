@@ -47,8 +47,7 @@ defmodule VarselWeb.Storybook.Inputs.MarkdownInput do
       %Variation{
         id: :comment,
         description: """
-        A comment composer: an emoji picker under the textarea, and typing `@`
-        offers the people in `mentionable`. Preview renders mentions and emoji
+        A comment composer: typing `@` offers the people in `mentionable`. Preview renders mentions and emoji
         shortcodes as the posted comment will.
         """,
         attributes: %{

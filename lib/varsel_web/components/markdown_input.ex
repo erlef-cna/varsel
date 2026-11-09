@@ -27,19 +27,16 @@ defmodule VarselWeb.MarkdownInput do
 
   With `flavor={:comment}` it is a comment composer: the preview renders as
   the comment will (`Varsel.Cases.Markdown.to_comment_html/2`, with the
-  viewer's own mentions marked by `viewer_id`), an emoji picker sits under
-  the textarea, and typing `@` offers the `mentionable` people
-  (`[%{id: id, name: name}]`).
+  viewer's own mentions marked by `viewer_id`), and typing `@` offers the
+  `mentionable` people (`[%{id: id, name: name}]`).
   """
   use VarselWeb, :live_component
 
   alias Varsel.Cases.Markdown
 
-  @emoji ~w(👍 👎 😄 🎉 😕 ❤️ 🚀 👀 🙏 👏 🙌 💯 ✅ ❌ ⚠️ 🔥 🐛 🔒 💡 🤔 😅 😢 😮 📌)
-
   @impl Phoenix.LiveComponent
   def mount(socket) do
-    {:ok, assign(socket, mode: :write, emoji: @emoji)}
+    {:ok, assign(socket, mode: :write)}
   end
 
   @impl Phoenix.LiveComponent
@@ -90,7 +87,7 @@ defmodule VarselWeb.MarkdownInput do
         <span class="ml-auto pb-1.5 text-base-content/40">markdown</span>
       </div>
 
-      <div data-autogrow-frame class={@mode == :preview && "hidden"}>
+      <div data-autogrow-frame class={["relative", @mode == :preview && "hidden"]}>
         <.input
           field={@field}
           type="textarea"
@@ -99,44 +96,30 @@ defmodule VarselWeb.MarkdownInput do
           class="w-full textarea font-mono text-sm max-h-[80vh]"
           phx-hook="AutoGrow"
         />
-      </div>
-
-      <div :if={@flavor == :comment} class={@mode == :preview && "hidden"}>
         <div
+          :if={@flavor == :comment}
           id={"#{@id}-assist"}
           phx-hook="CommentAssist"
           phx-update="ignore"
           data-candidates={Jason.encode!(@mentionable)}
-          class="relative mt-1 flex items-center gap-2 text-xs text-base-content/50"
         >
           <ul
             data-mention-menu
             role="listbox"
             aria-label="People to mention"
-            class="hidden absolute left-0 bottom-full z-30 mb-1 w-64 max-h-60 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 text-sm text-base-content shadow"
+            class="hidden absolute top-0 left-0 z-30 w-64 max-h-60 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 text-sm text-base-content shadow"
           >
           </ul>
-          <div class="dropdown">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-xs gap-1 font-normal">
-              <.icon name="hero-face-smile-micro" class="size-4" /> Emoji
-            </div>
-            <div
-              tabindex="-1"
-              class="dropdown-content z-30 mt-1 grid w-max grid-cols-8 gap-0.5 rounded-box border border-base-300 bg-base-100 p-1 shadow"
-            >
-              <button
-                :for={emoji <- @emoji}
-                type="button"
-                data-emoji={emoji}
-                class="btn btn-ghost btn-sm btn-square text-base"
-              >
-                {emoji}
-              </button>
-            </div>
-          </div>
-          <span :if={@mentionable != []}>Type @ to mention someone in the case.</span>
         </div>
       </div>
+
+      <p
+        :if={@flavor == :comment and @mentionable != []}
+        id={"#{@id}-mention-hint"}
+        class={["mt-1 text-xs text-base-content/50", @mode == :preview && "hidden"]}
+      >
+        Type @ to mention someone in the case.
+      </p>
 
       <div
         :if={@mode == :preview}

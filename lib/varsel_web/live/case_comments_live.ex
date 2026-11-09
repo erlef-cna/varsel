@@ -69,7 +69,7 @@ defmodule VarselWeb.CaseCommentsLive do
     |> Enum.concat(Enum.map(case_record.comments, & &1.author))
     |> Enum.concat(Enum.map(case_record.proposals, & &1.author))
     |> Enum.concat(pocs)
-    |> Enum.reject(&(is_nil(&1) or &1.id == actor.id))
+    |> Enum.reject(&is_nil/1)
     |> Enum.uniq_by(& &1.id)
     |> Enum.map(&%{id: &1.id, name: &1.display_name})
     |> Enum.sort_by(&String.downcase(&1.name))

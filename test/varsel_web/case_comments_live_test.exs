@@ -229,7 +229,7 @@ defmodule VarselWeb.CaseCommentsLiveTest do
       %{case_record: case_record}
     end
 
-    test "offers the people in the case to mention, not the writer", %{
+    test "offers the people in the case to mention, the writer included", %{
       conn: conn,
       poc: poc,
       supporter: supporter,
@@ -247,7 +247,27 @@ defmodule VarselWeb.CaseCommentsLiveTest do
       ids = candidates |> Jason.decode!() |> Enum.map(& &1["id"])
 
       assert supporter.id in ids
-      refute poc.id in ids
+      assert poc.id in ids
+      assert has_element?(lv, "#case-comment-body-mention-hint")
+    end
+
+    test "offers the writer when they are alone on the case", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      [candidates] =
+        lv
+        |> render()
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("#case-comment-body-assist")
+        |> LazyHTML.attribute("data-candidates")
+
+      assert [%{"id" => id}] = Jason.decode!(candidates)
+      assert id == poc.id
+      assert has_element?(lv, "#case-comment-body-mention-hint")
     end
 
     test "marks a mention of the reader as their own", %{
