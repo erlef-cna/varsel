@@ -30,9 +30,9 @@ so you can see where your account is signed in and end a session you do not
 recognise. Look under *Sessions* in your account settings. A session's record
 goes when it expires or when you end it.
 
-**What you write.** Reports you submit, and the comments, reactions, proposals
-and case content you author. Vulnerability coordination is a written record, and that
-record is the point of the service.
+**What you write.** Reports you submit, and the comments, proposals and case
+content you author. Vulnerability coordination is a written record, and that
+record is the point of the service. Your reactions to comments are kept too.
 
 ## Data other systems report to us
 
@@ -167,7 +167,7 @@ direct database access.
 
 **Delete your account yourself, at any time.** Sign in and use *Delete account*
 in your account settings. It removes your account, your linked providers, your
-API keys, and your case assignments immediately.
+API keys, your case assignments and your reactions to comments immediately.
 
 What you *wrote* stays, and loses its author. A discussion does not stop being a
 discussion because one participant leaves, and a published CVE record cannot be

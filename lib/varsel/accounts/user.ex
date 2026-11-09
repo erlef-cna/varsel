@@ -329,13 +329,14 @@ defmodule Varsel.Accounts.User do
       # Revoking the tokens reads them first.
       require_atomic? false
 
-      # What the account *was* — its providers, API keys, and the case
-      # assignments only it could act on — goes with it, by cascade. What it
-      # *wrote* stays and loses its author: comments, proposals, reports and
-      # credits nilify, because a discussion does not stop being a discussion
-      # when one participant leaves. Paper-trail versions keep the raw id (the
-      # foreign key is dropped), so the audit trail can still say which account
-      # made a change after the account is gone.
+      # What the account *was* — its providers, API keys, the case
+      # assignments only it could act on, and its reactions to comments — goes
+      # with it, by cascade. What it *wrote* stays and loses its author:
+      # comments, proposals, reports and credits nilify, because a discussion
+      # does not stop being a discussion when one participant leaves.
+      # Paper-trail versions keep the raw id (the foreign key is dropped), so
+      # the audit trail can still say which account made a change after the
+      # account is gone.
       #
       # Tokens are the exception to the cascade: they are keyed by subject
       # rather than by a foreign key, so nothing removes them on their own.
