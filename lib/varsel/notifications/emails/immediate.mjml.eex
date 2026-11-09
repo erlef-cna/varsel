@@ -1,0 +1,6 @@
+<mj-text mj-class="heading"><%= @label %></mj-text>
+<mj-text><%= @description %></mj-text>
+<mj-button href="<%= @case_url %>">Open the case</mj-button>
+<mj-text mj-class="link-fallback">
+  Or open this link:<br /><a class="fallback" href="<%= @case_url %>"><%= @case_url %></a>
+</mj-text>

@@ -379,6 +379,77 @@ defmodule Varsel.Notifications.EmailsTest do
     end
   end
 
+  describe "the HTML part" do
+    alias Varsel.Cases.CaseInvite
+    alias Varsel.Notifications.Emails
+
+    @case_id "00000000-0000-4000-8000-000000000001"
+
+    defp html(email), do: LazyHTML.from_document(email.html_body)
+
+    defp hrefs(email) do
+      email
+      |> html()
+      |> LazyHTML.query("a[href]")
+      |> Enum.flat_map(&LazyHTML.attribute(&1, "href"))
+    end
+
+    test "an immediate email links the case and the settings, like its text part" do
+      email =
+        Emails.immediate_email(
+          %Accounts.User{notification_email: "someone@example.com"},
+          %Notification{kind: :comment_posted, case_id: @case_id}
+        )
+
+      links = hrefs(email)
+      assert Enum.any?(links, &String.ends_with?(&1, "/cases/#{@case_id}"))
+      assert Enum.any?(links, &String.ends_with?(&1, "/settings/notifications"))
+      assert email |> html() |> LazyHTML.query("title") |> LazyHTML.text() == email.subject
+    end
+
+    test "a digest lists one row per kind with its count" do
+      notifications =
+        for kind <- [:comment_posted, :comment_posted, :case_published],
+            do: %Notification{kind: kind, case_id: @case_id}
+
+      email =
+        Emails.digest_email(
+          %Accounts.User{notification_email: "someone@example.com"},
+          notifications
+        )
+
+      rows =
+        email
+        |> html()
+        |> LazyHTML.query("tr")
+        |> Enum.map(&(&1 |> LazyHTML.query("td") |> Enum.map(fn td -> LazyHTML.text(td) end)))
+
+      assert ["1", "Case published"] in rows
+      assert ["2", "New comment"] in rows
+      assert Enum.any?(hrefs(email), &String.ends_with?(&1, "/notifications"))
+    end
+
+    test "an invite escapes the provider handle" do
+      email =
+        Emails.invite_email(%CaseInvite{
+          email: "invitee@example.com",
+          strategy: :github,
+          username: "<img src=x onerror=alert(1)>",
+          case_id: @case_id
+        })
+
+      doc = html(email)
+
+      assert [] = doc |> LazyHTML.query("img") |> Enum.to_list()
+      assert doc |> LazyHTML.query(".handle") |> LazyHTML.text() == "<img src=x onerror=alert(1)>"
+
+      assert Enum.any?(
+               hrefs(email),
+               &String.ends_with?(&1, "/sign-in?return_to=%2Fcases%2F#{@case_id}")
+             )
+    end
+  end
+
   describe "policies" do
     test "Ash.can? denies :send_email and :send_digests to a POC" do
       poc = Fixtures.register_user("emails_can_poc", :poc)

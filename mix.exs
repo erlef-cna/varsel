@@ -133,6 +133,9 @@ defmodule Varsel.MixProject do
       {:lumis_wasm_toml, "~> 0.26"},
       {:lumis_wasm_yaml, "~> 0.26"},
       {:mdex, "~> 0.14"},
+      # mjml pins rustler_precompiled below the 0.10 that mdex_native and lumis need.
+      {:mjml, "~> 6.0", override: true},
+      {:mjml_eex, "~> 0.13.0"},
       {:oban, "~> 2.0"},
       {:oban_web, "~> 2.0", only: [:dev, :test]},
       {:phoenix, "~> 1.8.5"},
@@ -148,6 +151,7 @@ defmodule Varsel.MixProject do
       {:purl, "~> 0.5.0"},
       {:remote_ip, "~> 1.2"},
       {:req, "~> 0.5"},
+      {:rustler_precompiled, "~> 0.10", override: true},
       {:saxy, "~> 1.6"},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false, warn_if_outdated: true},
       {:sourceror, "~> 1.8", only: [:dev, :test]},

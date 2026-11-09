@@ -1,0 +1,14 @@
+<mj-text mj-class="heading">Your daily digest</mj-text>
+<mj-text>Since your last digest:</mj-text>
+<mj-table padding="0 0 20px 0" font-size="15px" line-height="24px" color="#1f2c34" css-class="ink">
+  <%= for {label, count} <- @lines do %>
+    <tr style="border-bottom: 1px solid #dde3e7;">
+      <td class="count" style="padding: 10px 14px 10px 0; width: 2.5em; font-weight: 700; text-align: right; vertical-align: top;"><%= count %></td>
+      <td style="padding: 10px 0;"><%= label %></td>
+    </tr>
+  <% end %>
+</mj-table>
+<mj-button href="<%= @notifications_url %>">See them all</mj-button>
+<mj-text mj-class="link-fallback">
+  Or open this link:<br /><a class="fallback" href="<%= @notifications_url %>"><%= @notifications_url %></a>
+</mj-text>
