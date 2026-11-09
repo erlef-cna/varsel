@@ -2130,7 +2130,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert render(lv) =~ "Han Dled"
     end
 
-    test "the activity rail summarizes comments and links to the tab that holds them", %{
+    test "the rail shows the newest comments and links to the tab that holds them", %{
       conn: conn,
       poc: poc
     } do
@@ -2142,14 +2142,35 @@ defmodule VarselWeb.CaseLiveTest do
       )
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
-      html = render(lv)
 
-      assert html =~ "wrote a comment"
-      refute html =~ "UNIQUEBODY"
+      assert has_element?(lv, "#recent-comments", "UNIQUEBODY")
+      assert render(lv) =~ "wrote a comment"
       assert has_element?(lv, ~s(a[href="/cases/#{case_record.id}/comments"]))
 
       # Comments are written on their own tab.
       refute has_element?(lv, "form[phx-submit=post_comment]")
+    end
+
+    test "the rail holds the five newest comments and folds a long one", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      comments =
+        for n <- 1..6 do
+          Cases.post_case_comment!(
+            %{case_id: case_record.id, body: "comment #{n}" <> String.duplicate(" word", n * 20)},
+            actor: poc
+          )
+        end
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      [oldest | shown] = comments
+      [short | _] = shown
+
+      refute has_element?(lv, "#rail-comment-#{oldest.id}")
+      assert Enum.all?(shown, &has_element?(lv, "#rail-comment-#{&1.id}"))
+      refute has_element?(lv, "#rail-comment-#{short.id}-toggle")
+      assert has_element?(lv, "#rail-comment-#{List.last(shown).id}-toggle", "Show more")
     end
 
     test "the activity rail collapses a run by one author into one line", %{

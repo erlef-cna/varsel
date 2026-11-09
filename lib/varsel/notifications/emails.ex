@@ -269,6 +269,10 @@ defmodule Varsel.Notifications.Emails do
     """
   end
 
+  defp subject_url(%Notification{kind: :mentioned, case_id: case_id}) do
+    url(~p"/cases/#{case_id}/comments")
+  end
+
   defp subject_url(%Notification{case_id: case_id}) do
     url(~p"/cases/#{case_id}")
   end

@@ -72,6 +72,24 @@ defmodule Varsel.Accounts.UserDeletionTest do
       Accounts.delete_user!(user, actor: poc)
       assert count("case_assignments", "user_id", user.id) == 0
     end
+
+    test "its reactions to comments, leaving the comment and others' reactions" do
+      poc = register_user("poc", :poc)
+      user = register_user("alice")
+      case_record = open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: user.id}, actor: poc)
+      comment = Cases.post_case_comment!(%{case_id: case_record.id, body: "Patched?"}, actor: poc)
+
+      for actor <- [poc, user] do
+        Cases.react_to_case_comment!(%{comment_id: comment.id, emoji: :rocket}, actor: actor)
+      end
+
+      Accounts.delete_user!(user, actor: user)
+
+      assert count("case_comment_reactions", "user_id", user.id) == 0
+      assert count("case_comment_reactions", "user_id", poc.id) == 1
+      assert Ash.get!(Cases.Comment, comment.id, authorize?: false).body == "Patched?"
+    end
   end
 
   describe "what stays behind" do

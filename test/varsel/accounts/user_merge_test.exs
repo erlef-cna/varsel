@@ -90,6 +90,25 @@ defmodule Varsel.Accounts.UserMergeTest do
       assert count("case_assignments", "user_id", into.id) == 1
     end
 
+    test "comment reactions, once where both accounts gave the same one" do
+      poc = register_user("poc", :poc)
+      from = register_user("from", :poc)
+      into = register_user("into", :poc)
+      case_record = open_case(poc)
+      comment = Cases.post_case_comment!(%{case_id: case_record.id, body: "Patched"}, actor: poc)
+
+      for {user, emoji} <- [{from, :rocket}, {from, :eyes}, {into, :rocket}] do
+        Cases.react_to_case_comment!(
+          %{comment_id: comment.id, emoji: emoji},
+          actor: user
+        )
+      end
+
+      Accounts.merge_user_into!(from, into.id, actor: console())
+
+      assert count("case_comment_reactions", "user_id", into.id) == 2
+    end
+
     test "reports" do
       from = register_user("from")
       into = register_user("into")
@@ -239,6 +258,7 @@ defmodule Varsel.Accounts.UserMergeTest do
     assert Enum.sort(Enum.map(rows, &List.to_tuple/1)) == [
              {"api_keys", "user_id"},
              {"case_assignments", "user_id"},
+             {"case_comment_reactions", "user_id"},
              {"case_comments", "author_id"},
              {"case_credits", "user_id"},
              {"case_proposals", "author_id"},

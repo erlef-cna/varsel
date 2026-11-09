@@ -115,6 +115,197 @@ export const AutoGrow = {
   },
 }
 
+// Where character `index` of `textarea` sits, relative to the textarea's
+// border box: a hidden copy of the field, styled alike, holds the text up to
+// `index` followed by a marker span whose offset is the answer.
+function caretPosition(textarea, index) {
+  const style = getComputedStyle(textarea)
+  const mirror = document.createElement("div")
+  const scrollbar = textarea.offsetWidth - textarea.clientWidth -
+    parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth)
+
+  for (const property of [
+    "boxSizing", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
+    "borderStyle", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+    "fontFamily", "fontSize", "fontWeight", "fontStyle", "fontVariant", "lineHeight",
+    "letterSpacing", "wordSpacing", "textTransform", "textIndent", "tabSize",
+  ]) {
+    mirror.style[property] = style[property]
+  }
+
+  Object.assign(mirror.style, {
+    position: "absolute",
+    visibility: "hidden",
+    top: "0",
+    left: "0",
+    overflow: "hidden",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "break-word",
+    width: `${textarea.offsetWidth - scrollbar}px`,
+  })
+
+  const marker = document.createElement("span")
+  marker.textContent = textarea.value.slice(index) || "."
+  mirror.textContent = textarea.value.slice(0, index)
+  mirror.appendChild(marker)
+  document.body.appendChild(mirror)
+
+  const position = {
+    top: marker.offsetTop - textarea.scrollTop,
+    left: marker.offsetLeft - textarea.scrollLeft,
+    height: parseFloat(style.lineHeight) || marker.offsetHeight,
+  }
+
+  mirror.remove()
+  return position
+}
+
+// The comment composer's `@`-mention menu, beside its textarea.
+//
+// Typing `@` offers the people in `data-candidates` ([{id, name}]); picking
+// one writes the mention markdown the server reads back,
+// `[@Name](mention:<id>)` and dispatches `input`, so the form's phx-change
+// and AutoGrow see the new value. When nobody matches, the menu says so.
+//
+// The textarea is found through the composer root on every event: a LiveView
+// patch may swap it, and the hook element itself is `phx-update="ignore"`.
+export const CommentAssist = {
+  mounted() {
+    this.root = this.el.closest("[data-comment-composer]")
+    this.menu = this.el.querySelector("[data-mention-menu]")
+    this.matches = []
+    this.active = 0
+    this.trigger = null
+
+    this.listeners = {
+      input: (e) => e.target.tagName === "TEXTAREA" && this.update(),
+      keydown: (e) => e.target.tagName === "TEXTAREA" && this.keydown(e),
+      focusout: (e) => e.target.tagName === "TEXTAREA" && this.close(),
+    }
+
+    for (const [event, listener] of Object.entries(this.listeners)) {
+      this.root.addEventListener(event, listener)
+    }
+  },
+  destroyed() {
+    for (const [event, listener] of Object.entries(this.listeners)) {
+      this.root.removeEventListener(event, listener)
+    }
+  },
+  textarea() {
+    return this.root.querySelector("textarea")
+  },
+  candidates() {
+    try {
+      return JSON.parse(this.el.dataset.candidates || "[]")
+    } catch (_error) {
+      return []
+    }
+  },
+  update() {
+    const textarea = this.textarea()
+    const before = textarea.value.slice(0, textarea.selectionStart)
+    const match = before.match(/(?:^|[\s(])@([^\s@[\]()]{0,40})$/)
+
+    if (!match) return this.close()
+
+    const query = match[1].toLowerCase()
+    this.trigger = textarea.selectionStart - match[1].length - 1
+    this.matches = this.candidates()
+      .filter((person) => person.name.toLowerCase().includes(query))
+      .slice(0, 8)
+    this.active = 0
+
+    if (this.matches.length) return this.render()
+
+    this.notice("No one in the case matches.")
+  },
+  notice(text) {
+    const item = document.createElement("li")
+    item.className = "px-2 py-1 text-base-content/50"
+    item.textContent = text
+    this.menu.replaceChildren(item)
+    this.open()
+  },
+  keydown(e) {
+    if (e.key === "Escape" && !this.menu.classList.contains("hidden")) {
+      e.preventDefault()
+      return this.close()
+    }
+
+    if (!this.matches.length) return
+
+    const moves = {ArrowDown: 1, ArrowUp: -1}
+
+    if (e.key in moves) {
+      e.preventDefault()
+      this.active = (this.active + moves[e.key] + this.matches.length) % this.matches.length
+      this.render()
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault()
+      this.pick(this.active)
+    }
+  },
+  render() {
+    this.menu.replaceChildren(
+      ...this.matches.map((person, index) => {
+        const option = document.createElement("li")
+        option.id = `${this.el.id}-option-${index}`
+        option.setAttribute("role", "option")
+        option.setAttribute("aria-selected", String(index === this.active))
+        option.className = `cursor-pointer rounded px-2 py-1 ${index === this.active ? "bg-base-200 font-semibold" : ""}`
+        option.textContent = person.name
+        // mousedown, so the textarea keeps its focus and caret.
+        option.addEventListener("mousedown", (e) => {
+          e.preventDefault()
+          this.pick(index)
+        })
+        return option
+      }),
+    )
+    this.open()
+  },
+  // Shows the menu just under the line holding the `@`. It is positioned
+  // against the textarea's frame, so validation errors appearing or clearing
+  // below the field leave it in place. The offsetParent only exists once the
+  // menu is displayed.
+  open() {
+    this.menu.classList.remove("hidden")
+
+    const textarea = this.textarea()
+    const parent = this.menu.offsetParent
+    if (!parent || this.trigger === null) return
+
+    const field = textarea.getBoundingClientRect()
+    const frame = parent.getBoundingClientRect()
+    const caret = caretPosition(textarea, this.trigger)
+    const maxLeft = field.right - frame.left - this.menu.offsetWidth
+
+    this.menu.style.top = `${field.top - frame.top + caret.top + caret.height + 4}px`
+    this.menu.style.left = `${Math.max(0, Math.min(field.left - frame.left + caret.left, maxLeft))}px`
+  },
+  close() {
+    this.matches = []
+    this.trigger = null
+    this.menu.classList.add("hidden")
+    this.menu.replaceChildren()
+  },
+  pick(index) {
+    const person = this.matches[index]
+    const textarea = this.textarea()
+    if (!person || this.trigger === null) return this.close()
+
+    const name = person.name.replace(/[[\]]/g, "")
+    this.replace(textarea, this.trigger, textarea.selectionStart, `[@${name}](mention:${person.id}) `)
+    this.close()
+  },
+  replace(textarea, from, to, text) {
+    textarea.focus()
+    textarea.setRangeText(text, from, to, "end")
+    textarea.dispatchEvent(new Event("input", {bubbles: true}))
+  },
+}
+
 // Workspace section rail. Two jobs:
 //
 // 1. Anchor navigation: on LiveView pages Chromium cancels the smooth

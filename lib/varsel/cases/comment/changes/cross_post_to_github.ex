@@ -11,7 +11,8 @@ defmodule Varsel.Cases.Comment.Changes.CrossPostToGitHub do
   the App's installation on the repository, so GitHub attributes the comment
   to them. Otherwise it runs with the installation token, which GitHub
   attributes to the App, and the body names the author instead. Every body
-  carries the address of the case, since the discussion continues there.
+  carries the address of the case, since the discussion continues there. A
+  mention reaches GitHub as the name it carries.
 
   The write runs before the comment is stored and a refusal fails the action,
   so the case never shows a comment the advisory does not hold. An author who
@@ -24,6 +25,7 @@ defmodule Varsel.Cases.Comment.Changes.CrossPostToGitHub do
 
   alias Ash.Changeset
   alias Ash.Resource.Change
+  alias Varsel.Cases.Comment.Mentions
   alias Varsel.Cases.GitHubAdvisoryLink
   alias Varsel.GitHub.Advisories
   alias Varsel.GitHub.Credentials
@@ -118,10 +120,11 @@ defmodule Varsel.Cases.Comment.Changes.CrossPostToGitHub do
 
   # GitHub attributes an installation write to the App, so the footer names
   # the person who wrote it. A write as the person is already theirs.
-  defp body(changeset, :user, _actor), do: Changeset.get_attribute(changeset, :body) <> footer(changeset, nil)
+  defp body(changeset, :user, _actor), do: text(changeset) <> footer(changeset, nil)
 
-  defp body(changeset, _installation, actor),
-    do: Changeset.get_attribute(changeset, :body) <> footer(changeset, author_name(actor))
+  defp body(changeset, _installation, actor), do: text(changeset) <> footer(changeset, author_name(actor))
+
+  defp text(changeset), do: changeset |> Changeset.get_attribute(:body) |> Mentions.to_names()
 
   # GitHub renders a subset of HTML in a comment, and `<sub>` is the one way
   # to set a line smaller than the body around it.

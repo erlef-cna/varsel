@@ -45,6 +45,23 @@ defmodule VarselWeb.Storybook.Inputs.MarkdownInput do
         }
       },
       %Variation{
+        id: :comment,
+        description: """
+        A comment composer: typing `@` offers the people in `mentionable`. Preview renders mentions and emoji
+        shortcodes as the posted comment will.
+        """,
+        attributes: %{
+          field: field("Thanks :tada: [@Sam Chen](mention:0190c0de-0000-7000-8000-00000000000b)"),
+          label: "Comment",
+          flavor: :comment,
+          viewer_id: "0190c0de-0000-7000-8000-00000000000a",
+          mentionable: [
+            %{id: "0190c0de-0000-7000-8000-00000000000b", name: "Sam Chen"},
+            %{id: "0190c0de-0000-7000-8000-00000000000c", name: "Ana Lima"}
+          ]
+        }
+      },
+      %Variation{
         id: :tall,
         description: "`rows` sizes the textarea.",
         attributes: %{

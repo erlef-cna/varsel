@@ -25,6 +25,10 @@ defmodule Varsel.Notifications.Kind do
         label: "New comment",
         description: "A comment was posted on a case."
       ],
+      mentioned: [
+        label: "Mentioned",
+        description: "Someone mentioned you in a comment on a case."
+      ],
       proposal_opened: [
         label: "New proposal",
         description: "A proposal was opened on a case."
@@ -40,10 +44,11 @@ defmodule Varsel.Notifications.Kind do
     ]
 
   @doc "Who a kind's notifications are fanned out to."
-  @spec audience(t()) :: :pocs | :assigned | :recipient
+  @spec audience(t()) :: :pocs | :assigned | :recipient | :mentioned
   def audience(:report_submitted), do: :pocs
   def audience(:review_requested), do: :pocs
   def audience(:comment_posted), do: :assigned
+  def audience(:mentioned), do: :mentioned
   def audience(:proposal_opened), do: :assigned
   def audience(:case_published), do: :assigned
   def audience(:case_assigned), do: :recipient

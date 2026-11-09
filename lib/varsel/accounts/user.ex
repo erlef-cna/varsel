@@ -329,13 +329,14 @@ defmodule Varsel.Accounts.User do
       # Revoking the tokens reads them first.
       require_atomic? false
 
-      # What the account *was* — its providers, API keys, and the case
-      # assignments only it could act on — goes with it, by cascade. What it
-      # *wrote* stays and loses its author: comments, proposals, reports and
-      # credits nilify, because a discussion does not stop being a discussion
-      # when one participant leaves. Paper-trail versions keep the raw id (the
-      # foreign key is dropped), so the audit trail can still say which account
-      # made a change after the account is gone.
+      # What the account *was* — its providers, API keys, the case
+      # assignments only it could act on, and its reactions to comments — goes
+      # with it, by cascade. What it *wrote* stays and loses its author:
+      # comments, proposals, reports and credits nilify, because a discussion
+      # does not stop being a discussion when one participant leaves.
+      # Paper-trail versions keep the raw id (the foreign key is dropped), so
+      # the audit trail can still say which account made a change after the
+      # account is gone.
       #
       # Tokens are the exception to the cascade: they are keyed by subject
       # rather than by a foreign key, so nothing removes them on their own.
@@ -422,13 +423,14 @@ defmodule Varsel.Accounts.User do
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if expr(id == ^actor(:id))
       # Users are also visible when loaded through a row the actor can read
-      # (report reporter, proposal/comment authors, case workers/credits) —
+      # (report reporter, proposal/comment authors, reactors, case workers/credits) —
       # the parent's own policy decided visibility, and the field policies
       # below restrict non-POC viewers to the display name.
       authorize_if accessing_from(Varsel.Cases.VulnerabilityReport, :reporter)
       authorize_if accessing_from(Proposal, :author)
       authorize_if accessing_from(Proposal, :resolved_by)
       authorize_if accessing_from(Varsel.Cases.Comment, :author)
+      authorize_if accessing_from(Varsel.Cases.CommentReaction, :user)
       authorize_if accessing_from(Varsel.Cases.CaseAssignment, :user)
       authorize_if accessing_from(Varsel.Cases.CaseCredit, :user)
       authorize_if accessing_from(UserIdentity, :user)

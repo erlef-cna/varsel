@@ -27,11 +27,17 @@ defmodule VarselWeb.Storybook.Case.CommentCard do
         author: %{display_name: "Sam Chen", avatar_url: nil},
         source: :varsel,
         github_author_login: nil,
-        github_html_url: nil
+        github_html_url: nil,
+        reactions: []
       },
       overrides
     )
   end
+
+  @viewer "0190c0de-0000-7000-8000-00000000000a"
+  @other "0190c0de-0000-7000-8000-00000000000b"
+
+  defp reaction(emoji, user_id, name), do: %{emoji: emoji, user_id: user_id, user: %{display_name: name}}
 
   def variations do
     [
@@ -116,6 +122,70 @@ defmodule VarselWeb.Storybook.Case.CommentCard do
               github_author_login: nil,
               github_html_url: nil,
               body: "Reported through the private form."
+            })
+        }
+      },
+      %Variation{
+        id: :mentions,
+        description: """
+        Mentions render as chips; the one naming the viewer is filled, so a
+        reader spots their own name at a glance.
+        """,
+        attributes: %{
+          row_id: "comment-mentions",
+          viewer_id: @viewer,
+          comment:
+            comment(%{
+              body:
+                "[@Ana Lima](mention:#{@viewer}) can you confirm the backport? " <>
+                  "[@Sam Chen](mention:#{@other}) already checked 3.12. :tada:"
+            })
+        }
+      },
+      %Variation{
+        id: :reactions,
+        description: """
+        Reactions under the body, one chip per emoji in the picker's order. The
+        viewer's own is info-toned and pressed; the face opens the picker.
+        """,
+        attributes: %{
+          row_id: "comment-reactions",
+          viewer_id: @viewer,
+          can_react: true,
+          comment:
+            comment(%{
+              reactions: [
+                reaction(:rocket, @other, "Sam Chen"),
+                reaction(:thumbs_up, @viewer, "Ana Lima"),
+                reaction(:thumbs_up, @other, "Sam Chen")
+              ]
+            })
+        }
+      },
+      %Variation{
+        id: :reactions_read_only,
+        description: "A reader who may not react sees the chips, inert, and no picker.",
+        attributes: %{
+          row_id: "comment-reactions-read-only",
+          viewer_id: @viewer,
+          comment: comment(%{reactions: [reaction(:eyes, @other, "Sam Chen")]})
+        }
+      },
+      %Variation{
+        id: :collapsible,
+        description: """
+        In the workspace rail a long body folds behind "Show more"; a short one
+        stays whole.
+        """,
+        attributes: %{
+          row_id: "comment-collapsible",
+          collapsible: true,
+          comment:
+            comment(%{
+              body:
+                Enum.map_join(1..12, "\n\n", fn n ->
+                  "Step #{n}: reproduced the crash against the frame parser with a truncated header."
+                end)
             })
         }
       },

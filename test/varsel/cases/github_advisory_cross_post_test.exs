@@ -13,6 +13,7 @@ defmodule Varsel.Cases.GitHubAdvisoryCrossPostTest do
   import Varsel.Test.GitHubAdvisoryFixtures
 
   alias Varsel.Cases
+  alias Varsel.Cases.Comment.Mentions
   alias Varsel.Fixtures
   alias Varsel.Test.GitHubApi
   alias Varsel.Test.GitHubApp
@@ -141,6 +142,19 @@ defmodule Varsel.Cases.GitHubAdvisoryCrossPostTest do
       assert_received {:comment_write, written, _headers}
       assert written["body"] =~ "/cases/#{case_record.id}"
       assert written["body"] =~ "Cross-posted from the EEF CNA case"
+    end
+
+    test "a mention reaches GitHub as the name it carries, and the stored body keeps it", %{
+      poc: poc
+    } do
+      stub_writes()
+
+      mention = Mentions.token(poc.id, "Pat Doe")
+      case_record = open_linked_case(poc)
+      comment = post!(case_record, poc, "Over to #{mention}", true)
+
+      assert_received {:comment_write, %{"body" => "Over to **Pat Doe**" <> _footer}, _headers}
+      assert comment.body == "Over to #{mention}"
     end
 
     test "the stored comment keeps the address GitHub gave it", %{poc: poc} do

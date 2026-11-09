@@ -200,8 +200,9 @@ defmodule VarselWeb.CaseCommentsLiveTest do
       assert unread_kinds(poc) == []
     end
 
-    # A tab that does not show the comment must leave its notification alone,
-    # or the bell clears itself the moment the comment arrives.
+    # A tab that does not show the whole stream must leave its notification
+    # alone, or the bell clears itself the moment the comment arrives. The
+    # workspace rail shows only the newest comments, folded.
     for {tab, path} <- [workspace: "", cve: "/cve", github: "/github"] do
       test "the #{tab} tab leaves the comment unread", %{
         conn: conn,
@@ -215,6 +216,121 @@ defmodule VarselWeb.CaseCommentsLiveTest do
 
         assert unread_kinds(poc) == [:comment_posted]
       end
+    end
+  end
+
+  describe "mentions and reactions" do
+    alias Varsel.Cases.Comment.Mentions
+
+    setup %{poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      %{case_record: case_record}
+    end
+
+    test "offers the people in the case to mention, the writer included", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter,
+      case_record: case_record
+    } do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      [candidates] =
+        lv
+        |> render()
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("#case-comment-body-assist")
+        |> LazyHTML.attribute("data-candidates")
+
+      ids = candidates |> Jason.decode!() |> Enum.map(& &1["id"])
+
+      assert supporter.id in ids
+      assert poc.id in ids
+      assert has_element?(lv, "#case-comment-body-mention-hint")
+    end
+
+    test "offers the writer when they are alone on the case", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+
+      [candidates] =
+        lv
+        |> render()
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("#case-comment-body-assist")
+        |> LazyHTML.attribute("data-candidates")
+
+      assert [%{"id" => id}] = Jason.decode!(candidates)
+      assert id == poc.id
+      assert has_element?(lv, "#case-comment-body-mention-hint")
+    end
+
+    test "marks a mention of the reader as their own", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter,
+      case_record: case_record
+    } do
+      Cases.post_case_comment!(
+        %{
+          case_id: case_record.id,
+          body: "#{Mentions.token(supporter.id, "Supporter")} and #{Mentions.token(poc.id, "Poc")}"
+        },
+        actor: poc
+      )
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/comments")
+
+      assert has_element?(lv, ".mention.mention-self", "@Supporter")
+      assert has_element?(lv, ".mention:not(.mention-self)", "@Poc")
+    end
+
+    test "the comments tab marks a mention read", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter,
+      case_record: case_record
+    } do
+      Cases.post_case_comment!(
+        %{case_id: case_record.id, body: Mentions.token(poc.id, "Poc")},
+        actor: supporter
+      )
+
+      Oban.drain_queue(queue: :default)
+      assert :mentioned in unread_kinds(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/comments")
+      _flushed = render(lv)
+
+      assert unread_kinds(poc) == []
+    end
+
+    test "a reaction is given from the picker and taken back from its chip", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter,
+      case_record: case_record
+    } do
+      comment = Cases.post_case_comment!(%{case_id: case_record.id, body: "Patched"}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/comments")
+
+      chip = ~s(#comment-#{comment.id}-reactions button[data-reaction="rocket"])
+
+      lv
+      |> element(~s(#comment-#{comment.id}-reactions .dropdown-content button[phx-value-reaction="rocket"]))
+      |> render_click()
+
+      assert has_element?(lv, chip <> ~s([aria-pressed="true"]), "1")
+
+      lv |> element(chip) |> render_click()
+
+      refute has_element?(lv, chip)
     end
   end
 
