@@ -1,0 +1,13 @@
+<mj-text mj-class="heading">Join a vulnerability case</mj-text>
+<mj-text>A coordinator at the Erlang Ecosystem Foundation (EEF) CNA invited you to work on a vulnerability case.</mj-text>
+<mj-text>
+  The invite names your <%= @provider %> account <span class="handle"><%= @username %></span>.
+  Sign in with that account to open the case. Already signed up with <%= @other_provider %>?
+  <a href="<%= @account_url %>" style="color: #1670ad; font-weight: 600;">Link <%= @provider %> to that account</a>
+  first.
+</mj-text>
+<mj-button href="<%= @sign_in_url %>">Sign in with <%= @provider %></mj-button>
+<mj-text padding="0">
+  Our <a href="<%= @process_url %>" style="color: #1670ad; font-weight: 600;">Maintainer Process</a>
+  explains how a case runs and what to expect.
+</mj-text>

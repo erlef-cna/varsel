@@ -47,7 +47,8 @@ defmodule Varsel.Cases.Case.Changes.AdmitNamedPeople do
           username: person.username,
           email: person[:email],
           email_optional: true,
-          note: person[:note]
+          note: person[:note],
+          role: person[:role] || :other
         }
 
         {assignments, invites ++ [invite]}

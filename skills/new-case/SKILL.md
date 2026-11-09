@@ -539,7 +539,11 @@ holds for the account, or the public address on the GitHub profile. The call fai
 3. Found none: repeat the call with `input: {strategy, username, skip_email: true}` and tell
    the user that this person was invited without an email.
 
-Grant access to all of:
+Grant access to all of the people below. Add `role: "maintainer"` to the input for the repository
+owner and the hex.pm package owners: their invite email asks them to respond and states that the
+CNA may publish without a fix after 14 days of silence. Everyone else, including the advisory's
+collaborators and any reporter, keeps the default `other`, whose invite states no deadline. The
+role only shapes the invite email, so it does nothing for someone who already has an account.
 
 - **The advisory's collaborators** (`strategy: "github"`): `collaborating_users[].login` from the
   advisory you fetched in Step 0, and the `user.login` of each credit on it.

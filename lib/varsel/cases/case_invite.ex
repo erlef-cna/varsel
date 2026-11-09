@@ -33,6 +33,7 @@ defmodule Varsel.Cases.CaseInvite do
   alias Varsel.Cases.CaseInvite.Changes.DeliverInvite
   alias Varsel.Cases.CaseInvite.Changes.ResolveContact
   alias Varsel.Cases.CaseInvite.EmailStatus
+  alias Varsel.Cases.CaseInvite.Role
   alias Varsel.Cases.CaseInvite.Strategy
 
   postgres do
@@ -94,7 +95,7 @@ defmodule Varsel.Cases.CaseInvite do
     create :invite do
       description "Invites someone to a case by their provider handle, and queues their invite email."
       primary? true
-      accept [:case_id, :strategy, :username, :note]
+      accept [:case_id, :strategy, :username, :note, :role]
 
       argument :email, :string do
         description "The address to email when the provider lists none for the account."
@@ -242,6 +243,13 @@ defmodule Varsel.Cases.CaseInvite do
 
     attribute :note, :string do
       description "Why this person was invited (optional)."
+      public? true
+    end
+
+    attribute :role, Role do
+      description "What the person is to the case. A maintainer's invite email states the non-response policy."
+      allow_nil? false
+      default :other
       public? true
     end
 

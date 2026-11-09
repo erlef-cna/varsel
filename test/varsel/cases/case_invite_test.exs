@@ -360,7 +360,7 @@ defmodule Varsel.Cases.CaseInviteTest do
 
       assert [email] = sent_emails()
       assert email.to == [{"", "octocat@example.com"}]
-      assert email.subject == "EEF CNA: you are invited to a case"
+      assert email.subject == "EEF CNA: join a vulnerability case"
       assert email.text_body =~ ~s(GitHub account "octocat")
       assert email.text_body =~ "/sign-in?return_to=%2Fcases%2F#{case_record.id}"
       refute email.text_body =~ case_record.title
@@ -469,6 +469,20 @@ defmodule Varsel.Cases.CaseInviteTest do
       assert [invite] = Cases.list_case_invites!(actor: poc)
       assert to_string(invite.username) == "octocat"
       assert invite.email_status == :pending
+    end
+
+    test "an invite is for someone else unless the granter names a maintainer", %{
+      poc: poc,
+      case: case_record
+    } do
+      assert {:ok, _} = Cases.grant_case_access(case_record, :github, "octocat", actor: poc)
+
+      assert {:ok, _} =
+               Cases.grant_case_access(case_record, :hex, "alice", %{role: :maintainer}, actor: poc)
+
+      roles = Map.new(Cases.list_case_invites!(actor: poc), &{to_string(&1.username), &1.role})
+
+      assert roles == %{"octocat" => :other, "alice" => :maintainer}
     end
 
     test "invites without an email when the email is optional and the profile lists none", %{

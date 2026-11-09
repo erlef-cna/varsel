@@ -64,6 +64,7 @@ defmodule Varsel.Cases.Case.Changes.InheritFromSource do
         strategy: invite.strategy,
         username: to_string(invite.username),
         note: invite.note,
+        role: invite.role,
         email_optional: true
       }
     end
