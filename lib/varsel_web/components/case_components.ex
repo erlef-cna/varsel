@@ -414,7 +414,7 @@ defmodule VarselWeb.CaseComponents do
           id={@row_id && "#{@row_id}-body"}
           class={[
             "relative",
-            @collapsible && long_comment?(@comment.body) && "max-h-40 overflow-hidden"
+            @collapsible && long_comment?(@comment.body) && "max-h-27 overflow-hidden"
           ]}
         >
           <.comment_markdown content={@comment.body} viewer_id={@viewer_id} />
@@ -431,7 +431,7 @@ defmodule VarselWeb.CaseComponents do
           class="link link-hover text-xs text-primary mt-1"
           aria-expanded="false"
           phx-click={
-            JS.toggle_class("max-h-40 overflow-hidden", to: "##{@row_id}-body")
+            JS.toggle_class("max-h-27 overflow-hidden", to: "##{@row_id}-body")
             |> JS.toggle(to: "##{@row_id}-fade")
             |> JS.toggle(to: "##{@row_id}-toggle [data-more]")
             |> JS.toggle(to: "##{@row_id}-toggle [data-less]")
