@@ -5,8 +5,8 @@
 defmodule VarselWeb.DevRouter do
   @moduledoc """
   Routes for the developer tooling: the component storybook, Oban Web, the
-  LiveDashboard, AshAdmin, the Swoosh mailbox preview and the error-page
-  preview.
+  LiveDashboard, AshAdmin, the Swoosh mailbox, the email preview and the
+  error-page preview.
 
   Lives under `dev/`, a directory `elixirc_paths/1` only compiles for `:dev`
   and `:test`, which is what keeps these routes out of production — the
@@ -80,6 +80,7 @@ defmodule VarselWeb.DevRouter do
     pipe_through :dev_browser
 
     get "/dev/http-error/:status", VarselWeb.DevErrorPreviewController, :show
+    get "/dev/emails", VarselWeb.DevEmailPreviewController, :index
     forward "/dev/mailbox", Plug.Swoosh.MailboxPreview
 
     live_dashboard "/dev/dashboard", metrics: VarselWeb.Telemetry

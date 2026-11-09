@@ -7,7 +7,7 @@ defmodule VarselWeb.DevNav do
   Floating dev-tools launcher, pinned to the bottom-right of every page.
 
   Hovering the `</>` disc opens the tooling index — storybook, GraphiQL,
-  dashboards, admin, mailbox, error previews. Kept out of the site header so
+  dashboards, admin, mailbox, email and error previews. Kept out of the site header so
   the real chrome stays honest.
 
   Lives under `dev/`, only compiled for `:dev` and `:test`; the layout renders
@@ -37,6 +37,7 @@ defmodule VarselWeb.DevNav do
       {"Oban", ~p"/dev/oban", "hero-queue-list"},
       {"LiveDashboard", ~p"/dev/dashboard", "hero-chart-bar"},
       {"Mailbox", ~p"/dev/mailbox", "hero-envelope"},
+      {"Email preview", ~p"/dev/emails", "hero-envelope-open"},
       {"Error pages", ~p"/dev/http-error/404", "hero-exclamation-triangle"}
     ]
   end
