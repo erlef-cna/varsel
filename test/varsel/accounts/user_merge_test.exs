@@ -99,7 +99,7 @@ defmodule Varsel.Accounts.UserMergeTest do
 
       for {user, emoji} <- [{from, :rocket}, {from, :eyes}, {into, :rocket}] do
         Cases.react_to_case_comment!(
-          %{case_id: case_record.id, comment_id: comment.id, emoji: emoji},
+          %{comment_id: comment.id, emoji: emoji},
           actor: user
         )
       end

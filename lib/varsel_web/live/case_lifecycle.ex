@@ -290,7 +290,7 @@ defmodule VarselWeb.CaseLifecycle do
         case Enum.find(comment.reactions, &(&1.user_id == actor.id and &1.emoji == emoji)) do
           nil ->
             Cases.react_to_case_comment(
-              %{case_id: case_record.id, comment_id: comment.id, emoji: emoji},
+              %{comment_id: comment.id, emoji: emoji},
               actor: actor
             )
 

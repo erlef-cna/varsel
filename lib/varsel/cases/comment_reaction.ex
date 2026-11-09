@@ -21,14 +21,12 @@ defmodule Varsel.Cases.CommentReaction do
 
   alias Varsel.Accounts.User
   alias Varsel.Cases.CommentReaction.Emoji
-  alias Varsel.Cases.CommentReaction.Validations.CommentBelongsToCase
 
   postgres do
     table "case_comment_reactions"
     repo Varsel.Repo
 
     references do
-      reference :case, on_delete: :delete
       reference :comment, on_delete: :delete
       reference :user, on_delete: :delete
     end
@@ -40,14 +38,13 @@ defmodule Varsel.Cases.CommentReaction do
     create :react do
       description "Reacts to a comment with an emoji. Reacting again with the same emoji changes nothing."
       primary? true
-      accept [:case_id, :comment_id, :emoji]
+      accept [:comment_id, :emoji]
 
       upsert? true
       upsert_identity :unique_reaction
       upsert_fields [:emoji]
 
       change relate_actor(:user)
-      validate CommentBelongsToCase, before_action?: true
     end
 
     destroy :unreact do
@@ -100,13 +97,6 @@ defmodule Varsel.Cases.CommentReaction do
   end
 
   relationships do
-    belongs_to :case, Varsel.Cases.Case do
-      description "The case of the comment, which decides who may see and give the reaction."
-      allow_nil? false
-      public? true
-      attribute_writable? true
-    end
-
     belongs_to :comment, Varsel.Cases.Comment do
       description "The comment reacted to."
       allow_nil? false
@@ -117,6 +107,19 @@ defmodule Varsel.Cases.CommentReaction do
     belongs_to :user, User do
       description "Who reacted."
       allow_nil? false
+      public? true
+    end
+
+    has_one :case, Varsel.Cases.Case do
+      description "The case of the comment, which decides who may see and give the reaction."
+      through [:comment, :case]
+      public? true
+    end
+  end
+
+  calculations do
+    calculate :case_id, :uuid, expr(comment.case_id) do
+      description "The id of the case of the comment."
       public? true
     end
   end
