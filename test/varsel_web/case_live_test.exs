@@ -2151,11 +2151,11 @@ defmodule VarselWeb.CaseLiveTest do
       refute has_element?(lv, "form[phx-submit=post_comment]")
     end
 
-    test "the rail holds the ten newest comments and folds a long one", %{conn: conn, poc: poc} do
+    test "the rail holds the five newest comments and folds a long one", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 
       comments =
-        for n <- 1..11 do
+        for n <- 1..6 do
           Cases.post_case_comment!(
             %{case_id: case_record.id, body: "comment #{n}" <> String.duplicate(" word", n * 20)},
             actor: poc

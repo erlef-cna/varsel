@@ -1188,7 +1188,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp recent_comments(case_record) do
     case_record.comments
     |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
-    |> Enum.take(10)
+    |> Enum.take(5)
   end
 
   defp comments_by_proposal(case_record) do
