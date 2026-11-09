@@ -99,7 +99,8 @@ defmodule Varsel.Cases.Case.Changes.TakeReport do
         strategy: :hex,
         username: maintainer[:username] || maintainer["username"],
         email: maintainer[:email] || maintainer["email"],
-        note: "Maintains #{package} on hex.pm"
+        note: "Maintains #{package} on hex.pm",
+        role: :maintainer
       }
     end
   end

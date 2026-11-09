@@ -1981,6 +1981,13 @@ defmodule VarselWeb.CaseDetailLive do
           <span class="flex min-w-0 flex-wrap items-center gap-2">
             <span class="font-mono text-xs">{invite_handle(invite)}</span>
             <span class="badge badge-ghost badge-sm">invited</span>
+            <span
+              :if={invite.role == :maintainer}
+              id={"invite-role-#{invite.id}"}
+              class="badge badge-ghost badge-sm"
+            >
+              maintainer
+            </span>
             <span class={["badge badge-sm", invite_status_class(invite.email_status)]}>
               {EmailStatus.label(invite.email_status)}
             </span>
@@ -2114,6 +2121,17 @@ defmodule VarselWeb.CaseDetailLive do
               <:label>Username</:label>
             </.input>
           </div>
+          <.input
+            field={@grant_form[:role]}
+            type="select"
+            options={[{"Someone else", "other"}, {"Maintainer of an affected package", "maintainer"}]}
+            class="select select-bordered select-sm w-full"
+          >
+            <:label>They are</:label>
+            <:description>
+              A maintainer's email asks for a response within 14 days.
+            </:description>
+          </.input>
           <.input
             field={@grant_form[:email]}
             type="email"

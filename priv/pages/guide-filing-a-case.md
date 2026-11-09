@@ -62,6 +62,11 @@ path from there to a published CVE.
    address, enter one you found at a trusted source, such as the author
    email on their commits in the affected repository. When you find no
    trusted address, tick *Send no email* and reach the person another way.
+   Mark someone who maintains an affected package as a *Maintainer*: their
+   invite email asks them to respond, says no fix is needed to start, and
+   says we may publish without one after 14 days of silence, as the
+   [maintainer process](/maintainer-process) states. Everyone else gets a
+   plain invite. Hex.pm reports mark the package's maintainers for you.
    The people panel shows what became of each invite email.
    Notification emails never carry case details, only a link, so the
    advisory thread is still where they hear what changed. The same holds for

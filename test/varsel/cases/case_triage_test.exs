@@ -219,6 +219,17 @@ defmodule Varsel.Cases.CaseTriageTest do
                MapSet.new(["triage_hex_reporter", "triage_stranger"])
     end
 
+    test "invites the maintainers as maintainers and the reporter as someone else" do
+      [case_record] =
+        submit_from_hex([
+          %{username: "triage_role_maintainer", email: "triage_role_maintainer@example.com"}
+        ]).cases
+
+      roles = Map.new(invites(case_record.id), &{to_string(&1.username), &1.role})
+
+      assert roles == %{"triage_hex_reporter" => :other, "triage_role_maintainer" => :maintainer}
+    end
+
     test "names someone who reports a package they maintain once" do
       report =
         submit_from_hex([

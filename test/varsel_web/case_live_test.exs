@@ -2694,6 +2694,21 @@ defmodule VarselWeb.CaseLiveTest do
       assert render(lv) =~ "no email, skipped"
     end
 
+    test "the inviter can name the person a maintainer", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      lv = open_picker(conn, poc, case_record)
+
+      grant(lv, %{
+        "strategy" => "github",
+        "username" => "hermit",
+        "skip_email" => "true",
+        "role" => "maintainer"
+      })
+
+      assert [%{id: id, role: :maintainer}] = Cases.list_case_invites!(actor: poc)
+      assert has_element?(lv, "#invite-role-#{id}")
+    end
+
     test "an unknown handle is reported on the username field, and nothing is added", %{
       conn: conn,
       poc: poc

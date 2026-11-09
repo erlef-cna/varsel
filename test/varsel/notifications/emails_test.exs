@@ -440,13 +440,91 @@ defmodule Varsel.Notifications.EmailsTest do
 
       doc = html(email)
 
-      assert [] = doc |> LazyHTML.query("img") |> Enum.to_list()
+      assert [] = doc |> LazyHTML.query("img[onerror]") |> Enum.to_list()
       assert doc |> LazyHTML.query(".handle") |> LazyHTML.text() == "<img src=x onerror=alert(1)>"
 
       assert Enum.any?(
                hrefs(email),
                &String.ends_with?(&1, "/sign-in?return_to=%2Fcases%2F#{@case_id}")
              )
+    end
+
+    test "a maintainer's invite escapes the handle and links the maintainer process" do
+      email =
+        Emails.invite_email(%CaseInvite{
+          email: "invitee@example.com",
+          strategy: :hex,
+          username: "<img src=x onerror=alert(1)>",
+          role: :maintainer,
+          case_id: @case_id
+        })
+
+      doc = html(email)
+
+      assert [] = doc |> LazyHTML.query("img[onerror]") |> Enum.to_list()
+      assert doc |> LazyHTML.query(".handle") |> LazyHTML.text() == "<img src=x onerror=alert(1)>"
+
+      links = hrefs(email)
+      assert Enum.any?(links, &String.ends_with?(&1, "/sign-in?return_to=%2Fcases%2F#{@case_id}"))
+      assert Enum.any?(links, &String.ends_with?(&1, "/maintainer-process"))
+    end
+  end
+
+  describe "the invite text part" do
+    alias Varsel.Cases.CaseInvite
+    alias Varsel.Notifications.Emails
+
+    defp invite_for(role) do
+      Emails.invite_email(%CaseInvite{
+        email: "invitee@example.com",
+        strategy: :hex,
+        username: "pkg_owner",
+        role: role,
+        case_id: "00000000-0000-4000-8000-000000000001"
+      })
+    end
+
+    test "a maintainer's states the 14-day non-response policy" do
+      email = invite_for(:maintainer)
+
+      assert email.subject == "EEF CNA: review a possible vulnerability in your package"
+      assert email.text_body =~ "within 14 days, we may publish the CVE without a fix"
+      assert email.text_body =~ "/maintainer-process"
+    end
+
+    test "anyone else's states no deadline" do
+      email = invite_for(:other)
+
+      assert email.subject == "EEF CNA: join a vulnerability case"
+      refute email.text_body =~ "14 days"
+      assert email.text_body =~ "/maintainer-process"
+    end
+  end
+
+  describe "the invite's account-linking hint" do
+    alias Varsel.Cases.CaseInvite
+    alias Varsel.Notifications.Emails
+
+    test "names the other provider and links the account settings, in both parts" do
+      for role <- [:maintainer, :other] do
+        email =
+          Emails.invite_email(%CaseInvite{
+            email: "invitee@example.com",
+            strategy: :github,
+            username: "octocat",
+            role: role,
+            case_id: "00000000-0000-4000-8000-000000000001"
+          })
+
+        assert email.text_body =~ "Already signed up with hex.pm? Link GitHub to that account first:"
+        assert email.text_body =~ "/settings/account\n"
+
+        assert email.html_body
+               |> LazyHTML.from_document()
+               |> LazyHTML.query("a[href]")
+               |> Enum.flat_map(&LazyHTML.attribute(&1, "href"))
+               |> Enum.any?(&String.ends_with?(&1, "/settings/account"))
+      end
     end
   end
 

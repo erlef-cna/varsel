@@ -14,7 +14,7 @@ defmodule VarselWeb.DevEmailPreviewControllerTest do
     hrefs = Enum.map(links, &(&1 |> LazyHTML.attribute("href") |> hd()))
 
     assert "/dev/emails?email=digest" in hrefs
-    assert "/dev/emails?email=invite-github" in hrefs
+    assert "/dev/emails?email=invite-maintainer-github" in hrefs
     assert "/dev/emails?email=immediate-comment_posted" in hrefs
 
     assert [_] = doc |> LazyHTML.query("#email-preview-html") |> Enum.to_list()

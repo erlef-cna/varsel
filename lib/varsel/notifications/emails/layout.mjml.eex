@@ -3,54 +3,66 @@
     <mj-title><%= @subject %></mj-title>
     <mj-preview><%= @preview %></mj-preview>
     <mj-raw>
-      <meta name="color-scheme" content="light dark" />
-      <meta name="supported-color-schemes" content="light dark" />
+      <meta name="color-scheme" content="light only" />
+      <meta name="supported-color-schemes" content="light" />
     </mj-raw>
     <mj-attributes>
       <mj-all font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"></mj-all>
-      <mj-text font-size="15px" line-height="24px" color="#1f2c34" padding="0 0 16px 0" css-class="ink"></mj-text>
-      <mj-button background-color="#1b85cb" color="#ffffff" font-size="15px" font-weight="600" border-radius="6px" inner-padding="12px 24px" align="left" padding="8px 0 12px 0"></mj-button>
-      <mj-class name="heading" font-size="22px" line-height="30px" font-weight="700" letter-spacing="-0.01em" padding="0 0 12px 0"></mj-class>
-      <mj-class name="link-fallback" font-size="13px" line-height="20px" color="#5b6872" padding="12px 0 24px 0" css-class="muted"></mj-class>
-      <mj-class name="note" font-size="13px" line-height="20px" color="#5b6872" padding="16px 0 0 0" css-class="muted"></mj-class>
+      <mj-text font-size="16px" line-height="26px" color="#1f2c34" padding="0 0 18px 0"></mj-text>
+      <mj-button background-color="#1b85cb" color="#ffffff" font-size="16px" font-weight="600" border-radius="6px" inner-padding="13px 26px" align="left" padding="6px 0 26px 0"></mj-button>
+      <mj-class name="heading" font-size="24px" line-height="32px" font-weight="700" letter-spacing="-0.015em" padding="0 0 16px 0"></mj-class>
+      <mj-class name="note" font-size="13px" line-height="20px" color="#5b6872" padding="16px 0 0 0"></mj-class>
+      <mj-class name="fine" font-size="12px" line-height="19px" color="#5b6872" padding="0 0 8px 0"></mj-class>
     </mj-attributes>
     <mj-style>
-      a.fallback { color: #1670ad; word-break: break-all; }
       .handle { white-space: nowrap; font-weight: 700; }
       .count { font-variant-numeric: tabular-nums; }
-      @media (prefers-color-scheme: dark) {
-        body, .page, .page > table, .page > table > tbody > tr > td { background-color: #17222a !important; }
-        .card, .card > table, .card > table > tbody > tr > td { background-color: #1f2c34 !important; }
-        .masthead, .masthead > table, .masthead > table > tbody > tr > td { background-color: #121b21 !important; }
-        .ink div, .ink td { color: #eef2f5 !important; }
-        .muted div { color: #a3b1bb !important; }
-        .rule p { border-top-color: #34444f !important; }
-        .ink tr { border-bottom-color: #34444f !important; }
-        a.fallback, .muted a { color: #5cb3eb !important; }
-      }
     </mj-style>
   </mj-head>
-  <mj-body background-color="#eef1f3" width="600px" css-class="page">
-    <mj-section background-color="#1f2c34" border-bottom="3px solid #1b85cb" padding="20px 32px" css-class="masthead">
+  <mj-body background-color="#eef1f3" width="600px">
+    <mj-section background-color="#1f2c34" padding="22px 40px">
       <mj-column>
-        <mj-text color="#ffffff" font-size="17px" font-weight="700" letter-spacing="0.04em" padding="0">EEF CNA</mj-text>
+        <mj-text padding="0">
+          <a href="<%= @site_url %>" style="text-decoration: none;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="vertical-align: middle; padding: 0 14px 0 0;">
+                  <img src="<%= @logo_url %>" alt="EEF" width="65" height="28" style="display: block; border: 0; height: 28px; width: 65px; color: #ffffff; font-size: 20px; font-weight: 900;" />
+                </td>
+                <td style="vertical-align: middle; padding: 0 0 0 14px; border-left: 1px solid #4a565e; color: #ffffff; font-size: 19px; line-height: 28px; font-weight: 900; font-style: italic; letter-spacing: 0.01em;">CNA</td>
+              </tr>
+            </table>
+          </a>
+        </mj-text>
       </mj-column>
     </mj-section>
-    <mj-section background-color="#ffffff" padding="36px 32px 24px 32px" css-class="card">
+    <mj-section background-color="#ffffff" padding="40px 40px 32px 40px">
       <mj-column>
         <%= @inner_content %>
       </mj-column>
     </mj-section>
-    <mj-section padding="20px 32px 32px 32px">
+    <mj-section padding="24px 40px 36px 40px">
       <mj-column>
-        <%= if assigns[:settings_url] do %>
-          <mj-text font-size="12px" line-height="18px" color="#5b6872" padding="0 0 6px 0" css-class="muted">
-            <a href="<%= @settings_url %>" style="color: #1670ad;">Change what you're notified about</a>
-          </mj-text>
-        <% end %>
-        <mj-text font-size="12px" line-height="18px" color="#5b6872" padding="0" css-class="muted">
-          The EEF CVE Numbering Authority, run by the Erlang Ecosystem Foundation.
+        <mj-text mj-class="fine">
+          <%= @reason %>
+          <%= if assigns[:settings_url] do %>
+            <a href="<%= @settings_url %>" style="color: #1670ad;">Change what you're notified about</a>.
+          <% end %>
         </mj-text>
+        <mj-divider border-width="1px" border-color="#d5dce1" padding="8px 0 16px 0"></mj-divider>
+        <mj-text mj-class="fine" font-weight="600" color="#3d4a53">
+          The Erlang Ecosystem Foundation's CVE Numbering Authority for the BEAM ecosystem.
+        </mj-text>
+        <mj-text mj-class="fine">
+          <a href="<%= @site_url %>" style="color: #1670ad; text-decoration: none;"><%= @site_host %></a>
+          &nbsp;·&nbsp;
+          <a href="<%= @process_url %>" style="color: #1670ad; text-decoration: none;">Maintainer Process</a>
+          &nbsp;·&nbsp;
+          <a href="<%= @policy_url %>" style="color: #1670ad; text-decoration: none;">Security Policy</a>
+          &nbsp;·&nbsp;
+          <a href="<%= @contact_url %>" style="color: #1670ad; text-decoration: none;">Contact</a>
+        </mj-text>
+        <mj-text mj-class="fine" padding="0">© <%= @year %> Erlang Ecosystem Foundation</mj-text>
       </mj-column>
     </mj-section>
   </mj-body>

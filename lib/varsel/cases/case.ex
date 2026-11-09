@@ -426,6 +426,17 @@ defmodule Varsel.Cases.Case do
         """
       end
 
+      argument :role, Varsel.Cases.CaseInvite.Role do
+        default :other
+
+        description """
+        What the person is to the case: `maintainer` for someone who maintains
+        an affected package, `other` for anyone else. A maintainer's invite
+        email tells them the CNA may publish without a fix after 14 days with
+        no response. Ignored when the person already has an account.
+        """
+      end
+
       change Varsel.Cases.Case.Changes.GrantAccess
     end
 

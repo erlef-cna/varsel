@@ -21,9 +21,13 @@ defmodule Varsel.Notifications.Emails do
   alias Varsel.Notifications.Emails.DigestTemplate
   alias Varsel.Notifications.Emails.ImmediateTemplate
   alias Varsel.Notifications.Emails.InviteTemplate
+  alias Varsel.Notifications.Emails.MaintainerInviteTemplate
   alias Varsel.Notifications.Kind
   alias Varsel.Notifications.Notification
   alias VarselWeb.SignInPath
+
+  # The non-response window in /maintainer-process, "Timelines & Embargo".
+  @maintainer_response_days 14
 
   @doc """
   Builds the one-event notification email for `user`.
@@ -35,6 +39,7 @@ defmodule Varsel.Notifications.Emails do
     assigns = %{
       subject: subject,
       preview: Kind.description(notification.kind),
+      reason: "You get this email because of your notification settings.",
       label: Kind.label(notification.kind),
       description: Kind.description(notification.kind),
       case_url: subject_url(notification),
@@ -46,7 +51,7 @@ defmodule Varsel.Notifications.Emails do
     |> from(from_address())
     |> subject(subject)
     |> text_body(immediate_body(assigns))
-    |> html_body(ImmediateTemplate.render(assigns))
+    |> html_body(assigns |> with_letterhead() |> ImmediateTemplate.render())
   end
 
   @doc """
@@ -60,6 +65,7 @@ defmodule Varsel.Notifications.Emails do
     assigns = %{
       subject: subject,
       preview: "What happened since your last digest.",
+      reason: "You get this daily digest because of your notification settings.",
       lines: digest_lines(notifications),
       notifications_url: url(~p"/notifications"),
       settings_url: url(~p"/settings/notifications")
@@ -70,7 +76,7 @@ defmodule Varsel.Notifications.Emails do
     |> from(from_address())
     |> subject(subject)
     |> text_body(digest_body(assigns))
-    |> html_body(DigestTemplate.render(assigns))
+    |> html_body(assigns |> with_letterhead() |> DigestTemplate.render())
   end
 
   @doc """
@@ -111,26 +117,56 @@ defmodule Varsel.Notifications.Emails do
 
   @doc """
   Builds the email that tells someone a case invite names their provider
-  account.
+  account. A maintainer's also states the CNA's non-response policy.
   """
   @spec invite_email(CaseInvite.t()) :: Swoosh.Email.t()
   def invite_email(invite) do
-    subject = "EEF CNA: you are invited to a case"
-
     assigns = %{
-      subject: subject,
-      preview: "Sign in to open the case you were invited to.",
       provider: provider_name(invite.strategy),
       username: invite.username,
-      sign_in_url: VarselWeb.Endpoint.url() <> SignInPath.for(~p"/cases/#{invite.case_id}")
+      sign_in_url: VarselWeb.Endpoint.url() <> SignInPath.for(~p"/cases/#{invite.case_id}"),
+      process_url: url(~p"/maintainer-process"),
+      other_provider: provider_name(other_strategy(invite.strategy)),
+      account_url: url(~p"/settings/account")
     }
 
     new()
     |> to(to_string(invite.email))
     |> from(from_address())
+    |> invite_content(invite.role, assigns)
+  end
+
+  defp invite_content(email, :maintainer, assigns) do
+    subject = "EEF CNA: review a possible vulnerability in your package"
+
+    assigns =
+      Map.merge(assigns, %{
+        subject: subject,
+        preview: "We'd like to work on it with you.",
+        reason: "This email holds no details about the vulnerability. You read them after you sign in.",
+        response_days: @maintainer_response_days
+      })
+
+    email
+    |> subject(subject)
+    |> text_body(maintainer_invite_body(assigns))
+    |> html_body(assigns |> with_letterhead() |> MaintainerInviteTemplate.render())
+  end
+
+  defp invite_content(email, _role, assigns) do
+    subject = "EEF CNA: join a vulnerability case"
+
+    assigns =
+      Map.merge(assigns, %{
+        subject: subject,
+        preview: "Sign in to open the case you were invited to.",
+        reason: "This email holds no details about the case. You read them after you sign in."
+      })
+
+    email
     |> subject(subject)
     |> text_body(invite_body(assigns))
-    |> html_body(InviteTemplate.render(assigns))
+    |> html_body(assigns |> with_letterhead() |> InviteTemplate.render())
   end
 
   @doc "Delivers the invite email for `invite` to its stored address."
@@ -146,15 +182,58 @@ defmodule Varsel.Notifications.Emails do
 
   defp invite_body(assigns) do
     """
-    A coordinator at the EEF CNA invited you to work on a vulnerability case.
+    A coordinator at the Erlang Ecosystem Foundation (EEF) CNA invited you to work on a vulnerability case.
 
     The invite names your #{assigns.provider} account "#{assigns.username}". Sign in with that account to open the case:
 
     #{assigns.sign_in_url}
 
+    Already signed up with #{assigns.other_provider}? Link #{assigns.provider} to that account first: #{assigns.account_url}
+
+    Our Maintainer Process explains how a case runs and what to expect: #{assigns.process_url}
+
     This email holds no details about the case. You read them after you sign in.
     """
   end
+
+  defp maintainer_invite_body(assigns) do
+    """
+    Hi,
+
+    Someone reported a possible vulnerability in a package you maintain, and we at the Erlang Ecosystem Foundation (EEF) CNA are coordinating it. We opened a private case for it and invited you, so we can work on it together.
+
+    The invite names your #{assigns.provider} account "#{assigns.username}". Sign in with that account to read the report:
+
+    #{assigns.sign_in_url}
+
+    Already signed up with #{assigns.other_provider}? Link #{assigns.provider} to that account first: #{assigns.account_url}
+
+    If we don't hear from you within #{assigns.response_days} days, we may publish the CVE without a fix, so that people who depend on the package can protect themselves. If you need more time, just tell us. Our Maintainer Process walks through each step and its timelines: #{assigns.process_url}
+
+    Until the CVE is out, please keep this private: no public issues, pull requests or commits about it, since those would tell attackers before users can upgrade.
+
+    The EEF CNA
+
+    This email holds no details about the vulnerability. You read them after you sign in.
+    """
+  end
+
+  defp with_letterhead(assigns) do
+    site_url = url(~p"/")
+
+    Map.merge(assigns, %{
+      site_url: site_url,
+      site_host: URI.parse(site_url).host,
+      logo_url: url(~p"/images/email/eef-mark-white.png"),
+      process_url: url(~p"/maintainer-process"),
+      policy_url: url(~p"/security-policy"),
+      contact_url: url(~p"/contact"),
+      year: Date.utc_today().year
+    })
+  end
+
+  defp other_strategy(:github), do: :hex
+  defp other_strategy(:hex), do: :github
 
   defp provider_name(:github), do: "GitHub"
   defp provider_name(:hex), do: "hex.pm"

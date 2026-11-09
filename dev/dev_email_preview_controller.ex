@@ -69,16 +69,17 @@ defmodule VarselWeb.DevEmailPreviewController do
     }
 
     invites =
-      for strategy <- CaseInvite.Strategy.values() do
+      for role <- CaseInvite.Role.values(), strategy <- CaseInvite.Strategy.values() do
         %{
-          slug: "invite-#{strategy}",
+          slug: "invite-#{role}-#{strategy}",
           group: "Case invite",
-          label: "Invite (#{strategy})",
+          label: "#{String.capitalize(to_string(role))} (#{strategy})",
           build: fn ->
             Emails.invite_email(%CaseInvite{
               email: "invitee@example.com",
               strategy: strategy,
               username: "octo-invitee",
+              role: role,
               case_id: @sample_case_id
             })
           end

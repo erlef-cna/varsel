@@ -79,16 +79,16 @@ defmodule VarselWeb.DevEmailPreviewHTML do
           <div class="grid gap-4 xl:grid-cols-2">
             <section id="email-preview-html" class="flex min-w-0 flex-col">
               <h2 class="eef-eyebrow pb-2">HTML</h2>
-              <iframe
+              <div
                 :if={@email.html_body}
-                title="HTML part"
-                sandbox=""
-                srcdoc={@email.html_body}
-                class="h-[36rem] w-full rounded-box border border-base-300 bg-white"
-              />
+                id="email-preview-html-body"
+                class="overflow-hidden rounded-box border border-base-300 bg-white"
+              >
+                <template shadowrootmode="open">{Phoenix.HTML.raw(@email.html_body)}</template>
+              </div>
               <div
                 :if={is_nil(@email.html_body)}
-                class="flex h-[36rem] items-center justify-center rounded-box border border-dashed border-base-300 text-sm text-base-content/60"
+                class="flex min-h-48 items-center justify-center rounded-box border border-dashed border-base-300 text-sm text-base-content/60"
               >
                 This email has no HTML part.
               </div>
@@ -98,11 +98,11 @@ defmodule VarselWeb.DevEmailPreviewHTML do
               <h2 class="eef-eyebrow pb-2">Text</h2>
               <pre
                 :if={@email.text_body}
-                class="h-[36rem] overflow-auto whitespace-pre-wrap break-words rounded-box border border-base-300 bg-base-100 p-4 font-mono text-sm"
+                class="whitespace-pre-wrap break-words rounded-box border border-base-300 bg-base-100 p-4 font-mono text-sm"
               >{@email.text_body}</pre>
               <div
                 :if={is_nil(@email.text_body)}
-                class="flex h-[36rem] items-center justify-center rounded-box border border-dashed border-base-300 text-sm text-base-content/60"
+                class="flex min-h-48 items-center justify-center rounded-box border border-dashed border-base-300 text-sm text-base-content/60"
               >
                 This email has no text part.
               </div>
