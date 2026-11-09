@@ -516,7 +516,9 @@ defmodule Varsel.Notifications.EmailsTest do
             case_id: "00000000-0000-4000-8000-000000000001"
           })
 
-        assert email.text_body =~ "Already signed up with hex.pm? Link GitHub to that account first:"
+        assert email.text_body =~
+                 "Already signed up with hex.pm? Link GitHub to that account first:"
+
         assert email.text_body =~ "/settings/account\n"
 
         assert email.html_body
