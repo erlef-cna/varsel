@@ -24,7 +24,11 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("channel_block"), do: [name: "Channel block", icon: {:local, "hero-truck"}]
 
+  def entry("case_actions"), do: [name: "Case actions", icon: {:local, "hero-play"}]
+
   def entry("case_content"), do: [name: "Case content", icon: {:local, "hero-document-text"}]
+
+  def entry("case_picker"), do: [name: "Case picker", icon: {:local, "hero-magnifying-glass"}]
 
   def entry("case_header"), do: [name: "Case header", icon: {:local, "hero-window"}]
 
@@ -50,6 +54,8 @@ defmodule VarselWeb.Storybook.Case do
   def entry("lifecycle_stepper"), do: [name: "Lifecycle stepper", icon: {:local, "hero-flag"}]
   def entry("markdown"), do: [name: "Markdown", icon: {:local, "hero-document-text"}]
   def entry("mode_pill"), do: [name: "Mode pill", icon: {:local, "hero-pencil"}]
+
+  def entry("suggest_toggle"), do: [name: "Suggest toggle", icon: {:local, "hero-pencil-square"}]
 
   def entry("program_file"), do: [name: "Program file", icon: {:local, "hero-document"}]
 

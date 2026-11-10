@@ -72,7 +72,7 @@ defmodule VarselWeb.CaseReportsLive do
         active={:reports}
       >
         <:actions>
-          <CaseLifecycle.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
+          <CaseLifecycle.lifecycle_actions case_record={@case_record} current_user={@current_user} />
         </:actions>
       </.case_header>
 
@@ -93,11 +93,10 @@ defmodule VarselWeb.CaseReportsLive do
         </.list_card>
       </.page_container>
 
-      <CaseLifecycle.cve_picker_modal
-        :if={@cve_picker}
+      <CaseLifecycle.lifecycle_modal
         case_record={@case_record}
         current_user={@current_user}
-        records={@cve_picker}
+        modal={@lifecycle_modal}
       />
     </Layouts.app>
     """

@@ -16,18 +16,26 @@ defmodule VarselWeb.CaseLifecycle do
 
   import AshPhoenix.LiveView, only: [keep_live: 4]
   import Phoenix.LiveView, only: [attach_hook: 4, connected?: 1, push_navigate: 2, put_flash: 3]
+  import VarselWeb.CaseComponents, only: [case_actions: 1, case_picker: 1]
 
   alias Phoenix.LiveView.Socket
   alias Varsel.Cases
+  alias Varsel.Cases.Case
   alias Varsel.Cases.CommentReaction.Emoji
   alias Varsel.CVE
   alias Varsel.Notifications
+
+  require Ash.Query
 
   @topics ~w(case case_proposal case_comment)
 
   # The case's own state, which every tab renders in the header and the
   # lifecycle buttons. A tab adds the kinds its body shows.
   @lifecycle_kinds [:report_submitted, :review_requested, :case_published, :case_assigned]
+
+  @form_modals %{"split" => :split, "reject" => :reject, "close" => :close}
+
+  @merge_picker_limit 10
 
   @doc """
   Mounts the case on the socket as the `:case_record` assign and attaches
@@ -56,7 +64,7 @@ defmodule VarselWeb.CaseLifecycle do
     marks_read = @lifecycle_kinds ++ Keyword.get(opts, :marks_read, [])
 
     socket
-    |> assign(case_id: case_id, cve_picker: nil, merge_picker: nil)
+    |> assign(case_id: case_id, lifecycle_modal: nil)
     |> attach_hook(__MODULE__, :handle_event, &handle_event/3)
     |> keep_live(:case_record, &load_case(&1, load),
       subscribe:
@@ -143,7 +151,10 @@ defmodule VarselWeb.CaseLifecycle do
 
     {case_record, socket} =
       if connected?(socket) do
-        Notifications.mark_case_notifications_read!(case_record.id, %{kinds: marks_read}, actor: actor)
+        Notifications.mark_case_notifications_read!(case_record.id, %{kinds: marks_read},
+          ## ------------------------------------------------------------------ events
+          actor: actor
+        )
 
         # The case was read before those rows were, so what it says is unseen
         # is what was unseen on the way in. `keep_live` has already assigned
@@ -159,8 +170,6 @@ defmodule VarselWeb.CaseLifecycle do
     after_fetch.(case_record, socket)
   end
 
-  ## ------------------------------------------------------------------ events
-
   defp handle_event("lifecycle", %{"action" => action}, socket)
        when action in ~w(request_review request_changes approve reopen triage accept withdraw) do
     {fun, done} = lifecycle_action(action)
@@ -174,16 +183,39 @@ defmodule VarselWeb.CaseLifecycle do
     {:halt, socket}
   end
 
+  defp handle_event("open_lifecycle_modal", %{"modal" => modal}, socket) when is_map_key(@form_modals, modal) do
+    {:halt, assign(socket, :lifecycle_modal, Map.fetch!(@form_modals, modal))}
+  end
+
+  defp handle_event("open_lifecycle_modal", %{"modal" => "merge"}, socket) do
+    {:halt, assign(socket, :lifecycle_modal, {:merge, merge_search(socket, "")})}
+  end
+
+  defp handle_event("search_merge_target", params, socket) do
+    search = merge_search(socket, params["query"], params["into_case_id"])
+
+    {:halt, assign(socket, :lifecycle_modal, {:merge, search})}
+  end
+
+  # Opening the picker reads the pool fresh: the ID list is the one thing on
+  # this page that another POC can invalidate between page load and click.
+  defp handle_event("open_lifecycle_modal", %{"modal" => "cve"}, socket) do
+    records = CVE.list_assignable_cve_records!(actor: socket.assigns.current_user)
+
+    {:halt, assign(socket, :lifecycle_modal, {:cve, records})}
+  end
+
+  defp handle_event("close_lifecycle_modal", _params, socket) do
+    {:halt, assign(socket, :lifecycle_modal, nil)}
+  end
+
   defp handle_event("reject_case", params, socket) do
     args = %{closed_reason: presence(params["closed_reason"])}
 
-    socket =
-      case Cases.reject_case(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
-        {:ok, _case_record} -> put_flash(socket, :info, "Case rejected.")
-        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
-      end
-
-    {:halt, socket}
+    case Cases.reject_case(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
+      {:ok, _case_record} -> {:halt, done(socket, "Case rejected.")}
+      {:error, error} -> {:halt, put_flash(socket, :error, errors_to_string(error))}
+    end
   end
 
   defp handle_event("split_case", %{"title" => title}, socket) do
@@ -193,39 +225,11 @@ defmodule VarselWeb.CaseLifecycle do
     end
   end
 
-  # Opening the picker reads the cases fresh, as the CVE ID picker does.
-  defp handle_event("open_merge_picker", _params, socket) do
-    case_id = socket.assigns.case_record.id
-
-    choices =
-      [actor: socket.assigns.current_user, load: [:cve_id]]
-      |> Cases.list_cases!()
-      |> Enum.reject(&(&1.id == case_id or &1.state in [:closed, :merged]))
-
-    {:halt, assign(socket, :merge_picker, choices)}
-  end
-
-  defp handle_event("cancel_merge_picker", _params, socket) do
-    {:halt, assign(socket, :merge_picker, nil)}
-  end
-
   defp handle_event("confirm_merge", %{"into_case_id" => into_case_id}, socket) do
     case Cases.merge_case(socket.assigns.case_record, into_case_id, actor: socket.assigns.current_user) do
       {:ok, _merged} -> {:halt, push_navigate(socket, to: ~p"/cases/#{into_case_id}")}
       {:error, error} -> {:halt, put_flash(socket, :error, errors_to_string(error))}
     end
-  end
-
-  # Opening the picker reads the pool fresh: the ID list is the one thing on
-  # this page that another POC can invalidate between page load and click.
-  defp handle_event("assign_cve_id", _params, socket) do
-    actor = socket.assigns.current_user
-
-    {:halt, assign(socket, cve_picker: CVE.list_assignable_cve_records!(actor: actor))}
-  end
-
-  defp handle_event("cancel_cve_picker", _params, socket) do
-    {:halt, assign(socket, :cve_picker, nil)}
   end
 
   # Both paths land here: "next free ID" sends no cve_record_id and lets the
@@ -240,7 +244,7 @@ defmodule VarselWeb.CaseLifecycle do
     socket =
       case Cases.assign_case_cve_id(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
         {:ok, _case_record} ->
-          assign(socket, :cve_picker, nil)
+          assign(socket, :lifecycle_modal, nil)
 
         {:error, error} ->
           put_flash(socket, :error, errors_to_string(error))
@@ -256,7 +260,7 @@ defmodule VarselWeb.CaseLifecycle do
              String.trim(cve_id),
              actor: socket.assigns.current_user
            ) do
-        {:ok, _case_record} -> assign(socket, :cve_picker, nil)
+        {:ok, _case_record} -> assign(socket, :lifecycle_modal, nil)
         {:error, error} -> put_flash(socket, :error, errors_to_string(error))
       end
 
@@ -269,13 +273,10 @@ defmodule VarselWeb.CaseLifecycle do
       reject_cve_id: params["cve_decision"] == "reject"
     }
 
-    socket =
-      case Cases.close_case(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
-        {:ok, _case_record} -> put_flash(socket, :info, "Case closed.")
-        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
-      end
-
-    {:halt, socket}
+    case Cases.close_case(socket.assigns.case_record, args, actor: socket.assigns.current_user) do
+      {:ok, _case_record} -> {:halt, done(socket, "Case closed.")}
+      {:error, error} -> {:halt, put_flash(socket, :error, errors_to_string(error))}
+    end
   end
 
   # A second click on an emoji the actor gave takes it back.
@@ -319,10 +320,45 @@ defmodule VarselWeb.CaseLifecycle do
   defp lifecycle_action("accept"), do: {&Cases.accept_case/2, "Case accepted."}
   defp lifecycle_action("withdraw"), do: {&Cases.withdraw_case/2, "Report withdrawn."}
 
+  # The cases this one may merge into: open ones the actor can read, matched
+  # as the board search matches them.
+  defp merge_search(socket, query, selected \\ nil) do
+    ## -------------------------------------------------------------- components
+    query = String.trim(query || "")
+    case_id = socket.assigns.case_record.id
+
+    base =
+      Case
+      |> Ash.Query.filter(id != ^case_id and state not in [:closed, :merged])
+      |> Ash.Query.limit(@merge_picker_limit + 1)
+
+    base =
+      if query == "",
+        do: base,
+        else: Ash.Query.filter(base, matches_query(query: ^String.downcase(query)))
+
+    {cases, rest} =
+      [actor: socket.assigns.current_user, load: [:cve_id], query: base]
+      |> Cases.list_cases!()
+      |> Enum.split(@merge_picker_limit)
+
+    %{
+      query: query,
+      cases: cases,
+      more?: rest != [],
+      selected: Enum.find_value(cases, &(&1.id == selected && selected))
+    }
+  end
+
+  defp done(socket, message) do
+    socket |> assign(:lifecycle_modal, nil) |> put_flash(:info, message)
+  end
+
   defp presence(nil), do: nil
   defp presence(value), do: if(String.trim(value) == "", do: nil, else: value)
 
-  ## -------------------------------------------------------------- components
+  @actions ~w(accept triage withdraw assign_cve_id request_review request_changes approve publish
+              reopen split merge reject close)a
 
   @doc """
   Renders the lifecycle actions the actor may take on the case. Publishing is
@@ -332,249 +368,221 @@ defmodule VarselWeb.CaseLifecycle do
   attr :current_user, :map, required: true
   attr :active_tab, :atom, default: nil, doc: "the tab being rendered"
 
-  def lifecycle_buttons(assigns) do
+  def lifecycle_actions(assigns) do
+    %{case_record: case_record, current_user: actor, active_tab: active_tab} = assigns
+
+    assigns =
+      assign(
+        assigns,
+        :actions,
+        Enum.filter(@actions, &offered?(&1, actor, case_record, active_tab))
+      )
+
     ~H"""
-    <div class="flex flex-wrap items-center gap-2">
-      <button
-        :if={Cases.can_accept_case?(@current_user, @case_record, validate?: true)}
-        class="btn btn-sm btn-eef"
-        phx-click="lifecycle"
-        phx-value-action="accept"
-      >
-        Accept case
-      </button>
-      <button
-        :if={Cases.can_triage_case?(@current_user, @case_record, validate?: true)}
-        class="btn btn-sm btn-eef-quiet"
-        phx-click="lifecycle"
-        phx-value-action="triage"
-      >
-        Under triage
-      </button>
-      <button
-        :if={Cases.can_withdraw_case?(@current_user, @case_record, validate?: true)}
-        class="btn btn-sm btn-outline btn-error"
-        phx-click="lifecycle"
-        phx-value-action="withdraw"
-        data-confirm="Withdraw your report? The CNA team will stop triaging this case."
-      >
-        Withdraw report
-      </button>
-      <button
-        :if={Cases.can_assign_case_cve_id?(@current_user, @case_record, validate?: true)}
-        class="btn btn-sm btn-eef-quiet"
-        phx-click="assign_cve_id"
-      >
-        Assign CVE ID
-      </button>
-      <button
-        :if={Cases.can_request_case_review?(@current_user, @case_record, validate?: true)}
-        class="btn btn-sm btn-eef"
-        phx-click="lifecycle"
-        phx-value-action="request_review"
-      >
-        Request review
-      </button>
-      <button
-        :if={Cases.can_request_case_changes?(@current_user, @case_record, validate?: true)}
-        class="btn btn-sm btn-eef-quiet"
-        phx-click="lifecycle"
-        phx-value-action="request_changes"
-      >
-        Request changes
-      </button>
-      <button
-        :if={Cases.can_approve_case?(@current_user, @case_record, validate?: true)}
-        class="btn btn-sm btn-eef"
-        phx-click="lifecycle"
-        phx-value-action="approve"
-      >
-        Approve
-      </button>
-      <.link
-        :if={
-          @active_tab != :publication and
-            Cases.can_publish_case?(@current_user, @case_record, validate?: true)
-        }
-        navigate={~p"/cases/#{@case_record.id}/publication"}
-        class="btn btn-sm btn-eef"
-      >
-        Publish
-      </.link>
-      <button
-        :if={Cases.can_reopen_case?(@current_user, @case_record, validate?: true)}
-        class="btn btn-ghost btn-sm"
-        phx-click="lifecycle"
-        phx-value-action="reopen"
-      >
-        Reopen
-      </button>
-    </div>
+    <.case_actions actions={@actions} publish_href={~p"/cases/#{@case_record.id}/publication"} />
     """
   end
 
+  defp offered?(:accept, actor, case_record, _tab), do: Cases.can_accept_case?(actor, case_record, validate?: true)
+
+  defp offered?(:triage, actor, case_record, _tab), do: Cases.can_triage_case?(actor, case_record, validate?: true)
+
+  defp offered?(:withdraw, actor, case_record, _tab), do: Cases.can_withdraw_case?(actor, case_record, validate?: true)
+
+  defp offered?(:assign_cve_id, actor, case_record, _tab),
+    do: Cases.can_assign_case_cve_id?(actor, case_record, validate?: true)
+
+  defp offered?(:request_review, actor, case_record, _tab),
+    do: Cases.can_request_case_review?(actor, case_record, validate?: true)
+
+  defp offered?(:request_changes, actor, case_record, _tab),
+    do: Cases.can_request_case_changes?(actor, case_record, validate?: true)
+
+  defp offered?(:approve, actor, case_record, _tab), do: Cases.can_approve_case?(actor, case_record, validate?: true)
+
+  defp offered?(:publish, _actor, _case_record, :publication), do: false
+
+  defp offered?(:publish, actor, case_record, _tab), do: Cases.can_publish_case?(actor, case_record, validate?: true)
+
+  defp offered?(:reopen, actor, case_record, _tab), do: Cases.can_reopen_case?(actor, case_record, validate?: true)
+
+  defp offered?(:split, actor, case_record, _tab), do: Cases.can_split_case?(actor, case_record.id, %{}, validate?: true)
+
+  defp offered?(:merge, actor, case_record, _tab),
+    do: Cases.can_merge_case?(actor, case_record, case_record.id, validate?: false)
+
+  defp offered?(:reject, actor, case_record, _tab), do: Cases.can_reject_case?(actor, case_record, validate?: true)
+
+  defp offered?(:close, actor, case_record, _tab), do: Cases.can_close_case?(actor, case_record, validate?: true)
+
   @doc """
-  Renders the triage decisions other than accepting, each collapsed: split,
-  merge and reject. Each shows only when the actor may take it.
+  Renders the open lifecycle modal, the `:lifecycle_modal` assign `mount/3`
+  sets, or nothing while none is open.
   """
   attr :case_record, :map, required: true
   attr :current_user, :map, required: true
+  attr :modal, :any, required: true, doc: "the `:lifecycle_modal` assign"
 
-  def triage_panel(assigns) do
+  def lifecycle_modal(%{modal: nil} = assigns), do: ~H""
+
+  def lifecycle_modal(%{modal: :split} = assigns) do
     ~H"""
-    <div id="triage-panel" class="space-y-2">
-      <details :if={Cases.can_split_case?(@current_user, @case_record.id, %{}, validate?: true)}>
-        <summary class="cursor-pointer text-xs text-base-content/50 hover:text-base-content/70">
-          Split off a finding
-        </summary>
-        <form id="split-case-form" phx-submit="split_case" class="mt-2 space-y-2">
-          <input
-            type="text"
-            name="title"
-            required
-            placeholder="Title of the new case"
-            class="input input-bordered input-sm w-full"
-          />
-          <p class="text-xs text-base-content/60">
-            The new case cites the same reports and gives the same people access.
-          </p>
-          <button type="submit" class="btn btn-sm btn-eef-quiet">Split</button>
-        </form>
-      </details>
-      <button
-        :if={Cases.can_merge_case?(@current_user, @case_record, @case_record.id, validate?: false)}
-        type="button"
-        phx-click="open_merge_picker"
-        class="block text-xs text-base-content/50 hover:text-base-content/70"
-      >
-        Merge into another case…
-      </button>
-      <details :if={Cases.can_reject_case?(@current_user, @case_record, validate?: true)}>
-        <summary class="cursor-pointer text-xs text-base-content/50 hover:text-base-content/70">
-          Reject case
-        </summary>
-        <form
-          id="reject-case-form"
-          phx-submit="reject_case"
-          class="mt-2 space-y-2 rounded-lg border border-base-300 bg-base-200 p-3"
-        >
-          <input
-            type="text"
-            name="closed_reason"
-            placeholder="Why does the CNA decline this case?"
-            class="input input-bordered input-sm w-full"
-          />
-          <button
-            type="submit"
-            class="btn btn-error btn-sm"
-            data-confirm="Reject this case? Its open invites are withdrawn."
-          >
-            Reject case
-          </button>
-        </form>
-      </details>
-    </div>
-    """
-  end
-
-  @doc "Renders the picker of the case to merge this one into."
-  attr :case_record, :map, required: true
-  attr :choices, :list, required: true
-
-  def merge_picker_modal(assigns) do
-    ~H"""
-    <.modal id="merge-picker" title="Merge into another case" on_cancel="cancel_merge_picker">
-      <p class="text-sm text-base-content/60 -mt-1 mb-4">
-        The other case then cites this case's reports and gives access to everyone on this case.
-        This case ends as merged.
-      </p>
-      <form id="merge-case-form" phx-submit="confirm_merge" class="space-y-3">
-        <select name="into_case_id" required class="w-full select select-bordered select-sm">
-          <option :for={choice <- @choices} value={choice.id}>
-            {[choice.cve_id, choice.title || "Untitled"] |> Enum.reject(&is_nil/1) |> Enum.join(" — ")}
-          </option>
-        </select>
-        <p :if={@choices == []} class="text-sm text-base-content/60">No open case to merge into.</p>
+    <.modal id="split-case-modal" title="Split off a finding" on_cancel="close_lifecycle_modal">
+      <form id="split-case-form" phx-submit="split_case" class="space-y-3">
+        <input
+          type="text"
+          name="title"
+          phx-mounted={JS.focus()}
+          required
+          placeholder="Title of the new case"
+          aria-label="Title of the new case"
+          class="input input-bordered input-sm w-full"
+        />
+        <p class="text-sm text-base-content/60">
+          The new case cites the same reports and gives the same people access.
+        </p>
         <div class="modal-action">
-          <button type="button" phx-click="cancel_merge_picker" class="btn btn-ghost btn-sm">
+          <button type="button" phx-click="close_lifecycle_modal" class="btn btn-ghost btn-sm">
             Cancel
           </button>
-          <button type="submit" class="btn btn-sm btn-eef" disabled={@choices == []}>Merge</button>
+          <button type="submit" class="btn btn-sm btn-eef">Split</button>
         </div>
       </form>
     </.modal>
     """
   end
 
-  @doc "Renders the collapsed close-case form."
-  attr :case_record, :map, required: true
-
-  def close_link(assigns) do
+  def lifecycle_modal(%{modal: :reject} = assigns) do
     ~H"""
-    <details>
-      <summary class="cursor-pointer text-xs text-base-content/50 hover:text-base-content/70">
-        Close case
-      </summary>
-      <div class="mt-2 rounded-lg border border-base-300 bg-base-200 p-3">
-        <form phx-submit="close_case" class="space-y-2">
-          <input
-            type="text"
-            name="closed_reason"
-            placeholder="Why is this case being closed?"
-            class="input input-bordered input-sm w-full"
-          />
-          <div :if={@case_record.cve_id && Map.get(@case_record, :upstream_cve)} class="text-sm">
-            <input type="hidden" name="cve_decision" value="release" />
-            <p>
-              {@case_record.cve_id} is an upstream CVE that another CNA owns. Closing unlinks it
-              unless this CNA's enrichment is already published.
-            </p>
-          </div>
-          <div
-            :if={@case_record.cve_id && !Map.get(@case_record, :upstream_cve)}
-            class="text-sm space-y-1"
-          >
-            <p class="font-semibold">{@case_record.cve_id} is assigned to this case:</p>
-            <label class="flex items-center gap-2">
-              <input type="radio" name="cve_decision" value="reject" class="radio radio-sm" required />
-              Reject (burn) the CVE ID at MITRE
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="radio" name="cve_decision" value="release" class="radio radio-sm" />
-              Return the ID to the pool
-            </label>
-          </div>
-          <button
-            type="submit"
-            class="btn btn-error btn-sm"
-            data-confirm="Close this case? This is terminal."
-          >
-            Close case
+    <.modal id="reject-case-modal" title="Reject case" on_cancel="close_lifecycle_modal">
+      <form id="reject-case-form" phx-submit="reject_case" class="space-y-3">
+        <input
+          type="text"
+          name="closed_reason"
+          phx-mounted={JS.focus()}
+          placeholder="Why does the CNA decline this case?"
+          aria-label="Reason"
+          class="input input-bordered input-sm w-full"
+        />
+        <p class="text-sm text-base-content/60">
+          Rejecting closes the case and withdraws its open invites.
+        </p>
+        <div class="modal-action">
+          <button type="button" phx-click="close_lifecycle_modal" class="btn btn-ghost btn-sm">
+            Cancel
           </button>
-        </form>
-      </div>
-    </details>
+          <button type="submit" class="btn btn-sm btn-error">Reject case</button>
+        </div>
+      </form>
+    </.modal>
     """
   end
 
-  @doc """
-  Renders the CVE ID picker for a case that has none.
+  def lifecycle_modal(%{modal: :close} = assigns) do
+    ~H"""
+    <.modal id="close-case-modal" title="Close case" on_cancel="close_lifecycle_modal">
+      <form id="close-case-form" phx-submit="close_case" class="space-y-3">
+        <input
+          type="text"
+          name="closed_reason"
+          phx-mounted={JS.focus()}
+          placeholder="Why is this case being closed?"
+          aria-label="Reason"
+          class="input input-bordered input-sm w-full"
+        />
+        <div :if={@case_record.cve_id && Map.get(@case_record, :upstream_cve)} class="text-sm">
+          <input type="hidden" name="cve_decision" value="release" />
+          <p>
+            {@case_record.cve_id} is an upstream CVE that another CNA owns. Closing unlinks it
+            unless this CNA's enrichment is already published.
+          </p>
+        </div>
+        <div
+          :if={@case_record.cve_id && !Map.get(@case_record, :upstream_cve)}
+          class="text-sm space-y-1"
+        >
+          <p class="font-semibold">{@case_record.cve_id} is assigned to this case:</p>
+          <label class="flex items-center gap-2">
+            <input type="radio" name="cve_decision" value="reject" class="radio radio-sm" required />
+            Reject (burn) the CVE ID at MITRE
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="radio" name="cve_decision" value="release" class="radio radio-sm" />
+            Return the ID to the pool
+          </label>
+        </div>
+        <p class="text-sm text-base-content/60">Closing is terminal.</p>
+        <div class="modal-action">
+          <button type="button" phx-click="close_lifecycle_modal" class="btn btn-ghost btn-sm">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-sm btn-error">Close case</button>
+        </div>
+      </form>
+    </.modal>
+    """
+  end
 
-  Two ways to take an ID, kept visibly apart: the top half is the one-click
-  default (whatever is next in the pool), the bottom half is the deliberate
-  pick. Nothing is assigned by opening this. Both halves need their own
-  button, so neither path can be taken by reflex.
+  def lifecycle_modal(%{modal: {:merge, search}} = assigns) do
+    assigns = assign(assigns, :search, search)
 
-  Only a caller who may name a record can see the pool (the reservations are
-  unreadable to anyone else), so for everyone else the listing is absent and
-  the top half says nothing about what is in it. An empty `records` there
-  means "not visible", not "not there".
-  """
+    ~H"""
+    <.modal id="merge-picker" title="Merge into another case" on_cancel="close_lifecycle_modal">
+      <p class="text-sm text-base-content/60 -mt-1 mb-4">
+        The other case then cites this case's reports and gives access to everyone on this case.
+        This case ends as merged.
+      </p>
+      <form
+        id="merge-case-form"
+        phx-change="search_merge_target"
+        phx-submit="confirm_merge"
+        class="space-y-3"
+      >
+        <.case_picker
+          id="merge-target-picker"
+          name="into_case_id"
+          query={@search.query}
+          cases={@search.cases}
+          selected={@search.selected}
+          more?={@search.more?}
+        />
+        <div class="modal-action">
+          <button type="button" phx-click="close_lifecycle_modal" class="btn btn-ghost btn-sm">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-sm btn-eef" disabled={@search.cases == []}>
+            Merge
+          </button>
+        </div>
+      </form>
+    </.modal>
+    """
+  end
+
+  def lifecycle_modal(%{modal: {:cve, records}} = assigns) do
+    assigns = assign(assigns, :records, records)
+
+    ~H"""
+    <.cve_picker_modal case_record={@case_record} current_user={@current_user} records={@records} />
+    """
+  end
+
+  # The CVE ID picker for a case that has none.
+  #
+  # Two ways to take an ID, kept visibly apart: the top half is the one-click
+  # default (whatever is next in the pool), the bottom half is the deliberate
+  # pick. Nothing is assigned by opening this. Both halves need their own
+  # button, so neither path can be taken by reflex.
+  #
+  # Only a caller who may name a record can see the pool (the reservations are
+  # unreadable to anyone else), so for everyone else the listing is absent and
+  # the top half says nothing about what is in it. An empty `records` there
+  # means "not visible", not "not there".
   attr :case_record, :map, required: true
   attr :current_user, :map, required: true
   attr :records, :list, required: true
 
-  def cve_picker_modal(assigns) do
+  defp cve_picker_modal(assigns) do
     {free, withheld} = Enum.split_with(assigns.records, &(&1.state == :reserved))
 
     can_choose? =
@@ -602,7 +610,7 @@ defmodule VarselWeb.CaseLifecycle do
       )
 
     ~H"""
-    <.modal id="cve-picker-modal" title="Assign a CVE ID" on_cancel="cancel_cve_picker">
+    <.modal id="cve-picker-modal" title="Assign a CVE ID" on_cancel="close_lifecycle_modal">
       <div class="space-y-4">
         <div class="rounded-lg border border-base-300 bg-base-200 p-3">
           <p class="text-sm font-semibold">Take the next free ID</p>
@@ -723,7 +731,7 @@ defmodule VarselWeb.CaseLifecycle do
       </div>
 
       <:actions>
-        <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_cve_picker">
+        <button type="button" class="btn btn-ghost btn-sm" phx-click="close_lifecycle_modal">
           Cancel
         </button>
       </:actions>

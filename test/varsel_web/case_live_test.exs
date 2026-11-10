@@ -1158,11 +1158,12 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
+      lv |> element("button[phx-value-modal=close]") |> render_click()
+
+      assert has_element?(lv, "#close-case-form")
       refute has_element?(lv, ~s(input[name="cve_decision"][value="reject"]))
 
-      lv
-      |> form(~s{form[phx-submit="close_case"]}, %{closed_reason: "Not affected"})
-      |> render_submit()
+      lv |> form("#close-case-form", %{closed_reason: "Not affected"}) |> render_submit()
 
       assert %{state: :closed, cve_record_id: nil} =
                Ash.get!(Cases.Case, case_record.id, authorize?: false)
@@ -1411,11 +1412,11 @@ defmodule VarselWeb.CaseLiveTest do
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :approved
 
       # A POC still edits an approved case directly, so suggesting stays off.
-      assert render(lv) =~ "Suggest: off"
+      assert has_element?(lv, "#suggest-toggle input:not([checked])")
 
       lv |> element("button", "Reopen") |> render_click()
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
-      assert render(lv) =~ "Suggest: off"
+      assert has_element?(lv, "#suggest-toggle input:not([checked])")
     end
 
     test "adds an affected package through the modal", %{conn: conn, poc: poc} do
@@ -3043,7 +3044,7 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
 
       # Suggesting is forced on the frozen case; nothing is being edited yet.
-      assert html =~ "Suggest: on"
+      assert has_element?(lv, "#suggest-toggle input[checked]")
       refute html =~ "case-content-form"
 
       html =
@@ -3073,14 +3074,46 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Better frozen title"
     end
 
+    test "the suggest toggle sits in the rail and, for small screens, above the content", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Toggle case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      refute has_element?(lv, "#suggest-toggle input[checked]")
+      refute has_element?(lv, "#suggest-toggle-mobile input[checked]")
+
+      lv |> element("#suggest-toggle-mobile input") |> render_click()
+
+      assert has_element?(lv, "#suggest-toggle input[checked]")
+      assert has_element?(lv, "#suggest-toggle-mobile input[checked]")
+    end
+
+    test "a frozen case locks the suggest toggle on", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Locked toggle"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+      case_record = Cases.request_case_review!(case_record, actor: poc)
+      Cases.approve_case!(case_record, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+
+      assert has_element?(lv, "#suggest-toggle input[checked][disabled]")
+    end
+
     test "a POC edits an approved case directly", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc, %{title: "Approved case"})
       case_record = Cases.request_case_review!(case_record, actor: poc)
       case_record = Cases.approve_case!(case_record, actor: poc)
 
-      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
-      assert html =~ "Suggest: off"
+      assert has_element?(lv, "#suggest-toggle input:not([checked])")
 
       lv
       |> element(~s{button[phx-click=edit_section][phx-value-section=summary]})
