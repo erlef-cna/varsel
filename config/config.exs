@@ -180,6 +180,7 @@ config :varsel, Oban,
   repo: Varsel.Repo,
   plugins: [
     {Oban.Plugins.Cron, []},
+    {Oban.Plugins.Pruner, max_age: div(to_timeout(day: 30), 1000)},
     # Rescue jobs orphaned in `executing` (e.g. after an OOM kill) — without
     # this they also block re-inserts of the unique @reboot sync jobs forever.
     {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 30)}
