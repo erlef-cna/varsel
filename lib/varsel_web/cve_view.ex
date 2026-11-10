@@ -1198,11 +1198,11 @@ defmodule VarselWeb.CveView do
   end
 
   # An image name alone is not an address — any registry could host a `gleam`.
-  # `repository_url` holds the rest, so the host names the ecosystem and its
-  # path joins the image, spelling out what you would actually pull.
-  defp display_parts(%Purl{type: "oci", namespace: [], name: name} = purl) do
+  # `repository_url` holds the rest: the host names the ecosystem and the path,
+  # which the purl spec ends in the image, is what you would actually pull.
+  defp display_parts(%Purl{type: "oci", namespace: []} = purl) do
     case purl |> repository() |> split_registry() do
-      {host, path} -> %{ecosystem: host, name: path <> "/" <> name}
+      {host, path} -> %{ecosystem: host, name: path}
       nil -> nil
     end
   end

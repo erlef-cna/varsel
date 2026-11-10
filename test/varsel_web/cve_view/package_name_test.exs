@@ -95,7 +95,7 @@ defmodule VarselWeb.CveView.PackageNameTest do
 
   describe "oci — the registry is part of the address" do
     test "the host names the ecosystem and its path joins the image" do
-      purl = "pkg:oci/gleam?repository_url=ghcr.io/gleam-lang"
+      purl = "pkg:oci/gleam?repository_url=ghcr.io/gleam-lang/gleam"
 
       assert name(purl) == "ghcr.io / gleam-lang/gleam"
     end

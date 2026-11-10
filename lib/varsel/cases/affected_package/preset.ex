@@ -117,7 +117,7 @@ defmodule Varsel.Cases.AffectedPackage.Preset do
       %{
         purl_type: "oci",
         name: "gleam",
-        qualifiers: %{"repository_url" => "ghcr.io/gleam-lang"},
+        qualifiers: %{"repository_url" => "ghcr.io/gleam-lang/gleam"},
         tag_prefix: "v",
         tag_suffixes: @gleam_tag_suffixes,
         position: 1

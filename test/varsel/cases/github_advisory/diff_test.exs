@@ -272,6 +272,36 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
            ]
   end
 
+  test "an oci entry matches the image channel by its repository_url" do
+    image = %PackageChannel{
+      purl_type: "oci",
+      name: "acme_lib",
+      qualifiers: %{"repository_url" => "ghcr.io/acme/acme_lib"}
+    }
+
+    packages = [
+      package_with("acme_lib", [
+        {hex("acme_lib"), [github_range(">= 1.0.0, < 1.2.3", ["1.2.3"])]},
+        {image, [github_range(">= 1.0.0, < 1.2.3", ["1.2.3"])]}
+      ])
+    ]
+
+    entry = %{
+      "package" => %{"ecosystem" => "oci", "name" => "ghcr.io/acme/acme_lib"},
+      "patched_versions" => "1.2.3",
+      "vulnerable_functions" => [],
+      "vulnerable_version_range" => ">=1.0.0,<1.2.3"
+    }
+
+    advisory = Map.update!(hex_advisory(), "vulnerabilities", &(&1 ++ [entry]))
+    rows = Diff.rows(case_record(%{affected_packages: packages}), advisory)
+
+    assert Enum.map(by_field(rows, :affected), &{&1.package, &1.status}) == [
+             {"erlang/acme_lib", :same},
+             {"oci/ghcr.io/acme/acme_lib", :same}
+           ]
+  end
+
   test "an application of a preset advisory matches the channel spelled as the preset spells it" do
     advisory =
       hex_advisory()

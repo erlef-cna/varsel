@@ -260,7 +260,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
       assert [software_id, oci, repository] = package.channels
       assert %{purl_type: "software-id", namespace: "gleam.run", name: "gleam"} = software_id
       assert %{purl_type: "oci", name: "gleam"} = oci
-      assert oci.qualifiers == %{"repository_url" => "ghcr.io/gleam-lang"}
+      assert oci.qualifiers == %{"repository_url" => "ghcr.io/gleam-lang/gleam"}
       assert "erlang" in oci.tag_suffixes and "scratch" in oci.tag_suffixes
 
       assert %{purl_type: "github", namespace: "gleam-lang", name: "gleam", version_type: :git} =

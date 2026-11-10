@@ -99,7 +99,7 @@ Detect the type from the first affected entry's `packageURL` and apply the match
 - [ ] Each entry has `programFiles`, `programRoutines`, `modules`.
 
 **Gleam compiler** (`pkg:software-id/gleam.run/gleam`):
-- [ ] First: `pkg:software-id/gleam.run/gleam`, `versionType: "semver"`. Second: `pkg:github/gleam-lang/gleam`, both `semver` and `git` blocks. Optional third: `pkg:oci/gleam?repository_url=ghcr.io/gleam-lang` with per-image `versionType: "other"` entries.
+- [ ] First: `pkg:software-id/gleam.run/gleam`, `versionType: "semver"`. Second: `pkg:github/gleam-lang/gleam`, both `semver` and `git` blocks. Optional third: `pkg:oci/gleam?repository_url=ghcr.io/gleam-lang/gleam` with per-image `versionType: "other"` entries.
 - [ ] Each entry has `programFiles`, `programRoutines`, `modules`.
 
 **Hex package** (`pkg:hex/<name>`):

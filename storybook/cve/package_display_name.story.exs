@@ -90,11 +90,11 @@ defmodule VarselWeb.Storybook.Cve.PackageDisplayName do
         id: :oci,
         description:
           "An image name alone is not an address — any registry could host a `gleam`. The host " <>
-            "names the ecosystem and its path joins the image, spelling out what you would pull.",
+            "names the ecosystem and its path, which ends in the image, is what you would pull.",
         variations: [
           %Variation{
             id: :ghcr,
-            attributes: %{purl: "pkg:oci/gleam?repository_url=ghcr.io/gleam-lang"}
+            attributes: %{purl: "pkg:oci/gleam?repository_url=ghcr.io/gleam-lang/gleam"}
           },
           %Variation{id: :no_registry, attributes: %{purl: "pkg:oci/redis"}}
         ]
