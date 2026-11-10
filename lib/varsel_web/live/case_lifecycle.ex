@@ -392,7 +392,7 @@ defmodule VarselWeb.CaseLifecycle do
   defp blocked_actions(actor, case_record) do
     if not Cases.can_request_case_review?(actor, case_record, validate?: true) and
          Cases.can_request_case_review?(actor, case_record) do
-      [request_review: "Needs a POC assigned first"]
+      [request_review: "Add a POC to the case first"]
     else
       []
     end

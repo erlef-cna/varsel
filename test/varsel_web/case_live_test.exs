@@ -1480,7 +1480,7 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
 
       assert has_element?(lv, "#request-review-blocked[disabled]")
-      assert has_element?(lv, "#request-review-blocked-reason", "Needs a POC assigned first")
+      assert has_element?(lv, "#request-review-blocked-reason", "Add a POC to the case first")
       refute has_element?(lv, "button[phx-value-action=request_review]")
 
       Cases.assign_case_user!(%{case_id: case_record.id, user_id: poc.id}, actor: poc)

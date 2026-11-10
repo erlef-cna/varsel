@@ -144,8 +144,8 @@ path from there to a published CVE.
 
    Take the next free CVE ID, then send the case to review. Review needs a
    Point of Contact assigned to the case, and only they are notified; until
-   one is, **Request review** stays disabled, so mention a Point of Contact
-   in the comments to ask for one. They send it back with findings, or
+   one is, **Request review** stays disabled. Add one with **Add someone** on
+   the case and their handle. They send it back with findings, or
    approve it and, once the advisory is public,
    [publishes](/guide/review-and-publication): Varsel pushes the record to
    MITRE, and the OSV feed and hex.pm advisories follow automatically.
