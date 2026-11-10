@@ -57,7 +57,8 @@ defmodule VarselWeb.CaseLifecycle do
       :comment_count,
       :unseen_comment_count,
       :upstream_cve,
-      :upstream_cve_reserved | Keyword.fetch!(opts, :load)
+      :upstream_cve_reserved,
+      :poc_assigned | Keyword.fetch!(opts, :load)
     ]
 
     after_fetch = Keyword.fetch!(opts, :after_fetch)
@@ -386,17 +387,18 @@ defmodule VarselWeb.CaseLifecycle do
     """
   end
 
-  # The policy says whether the actor may hand this case to review at all;
-  # the action's validation then refuses a case with no POC to review it,
-  # which the button explains rather than vanishing.
+  # The policy refuses review to a draft with no POC assigned, so the button
+  # stays in view, disabled, for whoever could add the POC it needs.
   defp blocked_actions(actor, case_record) do
-    if not Cases.can_request_case_review?(actor, case_record, validate?: true) and
-         Cases.can_request_case_review?(actor, case_record) do
+    if needs_poc?(case_record) and Ash.can?({case_record, :grant_access}, actor) do
       [request_review: "Add a POC to the case first"]
     else
       []
     end
   end
+
+  defp needs_poc?(%{state: :draft, poc_assigned: false}), do: true
+  defp needs_poc?(_case_record), do: false
 
   defp offered?(:accept, actor, case_record, _tab), do: Cases.can_accept_case?(actor, case_record, validate?: true)
 

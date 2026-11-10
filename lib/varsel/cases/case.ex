@@ -480,7 +480,6 @@ defmodule Varsel.Cases.Case do
     update :request_review do
       description "Marks a drafted case ready for review by the POCs assigned to it."
       accept []
-      validate Varsel.Cases.Validations.PocAssigned
       change transition_state(:review)
 
       emit Signals, :review_requested,
@@ -844,6 +843,12 @@ defmodule Varsel.Cases.Case do
                      ^actor(:role) == :supporter and
                        exists(assignments, user_id == ^actor(:id))
                    )
+    end
+
+    # Review is the assigned POCs' to give, and only they hear of the request,
+    # so a case with none of them assigned stays in :draft.
+    policy action(:request_review) do
+      authorize_if expr(poc_assigned)
     end
 
     # Content freeze: case content may change while the case is triaged and
@@ -1234,6 +1239,11 @@ defmodule Varsel.Cases.Case do
   end
 
   calculations do
+    calculate :poc_assigned, :boolean, expr(exists(assignments, user.role == :poc)) do
+      description "Whether a POC is assigned to the case."
+      public? true
+    end
+
     calculate :cve_id, :string, expr(cve_record.cve_id) do
       description "The assigned CVE ID, if any."
       public? true

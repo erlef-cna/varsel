@@ -137,8 +137,7 @@ defmodule Varsel.Notifications.FanOutTest do
 
       refute Cases.can_request_case_review?(requester, case_record, validate?: true)
 
-      assert {:error, %Ash.Error.Invalid{}} =
-               Cases.request_case_review(case_record, actor: requester)
+      assert {:error, %Forbidden{}} = Cases.request_case_review(case_record, actor: requester)
 
       refute_enqueued worker: Worker, args: %{"listener" => "notify_review_requested"}
 
