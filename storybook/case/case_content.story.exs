@@ -42,6 +42,14 @@ defmodule VarselWeb.Storybook.Case.CaseContent do
         }
       },
       %Variation{
+        id: :date_public,
+        description: "A case that names when the vulnerability became public.",
+        attributes: %{
+          description: "A path-existence oracle in the SFTP daemon.",
+          date_public: ~U[2026-11-10 17:41:33Z]
+        }
+      },
+      %Variation{
         id: :internal_notes,
         description: "Team-only notes, collapsed and marked as never reaching the record.",
         attributes: %{

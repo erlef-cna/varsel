@@ -1287,6 +1287,58 @@ defmodule VarselWeb.CaseLiveTest do
       assert render(lv) =~ "Renamed case"
     end
 
+    test "a date-public suggestion renders against the current date", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc)
+      Cases.edit_case!(case_record, %{date_public: ~U[2026-11-01 09:30:15Z]}, actor: poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      proposal =
+        Cases.propose_date_public!(
+          %{case_id: case_record.id, value: ~U[2026-11-10 17:41:33Z]},
+          actor: supporter
+        )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert lv |> element("#case-date-public time") |> render() =~ "2026-11-01 09:30:15 UTC"
+
+      card = lv |> element("#suggestion-#{proposal.id}") |> render()
+      assert card =~ "2026-11-01T09:30:15Z"
+      assert card =~ "2026-11-10T17:41:33Z"
+    end
+
+    test "the summary editor sets the date public and keeps its seconds", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      Cases.edit_case!(case_record, %{date_public: ~U[2026-11-01 09:30:15Z]}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+
+      assert lv |> element("#form_date_public[value='2026-11-01T09:30:15']") |> has_element?()
+
+      lv
+      |> form("#case-content-form", %{"form" => %{"title" => "Renamed"}})
+      |> render_submit()
+
+      assert render(lv) =~ "2026-11-01 09:30:15 UTC"
+
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).date_public ==
+               ~U[2026-11-01 09:30:15Z]
+
+      lv
+      |> element(~s{button[phx-click=edit_section][phx-value-section=summary]})
+      |> render_click()
+
+      lv
+      |> form("#case-content-form", %{"form" => %{"date_public" => "2026-11-05T12:00"}})
+      |> render_submit()
+
+      assert lv |> element("#case-date-public time") |> render() =~ "2026-11-05 12:00:00 UTC"
+    end
+
     test "markdown fields preview the rendered HTML and keep unsaved edits", %{
       conn: conn,
       poc: poc
@@ -3037,6 +3089,10 @@ defmodule VarselWeb.CaseLiveTest do
       supporter: supporter
     } do
       case_record = Fixtures.open_case(poc, %{title: "Frozen case"})
+
+      case_record =
+        Cases.edit_case!(case_record, %{date_public: ~U[2026-11-01 09:30:15Z]}, actor: poc)
+
       Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
       case_record = Cases.request_case_review!(case_record, actor: poc)
       case_record = Cases.approve_case!(case_record, actor: poc)
@@ -3059,7 +3115,8 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#case-content-form", %{"form" => %{"title" => "Better frozen title"}})
       |> render_submit(%{"reasoning" => "clearer title"})
 
-      # The case itself is untouched; the change became a proposal.
+      # The case itself is untouched; the change became a proposal. The
+      # untouched date public, rendered without its zone, proposes nothing.
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Frozen case"
 
       assert [proposal] = Cases.list_open_case_proposals!(case_record.id, actor: poc)

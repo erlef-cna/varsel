@@ -840,11 +840,21 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp format_proposal_value(value) when is_atom(value), do: to_string(value)
 
+  defp format_proposal_value(%module{} = value) when module in [DateTime, NaiveDateTime, Date, Time],
+    do: module.to_iso8601(value)
+
   defp format_proposal_value(%_{} = struct) do
     struct |> Map.from_struct() |> Map.delete(:__meta__) |> pretty_json()
   end
 
   defp format_proposal_value(value), do: pretty_json(value)
+
+  # `Phoenix.HTML.Form.normalize_value/2` drops the seconds of a
+  # datetime-local value, so a save of any other field would truncate them.
+  defp datetime_local_value(%DateTime{} = value),
+    do: value |> DateTime.to_naive() |> NaiveDateTime.truncate(:second) |> NaiveDateTime.to_iso8601()
+
+  defp datetime_local_value(value), do: value
 
   ## ------------------------------------------------------------------ render
 
@@ -1418,6 +1428,14 @@ defmodule VarselWeb.CaseDetailLive do
         >
           <:label>Discovery</:label>
         </.input>
+        <.input
+          field={@content_form[:date_public]}
+          type="datetime-local"
+          step="1"
+          value={datetime_local_value(@content_form[:date_public].value)}
+        >
+          <:label>Publicly disclosed (UTC, optional)</:label>
+        </.input>
         <.live_component
           module={VarselWeb.MarkdownInput}
           id="case-internal-notes"
@@ -1439,6 +1457,7 @@ defmodule VarselWeb.CaseDetailLive do
       <.case_content
         :if={!@content_form}
         description={@case_record.description_md}
+        date_public={@case_record.date_public}
         affected_summary={@case_record.affected_summary}
         configurations={@case_record.configurations_md}
         workarounds={@case_record.workarounds_md}

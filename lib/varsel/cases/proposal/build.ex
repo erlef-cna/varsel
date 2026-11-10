@@ -145,6 +145,13 @@ defmodule Varsel.Cases.Proposal.Build do
   empty input).
   """
   @spec changed_value?(current :: term(), param :: term()) :: boolean()
+  def changed_value?(%DateTime{} = current, param) when is_binary(param) do
+    case Ash.Type.cast_input(:utc_datetime, param, []) do
+      {:ok, %DateTime{} = cast} -> DateTime.compare(current, cast) != :eq
+      _other -> true
+    end
+  end
+
   def changed_value?(current, param), do: comparable(current) != comparable(param)
 
   # The id of the open :set proposal this change would counter, if any.
