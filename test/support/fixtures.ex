@@ -99,6 +99,24 @@ defmodule Varsel.Fixtures do
     Varsel.Cases.open_case!(Map.put_new(attrs, :title, "Test case"), actor: actor)
   end
 
+  @doc """
+  Hands a supporter's case to review with each of `pocs` assigned, so the
+  review request reaches exactly them. Each POC assigns themselves, which
+  raises no notification for them, so the review request is their only one.
+  """
+  def request_review_for(pocs) do
+    requester =
+      register_user("review_requester_#{System.unique_integer([:positive])}", :supporter)
+
+    case_record = open_case(requester)
+
+    for poc <- List.wrap(pocs) do
+      Varsel.Cases.assign_case_user!(%{case_id: case_record.id, user_id: poc.id}, actor: poc)
+    end
+
+    Varsel.Cases.request_case_review!(case_record, actor: requester)
+  end
+
   @doc "Adds an affected package with sensible defaults to a case."
   def add_affected_package(actor, case_record, attrs \\ %{}) do
     Varsel.Cases.add_affected_package!(

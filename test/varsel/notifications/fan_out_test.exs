@@ -111,15 +111,22 @@ defmodule Varsel.Notifications.FanOutTest do
       assert [] = notifications_for(requester, :review_requested)
     end
 
-    test "a POC who requests review on their own case is not notified" do
+    test "a review a POC requests notifies nobody, not even the other assigned POCs" do
       poc = Fixtures.register_user("fanout_review_self_poc", :poc)
+      fellow_poc = Fixtures.register_user("fanout_review_fellow_poc", :poc)
 
       case_record = Fixtures.open_case(poc)
+
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: fellow_poc.id},
+        actor: fellow_poc
+      )
+
       Cases.request_case_review!(case_record, actor: poc)
 
       drain()
 
-      assert [] = notifications_for(poc)
+      assert [] = notifications_for(poc, :review_requested)
+      assert [] = notifications_for(fellow_poc, :review_requested)
     end
 
     test "is refused while no POC is assigned, and notifies nobody" do
@@ -344,7 +351,6 @@ defmodule Varsel.Notifications.FanOutTest do
   describe "preferences" do
     test "in_app: false suppresses the notification" do
       poc = Fixtures.register_user("fanout_pref_inapp_poc", :poc)
-      other_poc = Fixtures.register_user("fanout_pref_inapp_other", :poc)
 
       Ash.update!(
         poc,
@@ -353,8 +359,7 @@ defmodule Varsel.Notifications.FanOutTest do
         actor: poc
       )
 
-      case_record = Fixtures.open_case(poc)
-      Cases.request_case_review!(case_record, actor: other_poc)
+      Fixtures.request_review_for(poc)
 
       drain()
 
@@ -363,7 +368,6 @@ defmodule Varsel.Notifications.FanOutTest do
 
     test "email: false still records the notification, with email_requested: false" do
       poc = Fixtures.register_user("fanout_pref_email_poc", :poc)
-      other_poc = Fixtures.register_user("fanout_pref_email_other", :poc)
 
       Ash.update!(
         poc,
@@ -372,8 +376,7 @@ defmodule Varsel.Notifications.FanOutTest do
         actor: poc
       )
 
-      case_record = Fixtures.open_case(poc)
-      Cases.request_case_review!(case_record, actor: other_poc)
+      Fixtures.request_review_for(poc)
 
       drain()
 
@@ -384,10 +387,8 @@ defmodule Varsel.Notifications.FanOutTest do
   describe "the fan-out job" do
     test "is enqueued with the source write and runs after it" do
       poc = Fixtures.register_user("fanout_enqueued_poc", :poc)
-      other_poc = Fixtures.register_user("fanout_enqueued_other", :poc)
 
-      case_record = Fixtures.open_case(poc)
-      Cases.request_case_review!(case_record, actor: other_poc)
+      Fixtures.request_review_for(poc)
 
       assert_enqueued worker: Worker,
                       queue: :default,

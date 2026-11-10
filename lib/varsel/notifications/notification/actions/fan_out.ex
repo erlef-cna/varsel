@@ -6,7 +6,8 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   @moduledoc """
   Records a `Varsel.Notifications.Notification` for every user in a signal's
   audience, honouring each recipient's per-kind preferences and excluding the
-  user who acted. A mention reaches only the mentioned who may read the case.
+  user who acted. A mention reaches only the mentioned who may read the case,
+  and a review a POC requested reaches nobody.
 
   Implements `Varsel.Notifications.Notification`'s `:fan_out` action, the
   listener of every signal that raises a notification. A failure raises, so
@@ -71,7 +72,19 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   defp event(%Cases.Signals.CaseAssigned{} = signal),
     do: %{kind: :case_assigned, case_id: signal.case_id, recipient_id: signal.user_id, actor_id: signal.actor_id}
 
-  defp recipients(event, opts) do
+  defp recipients(%{kind: :review_requested} = event, opts) do
+    if requested_by_poc?(event.actor_id, opts), do: [], else: audience(event, opts)
+  end
+
+  defp recipients(event, opts), do: audience(event, opts)
+
+  defp requested_by_poc?(nil, _opts), do: false
+
+  defp requested_by_poc?(actor_id, opts) do
+    match?({:ok, %User{role: :poc}}, Ash.get(User, actor_id, opts))
+  end
+
+  defp audience(event, opts) do
     case Kind.audience(event.kind) do
       :pocs ->
         User
