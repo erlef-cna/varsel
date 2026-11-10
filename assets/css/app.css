@@ -517,6 +517,14 @@
   box-shadow: inset 2px 0 0 var(--color-primary);
 }
 
+/* The notification group rail runs as a row below md, so its active bar
+   sits along the foot of the pill instead of its side. */
+@media (width < 48rem) {
+  .group-rail .rail-link.is-active {
+    box-shadow: inset 0 -2px 0 var(--color-primary);
+  }
+}
+
 /* [data-toc] scroll-spy (public/docs pages, marked by the plain-JS spy in
    app.js — these pages are controller-rendered, no phx hook runs): active
    entry gets the accent left-border + ink text treatment. */

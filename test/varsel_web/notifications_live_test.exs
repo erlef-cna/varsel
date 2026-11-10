@@ -11,6 +11,8 @@ defmodule VarselWeb.NotificationsLiveTest do
   alias Varsel.Cases
   alias Varsel.Fixtures
   alias Varsel.Notifications
+  alias Varsel.Notifications.Kind
+  alias VarselWeb.NotificationComponents
 
   defp log_in(conn, user) do
     conn
@@ -55,7 +57,7 @@ defmodule VarselWeb.NotificationsLiveTest do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
 
     assert has_element?(lv, "a[href='/cases/#{case_record.id}']", "Notified about this")
-    assert has_element?(lv, "*", "New comment")
+    assert has_element?(lv, "#notification-group-title", "Comments")
     assert has_element?(lv, "*", "2×")
     assert has_element?(lv, "a[href='/cases/#{case_record.id}']", "Open case →")
   end
@@ -131,6 +133,10 @@ defmodule VarselWeb.NotificationsLiveTest do
     assert has_element?(lv, "*", "Nothing unread")
     refute has_element?(lv, "#mark-all-read")
     assert has_element?(lv, "button[phx-value-row_id='#{first.id}']", "Mark unread")
+
+    lv |> element("#notification-group-proposal_opened") |> render_click()
+
+    render(lv)
     assert has_element?(lv, "button[phx-value-row_id='#{second.id}']", "Mark unread")
   end
 
@@ -144,6 +150,121 @@ defmodule VarselWeb.NotificationsLiveTest do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
 
     refute has_element?(lv, "#mark-all-read")
+  end
+
+  test "every kind has a group label and icon" do
+    for kind <- Kind.values() do
+      assert is_binary(NotificationComponents.group_label(kind))
+      assert "hero-" <> _ = NotificationComponents.group_icon(kind)
+    end
+  end
+
+  test "the rail lists only the kinds the user has, addressed-to-you first", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    record!(poc, case_record, :comment_posted)
+    record!(poc, case_record, :mentioned)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
+
+    rail = lv |> element("#notification-groups") |> render() |> LazyHTML.from_fragment()
+    ids = rail |> LazyHTML.query("a[id^=notification-group-]") |> LazyHTML.attribute("id")
+
+    assert ids == ["notification-group-mentioned", "notification-group-comment_posted"]
+  end
+
+  test "the open group defaults to the first kind with something unread", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    poc |> record!(case_record, :mentioned) |> Notifications.mark_notification_read!(actor: poc)
+    proposal = record!(poc, case_record, :proposal_opened)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
+
+    assert has_element?(lv, "#notification-group-proposal_opened[aria-current=page]")
+    assert has_element?(lv, "#notification-group-title", "Proposals")
+    assert has_element?(lv, "button[phx-value-row_id='#{proposal.id}']")
+  end
+
+  test "following a group link shows only that kind's notifications", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    comment = record!(poc, case_record, :comment_posted)
+    mention = record!(poc, case_record, :mentioned)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
+    assert has_element?(lv, "button[phx-value-row_id='#{mention.id}']")
+    refute has_element?(lv, "button[phx-value-row_id='#{comment.id}']")
+
+    lv |> element("#notification-group-comment_posted") |> render_click()
+
+    assert_patch(lv, ~p"/notifications?kind=comment_posted")
+    assert has_element?(lv, "#notification-group-comment_posted[aria-current=page]")
+    refute has_element?(lv, "button[phx-value-row_id='#{mention.id}']")
+    assert has_element?(lv, "button[phx-value-row_id='#{comment.id}']")
+  end
+
+  test "an unknown kind in the URL falls back to the default group", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    record!(poc, case_record, :comment_posted)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications?kind=not_a_kind")
+
+    assert has_element?(lv, "#notification-group-comment_posted[aria-current=page]")
+  end
+
+  test "a group named in the URL that the user has nothing in stays open and empty", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    record!(poc, case_record, :comment_posted)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications?kind=case_published")
+
+    assert has_element?(lv, "#notification-group-case_published[aria-current=page]")
+    assert has_element?(lv, "#notification-group", "Nothing here yet.")
+  end
+
+  test "a group's unread count updates when one of its rows is read", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    notification = record!(poc, case_record, :comment_posted)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
+    assert has_element?(lv, "#notification-group-comment_posted", "1 unread")
+
+    lv
+    |> element("button[phx-click=toggle_read][phx-value-row_id='#{notification.id}']")
+    |> render_click()
+
+    render(lv)
+    assert has_element?(lv, "#notification-group-comment_posted", "1 read")
+    assert has_element?(lv, "#notification-group", "1 read")
+  end
+
+  test "a group that fits on one page shows no pager footer", %{
+    conn: conn,
+    poc: poc,
+    case: case_record
+  } do
+    record!(poc, case_record)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
+
+    assert has_element?(lv, "#notification-group", "1 unread · 1 total")
+    refute has_element?(lv, "#notification-group", "1 notification")
   end
 
   test "toggling an unknown row flashes an error instead of crashing", %{conn: conn, poc: poc} do

@@ -29,6 +29,15 @@ defmodule VarselWeb.Storybook.Notifications.NotificationRow do
         }
       },
       %Variation{
+        id: :grouped,
+        description:
+          "In a list already grouped by kind (`show_kind?={false}`): the kind line drops, the group heading names it.",
+        attributes: %{
+          notification: row(read_at: nil, count: 1, kind: :comment_posted, case: case_record()),
+          show_kind?: false
+        }
+      },
+      %Variation{
         id: :absorbed_count,
         description: "Several unread events on the same subject absorb into one row: the ×N chip.",
         attributes: %{
