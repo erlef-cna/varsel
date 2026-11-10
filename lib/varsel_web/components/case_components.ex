@@ -153,24 +153,38 @@ defmodule VarselWeb.CaseComponents do
 
   The actions that move the case along sit in the bar. Splitting, merging,
   rejecting and closing sit under the `⋯` menu, and each opens a modal. The
-  caller decides which actions the actor may take.
+  caller decides which actions the actor may take, and which bar actions to
+  show disabled with the reason they are not open yet.
   """
   attr :actions, :list,
     required: true,
     doc: "the actions to offer: any of #{inspect(@inline_actions ++ @menu_actions)}"
+
+  attr :blocked, :list,
+    default: [],
+    doc: "bar actions to show disabled, as `{action, reason}` pairs"
 
   attr :publish_href, :string, default: nil, doc: "where `:publish` leads"
 
   def case_actions(assigns) do
     assigns =
       assign(assigns,
-        inline: Enum.filter(@inline_actions, &(&1 in assigns.actions)),
+        inline:
+          Enum.filter(
+            @inline_actions,
+            &(&1 in assigns.actions or Keyword.has_key?(assigns.blocked, &1))
+          ),
         menu: Enum.filter(@menu_actions, &(&1 in assigns.actions))
       )
 
     ~H"""
     <div class="flex flex-wrap items-center gap-2">
-      <.case_action :for={action <- @inline} action={action} publish_href={@publish_href} />
+      <.case_action
+        :for={action <- @inline}
+        action={action}
+        reason={@blocked[action]}
+        publish_href={@publish_href}
+      />
       <div :if={@menu != []} class="dropdown dropdown-end">
         <div tabindex="0" role="button" aria-label="More case actions" class="btn btn-sm btn-ghost">
           <.icon name="hero-ellipsis-horizontal-mini" class="size-5" />
@@ -196,7 +210,27 @@ defmodule VarselWeb.CaseComponents do
   end
 
   attr :action, :atom, required: true
+  attr :reason, :string, default: nil, doc: "why the action is not open yet"
   attr :publish_href, :string, default: nil
+
+  defp case_action(%{reason: reason} = assigns) when is_binary(reason) do
+    assigns = assign(assigns, :dom_id, String.replace("#{assigns.action}-blocked", "_", "-"))
+
+    ~H"""
+    <span class="inline-flex items-center gap-2">
+      <button
+        type="button"
+        id={@dom_id}
+        class={["btn btn-sm", action_class(@action)]}
+        disabled
+        aria-describedby={"#{@dom_id}-reason"}
+      >
+        {action_label(@action)}
+      </button>
+      <span id={"#{@dom_id}-reason"} class="text-xs text-base-content/60">{@reason}</span>
+    </span>
+    """
+  end
 
   defp case_action(%{action: :publish} = assigns) do
     ~H"""

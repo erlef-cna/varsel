@@ -182,7 +182,7 @@ defmodule Varsel.Notifications.EmailsTest do
         actor: poc
       )
 
-      case_record = Fixtures.open_case(other_poc)
+      case_record = Fixtures.open_case(poc)
       Cases.request_case_review!(case_record, actor: other_poc)
 
       drain()
@@ -200,7 +200,7 @@ defmodule Varsel.Notifications.EmailsTest do
         authorize?: false
       )
 
-      case_record = Fixtures.open_case(other_poc)
+      case_record = Fixtures.open_case(poc)
       Cases.request_case_review!(case_record, actor: other_poc)
 
       drain()
@@ -219,7 +219,7 @@ defmodule Varsel.Notifications.EmailsTest do
         actor: poc
       )
 
-      case_record = Fixtures.open_case(other_poc)
+      case_record = Fixtures.open_case(poc)
       Cases.request_case_review!(case_record, actor: other_poc)
 
       drain()
@@ -249,7 +249,7 @@ defmodule Varsel.Notifications.EmailsTest do
       sent_emails()
 
       Cases.post_case_comment!(%{case_id: case_one.id, body: "hi"}, actor: supporter)
-      Cases.request_case_review!(Fixtures.open_case(other_poc), actor: other_poc)
+      Cases.request_case_review!(Fixtures.open_case(poc), actor: other_poc)
 
       drain()
 
@@ -276,7 +276,7 @@ defmodule Varsel.Notifications.EmailsTest do
         actor: poc
       )
 
-      read_case = Fixtures.open_case(other_poc)
+      read_case = Fixtures.open_case(poc)
       Cases.request_case_review!(read_case, actor: other_poc)
       drain()
 
@@ -312,7 +312,7 @@ defmodule Varsel.Notifications.EmailsTest do
       poc = Fixtures.register_user("emails_switch_to_digest_poc", :poc)
       other_poc = Fixtures.register_user("emails_switch_to_digest_other", :poc)
 
-      case_record = Fixtures.open_case(other_poc)
+      case_record = Fixtures.open_case(poc)
       Cases.request_case_review!(case_record, actor: other_poc)
 
       # Run only the two fan-out jobs queued so far (the opener's own
@@ -360,7 +360,12 @@ defmodule Varsel.Notifications.EmailsTest do
         actor: digest_poc
       )
 
-      case_record = Fixtures.open_case(other_poc)
+      case_record = Fixtures.open_case(immediate_poc)
+
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: digest_poc.id},
+        actor: other_poc
+      )
+
       Cases.request_case_review!(case_record, actor: other_poc)
 
       perform_job(Varsel.Notifications.Notification.EmailScheduler, %{})
@@ -375,7 +380,8 @@ defmodule Varsel.Notifications.EmailsTest do
       refute "emails_scheduler_digest_poc@example.com" in recipients
 
       assert [%Notification{emailed_at: %DateTime{}}] = notifications_for(immediate_poc)
-      assert [%Notification{emailed_at: nil}] = notifications_for(digest_poc)
+      assert [_ | _] = digest_rows = notifications_for(digest_poc)
+      assert Enum.all?(digest_rows, &is_nil(&1.emailed_at))
     end
   end
 

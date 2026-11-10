@@ -36,8 +36,11 @@ case, which their own board shows.
 
 ## Review
 
-Cases arrive in review when a supporter considers them ready; the
-[Cases](/cases) board shows the whole pipeline.
+Cases arrive in review when a supporter considers them ready. A case goes
+to review only with a Point of Contact assigned to it, and the request
+notifies the Points of Contact assigned, not every one, so assign yourself
+to a supporter's case you mean to review. The [Cases](/cases) board shows
+the whole pipeline.
 
 ![Cases board with a case in the draft lane and one in review](/images/guide/case-board.png)
 

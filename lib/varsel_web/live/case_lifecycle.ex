@@ -372,15 +372,30 @@ defmodule VarselWeb.CaseLifecycle do
     %{case_record: case_record, current_user: actor, active_tab: active_tab} = assigns
 
     assigns =
-      assign(
-        assigns,
-        :actions,
-        Enum.filter(@actions, &offered?(&1, actor, case_record, active_tab))
+      assign(assigns,
+        actions: Enum.filter(@actions, &offered?(&1, actor, case_record, active_tab)),
+        blocked: blocked_actions(actor, case_record)
       )
 
     ~H"""
-    <.case_actions actions={@actions} publish_href={~p"/cases/#{@case_record.id}/publication"} />
+    <.case_actions
+      actions={@actions}
+      blocked={@blocked}
+      publish_href={~p"/cases/#{@case_record.id}/publication"}
+    />
     """
+  end
+
+  # The policy says whether the actor may hand this case to review at all;
+  # the action's validation then refuses a case with no POC to review it,
+  # which the button explains rather than vanishing.
+  defp blocked_actions(actor, case_record) do
+    if not Cases.can_request_case_review?(actor, case_record, validate?: true) and
+         Cases.can_request_case_review?(actor, case_record) do
+      [request_review: "Needs a POC assigned first"]
+    else
+      []
+    end
   end
 
   defp offered?(:accept, actor, case_record, _tab), do: Cases.can_accept_case?(actor, case_record, validate?: true)

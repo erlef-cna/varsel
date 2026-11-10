@@ -478,8 +478,9 @@ defmodule Varsel.Cases.Case do
     end
 
     update :request_review do
-      description "Marks a drafted case ready for POC review."
+      description "Marks a drafted case ready for review by the POCs assigned to it."
       accept []
+      validate Varsel.Cases.Validations.PocAssigned
       change transition_state(:review)
 
       emit Signals, :review_requested,

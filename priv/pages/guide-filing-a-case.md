@@ -142,11 +142,13 @@ path from there to a published CVE.
 
 6. **Take a CVE ID and hand it to review**
 
-   Take the next free CVE ID, then send the case to review. A Point of
-   Contact sends it back with findings, or approves it and, once the
-   advisory is public, [publishes](/guide/review-and-publication): Varsel
-   pushes the record to MITRE, and the OSV feed and hex.pm advisories follow
-   automatically.
+   Take the next free CVE ID, then send the case to review. Review needs a
+   Point of Contact assigned to the case, and only they are notified; until
+   one is, **Request review** stays disabled, so mention a Point of Contact
+   in the comments to ask for one. They send it back with findings, or
+   approve it and, once the advisory is public,
+   [publishes](/guide/review-and-publication): Varsel pushes the record to
+   MITRE, and the OSV feed and hex.pm advisories follow automatically.
 
    Is the vulnerability in code the package vendors from a project outside
    the CNA's [scope](/scope), such as a C library? Then the CNA responsible

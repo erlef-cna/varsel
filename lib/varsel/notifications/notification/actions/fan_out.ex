@@ -78,12 +78,11 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
         |> Ash.Query.filter(role == :poc)
         |> Ash.read!(opts)
 
+      :assigned_pocs ->
+        event |> assigned_users(opts) |> Enum.filter(&(&1.role == :poc))
+
       :assigned ->
-        CaseAssignment
-        |> Ash.Query.filter(case_id == ^event.case_id)
-        |> Ash.Query.load(:user)
-        |> Ash.read!(opts)
-        |> Enum.map(& &1.user)
+        assigned_users(event, opts)
 
       :recipient ->
         [Ash.get!(User, event.recipient_id, opts)]
@@ -101,6 +100,14 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
         |> Ash.Query.filter(id in ^event.recipient_ids and (role == :poc or id in ^assigned))
         |> Ash.read!(opts)
     end
+  end
+
+  defp assigned_users(event, opts) do
+    CaseAssignment
+    |> Ash.Query.filter(case_id == ^event.case_id)
+    |> Ash.Query.load(:user)
+    |> Ash.read!(opts)
+    |> Enum.map(& &1.user)
   end
 
   defp inputs(users, event) do

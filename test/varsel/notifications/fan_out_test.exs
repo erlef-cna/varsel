@@ -87,19 +87,57 @@ defmodule Varsel.Notifications.FanOutTest do
   end
 
   describe ":review_requested" do
-    test "notifies every POC, not the requester" do
-      poc_one = Fixtures.register_user("fanout_review_poc_one", :poc)
-      poc_two = Fixtures.register_user("fanout_review_poc_two", :poc)
+    test "notifies the POCs assigned to the case, not other POCs, supporters or the requester" do
+      assigned_poc = Fixtures.register_user("fanout_review_assigned_poc", :poc)
+      other_poc = Fixtures.register_user("fanout_review_other_poc", :poc)
+      requester = Fixtures.register_user("fanout_review_requester", :supporter)
+      fellow = Fixtures.register_user("fanout_review_fellow", :supporter)
 
-      case_record = Fixtures.open_case(poc_one)
-      Cases.request_case_review!(case_record, actor: poc_one)
+      case_record = Fixtures.open_case(requester)
+
+      for user <- [assigned_poc, fellow] do
+        Cases.assign_case_user!(%{case_id: case_record.id, user_id: user.id}, actor: assigned_poc)
+      end
+
+      Cases.request_case_review!(case_record, actor: requester)
 
       drain()
 
-      # poc_one opened (and is assigned to) the case and also requested
-      # review as its actor, so they get nothing for this event.
-      assert [] = notifications_for(poc_one)
-      assert [%Notification{kind: :review_requested}] = notifications_for(poc_two)
+      assert [%Notification{kind: :review_requested}] =
+               notifications_for(assigned_poc, :review_requested)
+
+      assert [] = notifications_for(other_poc, :review_requested)
+      assert [] = notifications_for(fellow, :review_requested)
+      assert [] = notifications_for(requester, :review_requested)
+    end
+
+    test "a POC who requests review on their own case is not notified" do
+      poc = Fixtures.register_user("fanout_review_self_poc", :poc)
+
+      case_record = Fixtures.open_case(poc)
+      Cases.request_case_review!(case_record, actor: poc)
+
+      drain()
+
+      assert [] = notifications_for(poc)
+    end
+
+    test "is refused while no POC is assigned, and notifies nobody" do
+      poc = Fixtures.register_user("fanout_review_unassigned_poc", :poc)
+      requester = Fixtures.register_user("fanout_review_lone_supporter", :supporter)
+
+      case_record = Fixtures.open_case(requester)
+
+      refute Cases.can_request_case_review?(requester, case_record, validate?: true)
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               Cases.request_case_review(case_record, actor: requester)
+
+      refute_enqueued worker: Worker, args: %{"listener" => "notify_review_requested"}
+
+      drain()
+
+      assert [] = notifications_for(poc, :review_requested)
     end
   end
 
@@ -315,7 +353,7 @@ defmodule Varsel.Notifications.FanOutTest do
         actor: poc
       )
 
-      case_record = Fixtures.open_case(other_poc)
+      case_record = Fixtures.open_case(poc)
       Cases.request_case_review!(case_record, actor: other_poc)
 
       drain()
@@ -334,7 +372,7 @@ defmodule Varsel.Notifications.FanOutTest do
         actor: poc
       )
 
-      case_record = Fixtures.open_case(other_poc)
+      case_record = Fixtures.open_case(poc)
       Cases.request_case_review!(case_record, actor: other_poc)
 
       drain()
@@ -348,7 +386,7 @@ defmodule Varsel.Notifications.FanOutTest do
       poc = Fixtures.register_user("fanout_enqueued_poc", :poc)
       other_poc = Fixtures.register_user("fanout_enqueued_other", :poc)
 
-      case_record = Fixtures.open_case(other_poc)
+      case_record = Fixtures.open_case(poc)
       Cases.request_case_review!(case_record, actor: other_poc)
 
       assert_enqueued worker: Worker,

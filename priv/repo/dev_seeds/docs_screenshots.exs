@@ -49,7 +49,7 @@ defmodule DevSeed.DocsScreenshots do
     collaborator = mock_user("none", nil)
 
     kase = seed_main_case(poc, supporter, collaborator)
-    review_case = seed_review_case(supporter)
+    review_case = seed_review_case(poc, supporter)
     seed_report(collaborator)
 
     # Contract with docs_screenshots_capture.mjs: where to find the case ids.
@@ -416,7 +416,7 @@ defmodule DevSeed.DocsScreenshots do
 
   # ── a second case, in review, so the board shows both lanes ──────────────
 
-  defp seed_review_case(supporter) do
+  defp seed_review_case(poc, supporter) do
     kase =
       Varsel.Cases.open_case!(
         %{
@@ -437,6 +437,7 @@ defmodule DevSeed.DocsScreenshots do
         actor: supporter
       )
 
+    Varsel.Cases.assign_case_user!(%{case_id: kase.id, user_id: poc.id}, actor: poc)
     Varsel.Cases.request_case_review!(kase, actor: supporter)
   end
 

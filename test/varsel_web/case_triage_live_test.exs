@@ -138,6 +138,7 @@ defmodule VarselWeb.CaseTriageLiveTest do
   } do
     supporter = Fixtures.register_user("case_triage_supporter", :supporter)
     Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+    Cases.assign_case_user!(%{case_id: case_record.id, user_id: poc.id}, actor: poc)
     Cases.accept_case!(case_record, actor: poc)
 
     {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")

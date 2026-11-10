@@ -540,11 +540,12 @@ defmodule VarselWeb.CaseLiveTest do
 
     test "review/approved cards without an assignee show the dashed needs-owner circle; draft doesn't",
          %{conn: conn, poc: poc} do
-      # Opening assigns the opener, so an ownerless case is made by unassigning.
+      # Opening assigns the opener, so an ownerless case is made by unassigning,
+      # and review needs an assigned POC, so that comes after the request.
       poc |> Fixtures.open_case(%{title: "Unassigned draft"}) |> unassign_everyone(poc)
       unassigned_review = Fixtures.open_case(poc, %{title: "Unassigned review"})
-      unassign_everyone(unassigned_review, poc)
       Cases.request_case_review!(unassigned_review, actor: poc)
+      unassign_everyone(unassigned_review, poc)
 
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
 
@@ -1469,6 +1470,27 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Reopen") |> render_click()
       assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
       assert has_element?(lv, "#suggest-toggle input:not([checked])")
+    end
+
+    test "a supporter's case with no POC assigned shows review disabled with the reason",
+         %{conn: conn, poc: poc} do
+      supporter = Fixtures.register_user("review_blocked_supporter", :supporter)
+      case_record = Fixtures.open_case(supporter)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+
+      assert has_element?(lv, "#request-review-blocked[disabled]")
+      assert has_element?(lv, "#request-review-blocked-reason", "Needs a POC assigned first")
+      refute has_element?(lv, "button[phx-value-action=request_review]")
+
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: poc.id}, actor: poc)
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+
+      refute has_element?(lv, "#request-review-blocked")
+      lv |> element("button[phx-value-action=request_review]") |> render_click()
+
+      render(lv)
+      assert has_element?(lv, "#flash-info", "Review requested.")
     end
 
     test "adds an affected package through the modal", %{conn: conn, poc: poc} do
