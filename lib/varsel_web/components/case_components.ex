@@ -1698,6 +1698,7 @@ defmodule VarselWeb.CaseComponents do
   `<details>`, since nothing here needs LiveView state.
   """
   attr :description, :string, default: nil
+  attr :date_public, DateTime, default: nil
   attr :affected_summary, :string, default: nil
   attr :configurations, :string, default: nil
   attr :workarounds, :string, default: nil
@@ -1711,6 +1712,13 @@ defmodule VarselWeb.CaseComponents do
     <div class="space-y-4">
       <.markdown :if={@description} content={@description} />
       <p :if={is_nil(@description)} class="text-base-content/60">No description yet.</p>
+
+      <p :if={@date_public} id="case-date-public" class="text-sm text-base-content/70">
+        <span class="font-semibold">Publicly disclosed</span>
+        <time datetime={DateTime.to_iso8601(@date_public)}>
+          {Calendar.strftime(@date_public, "%Y-%m-%d %H:%M:%S UTC")}
+        </time>
+      </p>
 
       <div :if={@affected_summary} class="rounded border border-base-300/70 bg-base-200/40 p-3">
         <p class="mb-1 text-[0.62rem] font-bold uppercase tracking-wide text-base-content/50">
