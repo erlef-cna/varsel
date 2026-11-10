@@ -119,6 +119,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attest SBOM
+        id: attest-image-sbom
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/${{ github.repository }}
@@ -128,11 +129,58 @@ jobs:
           push-to-registry: true
 
       - name: Attest build provenance
+        id: attest-image-provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+      - name: Attest SBOM file
+        id: attest-sbom-file
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: varsel.cdx.json
+
+      - name: Collect release assets
+        env:
+          IMAGE_SBOM_BUNDLE: ${{ steps.attest-image-sbom.outputs.bundle-path }}
+          IMAGE_PROVENANCE_BUNDLE: ${{ steps.attest-image-provenance.outputs.bundle-path }}
+          SBOM_FILE_BUNDLE: ${{ steps.attest-sbom-file.outputs.bundle-path }}
+        run: |
+          mkdir release-assets
+          cp varsel.cdx.json release-assets/
+          cp "${SBOM_FILE_BUNDLE}" release-assets/varsel.cdx.json.sigstore
+          jq -c . "${IMAGE_SBOM_BUNDLE}" "${IMAGE_PROVENANCE_BUNDLE}" \
+            > release-assets/varsel-image.sigstore.jsonl
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          path: release-assets/
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    if: github.ref_type == 'tag'
+    needs: container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: release-assets
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "${TAG}" --verify-tag --generate-notes --title "${TAG}" \
+            release-assets/*
 
   # main deploys to the `test` environment (varsel-test), v* tags to
   # `production` (varsel-prod); the environment key ties the run to GitHub
