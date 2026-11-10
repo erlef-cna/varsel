@@ -169,11 +169,10 @@ defmodule Varsel.CVE.CveRecord do
                         date_published: "cve_record_published(cve_json)",
                         year: "(reservation_json->>'cve_year')::integer",
                         search_vector: "search_vector",
-                        cwe_ids: "cve_record_cwe_ids(cve_json)",
                         capec_ids: "cve_record_capec_ids(cve_json)"
 
     # The migration generator cannot express GENERATED ALWAYS.
-    migration_ignore_attributes [:search_vector]
+    migration_ignore_attributes [:search_vector, :cwe_ids]
 
     custom_statements do
       # The indexes cover every container: the CNA's and each ADP's.
@@ -344,8 +343,15 @@ defmodule Varsel.CVE.CveRecord do
         down "DROP FUNCTION IF EXISTS cve_record_cwe_ids(jsonb)"
       end
 
-      statement :add_cwe_ids_index_v2 do
-        up "CREATE INDEX cve_records_cwe_ids ON cve_records USING GIN (cve_record_cwe_ids(cve_json))"
+      # A read-time call of cve_record_cwe_ids gets JIT-compiled once per row on
+      # PostgreSQL 17, at several milliseconds each.
+      statement :add_cwe_ids do
+        up "ALTER TABLE cve_records ADD COLUMN cwe_ids bigint[] GENERATED ALWAYS AS (cve_record_cwe_ids(cve_json)) STORED"
+        down "ALTER TABLE cve_records DROP COLUMN IF EXISTS cwe_ids"
+      end
+
+      statement :add_cwe_ids_index_v3 do
+        up "CREATE INDEX cve_records_cwe_ids ON cve_records USING GIN (cwe_ids)"
         down "DROP INDEX IF EXISTS cve_records_cwe_ids"
       end
 
@@ -1125,6 +1131,13 @@ defmodule Varsel.CVE.CveRecord do
       select_by_default? false
     end
 
+    attribute :cwe_ids, {:array, :integer} do
+      writable? false
+      public? true
+      generated? true
+      select_by_default? false
+    end
+
     attribute :reservation_json, :map do
       description "Raw MITRE reservation object. Present from the :reserved state onward."
       public? true
@@ -1330,26 +1343,19 @@ defmodule Varsel.CVE.CveRecord do
       end
     end
 
-    calculate :cwe_ids,
-              {:array, :integer},
-              expr(fragment("cve_record_cwe_ids(?)", cve_json)) do
-      public? true
-    end
-
     calculate :capec_ids,
               {:array, :integer},
               expr(fragment("cve_record_capec_ids(?)", cve_json)) do
       public? true
     end
 
-    # Renders against the exact indexed expression (cve_record_cwe_ids(cve_json))
-    # so the GIN index cve_records_cwe_ids matches via the @> containment operator.
+    # The @> containment operator lets the GIN index cve_records_cwe_ids match.
     calculate :has_cwe,
               :boolean,
               expr(
                 fragment(
-                  "cve_record_cwe_ids(?) @> ARRAY[?::bigint]",
-                  cve_json,
+                  "? @> ARRAY[?::bigint]",
+                  cwe_ids,
                   type(^arg(:cwe_id), :integer)
                 )
               ) do
@@ -1369,14 +1375,14 @@ defmodule Varsel.CVE.CveRecord do
               expr(
                 fragment(
                   """
-                  cve_record_cwe_ids(?) && (
+                  ? && (
                     SELECT coalesce(array_agg(c.descendant_cwe_id), ARRAY[]::bigint[])
                     FROM cwe_weakness_closure AS c
                     WHERE c.view_id = ?
                       AND ((?::bigint IS NULL AND c.parent_cwe_id IS NULL) OR c.parent_cwe_id = ?)
                   )
                   """,
-                  cve_json,
+                  cwe_ids,
                   type(^arg(:view_id), :integer),
                   type(^arg(:cwe_id), :integer),
                   type(^arg(:cwe_id), :integer)

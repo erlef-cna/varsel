@@ -45,7 +45,7 @@ defmodule Varsel.CVE.CveRecord.Actions.PublishedCweSubtreeCounts do
     |> join(
       :inner_lateral,
       [r],
-      cwe in fragment("SELECT unnest(cve_record_cwe_ids(?)) AS id", r.cve_json),
+      cwe in fragment("SELECT unnest(?) AS id", r.cwe_ids),
       on: true
     )
     |> join(
