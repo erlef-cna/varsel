@@ -18,7 +18,9 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
   Affected packages compare per distribution channel: the ranges the case
   **derived** for the channel, in GitHub's spelling from the derivation
   cache, against the ranges the advisory states. The advisory's entries are
-  paired with the channels by `Varsel.Cases.GitHubAdvisory.Channels`.
+  paired with the channels by `Varsel.Cases.GitHubAdvisory.Channels`. GitHub
+  states one range per entry, so all entries that name one channel make one
+  row.
 
   The case needs `Varsel.Cases.GitHubAdvisory.Export.load/0` loaded.
   """
@@ -212,17 +214,22 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
 
     matches =
       Enum.map(Import.vulnerabilities(advisory), fn vulnerability ->
-        {vulnerability, Enum.find(channels, &Channels.matches?(&1, vulnerability, preset))}
+        channel = Enum.find(channels, &Channels.matches?(&1, vulnerability, preset))
+        key = if channel, do: channel.id, else: {:unmatched, vulnerability.position}
+        {key, vulnerability, channel}
       end)
 
-    matched = for {_vulnerability, %{id: id}} <- matches, do: id
+    matched = for {_key, _vulnerability, %{id: id}} <- matches, do: id
+    grouped = Enum.group_by(matches, &elem(&1, 0), &Tuple.delete_at(&1, 0))
 
     theirs_rows =
-      for {vulnerability, channel} <- matches do
+      for key <- matches |> Enum.map(&elem(&1, 0)) |> Enum.uniq() do
+        [{first, channel} | _rest] = entries = grouped[key]
+
         affected_row(
-          package_label(vulnerability),
+          package_label(first),
           channel && channel.github_ranges,
-          vulnerability
+          Enum.map(entries, &elem(&1, 0))
         )
       end
 
@@ -234,12 +241,12 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
     theirs_rows ++ ours_only
   end
 
-  defp affected_row(package, nil, vulnerability) do
+  defp affected_row(package, nil, vulnerabilities) do
     %{
       field: :affected,
       package: package,
       ours: nil,
-      theirs: theirs_ranges(vulnerability),
+      theirs: theirs_ranges(vulnerabilities),
       status: :theirs_only
     }
   end
@@ -254,9 +261,9 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
     }
   end
 
-  defp affected_row(package, github_ranges, vulnerability) do
+  defp affected_row(package, github_ranges, vulnerabilities) do
     ours = ours_ranges(github_ranges)
-    theirs = theirs_ranges(vulnerability)
+    theirs = theirs_ranges(vulnerabilities)
 
     status =
       cond do
@@ -281,8 +288,11 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
     }
   end
 
-  defp theirs_ranges(%{vulnerable_version_range: range, patched_versions: patched}) do
-    %{ranges: List.wrap(range), patched: patched}
+  defp theirs_ranges(vulnerabilities) do
+    %{
+      ranges: Enum.flat_map(vulnerabilities, &List.wrap(&1.vulnerable_version_range)),
+      patched: vulnerabilities |> Enum.flat_map(& &1.patched_versions) |> Enum.uniq()
+    }
   end
 
   defp package_label(%{ecosystem: nil, name: name}), do: name

@@ -19,7 +19,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Channels do
   case-insensitively.
 
   An OCI image is named by its `repository_url` (`ghcr.io/gleam-lang/gleam`),
-  since its bare name does not tell registries apart.
+  since its bare name does not tell registries apart. Any other channel with a
+  purl namespace is named `namespace/name` (`gleam.run/gleam`).
 
   The case needs `Varsel.Cases.GitHubAdvisory.Export.load/0` loaded.
   """
@@ -93,6 +94,9 @@ defmodule Varsel.Cases.GitHubAdvisory.Channels do
 
   defp github_name(%{purl_type: "oci", qualifiers: %{"repository_url" => repository_url}}) when is_binary(repository_url),
     do: repository_url
+
+  defp github_name(%{namespace: namespace, name: name}) when is_binary(namespace) and is_binary(name),
+    do: "#{namespace}/#{name}"
 
   defp github_name(channel), do: channel.name
 

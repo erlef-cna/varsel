@@ -70,7 +70,8 @@ defmodule Varsel.Cases do
       The GitHub advisory a case is linked to and the diff of the case against
       it, one row per field with `ours`, `theirs` and a `status` of same,
       differs, ours_only, theirs_only or not_derived. Affected packages come
-      one row per advisory entry, named in `package`. A case without a link
+      one row per distribution channel, named in `package`. All advisory
+      entries that name one channel are in that row. A case without a link
       is not found.
       """
 
