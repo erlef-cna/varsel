@@ -145,6 +145,173 @@ defmodule VarselWeb.CaseComponents do
     """
   end
 
+  @inline_actions ~w(accept triage withdraw assign_cve_id request_review request_changes approve publish reopen)a
+  @menu_actions ~w(split merge reject close)a
+
+  @doc """
+  Renders the lifecycle actions offered on a case, in a fixed order.
+
+  The actions that move the case along sit in the bar. Splitting, merging,
+  rejecting and closing sit under the `⋯` menu, and each opens a modal. The
+  caller decides which actions the actor may take.
+  """
+  attr :actions, :list,
+    required: true,
+    doc: "the actions to offer: any of #{inspect(@inline_actions ++ @menu_actions)}"
+
+  attr :publish_href, :string, default: nil, doc: "where `:publish` leads"
+
+  def case_actions(assigns) do
+    assigns =
+      assign(assigns,
+        inline: Enum.filter(@inline_actions, &(&1 in assigns.actions)),
+        menu: Enum.filter(@menu_actions, &(&1 in assigns.actions))
+      )
+
+    ~H"""
+    <div class="flex flex-wrap items-center gap-2">
+      <.case_action :for={action <- @inline} action={action} publish_href={@publish_href} />
+      <div :if={@menu != []} class="dropdown dropdown-end">
+        <div tabindex="0" role="button" aria-label="More case actions" class="btn btn-sm btn-ghost">
+          <.icon name="hero-ellipsis-horizontal-mini" class="size-5" />
+        </div>
+        <ul
+          tabindex="0"
+          class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-56 p-2 z-50"
+        >
+          <li :for={action <- @menu}>
+            <button
+              type="button"
+              phx-click="open_lifecycle_modal"
+              phx-value-modal={action}
+              class={action in [:reject, :close] && "text-error"}
+            >
+              {menu_label(action)}
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+    """
+  end
+
+  attr :action, :atom, required: true
+  attr :publish_href, :string, default: nil
+
+  defp case_action(%{action: :publish} = assigns) do
+    ~H"""
+    <.link navigate={@publish_href} class="btn btn-sm btn-eef">Publish</.link>
+    """
+  end
+
+  defp case_action(%{action: :assign_cve_id} = assigns) do
+    ~H"""
+    <button
+      type="button"
+      class="btn btn-sm btn-eef-quiet"
+      phx-click="open_lifecycle_modal"
+      phx-value-modal="cve"
+    >
+      Assign CVE ID
+    </button>
+    """
+  end
+
+  defp case_action(assigns) do
+    ~H"""
+    <button
+      type="button"
+      class={["btn btn-sm", action_class(@action)]}
+      phx-click="lifecycle"
+      phx-value-action={@action}
+    >
+      {action_label(@action)}
+    </button>
+    """
+  end
+
+  defp action_class(action) when action in [:accept, :request_review, :approve], do: "btn-eef"
+  defp action_class(:withdraw), do: "btn-error"
+  defp action_class(:reopen), do: "btn-ghost"
+  defp action_class(_action), do: "btn-eef-quiet"
+
+  defp action_label(:accept), do: "Accept case"
+  defp action_label(:triage), do: "Under triage"
+  defp action_label(:withdraw), do: "Withdraw report"
+  defp action_label(:request_review), do: "Request review"
+  defp action_label(:request_changes), do: "Request changes"
+  defp action_label(:approve), do: "Approve"
+  defp action_label(:reopen), do: "Reopen"
+
+  defp menu_label(:split), do: "Split off a finding…"
+  defp menu_label(:merge), do: "Merge into another case…"
+  defp menu_label(:reject), do: "Reject case…"
+  defp menu_label(:close), do: "Close case…"
+
+  @doc """
+  Renders a search box over the cases it matched, one radio per case, for a
+  form that acts on the chosen one.
+
+  The caller owns the search: the box is named `query`, so the form's
+  `phx-change` receives each keystroke, and `cases` is what the caller found
+  for it. Callers must load `:cve_id`.
+  """
+  attr :id, :string, required: true
+  attr :name, :string, default: "case_id", doc: "the param the chosen id is submitted under"
+  attr :query, :string, required: true
+  attr :cases, :list, required: true, doc: "the cases the query matched"
+  attr :selected, :string, default: nil, doc: "the id of the chosen case, if any"
+  attr :more?, :boolean, default: false, doc: "whether more cases matched than are listed"
+  attr :placeholder, :string, default: "Search by title, CVE ID or package…"
+
+  def case_picker(assigns) do
+    ~H"""
+    <div id={@id} class="w-full space-y-2">
+      <label class="input input-sm input-bordered flex w-full items-center gap-2">
+        <.icon name="hero-magnifying-glass-mini" class="size-4 shrink-0 text-base-content/40" />
+        <input
+          type="search"
+          name="query"
+          value={@query}
+          placeholder={@placeholder}
+          autocomplete="off"
+          phx-debounce="200"
+          phx-mounted={JS.focus()}
+          class="min-w-0 grow bg-transparent focus:outline-none"
+        />
+      </label>
+      <p :if={@cases == []} class="px-1 text-xs text-base-content/60">No case matches.</p>
+      <ul
+        :if={@cases != []}
+        class="lane-card max-h-56 divide-y divide-base-300 overflow-y-auto rounded-md border border-base-300"
+      >
+        <li :for={case_record <- @cases}>
+          <label class="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm hover:bg-base-300/40 has-[:checked]:bg-base-300/60">
+            <input
+              type="radio"
+              name={@name}
+              value={case_record.id}
+              checked={case_record.id == @selected}
+              required
+              class="radio radio-xs"
+            />
+            <span class="min-w-0 flex-1 truncate">{case_record.title || "Untitled case"}</span>
+            <span class="badge badge-outline badge-xs shrink-0">
+              {Phoenix.Naming.humanize(case_record.state)}
+            </span>
+            <span :if={case_record.cve_id} class="shrink-0 font-mono text-xs text-base-content/60">
+              {case_record.cve_id}
+            </span>
+          </label>
+        </li>
+      </ul>
+      <p :if={@more?} class="px-1 text-xs text-base-content/60">
+        More cases match. Keep typing to narrow the list.
+      </p>
+    </div>
+    """
+  end
+
   @doc """
   Renders the case lifecycle as a stepper: done steps ✓, the current step
   filled, upcoming steps hollow. `:publishing` renders as the Published step
@@ -1107,6 +1274,51 @@ defmodule VarselWeb.CaseComponents do
     </span>
     """
   end
+
+  @doc """
+  Renders the switch between editing the case directly and routing edits
+  through suggestions, with a line saying what an edit does. On a frozen case
+  suggesting is all there is, so the switch is locked on.
+  """
+  attr :id, :string, required: true
+  attr :on?, :boolean, required: true
+  attr :forced?, :boolean, default: false, doc: "whether the case is frozen for the actor"
+  attr :class, :any, default: nil
+
+  def suggest_toggle(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      class={[
+        "rounded-[var(--radius-field)] border px-2.5 py-2",
+        if(@on?, do: "border-info/40 bg-info/5", else: "border-base-300"),
+        @class
+      ]}
+    >
+      <label class={[
+        "flex items-center justify-between gap-2",
+        if(@forced?, do: "cursor-not-allowed", else: "cursor-pointer")
+      ]}>
+        <span class={["whitespace-nowrap text-sm font-semibold", @on? && "text-info"]}>
+          Suggest edits
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          class="toggle toggle-xs toggle-info"
+          checked={@on?}
+          disabled={@forced?}
+          phx-click="toggle_suggest"
+        />
+      </label>
+      <p class="mt-0.5 text-xs text-base-content/60">{suggest_note(@on?, @forced?)}</p>
+    </div>
+    """
+  end
+
+  defp suggest_note(_on?, true), do: "The case is frozen, so edits become suggestions."
+  defp suggest_note(true, false), do: "Edits become suggestions."
+  defp suggest_note(false, false), do: "Edits apply directly."
 
   @doc """
   Renders the affected source files of a package, each path followed by the

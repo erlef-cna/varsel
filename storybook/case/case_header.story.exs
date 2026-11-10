@@ -120,7 +120,6 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
         slots: [
           """
           <:actions>
-            <button class="btn btn-sm btn-eef-quiet">Suggest: off</button>
             <button class="btn btn-sm btn-eef-quiet">Assign CVE ID</button>
             <button class="btn btn-sm btn-eef">Request review</button>
           </:actions>

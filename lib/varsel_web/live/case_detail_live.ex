@@ -864,35 +864,30 @@ defmodule VarselWeb.CaseDetailLive do
         active={:workspace}
       >
         <:actions>
-          <button
-            :if={@mode != :view and can_propose?(@case_record, @current_user)}
-            phx-click="toggle_suggest"
-            disabled={suggest_forced?(@case_record, @current_user)}
-            title={
-              if suggest_forced?(@case_record, @current_user),
-                do: "The case is frozen — edits become suggestions",
-                else: "Route your edits through suggestions instead of applying them"
-            }
-            class={[
-              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold",
-              if(@mode == :propose,
-                do: "border-info bg-info/15 text-info",
-                else: "border-info/40 text-info"
-              )
-            ]}
-          >
-            ✎ Suggest: {if @mode == :propose, do: "on", else: "off"}
-          </button>
-          <CaseLifecycle.lifecycle_buttons case_record={@case_record} current_user={@current_user} />
+          <CaseLifecycle.lifecycle_actions case_record={@case_record} current_user={@current_user} />
         </:actions>
       </.case_header>
 
       <.page_container width={:wide}>
         <:left width={:narrow} class="lg:sticky lg:top-24">
+          <.suggest_toggle
+            :if={@mode != :view and can_propose?(@case_record, @current_user)}
+            id="suggest-toggle"
+            on?={@mode == :propose}
+            forced?={suggest_forced?(@case_record, @current_user)}
+            class="mb-4"
+          />
           <.section_nav sections={workspace_sections(@display_case, @case_record.proposals)} />
         </:left>
 
         <div class="space-y-8 min-w-0">
+          <.suggest_toggle
+            :if={@mode != :view and can_propose?(@case_record, @current_user)}
+            id="suggest-toggle-mobile"
+            on?={@mode == :propose}
+            forced?={suggest_forced?(@case_record, @current_user)}
+            class="lg:hidden"
+          />
           <div id="summary">
             <.content_section
               case_record={@display_case}
@@ -1107,11 +1102,6 @@ defmodule VarselWeb.CaseDetailLive do
             <.activity_feed entries={activity_entries(@case_record)} />
           </.panel>
           <.assignments_section case_record={@case_record} current_user={@current_user} />
-          <CaseLifecycle.triage_panel case_record={@case_record} current_user={@current_user} />
-          <CaseLifecycle.close_link
-            :if={Cases.can_close_case?(@current_user, @case_record, validate?: true)}
-            case_record={@case_record}
-          />
         </:right>
 
         <.child_modal
@@ -1131,17 +1121,10 @@ defmodule VarselWeb.CaseDetailLive do
         credit_form={@credit_picker.form}
       />
 
-      <CaseLifecycle.merge_picker_modal
-        :if={@merge_picker}
-        case_record={@case_record}
-        choices={@merge_picker}
-      />
-
-      <CaseLifecycle.cve_picker_modal
-        :if={@cve_picker}
+      <CaseLifecycle.lifecycle_modal
         case_record={@case_record}
         current_user={@current_user}
-        records={@cve_picker}
+        modal={@lifecycle_modal}
       />
     </Layouts.app>
     """
