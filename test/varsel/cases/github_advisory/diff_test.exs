@@ -302,6 +302,58 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
            ]
   end
 
+  test "the entries that name one channel compare as one row" do
+    packages = [
+      package_with("acme_lib", [
+        {hex("acme_lib"),
+         [
+           github_range(">= 1.0.0, < 1.2.3", ["1.2.3"]),
+           github_range(">= 2.0.0, < 2.0.4", ["2.0.4"])
+         ]}
+      ])
+    ]
+
+    entry = %{
+      "package" => %{"ecosystem" => "erlang", "name" => "acme_lib"},
+      "patched_versions" => "2.0.4",
+      "vulnerable_version_range" => ">= 2.0.0, < 2.0.4"
+    }
+
+    advisory = Map.update!(hex_advisory(), "vulnerabilities", &(&1 ++ [entry]))
+    rows = Diff.rows(case_record(%{affected_packages: packages}), advisory)
+
+    assert [
+             %{
+               package: "erlang/acme_lib",
+               status: :same,
+               theirs: %{
+                 ranges: [">= 1.0.0, < 1.2.3", ">= 2.0.0, < 2.0.4"],
+                 patched: ["1.2.3", "2.0.4"]
+               }
+             }
+           ] = by_field(rows, :affected)
+  end
+
+  test "a channel with a purl namespace matches the entry named namespace/name" do
+    gleam = %PackageChannel{purl_type: "software-id", namespace: "gleam.run", name: "gleam"}
+    packages = [package_with("gleam", [{gleam, [github_range(">= 1.0.0, < 1.2.3", ["1.2.3"])]}])]
+
+    advisory =
+      Map.put(hex_advisory(), "vulnerabilities", [
+        %{
+          "package" => %{"ecosystem" => "software-id", "name" => "gleam.run/gleam"},
+          "vulnerable_version_range" => ">= 1.0.0, < 1.2.3",
+          "patched_versions" => "1.2.3"
+        }
+      ])
+
+    rows = Diff.rows(case_record(%{affected_packages: packages}), advisory)
+
+    assert Enum.map(by_field(rows, :affected), &{&1.package, &1.status}) == [
+             {"software-id/gleam.run/gleam", :same}
+           ]
+  end
+
   test "an application of a preset advisory matches the channel spelled as the preset spells it" do
     advisory =
       hex_advisory()

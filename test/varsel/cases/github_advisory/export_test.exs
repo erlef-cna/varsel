@@ -224,6 +224,20 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
     assert package == %{"ecosystem" => "other", "name" => "ghcr.io/acme/acme_lib"}
   end
 
+  test "a channel with a purl namespace is named namespace/name" do
+    packages = [
+      package("gleam", [
+        {%PackageChannel{purl_type: "software-id", namespace: "gleam.run", name: "gleam"},
+         [github_range("< 1.2.3", ["1.2.3"])]}
+      ])
+    ]
+
+    assert %{body: %{"vulnerabilities" => [%{"package" => package}]}} =
+             Export.body(case_record(%{affected_packages: packages}), [:affected])
+
+    assert package == %{"ecosystem" => "other", "name" => "gleam.run/gleam"}
+  end
+
   test "affected packages replace the advisory's entry for a derived channel and keep every other entry" do
     matched = %{
       "package" => %{"ecosystem" => "erlang", "name" => "ACME_LIB"},

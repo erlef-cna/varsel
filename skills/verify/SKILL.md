@@ -116,7 +116,7 @@ mcp__varsel__refresh_github_advisory_link(case_id: <case-id>)
 mcp__varsel__get_case_github_advisory(case_id: <case-id>)
 ```
 
-`diff` holds one row per field (`title`, `description`, `cve_id`, `cvss_v4`, `weaknesses`, `credits`, then one `affected` row per advisory entry, named in `package`) with `ours`, `theirs` and a `status`: `same`, `differs`, `ours_only`, `theirs_only`, or `not_derived` for a channel the case has but derived no range for. `get_case_github_advisory` finds nothing for an unlinked case; then find the GHSA URL in references (first `vendor-advisory`) and re-fetch it:
+`diff` holds one row per field (`title`, `description`, `cve_id`, `cvss_v4`, `weaknesses`, `credits`, then one `affected` row per distribution channel, named in `package`, holding every advisory entry that names it) with `ours`, `theirs` and a `status`: `same`, `differs`, `ours_only`, `theirs_only`, or `not_derived` for a channel the case has but derived no range for. `get_case_github_advisory` finds nothing for an unlinked case; then find the GHSA URL in references (first `vendor-advisory`) and re-fetch it:
 
 ```bash
 gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
