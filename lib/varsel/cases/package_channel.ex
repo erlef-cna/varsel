@@ -238,7 +238,7 @@ defmodule Varsel.Cases.PackageChannel do
     attribute :qualifiers, :map do
       description """
       Purl qualifiers rendered into the packageURL, e.g.
-      %{"repository_url" => "ghcr.io/gleam-lang"} for oci, or vcs_url on the
+      %{"repository_url" => "ghcr.io/gleam-lang/gleam"} for oci, or vcs_url on the
       repository channel of a forge with no purl type of its own.
       """
 
@@ -344,7 +344,7 @@ defmodule Varsel.Cases.PackageChannel do
       description """
       The composed Package URL of this channel, e.g.
       "pkg:hex/ash_authentication_phoenix" or
-      "pkg:oci/gleam?repository_url=ghcr.io/gleam-lang". Nil for :service
+      "pkg:oci/gleam?repository_url=ghcr.io/gleam-lang/gleam". Nil for :service
       channels, which have a domain rather than a purl.
       """
 

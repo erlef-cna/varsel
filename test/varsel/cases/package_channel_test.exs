@@ -42,7 +42,7 @@ defmodule Varsel.Cases.PackageChannelTest do
           purl_type: "oci",
           namespace: "gleam.run",
           name: "gleam",
-          qualifiers: %{"repository_url" => "ghcr.io/gleam-lang"}
+          qualifiers: %{"repository_url" => "ghcr.io/gleam-lang/gleam"}
         })
 
       purl = Ash.load!(channel, :purl, authorize?: false).purl

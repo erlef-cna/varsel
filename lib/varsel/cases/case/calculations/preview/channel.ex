@@ -115,12 +115,13 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Channel do
   defp service_url(%{domain: nil}), do: nil
   defp service_url(%{domain: domain}), do: "https://#{domain}"
 
-  # The published packageName per ecosystem: oci includes the registry path
-  # ("gleam-lang/gleam"), namespaced ecosystems join namespace/name, and
-  # everything else publishes the bare name.
+  # The published packageName per ecosystem: oci publishes the repository path
+  # beneath the registry host ("gleam-lang/gleam"), namespaced ecosystems join
+  # namespace/name, and everything else publishes the bare name. The purl
+  # spec's oci repository_url ends in the image, so the path already names it.
   defp package_name(%{purl_type: "oci"} = channel) do
     case channel |> oci_repository_url() |> String.split("/", parts: 2) do
-      [_host, path] -> "#{path}/#{channel.name}"
+      [_host, path] -> path
       [_host] -> channel.name
     end
   end

@@ -69,7 +69,7 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
     end
 
     attribute :qualifiers, :map do
-      description ~S(Purl qualifiers rendered into the packageURL, e.g. %{"repository_url" => "ghcr.io/gleam-lang"} for oci.)
+      description ~S(Purl qualifiers rendered into the packageURL, e.g. %{"repository_url" => "ghcr.io/gleam-lang/gleam"} for oci.)
       allow_nil? false
       default %{}
       public? true

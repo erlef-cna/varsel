@@ -996,6 +996,36 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
       assert entry["repo"] == "https://git.sr.ht/~acme/acme_lib"
     end
 
+    test "an oci entry names the repository path, which ends in the image", %{
+      poc: poc,
+      forge_case: case_record
+    } do
+      package =
+        Fixtures.add_affected_package(poc, case_record, %{vendor: "acme", product: "acme_lib"})
+
+      Cases.add_package_channel!(
+        %{
+          case_id: case_record.id,
+          affected_package_id: package.id,
+          purl_type: "oci",
+          name: "acme_lib",
+          qualifiers: %{"repository_url" => "ghcr.io/acme/acme_lib"}
+        },
+        actor: poc
+      )
+
+      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+
+      entry =
+        Enum.find(
+          cna(render!(case_record, poc))["affected"],
+          &(&1["collectionURL"] == "https://ghcr.io")
+        )
+
+      assert entry["packageName"] == "acme/acme_lib"
+      assert entry["packageURL"] == "pkg:oci/acme_lib?repository_url=ghcr.io%2Facme%2Facme_lib"
+    end
+
     defp commit_reference(poc, case_record, repo_url, sha) do
       package =
         Fixtures.add_affected_package(poc, case_record, %{

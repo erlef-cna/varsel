@@ -230,7 +230,7 @@ defmodule VarselWeb.CaseFormComponents do
           type="text"
           name="child[qualifiers]"
           value={qualifiers_value(@form[:qualifiers])}
-          placeholder="repository_url=ghcr.io/owner"
+          placeholder="repository_url=ghcr.io/owner/image"
         >
           <:label>Qualifiers (key=value, comma separated)</:label>
           <:description>

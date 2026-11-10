@@ -810,7 +810,7 @@ defmodule Varsel.Cases.DerivationTest do
           {:oci,
            %{
              name: "acme_lib",
-             qualifiers: %{"repository_url" => "ghcr.io/acme"},
+             qualifiers: %{"repository_url" => "ghcr.io/acme/acme_lib"},
              tag_prefix: "v",
              tag_suffixes: ["elixir", "erlang"]
            }}

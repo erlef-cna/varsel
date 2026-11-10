@@ -51,7 +51,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
       affected_packages: [
         :product,
         :derivation_cache,
-        channels: [:purl_type, :name, :kind, :domain]
+        channels: [:purl_type, :name, :kind, :domain, :qualifiers]
       ]
     ]
   end
@@ -185,7 +185,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
       %{
         "package" => %{
           "ecosystem" => ecosystem(channel),
-          "name" => channel.name || channel.product
+          "name" => channel.github_name || channel.product
         },
         "vulnerable_version_range" => range["vulnerable_version_range"],
         "patched_versions" => Enum.join(range["patched_versions"] || [], ", ")

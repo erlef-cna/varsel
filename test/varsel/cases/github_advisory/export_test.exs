@@ -207,6 +207,23 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
            ]
   end
 
+  test "an oci image is named by its repository_url" do
+    packages = [
+      package("acme_lib", [
+        {%PackageChannel{
+           purl_type: "oci",
+           name: "acme_lib",
+           qualifiers: %{"repository_url" => "ghcr.io/acme/acme_lib"}
+         }, [github_range("< 1.2.3", ["1.2.3"])]}
+      ])
+    ]
+
+    assert %{body: %{"vulnerabilities" => [%{"package" => package}]}} =
+             Export.body(case_record(%{affected_packages: packages}), [:affected])
+
+    assert package == %{"ecosystem" => "other", "name" => "ghcr.io/acme/acme_lib"}
+  end
+
   test "affected packages replace the advisory's entry for a derived channel and keep every other entry" do
     matched = %{
       "package" => %{"ecosystem" => "erlang", "name" => "ACME_LIB"},

@@ -18,6 +18,9 @@ defmodule Varsel.Cases.GitHubAdvisory.Channels do
   matches a channel or a product that carries the name. Names compare
   case-insensitively.
 
+  An OCI image is named by its `repository_url` (`ghcr.io/gleam-lang/gleam`),
+  since its bare name does not tell registries apart.
+
   The case needs `Varsel.Cases.GitHubAdvisory.Export.load/0` loaded.
   """
 
@@ -26,14 +29,15 @@ defmodule Varsel.Cases.GitHubAdvisory.Channels do
   alias Varsel.Cases.GitHubAdvisory.Import
 
   @typedoc """
-  One channel of the case: its identity, the product of its package, a
-  display label and the derived ranges as
+  One channel of the case: its identity, the name an advisory gives it, the
+  product of its package, a display label and the derived ranges as
   `Varsel.Cases.Derivation.Emit.github/3` cached them.
   """
   @type t :: %{
           id: String.t(),
           purl_type: String.t() | nil,
           name: String.t() | nil,
+          github_name: String.t() | nil,
           product: String.t() | nil,
           label: String.t(),
           github_ranges: [map()]
@@ -50,6 +54,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Channels do
         id: channel.id,
         purl_type: channel.purl_type,
         name: channel.name,
+        github_name: github_name(channel),
         product: package.product,
         label: label(channel),
         github_ranges: cached
@@ -74,8 +79,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Channels do
 
   def matches?(_channel, %{ecosystem: "otp"}, _preset), do: false
 
-  def matches?(%{name: name, product: product}, %{name: theirs}, _preset) do
-    same_name?(name, theirs) or same_name?(product, theirs)
+  def matches?(%{name: name, github_name: github_name, product: product}, %{name: theirs}, _preset) do
+    same_name?(github_name, theirs) or same_name?(name, theirs) or same_name?(product, theirs)
   end
 
   @doc "Whether two names are the same, case-insensitively. False when either is missing."
@@ -85,6 +90,11 @@ defmodule Varsel.Cases.GitHubAdvisory.Channels do
   end
 
   def same_name?(_name, _theirs), do: false
+
+  defp github_name(%{purl_type: "oci", qualifiers: %{"repository_url" => repository_url}}) when is_binary(repository_url),
+    do: repository_url
+
+  defp github_name(channel), do: channel.name
 
   defp label(%{kind: :service, domain: domain}), do: domain || "service"
 
