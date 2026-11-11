@@ -38,19 +38,34 @@ defmodule VarselWeb.CaseTriageLiveTest do
   end
 
   describe "the board" do
-    test "shows a POC the reported case in the submitted lane", %{
+    test "shows a POC the reported case in the submitted column", %{
       conn: conn,
       poc: poc,
       case: case_record
     } do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
 
-      assert has_element?(lv, ~s(#lane-submitted a[href="/cases/#{case_record.id}"]))
+      assert has_element?(lv, ~s([data-column=submitted] a[href="/cases/#{case_record.id}"]))
 
       Cases.triage_case!(case_record, actor: poc)
 
-      assert has_element?(lv, ~s(#lane-triage a[href="/cases/#{case_record.id}"]))
-      refute has_element?(lv, ~s(#lane-submitted a[href="/cases/#{case_record.id}"]))
+      assert has_element?(lv, ~s([data-column=triage] a[href="/cases/#{case_record.id}"]))
+      refute has_element?(lv, ~s([data-column=submitted] a[href="/cases/#{case_record.id}"]))
+    end
+
+    test "a submitted case can be dragged to triage or straight to draft", %{
+      conn: conn,
+      poc: poc,
+      case: case_record
+    } do
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      render_hook(lv, "move_targets", %{"id" => case_record.id})
+      assert_reply lv, %{targets: targets}
+      assert Enum.sort(targets) == [:draft, :triage]
+
+      render_hook(lv, "move_case", %{"id" => case_record.id, "to" => "triage"})
+      assert has_element?(lv, ~s([data-column=triage] a[href="/cases/#{case_record.id}"]))
     end
 
     test "shows the reporter their own case and nobody else's", %{
@@ -73,7 +88,7 @@ defmodule VarselWeb.CaseTriageLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(reporter) |> live(~p"/cases")
 
-      assert has_element?(lv, ~s(#lane-submitted a[href="/cases/#{case_record.id}"]))
+      assert has_element?(lv, ~s([data-column=submitted] a[href="/cases/#{case_record.id}"]))
       refute has_element?(lv, ~s(a[href="/cases/#{other_case.id}"]))
     end
   end

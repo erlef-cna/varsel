@@ -69,6 +69,29 @@ defmodule VarselWeb.Storybook.Core.PageHeader do
         ]
       },
       %Variation{
+        id: :with_primary,
+        description:
+          "The page's leading action sits at the end of the title's row, above the " <>
+            "other actions. `wide_actions` lets a row of controls take most of the band.",
+        attributes: %{wide_actions: true},
+        slots: [
+          "<:eyebrow>CNA Console</:eyebrow>",
+          "<:title>Cases</:title>",
+          "<:meta><span class=\"text-sm\">Pipeline 12 · Archive 40</span></:meta>",
+          """
+          <:actions>
+            <button class="btn btn-ghost btn-sm border border-base-300 font-normal">Assignee: Everyone</button>
+            <button class="btn btn-ghost btn-sm border border-base-300 font-normal">Sort: Latest update</button>
+          </:actions>
+          """,
+          """
+          <:primary>
+            <button class="btn btn-eef btn-sm">Open case</button>
+          </:primary>
+          """
+        ]
+      },
+      %Variation{
         id: :every_row,
         description: "All four naming rows, with the actions spanning them.",
         slots: [

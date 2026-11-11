@@ -60,6 +60,24 @@ defmodule VarselWeb.Storybook.Core.ConsoleMenu do
           options: [{:mine, "Mine"}, {:everyone, "Everyone"}],
           event: "sort"
         }
+      },
+      %Variation{
+        id: :filter,
+        description:
+          "A filter names its own icon, and its options can be any value, such as a " <>
+            "record's id. A long choice is cut off in the trigger.",
+        attributes: %{
+          id: "assignee-filter",
+          label: "Assignee",
+          icon: "hero-user-mini",
+          value: "3f2a",
+          options: [
+            {"all", "Everyone"},
+            {"me", "Me"},
+            {"3f2a", "Someone with a rather long display name"}
+          ],
+          event: "assignee"
+        }
       }
     ]
   end

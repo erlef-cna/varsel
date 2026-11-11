@@ -151,17 +151,29 @@ defmodule VarselWeb.CoreComponents do
   the subtitle and meta rows, settled against the foot of the band, so a
   wide set of actions never narrows the title. Below that everything stacks
   in one column and the actions come last.
+
+  A `primary` slot holds the page's one leading action at the end of the
+  title's row, above the other actions.
   """
+  attr :wide_actions, :boolean,
+    default: false,
+    doc: "lets the actions take most of the band, for a page that leads with its controls"
+
   slot :eyebrow, required: true, doc: ~s(context line above the title, e.g. "CNA Console")
   slot :title, required: true, doc: "heading content — plain text or rich"
   slot :subtitle, doc: "one-line description under the title — plain text or rich"
   slot :meta, doc: "tabs, state, chips — what the page holds rather than what it is"
   slot :actions
+  slot :primary, doc: "the page's leading action, at the end of the title's row"
 
   def page_header(assigns) do
     ~H"""
     <div class="console-band">
-      <div class="page-header container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+      <div class={[
+        "page-header container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6",
+        @wide_actions && "page-header-wide-actions",
+        @primary != [] && "page-header-with-primary"
+      ]}>
         <p class="page-header-eyebrow eef-eyebrow">{render_slot(@eyebrow)}</p>
         <h1 class="page-header-title text-2xl font-bold leading-tight">
           {render_slot(@title)}
@@ -169,6 +181,7 @@ defmodule VarselWeb.CoreComponents do
         <p :if={@subtitle != []} class="page-header-subtitle text-sm text-base-content/60">
           {render_slot(@subtitle)}
         </p>
+        <div :if={@primary != []} class="page-header-primary">{render_slot(@primary)}</div>
         <div :if={@meta != []} class="page-header-meta">{render_slot(@meta)}</div>
         <div
           :if={@actions != []}
@@ -431,7 +444,7 @@ defmodule VarselWeb.CoreComponents do
       "inline-block cursor-pointer pb-1",
       if(@active?,
         do: "font-bold text-base-content shadow-[inset_0_-2px_0_var(--eef-blue)]",
-        else: "text-base-content/60"
+        else: "text-base-content/70"
       )
     ]}>
       {@label}
@@ -440,9 +453,9 @@ defmodule VarselWeb.CoreComponents do
         class={[
           "font-semibold tabular-nums ml-1",
           cond do
-            @active? -> "text-primary"
+            @active? -> "text-[color:var(--eef-blue-text)]"
             @matched? -> "text-info"
-            true -> "text-base-content/50"
+            true -> "text-base-content/70"
           end
         ]}
       >
@@ -944,7 +957,7 @@ defmodule VarselWeb.CoreComponents do
     ~H"""
     <span class={[
       "inline-flex items-center rounded-[5px] border border-dashed border-base-content/25 px-[0.42rem] py-[0.07rem]",
-      "text-[0.67rem] font-semibold whitespace-nowrap text-base-content/50",
+      "text-[0.67rem] font-semibold whitespace-nowrap text-base-content/70",
       @class
     ]}>
       no score
@@ -1156,12 +1169,17 @@ defmodule VarselWeb.CoreComponents do
   A menu that picks one option, for a console control that sits beside the
   search box rather than inside a form.
 
-  The trigger names the current choice, so the board's order is readable
-  without opening the menu.
+  The trigger names the current choice, so the board's order, or what it is
+  filtered to, is readable without opening the menu.
   """
   attr :id, :string, required: true
   attr :label, :string, required: true, doc: "what the control chooses, e.g. \"Sort\""
-  attr :value, :atom, required: true, doc: "the selected option"
+  attr :value, :any, required: true, doc: "the selected option's value"
+
+  attr :icon, :string,
+    default: "hero-bars-arrow-down-mini",
+    doc: "what the control does: the default is for an order, a filter names its own"
+
   attr :options, :list, required: true, doc: "{value, label} pairs, in menu order"
   attr :event, :string, required: true, doc: "pushed with the chosen value as `selection`"
 
@@ -1174,9 +1192,11 @@ defmodule VarselWeb.CoreComponents do
         aria-label={@label}
         class="btn btn-sm btn-ghost border border-base-300 font-normal gap-1.5"
       >
-        <.icon name="hero-bars-arrow-down-mini" class="size-4 text-base-content/50 shrink-0" />
-        <span class="text-base-content/60">{@label}:</span>
-        {Enum.find_value(@options, fn {value, label} -> value == @value && label end)}
+        <.icon name={@icon} class="size-4 text-base-content/50 shrink-0" />
+        <span class="text-base-content/70">{@label}:</span>
+        <span class="max-w-40 truncate">
+          {Enum.find_value(@options, fn {value, label} -> value == @value && label end)}
+        </span>
       </div>
       <ul
         tabindex="0"

@@ -11,8 +11,8 @@ user management.
 ## Triage
 
 Each report from [the form](/report), the API, or hex.pm opens a case at
-once. It waits in the Submitted lane of the [Cases](/cases) board, and moves
-to the Triage lane when you mark it under triage. The reporter and the
+once. It waits in the Submitted column of the [Cases](/cases) board, and
+moves to the Triage column when you mark it under triage. The reporter and the
 maintainers hex.pm named are on the case from the start. You and the
 supporters on it can edit the case while you triage it. The reporter and the
 maintainers comment and suggest.
@@ -32,7 +32,7 @@ merge needs them on both cases.
 A reporter may withdraw until you accept. Reporters follow the outcome on the
 case, which their own board shows.
 
-![The case board with a reported case in the Submitted lane](/images/guide/report-triage.png)
+![The case board with a reported case in the Submitted column](/images/guide/report-triage.png)
 
 ## Review
 
@@ -44,7 +44,7 @@ it notifies the Points of Contact who turned on **Unassigned review** in
 while nobody has. Sending a case to review yourself notifies nobody. The
 [Cases](/cases) board shows the whole pipeline.
 
-![Cases board with a case in the draft lane and one in review](/images/guide/case-board.png)
+![Cases board with a case in the draft column and one in review](/images/guide/case-board.png)
 
 Send a case back with your findings in the case comments, or approve it,
 which freezes the content for everyone but a Point of Contact. A Point of

@@ -34,7 +34,7 @@
       })();
     </script>
   </head>
-  <body class="min-h-screen flex flex-col">
+  <body class="min-h-screen flex flex-col" data-force-reload={force_reload?(@conn)}>
     {@inner_content}
   </body>
 </html>

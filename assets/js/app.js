@@ -28,7 +28,15 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/varsel"
 import topbar from "../vendor/topbar"
-import {AutoGrow, CommentAssist, CssVars, DragSort, SectionRail} from "./hooks"
+import {
+  AutoGrow,
+  BoardMove,
+  CommentAssist,
+  CssVars,
+  DragSort,
+  SectionRail,
+  SortMemory,
+} from "./hooks"
 import {install as installPriorityNav} from "./priority_nav"
 
 installPriorityNav()
@@ -130,7 +138,16 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, AutoGrow, CommentAssist, DragSort, SectionRail, CssVars},
+  hooks: {
+    ...colocatedHooks,
+    AutoGrow,
+    BoardMove,
+    CommentAssist,
+    DragSort,
+    SectionRail,
+    CssVars,
+    SortMemory,
+  },
 })
 
 // Show progress bar on live navigation and form submits

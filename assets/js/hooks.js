@@ -29,6 +29,138 @@ export const DragSort = {
   },
 }
 
+// Drag & drop of a board's cards between the columns of their own row. A
+// [data-card] is dragged; the [data-column] cells of its [data-row] are the
+// drop targets. On drag start the board asks the server (data-targets-event)
+// which columns the card may move to and marks each other cell of the row
+// data-drop="allowed" or "denied", which is what reveals the cell's
+// placeholder, sized to the dragged card through --board-card-height. Dropping on an allowed cell pushes data-move-event with the
+// card and the column.
+export const BoardMove = {
+  mounted() {
+    this.drag = null
+
+    this.clear = () => {
+      for (const cell of this.el.querySelectorAll("[data-drop], [data-drop-over]")) {
+        cell.removeAttribute("data-drop")
+        cell.removeAttribute("data-drop-over")
+      }
+      this.drag = null
+    }
+
+    this.targetCell = (event) => {
+      const cell = event.target.closest?.("[data-column]")
+      return this.drag && cell && cell.closest("[data-row]") === this.drag.row ? cell : null
+    }
+
+    this.el.addEventListener("dragstart", (event) => {
+      const card = event.target.closest?.("[data-card]")
+      if (!card) return
+
+      const id = card.dataset.card
+      const row = card.closest("[data-row]")
+      const from = card.closest("[data-column]")
+      this.drag = {id, row}
+      this.el.style.setProperty("--board-card-height", `${card.offsetHeight}px`)
+      event.dataTransfer.effectAllowed = "move"
+      event.dataTransfer.setData("text/plain", id)
+
+      this.pushEvent(this.el.dataset.targetsEvent, {id}, ({targets}) => {
+        if (this.drag?.id !== id) return
+
+        for (const cell of row.querySelectorAll("[data-column]")) {
+          if (cell !== from) {
+            cell.dataset.drop = targets.includes(cell.dataset.column) ? "allowed" : "denied"
+          }
+        }
+      })
+    })
+
+    this.el.addEventListener("dragover", (event) => {
+      const cell = this.targetCell(event)
+
+      for (const other of this.el.querySelectorAll("[data-drop-over]")) {
+        if (other !== cell) other.removeAttribute("data-drop-over")
+      }
+
+      if (!this.drag) return
+
+      // LiveView accepts every dragover page-wide for its upload drop
+      // targets, so a refused cell has to say so itself to get the
+      // not-allowed cursor.
+      if (cell?.dataset.drop === "allowed") {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = "move"
+        cell.dataset.dropOver = ""
+      } else {
+        event.dataTransfer.dropEffect = "none"
+      }
+    })
+
+    this.el.addEventListener("drop", (event) => {
+      const cell = this.targetCell(event)
+
+      if (cell?.dataset.drop === "allowed") {
+        event.preventDefault()
+        this.pushEvent(this.el.dataset.moveEvent, {id: this.drag.id, to: cell.dataset.column})
+      }
+
+      this.clear()
+    })
+
+    this.el.addEventListener("dragend", this.clear)
+  },
+}
+
+// Remembers the cases board's sort across visits. The element carries the
+// sort the URL names (data-sort, data-packages; absent for a default). A
+// visit whose URL names none gets the remembered one back through the
+// restore_sort event. A force-refresh, which the root layout marks on the
+// body, forgets it and resets the board through reset_sort; the mark lasts
+// as long as the page, so it is honoured once.
+const SORT_MEMORY_KEY = "cases:sort"
+let forceReloadHonoured = false
+
+export const SortMemory = {
+  chosen() {
+    return {sort: this.el.dataset.sort || null, packages: this.el.dataset.packages || null}
+  },
+  remembered() {
+    try {
+      return JSON.parse(localStorage.getItem(SORT_MEMORY_KEY))
+    } catch (_error) {
+      return null
+    }
+  },
+  remember() {
+    const chosen = this.chosen()
+
+    if (chosen.sort || chosen.packages) {
+      localStorage.setItem(SORT_MEMORY_KEY, JSON.stringify(chosen))
+    } else {
+      localStorage.removeItem(SORT_MEMORY_KEY)
+    }
+  },
+  mounted() {
+    const chosen = this.chosen()
+    const named = chosen.sort || chosen.packages
+
+    if (document.body.hasAttribute("data-force-reload") && !forceReloadHonoured) {
+      forceReloadHonoured = true
+      localStorage.removeItem(SORT_MEMORY_KEY)
+      if (named) this.pushEvent("reset_sort", {})
+    } else if (named) {
+      this.remember()
+    } else {
+      const remembered = this.remembered()
+      if (remembered?.sort || remembered?.packages) this.pushEvent("restore_sort", remembered)
+    }
+  },
+  updated() {
+    this.remember()
+  },
+}
+
 // Applies dynamic, per-render style values without an inline `style`
 // attribute, which the strict Content-Security-Policy forbids. Every
 // `data-css-*` attribute is written to the element's CSSOM style

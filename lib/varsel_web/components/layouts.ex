@@ -30,6 +30,18 @@ defmodule VarselWeb.Layouts do
   embed_templates "layouts/*"
 
   @doc """
+  Whether the browser asked for this page past its cache, which is what a
+  force-refresh does. The root layout marks the body with it, for scripts
+  that drop what they remembered when the reader asks for a clean page.
+  """
+  @spec force_reload?(Plug.Conn.t()) :: boolean()
+  def force_reload?(conn) do
+    conn
+    |> Plug.Conn.get_req_header("cache-control")
+    |> Enum.any?(&String.contains?(&1, "no-cache"))
+  end
+
+  @doc """
   The page chrome — nav, main, footer — wrapped around every page's content.
 
   It is a component rather than part of the root layout because the root
