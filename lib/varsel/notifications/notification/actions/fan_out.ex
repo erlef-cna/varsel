@@ -87,12 +87,10 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   defp audience(event, opts) do
     case Kind.audience(event.kind) do
       :pocs ->
-        User
-        |> Ash.Query.filter(role == :poc)
-        |> Ash.read!(opts)
+        pocs(opts)
 
-      :assigned_pocs ->
-        event |> assigned_users(opts) |> Enum.filter(&(&1.role == :poc))
+      :reviewers ->
+        reviewers(event, opts)
 
       :assigned ->
         assigned_users(event, opts)
@@ -113,6 +111,21 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
         |> Ash.Query.filter(id in ^event.recipient_ids and (role == :poc or id in ^assigned))
         |> Ash.read!(opts)
     end
+  end
+
+  # A case nobody reviews yet goes to every POC, so a request from someone
+  # who cannot assign one still reaches a reviewer.
+  defp reviewers(event, opts) do
+    case event |> assigned_users(opts) |> Enum.filter(&(&1.role == :poc)) do
+      [] -> pocs(opts)
+      assigned_pocs -> assigned_pocs
+    end
+  end
+
+  defp pocs(opts) do
+    User
+    |> Ash.Query.filter(role == :poc)
+    |> Ash.read!(opts)
   end
 
   defp assigned_users(event, opts) do

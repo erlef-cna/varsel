@@ -26,14 +26,6 @@ defmodule VarselWeb.Storybook.Case.CaseActions do
         attributes: %{actions: [:assign_cve_id, :request_review, :close]}
       },
       %Variation{
-        id: :draft_without_poc,
-        description: "A coordinator's draft with no POC assigned: review waits on one.",
-        attributes: %{
-          actions: [:assign_cve_id, :close],
-          blocked: [request_review: "Add a POC to the case first"]
-        }
-      },
-      %Variation{
         id: :review,
         description: "A POC reviewing a case.",
         attributes: %{actions: [:request_changes, :approve, :reopen, :close]}

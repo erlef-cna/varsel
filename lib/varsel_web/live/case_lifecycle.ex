@@ -57,8 +57,7 @@ defmodule VarselWeb.CaseLifecycle do
       :comment_count,
       :unseen_comment_count,
       :upstream_cve,
-      :upstream_cve_reserved,
-      :poc_assigned | Keyword.fetch!(opts, :load)
+      :upstream_cve_reserved | Keyword.fetch!(opts, :load)
     ]
 
     after_fetch = Keyword.fetch!(opts, :after_fetch)
@@ -373,32 +372,16 @@ defmodule VarselWeb.CaseLifecycle do
     %{case_record: case_record, current_user: actor, active_tab: active_tab} = assigns
 
     assigns =
-      assign(assigns,
-        actions: Enum.filter(@actions, &offered?(&1, actor, case_record, active_tab)),
-        blocked: blocked_actions(actor, case_record)
+      assign(
+        assigns,
+        :actions,
+        Enum.filter(@actions, &offered?(&1, actor, case_record, active_tab))
       )
 
     ~H"""
-    <.case_actions
-      actions={@actions}
-      blocked={@blocked}
-      publish_href={~p"/cases/#{@case_record.id}/publication"}
-    />
+    <.case_actions actions={@actions} publish_href={~p"/cases/#{@case_record.id}/publication"} />
     """
   end
-
-  # The policy refuses review to a draft with no POC assigned, so the button
-  # stays in view, disabled, for whoever could add the POC it needs.
-  defp blocked_actions(actor, case_record) do
-    if needs_poc?(case_record) and Ash.can?({case_record, :grant_access}, actor) do
-      [request_review: "Add a POC to the case first"]
-    else
-      []
-    end
-  end
-
-  defp needs_poc?(%{state: :draft, poc_assigned: false}), do: true
-  defp needs_poc?(_case_record), do: false
 
   defp offered?(:accept, actor, case_record, _tab), do: Cases.can_accept_case?(actor, case_record, validate?: true)
 

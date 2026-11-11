@@ -19,7 +19,7 @@ defmodule Varsel.Notifications.Kind do
       ],
       review_requested: [
         label: "Review requested",
-        description: "A case you are assigned to was handed to review."
+        description: "A case was handed to review."
       ],
       comment_posted: [
         label: "New comment",
@@ -43,10 +43,13 @@ defmodule Varsel.Notifications.Kind do
       ]
     ]
 
-  @doc "Who a kind's notifications are fanned out to."
-  @spec audience(t()) :: :pocs | :assigned_pocs | :assigned | :recipient | :mentioned
+  @doc """
+  Who a kind's notifications are fanned out to. `:reviewers` are the POCs
+  assigned to the case, or every POC when none is.
+  """
+  @spec audience(t()) :: :pocs | :reviewers | :assigned | :recipient | :mentioned
   def audience(:report_submitted), do: :pocs
-  def audience(:review_requested), do: :assigned_pocs
+  def audience(:review_requested), do: :reviewers
   def audience(:comment_posted), do: :assigned
   def audience(:mentioned), do: :mentioned
   def audience(:proposal_opened), do: :assigned

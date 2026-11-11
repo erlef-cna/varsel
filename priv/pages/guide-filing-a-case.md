@@ -142,11 +142,10 @@ path from there to a published CVE.
 
 6. **Take a CVE ID and hand it to review**
 
-   Take the next free CVE ID, then send the case to review. Review needs a
-   Point of Contact assigned to the case, and only they are notified; until
-   one is, **Request review** stays disabled. Add one with **Add someone** on
-   the case and their handle. They send it back with findings, or
-   approve it and, once the advisory is public,
+   Take the next free CVE ID, then send the case to review. The Points of
+   Contact assigned to the case are notified, or every Point of Contact
+   while none is. A Point of Contact sends it back with findings, or
+   approves it and, once the advisory is public,
    [publishes](/guide/review-and-publication): Varsel pushes the record to
    MITRE, and the OSV feed and hex.pm advisories follow automatically.
 

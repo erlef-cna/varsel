@@ -52,7 +52,7 @@ defmodule Varsel.Cases.Signals do
     end
 
     signal :review_requested do
-      description "A drafted case was handed to the POCs assigned to it for review."
+      description "A drafted case was marked ready for POC review."
       argument :case_id, :uuid, allow_nil?: false
       argument :actor_id, :uuid, description: "The user who asked for review, when a user did."
     end
