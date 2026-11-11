@@ -43,7 +43,8 @@ defmodule VarselWeb.CaseLifecycle do
 
   `load` names what to load on the case. `after_fetch` receives the loaded
   case and the socket after every fetch and returns the socket. A case the
-  actor cannot read sends them back to the case list.
+  actor cannot read on mount renders the error page. A case that becomes
+  unreadable later sends them back to the case list.
 
   `marks_read` names the notification kinds this tab's body shows, which it
   marks read on top of the case's own lifecycle kinds. A kind no open tab
@@ -63,13 +64,16 @@ defmodule VarselWeb.CaseLifecycle do
     after_fetch = Keyword.fetch!(opts, :after_fetch)
     marks_read = @lifecycle_kinds ++ Keyword.get(opts, :marks_read, [])
 
+    actor = socket.assigns.current_user
+
     socket
     |> assign(case_id: case_id, lifecycle_modal: nil)
     |> attach_hook(__MODULE__, :handle_event, &handle_event/3)
     |> keep_live(:case_record, &load_case(&1, load),
+      initial: Cases.get_case!(case_id, actor: actor, load: load),
       subscribe:
         Enum.map(@topics, &"#{&1}:#{case_id}") ++
-          notification_topics(socket.assigns.current_user),
+          notification_topics(actor),
       after_fetch: &fetched(&1, &2, after_fetch, marks_read)
     )
   end
@@ -137,11 +141,12 @@ defmodule VarselWeb.CaseLifecycle do
   defp load_case(socket, load) do
     case Cases.get_case(socket.assigns.case_id, actor: socket.assigns.current_user, load: load) do
       {:ok, case_record} -> case_record
-      {:error, _error} -> nil
+      {:error, %Ash.Error.Forbidden{}} -> nil
+      {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} -> nil
     end
   end
 
-  # nil: the case vanished or became inaccessible (on mount and refetch alike).
+  # nil: the case vanished or became inaccessible after mount.
   defp fetched(nil, socket, _after_fetch, _marks_read) do
     socket |> put_flash(:error, "Case not found.") |> push_navigate(to: ~p"/cases")
   end

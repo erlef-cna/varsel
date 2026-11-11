@@ -60,13 +60,13 @@ defmodule VarselWeb.CaseRecordLiveTest do
                "font-bold"
     end
 
-    test "a case the actor cannot read sends them to the case list", %{conn: conn} do
+    test "a case the actor cannot read renders the not-found page", %{conn: conn} do
       poc = Fixtures.register_user("case_record_other_poc", :poc)
       case_record = Fixtures.open_case(poc)
       stranger = Fixtures.register_user("case_record_stranger", :supporter)
+      conn = log_in(conn, stranger)
 
-      assert {:error, {:live_redirect, %{to: "/cases"}}} =
-               conn |> log_in(stranger) |> live(~p"/cases/#{case_record.id}/cve")
+      assert_error_sent(404, fn -> get(conn, ~p"/cases/#{case_record.id}/cve") end)
     end
 
     test "lifecycle actions work from a record tab", %{conn: conn, poc: poc} do

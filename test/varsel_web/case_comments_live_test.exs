@@ -30,16 +30,15 @@ defmodule VarselWeb.CaseCommentsLiveTest do
   end
 
   describe "comments tab" do
-    test "sends an anonymous caller away without saying the case exists", %{
+    test "asks an anonymous caller to sign in without saying the case exists", %{
       conn: conn,
       poc: poc
     } do
       case_record = Fixtures.open_case(poc)
 
-      assert {:error, {:live_redirect, %{to: "/cases", flash: flash}}} =
-               live(conn, ~p"/cases/#{case_record.id}/comments")
-
-      assert flash == %{"error" => "Case not found."}
+      for case_id <- [case_record.id, Ash.UUID.generate()] do
+        assert_error_sent(401, fn -> get(conn, ~p"/cases/#{case_id}/comments") end)
+      end
     end
 
     test "shows the whole stream, oldest first", %{conn: conn, poc: poc} do
@@ -154,8 +153,9 @@ defmodule VarselWeb.CaseCommentsLiveTest do
     } do
       case_record = Fixtures.open_case(poc)
 
-      assert {:error, {:live_redirect, %{to: "/cases"}}} =
-               conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/comments")
+      conn = log_in(conn, supporter)
+
+      assert_error_sent(404, fn -> get(conn, ~p"/cases/#{case_record.id}/comments") end)
     end
 
     test "a closed case still takes comments", %{conn: conn, poc: poc} do

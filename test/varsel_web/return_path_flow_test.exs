@@ -90,5 +90,13 @@ defmodule VarselWeb.ReturnPathFlowTest do
 
       assert body =~ "/sign-in?return_to=" <> URI.encode_www_form("/settings/account")
     end
+
+    test "returns to a case page linked directly", %{conn: conn} do
+      path = ~p"/cases/#{Ash.UUID.generate()}"
+
+      {401, _headers, body} = assert_error_sent(401, fn -> get(conn, path) end)
+
+      assert body =~ "/sign-in?return_to=" <> URI.encode_www_form(path)
+    end
   end
 end

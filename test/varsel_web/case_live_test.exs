@@ -2287,8 +2287,9 @@ defmodule VarselWeb.CaseLiveTest do
     } do
       case_record = Fixtures.open_case(poc)
 
-      assert {:error, {:live_redirect, %{to: "/cases"}}} =
-               conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+      conn = log_in(conn, supporter)
+
+      assert_error_sent(404, fn -> get(conn, ~p"/cases/#{case_record.id}") end)
     end
 
     test "an open suggestion renders inline in its owning section card, and the rail Jump link anchors to it",
