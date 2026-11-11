@@ -6,7 +6,10 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   @moduledoc """
   Records a `Varsel.Notifications.Notification` for every user in a signal's
   audience, honouring each recipient's per-kind preferences and excluding the
-  user who acted. A mention reaches only the mentioned who may read the case.
+  user who acted. A mention reaches only the mentioned who may read the case,
+  and a review a POC requested reaches nobody. A review on a case with no POC
+  assigned is an `:unassigned_review_requested` for the POCs who want one,
+  or a plain `:review_requested` for every POC while none does.
 
   Implements `Varsel.Notifications.Notification`'s `:fan_out` action, the
   listener of every signal that raises a notification. A failure raises, so
@@ -27,11 +30,10 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   @impl Ash.Resource.Actions.Implementation
   def run(input, _opts, context) do
     opts = Varsel.ObanContext.forward(context)
-    event = event(input.arguments.signal)
+    {event, recipients} = input.arguments.signal |> event() |> route(opts)
 
     result =
-      event
-      |> recipients(opts)
+      recipients
       |> inputs(event)
       |> Notifications.record_notification(
         Keyword.put(opts, :bulk_options,
@@ -71,19 +73,50 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   defp event(%Cases.Signals.CaseAssigned{} = signal),
     do: %{kind: :case_assigned, case_id: signal.case_id, recipient_id: signal.user_id, actor_id: signal.actor_id}
 
-  defp recipients(event, opts) do
+  defp route(%{kind: :review_requested} = event, opts) do
+    if requested_by_poc?(event.actor_id, opts), do: {event, []}, else: route_review(event, opts)
+  end
+
+  defp route(event, opts), do: {event, audience(event, opts)}
+
+  # A case nobody reviews yet goes to the POCs who asked for such reviews, or
+  # to every POC while none has, so a request from someone who cannot assign
+  # a POC still reaches a reviewer.
+  defp route_review(event, opts) do
+    case audience(event, opts) do
+      [] ->
+        unassigned = %{event | kind: :unassigned_review_requested}
+        pocs = audience(unassigned, opts)
+
+        if Enum.any?(pocs, &in_app?(&1, unassigned.kind)),
+          do: {unassigned, pocs},
+          else: {event, pocs}
+
+      assigned_pocs ->
+        {event, assigned_pocs}
+    end
+  end
+
+  defp in_app?(user, kind), do: Preference.for_kind(user.notification_preferences, kind).in_app
+
+  defp requested_by_poc?(nil, _opts), do: false
+
+  defp requested_by_poc?(actor_id, opts) do
+    match?({:ok, %User{role: :poc}}, Ash.get(User, actor_id, opts))
+  end
+
+  defp audience(event, opts) do
     case Kind.audience(event.kind) do
       :pocs ->
         User
         |> Ash.Query.filter(role == :poc)
         |> Ash.read!(opts)
 
+      :reviewers ->
+        event |> assigned_users(opts) |> Enum.filter(&(&1.role == :poc))
+
       :assigned ->
-        CaseAssignment
-        |> Ash.Query.filter(case_id == ^event.case_id)
-        |> Ash.Query.load(:user)
-        |> Ash.read!(opts)
-        |> Enum.map(& &1.user)
+        assigned_users(event, opts)
 
       :recipient ->
         [Ash.get!(User, event.recipient_id, opts)]
@@ -101,6 +134,14 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
         |> Ash.Query.filter(id in ^event.recipient_ids and (role == :poc or id in ^assigned))
         |> Ash.read!(opts)
     end
+  end
+
+  defp assigned_users(event, opts) do
+    CaseAssignment
+    |> Ash.Query.filter(case_id == ^event.case_id)
+    |> Ash.Query.load(:user)
+    |> Ash.read!(opts)
+    |> Enum.map(& &1.user)
   end
 
   defp inputs(users, event) do

@@ -36,7 +36,12 @@ case, which their own board shows.
 
 ## Review
 
-Cases arrive in review when a supporter considers them ready; the
+Cases arrive in review when a supporter considers them ready. A
+supporter's request notifies the Points of Contact assigned to the case, so
+assign yourself to a case you mean to review. On a case with none assigned
+it notifies the Points of Contact who turned on **Unassigned review** in
+[Notification settings](/settings/notifications), or every Point of Contact
+while nobody has. Sending a case to review yourself notifies nobody. The
 [Cases](/cases) board shows the whole pipeline.
 
 ![Cases board with a case in the draft lane and one in review](/images/guide/case-board.png)

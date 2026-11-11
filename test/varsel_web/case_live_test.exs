@@ -1471,6 +1471,18 @@ defmodule VarselWeb.CaseLiveTest do
       assert has_element?(lv, "#suggest-toggle input:not([checked])")
     end
 
+    test "a supporter's case with no POC assigned can still be sent to review", %{conn: conn} do
+      supporter = Fixtures.register_user("review_unassigned_supporter", :supporter)
+      case_record = Fixtures.open_case(supporter)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+
+      lv |> element("button[phx-value-action=request_review]") |> render_click()
+
+      render(lv)
+      assert has_element?(lv, "#flash-info", "Review requested.")
+    end
+
     test "adds an affected package through the modal", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 

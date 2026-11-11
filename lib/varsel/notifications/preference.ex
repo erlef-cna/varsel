@@ -7,9 +7,10 @@ defmodule Varsel.Notifications.Preference do
   One kind's in-app/email opt-in, embedded in `notification_preferences` on
   `Varsel.Accounts.User`.
 
-  A kind absent from the list defaults to both channels on (`for_kind/2`), so
-  a fresh account needs no seeded rows and a new kind is on for everyone
-  without a migration.
+  A kind absent from the list takes its default (`for_kind/2`), both channels
+  on unless `Varsel.Notifications.Kind.on_by_default?/1` says otherwise, so a
+  fresh account needs no seeded rows and a new kind reaches everyone without
+  a migration.
   """
 
   use Ash.Resource, data_layer: :embedded, extensions: [AshGraphql.Resource]
@@ -45,14 +46,19 @@ defmodule Varsel.Notifications.Preference do
   end
 
   @doc """
-  Finds `kind`'s preference in `preferences`, defaulting to both channels on
-  when the list carries no entry for it.
+  Finds `kind`'s preference in `preferences`, defaulting both channels to
+  `Varsel.Notifications.Kind.on_by_default?/1` when the list carries no entry
+  for it.
   """
   @spec for_kind([t()], Kind.t()) :: t()
   def for_kind(preferences, kind) do
     Enum.find(
       preferences,
-      struct(__MODULE__, kind: kind, in_app: true, email: true),
+      struct(__MODULE__,
+        kind: kind,
+        in_app: Kind.on_by_default?(kind),
+        email: Kind.on_by_default?(kind)
+      ),
       fn preference -> preference.kind == kind end
     )
   end

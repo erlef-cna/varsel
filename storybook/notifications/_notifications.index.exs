@@ -12,5 +12,7 @@ defmodule VarselWeb.Storybook.Notifications do
 
   def entry("notification_bell"), do: [name: "Notification bell", icon: {:local, "hero-bell"}]
 
+  def entry("notification_group_nav"), do: [name: "Notification group rail", icon: {:local, "hero-queue-list"}]
+
   def entry("notification_row"), do: [name: "Notification row", icon: {:local, "hero-list-bullet"}]
 end

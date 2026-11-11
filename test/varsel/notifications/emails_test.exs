@@ -174,7 +174,6 @@ defmodule Varsel.Notifications.EmailsTest do
 
     test "email: false records the notification but sends no mail" do
       poc = Fixtures.register_user("emails_pref_off_poc", :poc)
-      other_poc = Fixtures.register_user("emails_pref_off_other", :poc)
 
       Accounts.update_user_notification_settings!(
         poc,
@@ -182,8 +181,7 @@ defmodule Varsel.Notifications.EmailsTest do
         actor: poc
       )
 
-      case_record = Fixtures.open_case(other_poc)
-      Cases.request_case_review!(case_record, actor: other_poc)
+      Fixtures.request_review_for(poc)
 
       drain()
 
@@ -193,15 +191,13 @@ defmodule Varsel.Notifications.EmailsTest do
 
     test "a user with no notification_email is skipped, and the row is still stamped so the trigger stops re-selecting it" do
       poc = Fixtures.register_user("emails_no_address_poc", :poc)
-      other_poc = Fixtures.register_user("emails_no_address_other", :poc)
 
       Ash.update!(poc, %{notification_email: nil},
         action: :set_notification_email,
         authorize?: false
       )
 
-      case_record = Fixtures.open_case(other_poc)
-      Cases.request_case_review!(case_record, actor: other_poc)
+      Fixtures.request_review_for(poc)
 
       drain()
 
@@ -211,7 +207,6 @@ defmodule Varsel.Notifications.EmailsTest do
 
     test "daily_digest mode sends nothing on the immediate trigger" do
       poc = Fixtures.register_user("emails_digest_mode_poc", :poc)
-      other_poc = Fixtures.register_user("emails_digest_mode_other", :poc)
 
       Accounts.update_user_notification_settings!(
         poc,
@@ -219,8 +214,7 @@ defmodule Varsel.Notifications.EmailsTest do
         actor: poc
       )
 
-      case_record = Fixtures.open_case(other_poc)
-      Cases.request_case_review!(case_record, actor: other_poc)
+      Fixtures.request_review_for(poc)
 
       drain()
 
@@ -232,7 +226,6 @@ defmodule Varsel.Notifications.EmailsTest do
   describe ":send_digests" do
     test "emails a daily_digest user one mail listing counts per kind and stamps every covered row" do
       poc = Fixtures.register_user("emails_send_digest_poc", :poc)
-      other_poc = Fixtures.register_user("emails_send_digest_other", :poc)
       supporter = Fixtures.register_user("emails_send_digest_supporter", :supporter)
 
       Accounts.update_user_notification_settings!(
@@ -249,7 +242,7 @@ defmodule Varsel.Notifications.EmailsTest do
       sent_emails()
 
       Cases.post_case_comment!(%{case_id: case_one.id, body: "hi"}, actor: supporter)
-      Cases.request_case_review!(Fixtures.open_case(other_poc), actor: other_poc)
+      Fixtures.request_review_for(poc)
 
       drain()
 
@@ -276,8 +269,7 @@ defmodule Varsel.Notifications.EmailsTest do
         actor: poc
       )
 
-      read_case = Fixtures.open_case(other_poc)
-      Cases.request_case_review!(read_case, actor: other_poc)
+      Fixtures.request_review_for(poc)
       drain()
 
       [read_notification] = notifications_for(poc)
@@ -310,18 +302,16 @@ defmodule Varsel.Notifications.EmailsTest do
 
     test "a row pending under :immediate mode is not sent immediately once the user switches to :daily_digest, and the next digest run covers it" do
       poc = Fixtures.register_user("emails_switch_to_digest_poc", :poc)
-      other_poc = Fixtures.register_user("emails_switch_to_digest_other", :poc)
 
-      case_record = Fixtures.open_case(other_poc)
-      Cases.request_case_review!(case_record, actor: other_poc)
+      Fixtures.request_review_for(poc)
 
-      # Run only the two fan-out jobs queued so far (the opener's own
-      # assignment and the review request), so the row (and its
+      # Run only the three fan-out jobs queued so far (the opener's and the
+      # POC's assignments, and the review request), so the row (and its
       # freshly-enqueued :email trigger job) exists while the user is still
       # in :immediate mode, without running that trigger job yet.
       # with_recursion must be off here or the newly-enqueued :email job
       # runs in the same call.
-      drain(with_limit: 2, with_recursion: false)
+      drain(with_limit: 3, with_recursion: false)
 
       [notification] = notifications_for(poc)
       assert notification.emailed_at == nil
@@ -352,7 +342,6 @@ defmodule Varsel.Notifications.EmailsTest do
     test "selects only immediate-mode pending rows" do
       immediate_poc = Fixtures.register_user("emails_scheduler_immediate_poc", :poc)
       digest_poc = Fixtures.register_user("emails_scheduler_digest_poc", :poc)
-      other_poc = Fixtures.register_user("emails_scheduler_other", :poc)
 
       Accounts.update_user_notification_settings!(
         digest_poc,
@@ -360,8 +349,7 @@ defmodule Varsel.Notifications.EmailsTest do
         actor: digest_poc
       )
 
-      case_record = Fixtures.open_case(other_poc)
-      Cases.request_case_review!(case_record, actor: other_poc)
+      Fixtures.request_review_for([immediate_poc, digest_poc])
 
       perform_job(Varsel.Notifications.Notification.EmailScheduler, %{})
       drain()
