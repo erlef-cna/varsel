@@ -15,12 +15,11 @@ defmodule VarselWeb.CaseManagementLive do
   (published_at, or `updated_at` for the others — see `archive_query/2`)
   descending.
 
-  The face lives in `?face=` (`page`/`q`/`sort`/`packages`/`assignee` ride along), so
-  both faces, any search and the two sorts (the cases inside a row, and the
-  package rows) and the assignee filter are deep-linkable and survive a face
-  switch. The browser
-  remembers the sorts and the assignee, and a visit that names none of them
-  gets them back.
+  The face lives in `?face=`, and `page`, `q` and the board's view ride along
+  in the URL: `sort` orders the cases inside a row, `packages` orders the
+  rows, `assignee` filters to one person's cases. So both faces, any search
+  and the view are deep-linkable and survive a face switch. The browser
+  remembers the view, and a visit that names none of it gets it back.
   """
   use VarselWeb, :live_view
 
@@ -34,6 +33,7 @@ defmodule VarselWeb.CaseManagementLive do
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.Case
+  alias Varsel.Cases.RepoUrl
   alias Varsel.CVE
   alias Varsel.GitHub.Advisories
   alias Varsel.GitHub.Credentials
@@ -90,38 +90,46 @@ defmodule VarselWeb.CaseManagementLive do
   def handle_params(params, _uri, socket) do
     face = if params["face"] == "archive", do: :archive, else: :pipeline
     query = params["q"] || ""
+    scope = params["scope"] || "all"
+    fetched = {face, query, scope, params["page"]}
+    socket = assign(socket, :view, parse_view(params))
 
+    # A patch that only reorders or filters the board works on the cases
+    # already fetched.
     socket =
-      socket
-      |> assign(
-        face: face,
-        query: query,
-        scope: params["scope"] || "all",
-        sort: %{
-          cases: LaneSort.parse(params["sort"]),
-          packages: PackageSort.parse(params["packages"]),
-          assignee: parse_assignee(params["assignee"])
-        }
-      )
-      |> assign_cve_record_matches()
-      |> keep_pipeline_live()
-      |> keep_archive_live(params)
+      if socket.assigns[:fetched] == fetched do
+        assign_board(socket.assigns.pipeline_cases, socket)
+      else
+        socket
+        |> assign(face: face, query: query, scope: scope, fetched: fetched)
+        |> assign_cve_record_matches()
+        |> keep_pipeline_live()
+        |> keep_archive_live(params)
+      end
 
     {:noreply, socket}
   end
 
+  defp parse_view(params) do
+    %{
+      cases: LaneSort.parse(params["sort"]),
+      packages: PackageSort.parse(params["packages"]),
+      assignee: parse_assignee(params["assignee"])
+    }
+  end
+
   # ------------------------------------------------------------- pipeline face
 
-  # The pipeline is never paginated: one query for the active states, grouped
-  # into lanes in memory. keep_live carries the PubSub reactivity (case:all)
-  # so lane contents update live.
+  # The pipeline is never paginated: one query for the active states, laid
+  # out in memory. keep_live carries the PubSub reactivity (case:all) so the
+  # board updates live.
   defp keep_pipeline_live(socket) do
     socket.endpoint.unsubscribe("case:all")
 
     keep_live(socket, :pipeline_cases, &list_pipeline_cases/2,
       subscribe: "case:all",
       results: :lose,
-      after_fetch: &assign_lanes/2
+      after_fetch: &assign_board/2
     )
   end
 
@@ -147,7 +155,7 @@ defmodule VarselWeb.CaseManagementLive do
 
   # The answer to a gh open arrives out of band, on the POC's own terminal.
   # What reaches the page is the case's own create notification, which
-  # refetches the lanes, so the arrival is checked from here.
+  # refetches the board, so the arrival is checked from here.
   defp check_gh_answer(%{assigns: %{gh: %{request: %{id: id}}}} = socket) do
     case Cases.get_github_manual_request(id, actor: socket.assigns.current_user) do
       {:ok, %{completed_at: %DateTime{}, case_id: case_id}} when is_binary(case_id) ->
@@ -162,64 +170,64 @@ defmodule VarselWeb.CaseManagementLive do
 
   defp check_gh_answer(socket), do: socket
 
-  defp assign_lanes(cases, socket) do
-    {totals, assignees} = pipeline_overview(socket)
+  defp assign_board(cases, socket) do
+    %{view: view, query: query, current_user: viewer} = socket.assigns
 
-    assignee_id =
-      assignee_id(socket.assigns.sort.assignee, assignees, socket.assigns.current_user)
+    # A search narrows `cases`, so the totals and the people the pipeline's
+    # cases are assigned to then need the whole pipeline.
+    pipeline = if query == "", do: cases, else: list_pipeline_overview(socket)
+    totals = Enum.frequencies_by(pipeline, & &1.state)
+    people = assignees(pipeline, viewer)
+    {assignee, assignee_id} = resolve_assignee(view.assignee, people, viewer)
 
-    cases = assigned_to(cases, assignee_id)
-    grouped = Enum.group_by(cases, & &1.state)
-    searching? = socket.assigns.query != "" or not is_nil(assignee_id)
+    shown = cases |> assigned_to(assignee_id) |> LaneSort.sort(view.cases)
+    shown_counts = Enum.frequencies_by(shown, & &1.state)
+    narrowed? = query != "" or not is_nil(assignee_id)
 
-    lanes =
-      for state <- @lane_states do
-        cards = grouped |> Map.get(state, []) |> LaneSort.sort(socket.assigns.sort.cases)
-        total = Map.get(totals, state, 0)
-
-        %{
-          state: state,
-          key: state,
-          id: "lane-#{state}",
-          label: Phoenix.Naming.humanize(state),
-          dot: lane_dot(state),
-          count: total,
-          match_count: length(cards),
-          # The header count reflects matches while a query is active; the
-          # live total returns when the input clears.
-          display_count: if(searching?, do: length(cards), else: total),
-          cards: cards,
-          empty?: cards == []
-        }
-      end
+    assignee_options = [
+      {"all", "Everyone"},
+      {"me", "Me"} | Enum.map(people, &{&1.id, &1.display_name})
+    ]
 
     socket
-    |> assign(:lanes, lanes)
-    |> assign(:assignee_options, [
-      {"all", "Everyone"},
-      {"me", "Me"} | Enum.map(assignees, &{&1.id, &1.display_name})
-    ])
     |> assign(
-      :assignee_users,
-      Map.new([{"me", socket.assigns.current_user} | Enum.map(assignees, &{&1.id, &1})])
+      columns: columns(totals, shown_counts, narrowed?),
+      rows: package_rows(shown, view.packages),
+      assignee: assignee,
+      assignee_label: assignee != "all" && assignee_options |> List.keyfind(assignee, 0) |> elem(1),
+      assignee_options: assignee_options,
+      assignee_users: Map.new([{"me", viewer} | Enum.map(people, &{&1.id, &1})]),
+      pipeline_count: totals |> Map.values() |> Enum.sum(),
+      pipeline_match_count: length(shown)
     )
-    |> assign(:assignee, assignee_value(socket.assigns.sort.assignee, assignee_id))
-    |> assign(:pipeline_count, totals |> Map.values() |> Enum.sum())
-    |> assign(:pipeline_match_count, length(cases))
     |> check_gh_answer()
   end
 
-  # The rows are already filtered by the search, so the lanes' totals and the
-  # people the pipeline's cases are assigned to need their own query.
-  defp pipeline_overview(socket) do
-    cases =
-      Cases.list_cases!(
-        actor: socket.assigns.current_user,
-        load: [assignments: [user: [:display_name, :avatar_url]]],
-        query: Case |> Ash.Query.filter(state in ^@lane_states) |> Ash.Query.select([:state])
-      )
+  # A column counts what the search and the assignee filter leave while
+  # either is active, and everything in its state otherwise. Publishing is a
+  # handoff a case passes through in moments, so its column shows only while
+  # something is in it.
+  defp columns(totals, shown_counts, narrowed?) do
+    for state <- @lane_states, state != :publishing or Map.has_key?(totals, state) do
+      shown = Map.get(shown_counts, state, 0)
 
-    {Enum.frequencies_by(cases, & &1.state), assignees(cases, socket.assigns.current_user)}
+      %{
+        key: state,
+        id: "lane-#{state}",
+        label: Phoenix.Naming.humanize(state),
+        dot: lane_dot(state),
+        count: if(narrowed?, do: shown, else: Map.get(totals, state, 0)),
+        empty?: shown == 0
+      }
+    end
+  end
+
+  defp list_pipeline_overview(socket) do
+    Cases.list_cases!(
+      actor: socket.assigns.current_user,
+      load: [assignments: [user: [:display_name, :avatar_url]]],
+      query: Case |> Ash.Query.filter(state in ^@lane_states) |> Ash.Query.select([:state])
+    )
   end
 
   # Everyone but the viewer, who leads the menu as "Me" whether or not a case
@@ -244,14 +252,13 @@ defmodule VarselWeb.CaseManagementLive do
 
   defp parse_assignee(_param), do: nil
 
-  # An id that no case in the pipeline is assigned to filters nothing.
-  defp assignee_id(nil, _assignees, _viewer), do: nil
-  defp assignee_id("me", _assignees, viewer), do: viewer.id
-  defp assignee_id(id, assignees, _viewer), do: if(Enum.any?(assignees, &(&1.id == id)), do: id)
+  # The menu's choice and the user id it filters by. An id that no case in
+  # the pipeline is assigned to filters nothing.
+  defp resolve_assignee("me", _people, viewer), do: {"me", viewer.id}
 
-  defp assignee_value("me", _assignee_id), do: "me"
-  defp assignee_value(_assignee, nil), do: "all"
-  defp assignee_value(_assignee, assignee_id), do: assignee_id
+  defp resolve_assignee(id, people, _viewer) do
+    if Enum.any?(people, &(&1.id == id)), do: {id, id}, else: {"all", nil}
+  end
 
   defp assigned_to(cases, nil), do: cases
 
@@ -457,7 +464,8 @@ defmodule VarselWeb.CaseManagementLive do
 
   def handle_event("move_case", %{"id" => id, "to" => to}, socket) do
     with %Case{} = case_record <- Enum.find(socket.assigns.pipeline_cases, &(&1.id == id)),
-         {_can?, move} <- Enum.find_value(@moves, &move_to(&1, case_record.state, to)),
+         to when not is_nil(to) <- Enum.find(@lane_states, &(Atom.to_string(&1) == to)),
+         {_can?, move} <- Map.get(@moves, {case_record.state, to}),
          {:error, error} <- move.(case_record, actor: socket.assigns.current_user) do
       {:noreply, put_flash(socket, :error, errors_to_string(error))}
     else
@@ -468,51 +476,34 @@ defmodule VarselWeb.CaseManagementLive do
   def handle_event("search", %{"query" => query}, socket) do
     to =
       if socket.assigns.face == :archive do
-        archive_path(socket.assigns.scope, query, nil, socket.assigns.sort)
+        archive_path(socket.assigns.scope, query, nil, socket.assigns.view)
       else
-        pipeline_path(query, socket.assigns.sort)
+        pipeline_path(query, socket.assigns.view)
       end
 
     {:noreply, push_patch(socket, to: to)}
   end
 
   def handle_event("sort", %{"selection" => selection}, socket) do
-    sort = %{socket.assigns.sort | cases: LaneSort.parse(selection)}
-
-    {:noreply, push_patch(socket, to: pipeline_path(socket.assigns.query, sort))}
+    patch_view(socket, %{cases: LaneSort.parse(selection)})
   end
 
   def handle_event("sort_packages", %{"selection" => selection}, socket) do
-    sort = %{socket.assigns.sort | packages: PackageSort.parse(selection)}
-
-    {:noreply, push_patch(socket, to: pipeline_path(socket.assigns.query, sort))}
-  end
-
-  def handle_event("restore_sort", params, socket) do
-    sort = %{
-      socket.assigns.sort
-      | cases: LaneSort.parse(params["sort"]),
-        packages: PackageSort.parse(params["packages"]),
-        assignee: parse_assignee(params["assignee"])
-    }
-
-    {:noreply, push_patch(socket, to: pipeline_path(socket.assigns.query, sort))}
-  end
-
-  def handle_event("reset_sort", _params, socket) do
-    sort = %{cases: LaneSort.default(), packages: PackageSort.default(), assignee: nil}
-
-    {:noreply, push_patch(socket, to: pipeline_path(socket.assigns.query, sort))}
+    patch_view(socket, %{packages: PackageSort.parse(selection)})
   end
 
   def handle_event("assignee", %{"selection" => selection}, socket) do
-    sort = %{socket.assigns.sort | assignee: parse_assignee(selection)}
+    patch_view(socket, %{assignee: parse_assignee(selection)})
+  end
 
-    {:noreply, push_patch(socket, to: pipeline_path(socket.assigns.query, sort))}
+  # What the browser remembered, or nothing at all after a force-refresh,
+  # which puts the defaults back.
+  def handle_event("restore_view", params, socket) do
+    patch_view(socket, parse_view(params))
   end
 
   def handle_event("scope", %{"scope" => scope}, socket) do
-    {:noreply, push_patch(socket, to: archive_path(scope, socket.assigns.query, nil, socket.assigns.sort))}
+    {:noreply, push_patch(socket, to: archive_path(scope, socket.assigns.query, nil, socket.assigns.view))}
   end
 
   def handle_event("paginate", %{"page" => target}, socket) do
@@ -589,36 +580,36 @@ defmodule VarselWeb.CaseManagementLive do
         do: to
   end
 
-  defp move_to({{from, to}, move}, from, to_param) do
-    if Atom.to_string(to) == to_param, do: move
+  defp patch_view(socket, changes) do
+    view = Map.merge(socket.assigns.view, changes)
+
+    {:noreply, push_patch(socket, to: pipeline_path(socket.assigns.query, view))}
   end
 
-  defp move_to(_move, _from, _to_param), do: nil
-
-  defp pipeline_path(query, sort) do
-    case drop_empty([q: (query != "" && query) || nil] ++ sort_params(sort)) do
+  defp pipeline_path(query, view) do
+    case drop_empty([q: (query != "" && query) || nil] ++ view_params(view)) do
       [] -> ~p"/cases"
       params -> ~p"/cases?#{params}"
     end
   end
 
-  # The sort rides along even on the archive face, which does not use it, so
-  # switching back to the pipeline returns to the board you left.
-  defp archive_path(scope, query, page, sort) do
+  # The board's view rides along even on the archive face, which does not use
+  # it, so switching back to the pipeline returns to the board you left.
+  defp archive_path(scope, query, page, view) do
     params =
       drop_empty(
         [face: "archive", scope: scope, page: page, q: (query != "" && query) || nil] ++
-          sort_params(sort)
+          view_params(view)
       )
 
     ~p"/cases?#{params}"
   end
 
-  defp sort_params(sort) do
+  defp view_params(view) do
     [
-      sort: LaneSort.param(sort.cases),
-      packages: PackageSort.param(sort.packages),
-      assignee: sort.assignee
+      sort: LaneSort.param(view.cases),
+      packages: PackageSort.param(view.packages),
+      assignee: view.assignee
     ]
   end
 
@@ -626,10 +617,10 @@ defmodule VarselWeb.CaseManagementLive do
 
   defp format_short_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %-d")
 
-  # "4 d" / "22 h" style age used on pipeline cards, distinct from
-  # `CaseComponents.relative_timestamp/1`'s "4d ago" prose form.
   defp stale?(seconds, state), do: seconds >= Map.fetch!(@stale_after, state)
 
+  # "4 d" / "22 h" style age used on pipeline cards, distinct from
+  # `CaseComponents.relative_timestamp/1`'s "4d ago" prose form.
   defp format_age(seconds) when seconds < 3600, do: "#{max(div(seconds, 60), 1)} m"
   defp format_age(seconds) when seconds < 86_400, do: "#{div(seconds, 3600)} h"
   defp format_age(seconds), do: "#{div(seconds, 86_400)} d"
@@ -660,7 +651,7 @@ defmodule VarselWeb.CaseManagementLive do
 
   attr :face, :atom, required: true
   attr :query, :string, required: true
-  attr :sort, :map, required: true
+  attr :view, :map, required: true
   attr :cve_record_match_count, :integer, required: true
   attr :pipeline_count, :integer, required: true
   attr :archive_count, :integer, required: true
@@ -670,7 +661,7 @@ defmodule VarselWeb.CaseManagementLive do
   defp face_tabs(assigns) do
     ~H"""
     <div class="flex items-center gap-4 text-sm mt-1.5">
-      <.link patch={pipeline_path(@query, @sort)}>
+      <.link patch={pipeline_path(@query, @view)}>
         <.scope_tab
           active?={@face == :pipeline}
           label="Pipeline"
@@ -678,7 +669,7 @@ defmodule VarselWeb.CaseManagementLive do
           matched?={searched_elsewhere?(@face == :pipeline, @query)}
         />
       </.link>
-      <.link patch={archive_path("all", @query, nil, @sort)}>
+      <.link patch={archive_path("all", @query, nil, @view)}>
         <.scope_tab
           active?={@face == :archive}
           label="Archive"
@@ -696,62 +687,6 @@ defmodule VarselWeb.CaseManagementLive do
       >
         {@cve_record_match_count} in CVEs →
       </.link>
-    </div>
-    """
-  end
-
-  attr :sort, :map, required: true
-
-  # One control for both orders: the package rows, then the cases in a row.
-  defp sort_menu(assigns) do
-    assigns =
-      assign(assigns,
-        groups: [
-          %{
-            label: "Packages",
-            event: "sort_packages",
-            value: assigns.sort.packages,
-            options: PackageSort.options()
-          },
-          %{label: "Cases", event: "sort", value: assigns.sort.cases, options: LaneSort.options()}
-        ]
-      )
-
-    ~H"""
-    <div id="board-sort" class="dropdown dropdown-end">
-      <div
-        tabindex="0"
-        role="button"
-        aria-label="Sort"
-        class="btn btn-sm btn-ghost border border-base-300 font-normal gap-1.5"
-      >
-        <.icon name="hero-bars-arrow-down-mini" class="size-4 text-base-content/50 shrink-0" />
-        <span class="text-base-content/70">Sort:</span>
-        <span :for={{group, index} <- Enum.with_index(@groups)} class="flex items-center gap-1.5">
-          <span :if={index > 0} class="text-base-content/70" aria-hidden="true">/</span>
-          {Enum.find_value(group.options, fn {value, label} -> value == group.value && label end)}
-        </span>
-      </div>
-      <ul
-        tabindex="0"
-        class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-52 p-2 z-50"
-      >
-        <%= for group <- @groups do %>
-          <li class="menu-title text-[0.65rem] uppercase tracking-wider">{group.label}</li>
-          <li :for={{value, label} <- group.options}>
-            <button
-              type="button"
-              phx-click={group.event}
-              phx-value-selection={value}
-              aria-pressed={to_string(value == group.value)}
-              class={[value == group.value && "menu-choice-active"]}
-            >
-              {label}
-              <.icon :if={value == group.value} name="hero-check-mini" class="ml-auto size-4" />
-            </button>
-          </li>
-        <% end %>
-      </ul>
     </div>
     """
   end
@@ -778,7 +713,7 @@ defmodule VarselWeb.CaseManagementLive do
           <.face_tabs
             face={@face}
             query={@query}
-            sort={@sort}
+            view={@view}
             cve_record_match_count={@cve_record_match_count}
             pipeline_count={@pipeline_count}
             archive_count={@archive_count}
@@ -789,11 +724,11 @@ defmodule VarselWeb.CaseManagementLive do
         <:actions>
           <span
             :if={@face == :pipeline}
-            id="sort-memory"
-            phx-hook="SortMemory"
-            data-sort={LaneSort.param(@sort.cases)}
-            data-packages={PackageSort.param(@sort.packages)}
-            data-assignee={@sort.assignee}
+            id="board-memory"
+            phx-hook="BoardMemory"
+            data-sort={LaneSort.param(@view.cases)}
+            data-packages={PackageSort.param(@view.packages)}
+            data-assignee={@view.assignee}
             hidden
           ></span>
           <.console_menu
@@ -815,7 +750,20 @@ defmodule VarselWeb.CaseManagementLive do
               </span>
             </:lead>
           </.console_menu>
-          <.sort_menu :if={@face == :pipeline} sort={@sort} />
+          <.console_menu
+            :if={@face == :pipeline}
+            id="board-sort"
+            label="Sort"
+            groups={[
+              %{
+                label: "Packages",
+                event: "sort_packages",
+                value: @view.packages,
+                options: PackageSort.options()
+              },
+              %{label: "Cases", event: "sort", value: @view.cases, options: LaneSort.options()}
+            ]}
+          />
           <.console_search id="case-search" value={@query} placeholder="Search all cases…" />
         </:actions>
         <:primary :if={Cases.can_open_case?(@current_user, %{})}>
@@ -856,15 +804,14 @@ defmodule VarselWeb.CaseManagementLive do
       <.page_container width={:wide}>
         <.pipeline_face
           :if={@face == :pipeline}
-          lanes={@lanes}
+          columns={@columns}
+          rows={@rows}
+          empty?={@pipeline_count == 0}
           query={@query}
-          assignee={
-            @assignee != "all" &&
-              Enum.find_value(@assignee_options, fn {value, label} -> value == @assignee && label end)
-          }
+          assignee={@assignee_label}
           archive_match_count={@archive_match_count}
           can_open?={Cases.can_open_case?(@current_user, %{})}
-          sort={@sort}
+          view={@view}
           cve_record_match_count={@cve_record_match_count}
         />
         <.archive_face
@@ -876,7 +823,7 @@ defmodule VarselWeb.CaseManagementLive do
           closed_count={@archive_closed_count}
           archive_count={@archive_count}
           archive_match_count={@archive_match_count}
-          sort={@sort}
+          view={@view}
         />
       </.page_container>
 
@@ -1006,25 +953,18 @@ defmodule VarselWeb.CaseManagementLive do
     """
   end
 
-  attr :lanes, :list, required: true
+  attr :columns, :list, required: true
+  attr :rows, :list, required: true
+  attr :empty?, :boolean, required: true, doc: "the pipeline holds no case at all"
   attr :query, :string, required: true
   attr :assignee, :any, required: true, doc: "who the board is filtered to, by name, or false"
   attr :archive_match_count, :integer, required: true
   attr :can_open?, :boolean, required: true
-  attr :sort, :map, required: true
+  attr :view, :map, required: true
   attr :cve_record_match_count, :integer, required: true
 
   defp pipeline_face(assigns) do
-    all_empty? = Enum.all?(assigns.lanes, &(&1.count == 0))
-    zero_matches? = assigns.query != "" and Enum.all?(assigns.lanes, &(&1.match_count == 0))
-
-    assigns =
-      assign(assigns,
-        all_empty?: all_empty?,
-        zero_matches?: zero_matches?,
-        columns: columns(assigns.lanes),
-        rows: package_rows(assigns.lanes, assigns.sort)
-      )
+    assigns = assign(assigns, :zero_matches?, assigns.query != "" and assigns.rows == [])
 
     ~H"""
     <div :if={@zero_matches?} class="text-center text-sm text-base-content/70 py-8">
@@ -1034,7 +974,7 @@ defmodule VarselWeb.CaseManagementLive do
         singular="match"
         plural="matches"
       /> in
-      <.link patch={archive_path("all", @query, nil, @sort)} class="link text-primary">
+      <.link patch={archive_path("all", @query, nil, @view)} class="link text-primary">
         Archive →
       </.link>
       <span :if={@cve_record_match_count > 0}>
@@ -1072,23 +1012,18 @@ defmodule VarselWeb.CaseManagementLive do
           </span>
           <span class="shrink-0 tabular-nums text-base-content/70">({row.total})</span>
         </div>
-        <.package_link :if={row.links.hex} href={row.links.hex} label="hex.pm" />
-        <.package_link
-          :if={row.links.forge}
-          href={elem(row.links.forge, 1)}
-          label={elem(row.links.forge, 0)}
-        />
+        <.package_link :for={{label, href} <- row.links} href={href} label={label} />
       </:row_head>
-      <:cell :let={{row, lane}}>
+      <:cell :let={{row, column}}>
         <.pipeline_card
-          :for={case_record <- Map.get(row.by_state, lane.state, [])}
+          :for={case_record <- Map.get(row.by_state, column.key, [])}
           case_record={case_record}
         />
       </:cell>
     </BoardComponents.matrix>
 
     <p
-      :if={@assignee && @rows == [] && !@all_empty? && @query == ""}
+      :if={@assignee && @rows == [] && !@empty? && @query == ""}
       id="no-assigned-cases"
       class="text-center text-sm text-base-content/70 mt-4"
     >
@@ -1097,99 +1032,66 @@ defmodule VarselWeb.CaseManagementLive do
         else: "No case in the pipeline is assigned to #{@assignee}."}
     </p>
 
-    <p
-      :if={@all_empty? and @query == "" and @can_open?}
-      class="text-center text-sm text-base-content/70 mt-4"
-    >
+    <p :if={@empty? and @query == ""} class="text-center text-sm text-base-content/70 mt-4">
       No active cases.
-      <button
-        type="button"
-        class="link text-primary"
-        phx-click="open_case_dialog"
-        phx-value-choice="blank"
-      >
-        Open a case
-      </button>
-      to start one, or browse the <.link
-        patch={archive_path("all", "", nil, @sort)}
-        class="link text-primary"
-      >archive</.link>.
-    </p>
-
-    <p
-      :if={@all_empty? and @query == "" and !@can_open?}
-      class="text-center text-sm text-base-content/70 mt-4"
-    >
-      No active cases. Browse the <.link
-        patch={archive_path("all", "", nil, @sort)}
-        class="link text-primary"
-      >archive</.link>.
+      <span :if={@can_open?}>
+        <button
+          type="button"
+          class="link text-primary"
+          phx-click="open_case_dialog"
+          phx-value-choice="blank"
+        >
+          Open a case
+        </button>
+        to start one, or browse
+      </span>
+      <span :if={!@can_open?}>Browse</span>
+      the <.link patch={archive_path("all", "", nil, @view)} class="link text-primary">archive</.link>.
     </p>
     """
-  end
-
-  # Publishing is a handoff a case passes through in moments, so its column
-  # shows only while something is in it.
-  defp columns(lanes) do
-    lanes
-    |> Enum.reject(&(&1.state == :publishing and &1.count == 0))
-    |> Enum.map(&Map.put(&1, :count, &1.display_count))
   end
 
   # A case with several packages groups under its first.
   defp package_key(case_record), do: case_record |> package_chips() |> List.first()
 
-  # Where the package a row stands for lives: its hex.pm page when it ships
-  # there, and its repository.
+  # Where the package a row stands for lives, as `{label, url}`: its hex.pm
+  # page when it ships there, and its repository.
   defp package_links(cards) do
     packages = Enum.flat_map(cards, &Enum.take(&1.affected_packages, 1))
 
     hex =
       packages
       |> Enum.flat_map(& &1.channels)
-      |> Enum.find_value(fn channel ->
-        if is_binary(channel.purl) and String.starts_with?(channel.purl, "pkg:hex/") do
-          {_label, url} = VarselWeb.CveView.package_link(%{"packageURL" => channel.purl})
-          url
-        end
+      |> Enum.find_value(fn
+        %{purl: "pkg:hex/" <> _name = purl} ->
+          VarselWeb.CveView.registry_link(%{"packageURL" => purl})
+
+        _channel ->
+          nil
       end)
 
-    %{hex: hex, forge: Enum.find_value(packages, &forge_link(&1.repo_url))}
+    forge =
+      Enum.find_value(packages, fn package ->
+        package.repo_url &&
+          {package.repo_url |> RepoUrl.parse() |> RepoUrl.forge_name(), package.repo_url}
+      end)
+
+    Enum.reject([hex, forge], &is_nil/1)
   end
 
-  defp forge_link(repo_url) when is_binary(repo_url) do
-    case URI.parse(repo_url) do
-      %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) ->
-        {forge_name(host), repo_url}
-
-      _other ->
-        nil
-    end
-  end
-
-  defp forge_link(_repo_url), do: nil
-
-  defp forge_name("github.com"), do: "GitHub"
-  defp forge_name("gitlab.com"), do: "GitLab"
-  defp forge_name("codeberg.org"), do: "Codeberg"
-  defp forge_name(host), do: host
-
-  # One row per package across every lane. The cases without a package lead,
-  # since that is where a fresh report waits.
-  defp package_rows(lanes, sort) do
+  # One row per package across every state. The cases without a package
+  # lead, since that is where a fresh report waits.
+  defp package_rows(cases, order) do
     {bare, packaged} =
-      lanes
-      |> Enum.flat_map(& &1.cards)
+      cases
       |> Enum.group_by(&package_key/1)
       |> Enum.map(fn {package, cards} ->
-        opened_at = cards |> Enum.map(& &1.inserted_at) |> Enum.min(DateTime)
-
         %{
           package: package,
           label: package || "No package",
-          links: if(package, do: package_links(cards), else: %{hex: nil, forge: nil}),
+          links: if(package, do: package_links(cards), else: []),
           total: length(cards),
-          opened_at: opened_at,
+          opened_at: cards |> Enum.map(& &1.inserted_at) |> Enum.min(DateTime),
           max_score:
             cards
             |> Enum.map(& &1.cvss_score)
@@ -1201,7 +1103,7 @@ defmodule VarselWeb.CaseManagementLive do
       end)
       |> Enum.split_with(&is_nil(&1.package))
 
-    bare ++ PackageSort.sort(packaged, sort.packages)
+    bare ++ PackageSort.sort(packaged, order)
   end
 
   attr :href, :string, required: true
@@ -1254,7 +1156,7 @@ defmodule VarselWeb.CaseManagementLive do
             <span
               class={[
                 "text-[0.68rem] tabular-nums whitespace-nowrap",
-                if(@stale?, do: "text-[color:var(--stale-text)]", else: "text-base-content/70")
+                if(@stale?, do: "text-[color:var(--warning-ink)]", else: "text-base-content/70")
               ]}
               title={@stale? && "Waiting past this stage's threshold"}
               data-stale={@stale?}
@@ -1296,7 +1198,7 @@ defmodule VarselWeb.CaseManagementLive do
   attr :closed_count, :integer, required: true
   attr :archive_count, :integer, required: true
   attr :archive_match_count, :integer, required: true
-  attr :sort, :map, required: true
+  attr :view, :map, required: true
 
   defp archive_face(assigns) do
     ~H"""
@@ -1308,7 +1210,7 @@ defmodule VarselWeb.CaseManagementLive do
           label="All"
           count={@archive_match_count}
           query={@query}
-          sort={@sort}
+          view={@view}
         />
         <.scope_link
           scope={@scope}
@@ -1316,7 +1218,7 @@ defmodule VarselWeb.CaseManagementLive do
           label="Published"
           count={@published_count}
           query={@query}
-          sort={@sort}
+          view={@view}
         />
         <.scope_link
           scope={@scope}
@@ -1324,7 +1226,7 @@ defmodule VarselWeb.CaseManagementLive do
           label="Closed"
           count={@closed_count}
           query={@query}
-          sort={@sort}
+          view={@view}
         />
       </:tabs>
       <:empty>
@@ -1458,13 +1360,13 @@ defmodule VarselWeb.CaseManagementLive do
   attr :label, :string, required: true
   attr :count, :integer, required: true
   attr :query, :string, required: true
-  attr :sort, :map, required: true
+  attr :view, :map, required: true
 
   defp scope_link(assigns) do
     assigns = assign(assigns, :active?, assigns.scope == assigns.value)
 
     ~H"""
-    <.link patch={archive_path(@value, @query, nil, @sort)}>
+    <.link patch={archive_path(@value, @query, nil, @view)}>
       <.scope_tab active?={@active?} label={@label} count={@count} />
     </.link>
     """

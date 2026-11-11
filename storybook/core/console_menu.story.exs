@@ -78,6 +78,25 @@ defmodule VarselWeb.Storybook.Core.ConsoleMenu do
           ],
           event: "assignee"
         }
+      },
+      %Variation{
+        id: :groups,
+        description:
+          "A control that chooses more than one thing: each group is a titled set " <>
+            "with its own current choice, and the trigger names them all.",
+        attributes: %{
+          id: "sort-groups",
+          label: "Sort",
+          groups: [
+            %{
+              label: "Packages",
+              event: "sort_packages",
+              value: :recent,
+              options: [{:recent, "Latest update"}, {:name, "Name"}]
+            },
+            %{label: "Cases", event: "sort", value: :newest, options: sort_options()}
+          ]
+        }
       }
     ]
   end

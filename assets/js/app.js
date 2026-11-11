@@ -35,7 +35,7 @@ import {
   CssVars,
   DragSort,
   SectionRail,
-  SortMemory,
+  BoardMemory,
 } from "./hooks"
 import {install as installPriorityNav} from "./priority_nav"
 
@@ -146,7 +146,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     DragSort,
     SectionRail,
     CssVars,
-    SortMemory,
+    BoardMemory,
   },
 })
 

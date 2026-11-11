@@ -249,10 +249,6 @@
   --sev-critical-fill: #1c2733;
   --sev-critical-line: transparent;
   --sev-critical-text: #ffffff;
-  /* Amber as small text: the warning hue itself is too pale on a light
-     surface, so staleness reads in the medium-severity amber, which already
-     has a shade for each theme. */
-  --stale-text: var(--sev-medium);
 }
 
 [data-theme="dark"] {
@@ -597,13 +593,6 @@
     align-self: end;
     margin-top: 0;
   }
-}
-
-/* The current choice in a console menu: a tinted row, with a check mark the
-   markup adds so the tint is not the only cue. */
-.menu-choice-active {
-  background-color: color-mix(in oklab, var(--eef-blue) 18%, transparent);
-  font-weight: 600;
 }
 
 /* Console buttons: solid EEF brand blue, and a quiet outline variant. */

@@ -396,8 +396,8 @@ in `assets/css/app.css`. Work inside it rather than inventing a look per screen.
   both themes before calling it done.
 - **Tokens, not ad-hoc color.** `base-100/200/300`, `--eef-navy`/`--eef-navy-2`/
   `--eef-blue` (a fill; small text in that blue takes `--eef-blue-text`), the
-  five-step `--sev-*` severity scale, `--violet` for the approved lane,
-  `--stale-text` for an amber that reads as text. Named classes carry the patterns: `.console-band`, `.eef-band`,
+  five-step `--sev-*` severity scale, `--violet` for the approved lane.
+  Status colours as small text take the `--*-ink` tokens. Named classes carry the patterns: `.console-band`, `.eef-band`,
   `.page-header`, `.btn-eef` / `.btn-eef-quiet`, `.lane-card`, `.eef-eyebrow`,
   `.overlay-scrim`, `.timeline-track`. Reach for these before writing new CSS; if a
   value has no token, add one rather than inlining a hex.

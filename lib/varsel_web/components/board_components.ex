@@ -100,23 +100,37 @@ defmodule VarselWeb.BoardComponents do
 
   defp drop_placeholders(assigns) do
     ~H"""
+    <.drop_placeholder
+      column={@column}
+      icon="hero-arrow-down-on-square-mini"
+      class="border-[color:var(--eef-blue)] text-[color:var(--eef-blue)] group-data-[drop=allowed]/cell:flex group-data-[drop-over]/cell:bg-[color:var(--eef-blue)]/15"
+    >
+      Move to {@column.label}
+    </.drop_placeholder>
+    <.drop_placeholder
+      column={@column}
+      icon="hero-no-symbol-mini"
+      class="cursor-not-allowed border-base-content/30 text-base-content/70 group-data-[drop=denied]/cell:flex"
+    >
+      Can't move here
+    </.drop_placeholder>
+    """
+  end
+
+  attr :column, :map, required: true
+  attr :icon, :string, required: true
+  attr :class, :string, required: true
+  slot :inner_block, required: true
+
+  defp drop_placeholder(assigns) do
+    ~H"""
     <div class={[
       "hidden min-h-[var(--board-card-height,4.9rem)] items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-[0.72rem] font-semibold",
-      "border-[color:var(--eef-blue)] text-[color:var(--eef-blue)]",
-      "group-data-[drop=allowed]/cell:flex group-data-[drop-over]/cell:bg-[color:var(--eef-blue)]/15",
-      !@column.empty? && "px-2.5"
+      !@column.empty? && "px-2.5",
+      @class
     ]}>
-      <.icon name="hero-arrow-down-on-square-mini" class="size-4 shrink-0" />
-      <span class={[@column.empty? && "sr-only"]}>Move to {@column.label}</span>
-    </div>
-    <div class={[
-      "hidden min-h-[var(--board-card-height,4.9rem)] cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-[0.72rem] font-semibold",
-      "border-base-content/30 text-base-content/70",
-      "group-data-[drop=denied]/cell:flex",
-      !@column.empty? && "px-2.5"
-    ]}>
-      <.icon name="hero-no-symbol-mini" class="size-4 shrink-0" />
-      <span class={[@column.empty? && "sr-only"]}>Can't move here</span>
+      <.icon name={@icon} class="size-4 shrink-0" />
+      <span class={[@column.empty? && "sr-only"]}>{render_slot(@inner_block)}</span>
     </div>
     """
   end

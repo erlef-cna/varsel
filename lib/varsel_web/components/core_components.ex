@@ -1171,10 +1171,21 @@ defmodule VarselWeb.CoreComponents do
 
   The trigger names the current choice, so the board's order, or what it is
   filtered to, is readable without opening the menu.
+
+  A control that chooses more than one thing takes `groups` in place of
+  `value`, `options` and `event`: each group is a titled set of options with
+  its own current value and event, and the trigger names every group's
+  choice.
   """
   attr :id, :string, required: true
   attr :label, :string, required: true, doc: "what the control chooses, e.g. \"Sort\""
-  attr :value, :any, required: true, doc: "the selected option's value"
+  attr :value, :any, default: nil, doc: "the selected option's value"
+  attr :options, :list, default: [], doc: "{value, label} pairs, in menu order"
+  attr :event, :string, default: nil, doc: "pushed with the chosen value as `selection`"
+
+  attr :groups, :list,
+    default: nil,
+    doc: "maps of `label`, `value`, `options` and `event`, one per titled set of options"
 
   attr :icon, :string,
     default: "hero-bars-arrow-down-mini",
@@ -1183,10 +1194,13 @@ defmodule VarselWeb.CoreComponents do
   slot :lead,
     doc: "a mark before an option's label, such as an avatar; receives the option's value"
 
-  attr :options, :list, required: true, doc: "{value, label} pairs, in menu order"
-  attr :event, :string, required: true, doc: "pushed with the chosen value as `selection`"
-
   def console_menu(assigns) do
+    assigns =
+      assign_new(assigns, :sets, fn ->
+        assigns.groups ||
+          [%{label: nil, value: assigns.value, options: assigns.options, event: assigns.event}]
+      end)
+
     ~H"""
     <div id={@id} class="dropdown dropdown-end">
       <div
@@ -1197,27 +1211,35 @@ defmodule VarselWeb.CoreComponents do
       >
         <.icon name={@icon} class="size-4 text-base-content/50 shrink-0" />
         <span class="text-base-content/70">{@label}:</span>
-        <span class="max-w-40 truncate">
-          {Enum.find_value(@options, fn {value, label} -> value == @value && label end)}
-        </span>
+        <%= for {set, index} <- Enum.with_index(@sets) do %>
+          <span :if={index > 0} class="text-base-content/70" aria-hidden="true">/</span>
+          <span class="max-w-40 truncate">
+            {Enum.find_value(set.options, fn {value, label} -> value == set.value && label end)}
+          </span>
+        <% end %>
       </div>
       <ul
         tabindex="0"
-        class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-48 p-2 z-50"
+        class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-52 p-2 z-50"
       >
-        <li :for={{value, label} <- @options}>
-          <button
-            type="button"
-            phx-click={@event}
-            phx-value-selection={value}
-            aria-pressed={to_string(value == @value)}
-            class={[value == @value && "menu-choice-active"]}
-          >
-            {render_slot(@lead, value)}
-            <span class="truncate">{label}</span>
-            <.icon :if={value == @value} name="hero-check-mini" class="ml-auto size-4 shrink-0" />
-          </button>
-        </li>
+        <%= for set <- @sets do %>
+          <li :if={set.label} class="menu-title text-[0.65rem] uppercase tracking-wider">
+            {set.label}
+          </li>
+          <li :for={{value, label} <- set.options}>
+            <button
+              type="button"
+              phx-click={set.event}
+              phx-value-selection={value}
+              aria-pressed={to_string(value == set.value)}
+              class={[value == set.value && "menu-active"]}
+            >
+              {render_slot(@lead, value)}
+              <span class="truncate">{label}</span>
+              <.icon :if={value == set.value} name="hero-check-mini" class="ml-auto size-4 shrink-0" />
+            </button>
+          </li>
+        <% end %>
       </ul>
     </div>
     """

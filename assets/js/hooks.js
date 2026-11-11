@@ -46,6 +46,7 @@ export const BoardMove = {
         cell.removeAttribute("data-drop-over")
       }
       this.drag = null
+      this.over = null
     }
 
     this.targetCell = (event) => {
@@ -79,9 +80,7 @@ export const BoardMove = {
     this.el.addEventListener("dragover", (event) => {
       const cell = this.targetCell(event)
 
-      for (const other of this.el.querySelectorAll("[data-drop-over]")) {
-        if (other !== cell) other.removeAttribute("data-drop-over")
-      }
+      if (this.over && this.over !== cell) this.over.removeAttribute("data-drop-over")
 
       if (!this.drag) return
 
@@ -92,6 +91,7 @@ export const BoardMove = {
         event.preventDefault()
         event.dataTransfer.dropEffect = "move"
         cell.dataset.dropOver = ""
+        this.over = cell
       } else {
         event.dataTransfer.dropEffect = "none"
       }
@@ -112,54 +112,50 @@ export const BoardMove = {
   },
 }
 
-// Remembers the cases board's sort and assignee filter across visits. The
-// element carries what the URL names (data-sort, data-packages,
-// data-assignee; absent for a default). A visit whose URL names none of
-// them gets the remembered ones back through the restore_sort event. A force-refresh, which the root layout marks on the
-// body, forgets it and resets the board through reset_sort; the mark lasts
-// as long as the page, so it is honoured once.
-const SORT_MEMORY_KEY = "cases:sort"
+// Remembers the cases board's view (its two sorts and its assignee filter)
+// across visits. The element carries what the URL names (data-sort,
+// data-packages, data-assignee; absent for a default). A visit whose URL
+// names none of them gets the remembered ones back through the restore_view
+// event. A force-refresh, which the root layout marks on the body, forgets
+// them and resets the board; the mark lasts as long as the page, so it is
+// honoured once.
+const BOARD_MEMORY_KEY = "cases:view"
 let forceReloadHonoured = false
 
-export const SortMemory = {
+const namesAny = (view) => Boolean(view?.sort || view?.packages || view?.assignee)
+
+export const BoardMemory = {
   chosen() {
-    return {
-      sort: this.el.dataset.sort || null,
-      packages: this.el.dataset.packages || null,
-      assignee: this.el.dataset.assignee || null,
-    }
-  },
-  remembered() {
-    try {
-      return JSON.parse(localStorage.getItem(SORT_MEMORY_KEY))
-    } catch (_error) {
-      return null
-    }
+    const {sort = null, packages = null, assignee = null} = this.el.dataset
+    return {sort, packages, assignee}
   },
   remember() {
     const chosen = this.chosen()
 
-    if (chosen.sort || chosen.packages || chosen.assignee) {
-      localStorage.setItem(SORT_MEMORY_KEY, JSON.stringify(chosen))
+    if (namesAny(chosen)) {
+      localStorage.setItem(BOARD_MEMORY_KEY, JSON.stringify(chosen))
     } else {
-      localStorage.removeItem(SORT_MEMORY_KEY)
+      localStorage.removeItem(BOARD_MEMORY_KEY)
+    }
+  },
+  remembered() {
+    try {
+      return JSON.parse(localStorage.getItem(BOARD_MEMORY_KEY))
+    } catch (_error) {
+      return null
     }
   },
   mounted() {
-    const chosen = this.chosen()
-    const named = chosen.sort || chosen.packages || chosen.assignee
+    const named = namesAny(this.chosen())
 
     if (document.body.hasAttribute("data-force-reload") && !forceReloadHonoured) {
       forceReloadHonoured = true
-      localStorage.removeItem(SORT_MEMORY_KEY)
-      if (named) this.pushEvent("reset_sort", {})
+      localStorage.removeItem(BOARD_MEMORY_KEY)
+      if (named) this.pushEvent("restore_view", {})
     } else if (named) {
       this.remember()
-    } else {
-      const remembered = this.remembered()
-      if (remembered?.sort || remembered?.packages || remembered?.assignee) {
-        this.pushEvent("restore_sort", remembered)
-      }
+    } else if (namesAny(this.remembered())) {
+      this.pushEvent("restore_view", this.remembered())
     }
   },
   updated() {

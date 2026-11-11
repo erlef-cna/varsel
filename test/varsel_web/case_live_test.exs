@@ -686,10 +686,10 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert has_element?(
                lv,
-               "#sort-memory[phx-hook=SortMemory]:not([data-sort]):not([data-packages])"
+               "#board-memory[phx-hook=BoardMemory]:not([data-sort]):not([data-packages])"
              )
 
-      render_hook(lv, "restore_sort", %{
+      render_hook(lv, "restore_view", %{
         "sort" => "severity",
         "packages" => "name",
         "assignee" => "me"
@@ -699,18 +699,18 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert has_element?(
                lv,
-               ~s{#sort-memory[data-sort=severity][data-packages=name][data-assignee=me]}
+               ~s{#board-memory[data-sort=severity][data-packages=name][data-assignee=me]}
              )
 
       # What the browser stored is not trusted to name a real order.
-      render_hook(lv, "restore_sort", %{"sort" => "sideways", "packages" => nil})
+      render_hook(lv, "restore_view", %{"sort" => "sideways", "packages" => nil})
       assert_patched(lv, "/cases")
 
-      render_hook(lv, "restore_sort", %{"sort" => "oldest", "assignee" => "me"})
-      render_hook(lv, "reset_sort", %{})
+      render_hook(lv, "restore_view", %{"sort" => "oldest", "assignee" => "me"})
+      render_hook(lv, "restore_view", %{})
       assert_patched(lv, "/cases")
-      refute has_element?(lv, "#sort-memory[data-sort]")
-      refute has_element?(lv, "#sort-memory[data-assignee]")
+      refute has_element?(lv, "#board-memory[data-sort]")
+      refute has_element?(lv, "#board-memory[data-assignee]")
     end
 
     test "the page is marked when the browser force-refreshes it", %{conn: conn, poc: poc} do
