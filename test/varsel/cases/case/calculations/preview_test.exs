@@ -174,13 +174,34 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     case: case_record
   } do
     cna = cna(render!(case_record, poc))
-    assert cna["dateAssigned"] == DateTime.to_iso8601(case_record.cve_assigned_at)
+    assert {:ok, date_assigned, 0} = DateTime.from_iso8601(cna["dateAssigned"])
+    assert DateTime.compare(date_assigned, case_record.cve_assigned_at) == :eq
     refute Map.has_key?(cna, "datePublic")
 
     case_record =
       Cases.edit_case!(case_record, %{date_public: ~U[2026-01-15 09:30:00Z]}, actor: poc)
 
-    assert cna(render!(case_record, poc))["datePublic"] == "2026-01-15T09:30:00Z"
+    assert cna(render!(case_record, poc))["datePublic"] == "2026-01-15T09:30:00.000Z"
+  end
+
+  test "renders timestamps at the millisecond precision CVE Services returns", %{
+    poc: poc,
+    case: case_record
+  } do
+    case_record =
+      Cases.edit_case!(
+        case_record,
+        %{
+          date_public: ~U[2026-06-02 13:41:37Z],
+          timeline: [%{time: ~U[2026-05-01 08:00:00Z], value_md: "Reported."}]
+        },
+        actor: poc
+      )
+
+    cna = cna(render!(case_record, poc))
+    assert cna["dateAssigned"] =~ ~r/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+    assert cna["datePublic"] == "2026-06-02T13:41:37.000Z"
+    assert [%{"time" => "2026-05-01T08:00:00.000Z"}] = cna["timeline"]
   end
 
   test "renders the technical analysis, proof of concept and authored impact prose", %{

@@ -624,5 +624,12 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   defp put_non_empty(map, key, value), do: Map.put(map, key, value)
 
   defp format_time(nil), do: nil
-  defp format_time(%DateTime{} = time), do: DateTime.to_iso8601(time)
+  # CVE Services stores timestamps at millisecond precision and returns them
+  # as `.000Z`. Rendering the same precision keeps the published diff clean.
+  defp format_time(%DateTime{} = time) do
+    time
+    |> DateTime.add(0, :millisecond)
+    |> DateTime.truncate(:millisecond)
+    |> DateTime.to_iso8601()
+  end
 end
