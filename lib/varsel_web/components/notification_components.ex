@@ -44,16 +44,29 @@ defmodule VarselWeb.NotificationComponents do
   defp badge_count(count) when count > 99, do: "99+"
   defp badge_count(count), do: to_string(count)
 
-  @group_order [
-    :review_requested,
-    :unassigned_review_requested,
-    :report_submitted,
-    :mentioned,
-    :case_assigned,
-    :proposal_opened,
-    :comment_posted,
-    :case_published
+  @kinds [
+    review_requested: [
+      label: "Review requests",
+      icon: "hero-clipboard-document-check",
+      tone: :review
+    ],
+    unassigned_review_requested: [
+      label: "Unassigned reviews",
+      icon: "hero-clipboard-document",
+      tone: :review
+    ],
+    report_submitted: [label: "New reports", icon: "hero-inbox-arrow-down", tone: :act],
+    mentioned: [label: "Mentions", icon: "hero-at-symbol", tone: :mention],
+    case_assigned: [label: "Added to a case", icon: "hero-user-plus", tone: :addressed],
+    proposal_opened: [label: "Proposals", icon: "hero-pencil-square", tone: :suggestion],
+    comment_posted: [label: "Comments", icon: "hero-chat-bubble-left-right", tone: :activity],
+    case_published: [label: "Published", icon: "hero-megaphone", tone: :done]
   ]
+
+  if Enum.sort(Keyword.keys(@kinds)) != Enum.sort(Kind.values()) do
+    raise CompileError,
+      description: "@kinds in #{inspect(__MODULE__)} must list every Varsel.Notifications.Kind value"
+  end
 
   @doc """
   The notification kinds in the order the notifications page lists them,
@@ -61,19 +74,12 @@ defmodule VarselWeb.NotificationComponents do
   them, then activity on their cases.
   """
   @spec group_order() :: [Kind.t()]
-  def group_order, do: @group_order ++ (Kind.values() -- @group_order)
+  def group_order, do: Keyword.keys(@kinds)
 
   @doc "A kind's name as a group of notifications, or `:all` for every kind."
   @spec group_label(Kind.t() | :all) :: String.t()
   def group_label(:all), do: "All"
-  def group_label(:mentioned), do: "Mentions"
-  def group_label(:review_requested), do: "Review requests"
-  def group_label(:unassigned_review_requested), do: "Unassigned reviews"
-  def group_label(:case_assigned), do: "Added to a case"
-  def group_label(:report_submitted), do: "New reports"
-  def group_label(:comment_posted), do: "Comments"
-  def group_label(:proposal_opened), do: "Proposals"
-  def group_label(:case_published), do: "Published"
+  for {kind, meta} <- @kinds, do: def(group_label(unquote(kind)), do: unquote(meta[:label]))
 
   @doc """
   How much a kind asks of the viewer, which sets the colour of its icon:
@@ -88,26 +94,12 @@ defmodule VarselWeb.NotificationComponents do
   """
   @spec kind_tone(Kind.t()) ::
           :review | :act | :mention | :addressed | :suggestion | :activity | :done
-  def kind_tone(:review_requested), do: :review
-  def kind_tone(:unassigned_review_requested), do: :review
-  def kind_tone(:report_submitted), do: :act
-  def kind_tone(:mentioned), do: :mention
-  def kind_tone(:case_assigned), do: :addressed
-  def kind_tone(:proposal_opened), do: :suggestion
-  def kind_tone(:comment_posted), do: :activity
-  def kind_tone(:case_published), do: :done
+  for {kind, meta} <- @kinds, do: def(kind_tone(unquote(kind)), do: unquote(meta[:tone]))
 
   @doc "The icon that stands for a kind, or `:all`, in the group rail."
   @spec group_icon(Kind.t() | :all) :: String.t()
   def group_icon(:all), do: "hero-inbox-stack"
-  def group_icon(:mentioned), do: "hero-at-symbol"
-  def group_icon(:review_requested), do: "hero-clipboard-document-check"
-  def group_icon(:unassigned_review_requested), do: "hero-clipboard-document"
-  def group_icon(:case_assigned), do: "hero-user-plus"
-  def group_icon(:report_submitted), do: "hero-inbox-arrow-down"
-  def group_icon(:comment_posted), do: "hero-chat-bubble-left-right"
-  def group_icon(:proposal_opened), do: "hero-pencil-square"
-  def group_icon(:case_published), do: "hero-megaphone"
+  for {kind, meta} <- @kinds, do: def(group_icon(unquote(kind)), do: unquote(meta[:icon]))
 
   @doc """
   The notifications page's group rail: an "All" entry over every kind, then

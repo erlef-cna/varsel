@@ -79,9 +79,8 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
 
   defp route(event, opts), do: {event, audience(event, opts)}
 
-  # A case nobody reviews yet goes to the POCs who asked for such reviews, or
-  # to every POC while none has, so a request from someone who cannot assign
-  # a POC still reaches a reviewer.
+  # A coordinator often cannot assign a POC, so a case with none must still
+  # reach a reviewer.
   defp route_review(event, opts) do
     case audience(event, opts) do
       [] ->

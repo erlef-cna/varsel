@@ -24,15 +24,7 @@ defmodule VarselWeb.NotificationsLive do
 
   @impl Phoenix.LiveView
   def mount(_params, _session, socket) do
-    socket =
-      socket
-      |> assign(:page_title, "Notifications")
-      |> keep_live(:summary, &summarize/1,
-        subscribe: subscribe_topic(socket.assigns[:current_user]),
-        results: :lose
-      )
-
-    {:ok, socket}
+    {:ok, assign(socket, :page_title, "Notifications")}
   end
 
   # An anonymous mount has no user id to scope a topic to; :read_notifications
@@ -50,14 +42,18 @@ defmodule VarselWeb.NotificationsLive do
 
   defp selected_kind(param), do: Enum.find(Kind.values(), :all, &(Atom.to_string(&1) == param))
 
-  # Both assigns share the user's topic, and the LiveNotifications hook
-  # refetches every assign on a topic from one subscription, so the topic is
-  # dropped before keep_live subscribes it again for the newly opened group.
+  # A patch to another group re-runs keep_live, so the topic is dropped first
+  # rather than subscribed twice. The rail's counts span every kind, and
+  # refresh with each fetch of the open group.
   defp keep_notifications_live(socket) do
     topic = subscribe_topic(socket.assigns[:current_user])
     if is_binary(topic), do: socket.endpoint.unsubscribe(topic)
 
-    keep_live(socket, :notifications, &list_notifications/2, subscribe: topic, results: :lose)
+    keep_live(socket, :notifications, &list_notifications/2,
+      subscribe: topic,
+      results: :lose,
+      after_fetch: fn _page, socket -> assign(socket, :summary, summarize(socket)) end
+    )
   end
 
   @impl Phoenix.LiveView
@@ -71,7 +67,7 @@ defmodule VarselWeb.NotificationsLive do
 
   def handle_event("toggle_read", %{"row_id" => id}, socket) do
     actor = socket.assigns.current_user
-    notification = Enum.find(page_results(socket.assigns.notifications), &(&1.id == id))
+    notification = Enum.find(socket.assigns.notifications.results, &(&1.id == id))
 
     socket =
       case toggle(notification, actor) do
@@ -113,6 +109,8 @@ defmodule VarselWeb.NotificationsLive do
     %{
       total: Enum.frequencies_by(rows, & &1.kind),
       unread: Enum.frequencies_by(unread, & &1.kind),
+      total_count: length(rows),
+      unread_count: length(unread),
       unread_row: List.first(unread)
     }
   end
@@ -134,20 +132,6 @@ defmodule VarselWeb.NotificationsLive do
   defp kind_filter(:all), do: []
   defp kind_filter(kind), do: [kind: kind]
 
-  # The group heading already counts what is in it, so the footer only
-  # appears when there is another page to reach.
-  defp pageable?(nil), do: false
-
-  defp pageable?(page) do
-    case AshPhoenix.LiveView.last_page(page) do
-      :unknown -> true
-      last_page -> last_page > 1
-    end
-  end
-
-  defp page_results(nil), do: []
-  defp page_results(page), do: page.results
-
   # The open group stays in the rail even with nothing in it, so a link to an
   # emptied group still shows where the reader is.
   defp groups(summary, active) do
@@ -160,11 +144,7 @@ defmodule VarselWeb.NotificationsLive do
     end
   end
 
-  defp unread_total(summary), do: summary.unread |> Map.values() |> Enum.sum()
-
-  defp group_counts(summary, :all) do
-    {unread_total(summary), summary.total |> Map.values() |> Enum.sum()}
-  end
+  defp group_counts(summary, :all), do: {summary.unread_count, summary.total_count}
 
   defp group_counts(summary, kind), do: {Map.get(summary.unread, kind, 0), Map.get(summary.total, kind, 0)}
 
@@ -196,7 +176,7 @@ defmodule VarselWeb.NotificationsLive do
       <.page_header>
         <:eyebrow>CNA Console</:eyebrow>
         <:title>Notifications</:title>
-        <:subtitle>{unread_headline(unread_total(@summary))}</:subtitle>
+        <:subtitle>{unread_headline(@summary.unread_count)}</:subtitle>
         <:actions :if={can_mark_all_read?(@summary, @current_user)}>
           <button
             type="button"
@@ -238,14 +218,14 @@ defmodule VarselWeb.NotificationsLive do
                 </p>
               </div>
 
-              <.list_card empty?={page_results(@notifications) == []}>
+              <.list_card empty?={@notifications.results == []}>
                 <:empty>Nothing here yet.</:empty>
                 <:footer :if={pageable?(@notifications)}>
                   <.pagination page={@notifications} noun="notification" />
                 </:footer>
 
                 <.notification_row
-                  :for={notification <- page_results(@notifications)}
+                  :for={notification <- @notifications.results}
                   notification={notification}
                   show_kind?={@kind == :all}
                 />

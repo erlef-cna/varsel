@@ -45,13 +45,15 @@ defmodule Seeds.Notifications do
   # The same upsert the mock sign-in performs, so signing in as POC in the
   # browser lands on exactly this user.
   defp mock_poc do
+    {_uid, label, _role} = List.keyfind(Varsel.Accounts.Strategy.Mock.roles(), "poc", 0)
+
     Ash.create!(
       User,
       %{
         user_info: %{
           "sub" => "poc",
           "preferred_username" => "mock-poc",
-          "name" => "Mock POC",
+          "name" => "Mock #{label}",
           "email" => "mock-poc@example.com"
         },
         oauth_tokens: %{},

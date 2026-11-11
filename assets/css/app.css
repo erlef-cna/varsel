@@ -160,54 +160,52 @@
   }
 }
 
-/* ------------------------------------------- Notification kind tone tokens */
-/* Notification kinds rank by what they ask of the reader: review, act,
-   mention, addressed, suggestion, activity, done. A review request wears the
-   suggestion's info blue, and act shares addressed's amber at a deeper
-   tint. The ink tokens darken the tones in light theme, where the raw
-   status hues sit too pale on white for a 3:1 icon. */
+/* ------------------------------------------------------ Status ink tokens */
+/* A status hue as foreground on its own tint. Light theme darkens it, where
+   the raw status hues sit too pale on white for a 3:1 icon. */
 :root,
 [data-theme="light"] {
-  --notice-amber-ink: oklch(50% 0.12 70);
-  --notice-red-ink: oklch(52% 0.19 27);
-  --notice-info-ink: oklch(50% 0.13 240);
-  --notice-success-ink: oklch(48% 0.13 149);
+  --warning-ink: oklch(50% 0.12 70);
+  --error-ink: oklch(52% 0.19 27);
+  --info-ink: oklch(50% 0.13 240);
+  --success-ink: oklch(48% 0.13 149);
 }
 
 [data-theme="dark"] {
-  --notice-amber-ink: var(--color-warning);
-  --notice-red-ink: var(--color-error);
-  --notice-info-ink: var(--color-info);
-  --notice-success-ink: var(--color-success);
+  --warning-ink: var(--color-warning);
+  --error-ink: var(--color-error);
+  --info-ink: var(--color-info);
+  --success-ink: var(--color-success);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --notice-amber-ink: var(--color-warning);
-    --notice-red-ink: var(--color-error);
-    --notice-info-ink: var(--color-info);
-    --notice-success-ink: var(--color-success);
+    --warning-ink: var(--color-warning);
+    --error-ink: var(--color-error);
+    --info-ink: var(--color-info);
+    --success-ink: var(--color-success);
   }
 }
 
+/* ------------------------------------------------ Notification kind tones */
 .notice-tone-act {
-  color: var(--notice-amber-ink);
+  color: var(--warning-ink);
   background-color: color-mix(in oklch, var(--color-warning) 20%, transparent);
 }
 
 .notice-tone-mention {
-  color: var(--notice-red-ink);
+  color: var(--error-ink);
   background-color: color-mix(in oklch, var(--color-error) 14%, transparent);
 }
 
 .notice-tone-addressed {
-  color: var(--notice-amber-ink);
+  color: var(--warning-ink);
   background-color: color-mix(in oklch, var(--color-warning) 11%, transparent);
 }
 
 .notice-tone-review,
 .notice-tone-suggestion {
-  color: var(--notice-info-ink);
+  color: var(--info-ink);
   background-color: color-mix(in oklch, var(--color-info) 14%, transparent);
 }
 
@@ -217,7 +215,7 @@
 }
 
 .notice-tone-done {
-  color: var(--notice-success-ink);
+  color: var(--success-ink);
   background-color: color-mix(in oklch, var(--color-success) 16%, transparent);
 }
 
