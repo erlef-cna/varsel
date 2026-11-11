@@ -15,9 +15,21 @@ defmodule VarselWeb.Storybook.Notifications.NotificationGroupNav do
   def variations do
     [
       %Variation{
+        id: :all,
+        description: "The default view: All, over every kind, is open and sums their counts above both sections.",
+        attributes: %{
+          active: :all,
+          groups: [
+            group(:mentioned, 3, 2),
+            group(:case_assigned, 4, 0),
+            group(:comment_posted, 18, 5)
+          ]
+        }
+      },
+      %Variation{
         id: :mixed,
         description:
-          "Both sections: unread groups carry an info badge, fully read groups their muted total. The open group is marked.",
+          "Both sections: unread groups carry an info dot and count, fully read groups their muted total. The open group is marked.",
         attributes: %{
           active: :mentioned,
           groups: [

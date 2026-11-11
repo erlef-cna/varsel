@@ -16,14 +16,28 @@ defmodule VarselWeb.Storybook.Notifications.NotificationRow do
     [
       %Variation{
         id: :unread,
-        description: "An unread row: the primary dot, and the toggle offers to mark it read.",
+        description: "An unread row: the primary dot and a bold headline. The toggle marks it read.",
         attributes: %{
           notification: row(read_at: nil, count: 1, kind: :comment_posted, case: case_record())
         }
       },
+      %VariationGroup{
+        id: :tones,
+        description:
+          "One row per kind, most important first. A review request and a suggestion are info blue, act the deeper amber, a mention red, addressed a lighter amber, activity neutral and done green.",
+        variations:
+          for kind <- VarselWeb.NotificationComponents.group_order() do
+            %Variation{
+              id: kind,
+              attributes: %{
+                notification: row(read_at: nil, count: 1, kind: kind, case: case_record())
+              }
+            }
+          end
+      },
       %Variation{
         id: :read,
-        description: "A read row: no dot, no highlight, and the toggle offers to mark it unread.",
+        description: "A read row: no dot and a muted headline. The toggle marks it unread.",
         attributes: %{
           notification: row(read_at: ago(3600), count: 1, kind: :case_published, case: case_record())
         }
@@ -31,7 +45,7 @@ defmodule VarselWeb.Storybook.Notifications.NotificationRow do
       %Variation{
         id: :grouped,
         description:
-          "In a list already grouped by kind (`show_kind?={false}`): the kind line drops, the group heading names it.",
+          "In a list already grouped by kind (`show_kind?={false}`): the kind column drops, the group heading names it.",
         attributes: %{
           notification: row(read_at: nil, count: 1, kind: :comment_posted, case: case_record()),
           show_kind?: false
@@ -55,17 +69,9 @@ defmodule VarselWeb.Storybook.Notifications.NotificationRow do
       %Variation{
         id: :degraded_no_case,
         description:
-          "A case-kind row whose case load came back nil: the viewer lost their assignment, or it is a report kind. Falls back to the kind label as the headline.",
+          "A row whose case load came back nil because the viewer lost their assignment: the row describes the kind instead.",
         attributes: %{
           notification: row(read_at: nil, count: 1, kind: :comment_posted, case: nil)
-        }
-      },
-      %Variation{
-        id: :report_kind,
-        description:
-          ~s(A report-subject kind: no `case_id`, so both links read "Open triage queue" instead of "Open case".),
-        attributes: %{
-          notification: row(read_at: nil, count: 1, kind: :report_submitted, case_id: nil, case: nil)
         }
       }
     ]

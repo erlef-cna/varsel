@@ -57,9 +57,7 @@ defmodule VarselWeb.NotificationsLiveTest do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
 
     assert has_element?(lv, "a[href='/cases/#{case_record.id}']", "Notified about this")
-    assert has_element?(lv, "#notification-group-title", "Comments")
     assert has_element?(lv, "*", "2×")
-    assert has_element?(lv, "a[href='/cases/#{case_record.id}']", "Open case →")
   end
 
   test "a case with an assigned CVE ID shows it as a chip beside the title", %{
@@ -78,7 +76,7 @@ defmodule VarselWeb.NotificationsLiveTest do
     assert has_element?(lv, "*", "CVE-#{year}-31900")
   end
 
-  test "a row for a case the viewer is no longer assigned to falls back to the kind label", %{
+  test "a row for a case the viewer is no longer assigned to describes the kind instead", %{
     conn: conn,
     poc: poc,
     other: other,
@@ -93,7 +91,12 @@ defmodule VarselWeb.NotificationsLiveTest do
     {:ok, lv, _html} = conn |> log_in(other) |> live(~p"/notifications")
 
     refute has_element?(lv, "a", case_record.title)
-    assert has_element?(lv, "a[href='/cases/#{case_record.id}']", "New comment")
+
+    assert has_element?(
+             lv,
+             "a[href='/cases/#{case_record.id}']",
+             Kind.description(:comment_posted)
+           )
   end
 
   test "toggling a row read updates its button and the unread count in the header", %{
@@ -152,11 +155,19 @@ defmodule VarselWeb.NotificationsLiveTest do
     refute has_element?(lv, "#mark-all-read")
   end
 
-  test "every kind has a group label and icon" do
-    for kind <- Kind.values() do
+  test "every kind, and all of them, has a group label and icon" do
+    for kind <- [:all | Kind.values()] do
       assert is_binary(NotificationComponents.group_label(kind))
       assert "hero-" <> _ = NotificationComponents.group_icon(kind)
     end
+  end
+
+  test "every kind has a tone, and the rail lists them most important first" do
+    tones = [:review, :act, :mention, :addressed, :suggestion, :activity, :done]
+    ranks = Enum.map(NotificationComponents.group_order(), &NotificationComponents.kind_tone/1)
+
+    assert Enum.all?(ranks, &(&1 in tones))
+    assert ranks == Enum.sort_by(ranks, &Enum.find_index(tones, fn tone -> tone == &1 end))
   end
 
   test "the rail lists only the kinds the user has, addressed-to-you first", %{
@@ -172,22 +183,30 @@ defmodule VarselWeb.NotificationsLiveTest do
     rail = lv |> element("#notification-groups") |> render() |> LazyHTML.from_fragment()
     ids = rail |> LazyHTML.query("a[id^=notification-group-]") |> LazyHTML.attribute("id")
 
-    assert ids == ["notification-group-mentioned", "notification-group-comment_posted"]
+    assert ids == [
+             "notification-group-all",
+             "notification-group-mentioned",
+             "notification-group-comment_posted"
+           ]
   end
 
-  test "the open group defaults to the first kind with something unread", %{
+  test "the page opens on every notification, read or not, across kinds", %{
     conn: conn,
     poc: poc,
     case: case_record
   } do
-    poc |> record!(case_record, :mentioned) |> Notifications.mark_notification_read!(actor: poc)
+    mention = record!(poc, case_record, :mentioned)
+    Notifications.mark_notification_read!(mention, actor: poc)
     proposal = record!(poc, case_record, :proposal_opened)
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
 
-    assert has_element?(lv, "#notification-group-proposal_opened[aria-current=page]")
-    assert has_element?(lv, "#notification-group-title", "Proposals")
+    assert has_element?(lv, "#notification-group-all[aria-current=page]", "1 unread")
+    assert has_element?(lv, "#notification-group-title", "All")
+    assert has_element?(lv, "#notification-group", "1 unread · 2 total")
+    assert has_element?(lv, "button[phx-value-row_id='#{mention.id}']")
     assert has_element?(lv, "button[phx-value-row_id='#{proposal.id}']")
+    assert has_element?(lv, "#notification-group p", Kind.label(:proposal_opened))
   end
 
   test "following a group link shows only that kind's notifications", %{
@@ -200,7 +219,7 @@ defmodule VarselWeb.NotificationsLiveTest do
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
     assert has_element?(lv, "button[phx-value-row_id='#{mention.id}']")
-    refute has_element?(lv, "button[phx-value-row_id='#{comment.id}']")
+    assert has_element?(lv, "button[phx-value-row_id='#{comment.id}']")
 
     lv |> element("#notification-group-comment_posted") |> render_click()
 
@@ -208,9 +227,16 @@ defmodule VarselWeb.NotificationsLiveTest do
     assert has_element?(lv, "#notification-group-comment_posted[aria-current=page]")
     refute has_element?(lv, "button[phx-value-row_id='#{mention.id}']")
     assert has_element?(lv, "button[phx-value-row_id='#{comment.id}']")
+    refute has_element?(lv, "#notification-group p", Kind.label(:comment_posted))
+
+    lv |> element("#notification-group-all") |> render_click()
+
+    assert_patch(lv, ~p"/notifications")
+    assert has_element?(lv, "#notification-group-all[aria-current=page]")
+    assert has_element?(lv, "button[phx-value-row_id='#{mention.id}']")
   end
 
-  test "an unknown kind in the URL falls back to the default group", %{
+  test "an unknown kind in the URL falls back to all notifications", %{
     conn: conn,
     poc: poc,
     case: case_record
@@ -219,7 +245,7 @@ defmodule VarselWeb.NotificationsLiveTest do
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications?kind=not_a_kind")
 
-    assert has_element?(lv, "#notification-group-comment_posted[aria-current=page]")
+    assert has_element?(lv, "#notification-group-all[aria-current=page]")
   end
 
   test "a group named in the URL that the user has nothing in stays open and empty", %{

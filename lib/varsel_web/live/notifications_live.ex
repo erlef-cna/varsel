@@ -4,10 +4,9 @@
 
 defmodule VarselWeb.NotificationsLive do
   @moduledoc """
-  The signed-in user's own notifications, grouped by kind: a rail of the
-  kinds they have, and the open kind's notifications most recent first, with
-  a read/unread toggle per row and one action that marks every unread row
-  read.
+  The signed-in user's own notifications, most recent first, all of them or
+  one kind at a time from a rail of the kinds they have, with a read/unread
+  toggle per row and one action that marks every unread row read.
 
   Visiting the subject (`VarselWeb.CaseDetailLive`, `VarselWeb.ReportTriageLive`)
   is what marks a notification read; this page only lists and toggles.
@@ -43,22 +42,13 @@ defmodule VarselWeb.NotificationsLive do
 
   @impl Phoenix.LiveView
   def handle_params(params, _url, socket) do
-    kind = selected_kind(params["kind"], socket.assigns.summary)
-
     {:noreply,
      socket
-     |> assign(:kind, kind)
+     |> assign(:kind, selected_kind(params["kind"]))
      |> keep_notifications_live()}
   end
 
-  defp selected_kind(param, summary) do
-    Enum.find(Kind.values(), &(Atom.to_string(&1) == param)) || default_kind(summary)
-  end
-
-  defp default_kind(summary) do
-    Enum.find(group_order(), &(Map.get(summary.unread, &1, 0) > 0)) ||
-      Enum.find(group_order(), &Map.has_key?(summary.total, &1))
-  end
+  defp selected_kind(param), do: Enum.find(Kind.values(), :all, &(Atom.to_string(&1) == param))
 
   # Both assigns share the user's topic, and the LiveNotifications hook
   # refetches every assign on a topic from one subscription, so the topic is
@@ -131,17 +121,18 @@ defmodule VarselWeb.NotificationsLive do
   # page's options on a refetch, so a toggle keeps the page the user is on.
   # The case load runs under Case's own read policy as the same actor, so a
   # user no longer assigned gets `case: nil` back rather than an error —
-  # notification_row/1 falls back to the kind label alone for that row.
-  defp list_notifications(%{assigns: %{kind: nil}}, _page_opts), do: nil
-
+  # notification_row/1 describes the kind instead for that row.
   defp list_notifications(socket, page_opts) do
     Notifications.list_notifications!(
       actor: socket.assigns.current_user,
-      query: [filter: [kind: socket.assigns.kind]],
+      query: [filter: kind_filter(socket.assigns.kind)],
       page: page_opts || [count: true, offset: 0],
       load: [case: [:title, :cve_id]]
     )
   end
+
+  defp kind_filter(:all), do: []
+  defp kind_filter(kind), do: [kind: kind]
 
   # The group heading already counts what is in it, so the footer only
   # appears when there is another page to reach.
@@ -171,6 +162,15 @@ defmodule VarselWeb.NotificationsLive do
 
   defp unread_total(summary), do: summary.unread |> Map.values() |> Enum.sum()
 
+  defp group_counts(summary, :all) do
+    {unread_total(summary), summary.total |> Map.values() |> Enum.sum()}
+  end
+
+  defp group_counts(summary, kind), do: {Map.get(summary.unread, kind, 0), Map.get(summary.total, kind, 0)}
+
+  defp group_description(:all), do: "Every notification you have, most recent first."
+  defp group_description(kind), do: Kind.description(kind)
+
   # A record-less update cannot answer a row-filter policy, so the question
   # is asked about one unread row.
   defp can_mark_all_read?(%{unread_row: nil}, _actor), do: false
@@ -181,8 +181,8 @@ defmodule VarselWeb.NotificationsLive do
   defp unread_headline(1), do: "1 unread"
   defp unread_headline(count), do: "#{count} unread"
 
-  defp group_tally(0, total), do: "#{total} read"
-  defp group_tally(unread, total), do: "#{unread} unread · #{total} total"
+  defp group_tally({0, total}), do: "#{total} read"
+  defp group_tally({unread, total}), do: "#{unread} unread · #{total} total"
 
   @impl Phoenix.LiveView
   def render(assigns) do
@@ -210,7 +210,7 @@ defmodule VarselWeb.NotificationsLive do
       </.page_header>
 
       <.page_container>
-        <%= if @kind do %>
+        <%= if @kind != :all or @summary.total != %{} do %>
           <div class="md:grid md:grid-cols-[14rem_minmax(0,1fr)] md:items-start md:gap-8">
             <.notification_group_nav
               groups={groups(@summary, @kind)}
@@ -228,13 +228,13 @@ defmodule VarselWeb.NotificationsLive do
                   <h2 id="notification-group-title" class="text-lg font-semibold leading-tight">
                     {group_label(@kind)}
                   </h2>
-                  <p class="text-sm text-base-content/60">{Kind.description(@kind)}</p>
+                  <p class="text-sm text-base-content/60">{group_description(@kind)}</p>
                 </div>
                 <p
-                  :if={Map.has_key?(@summary.total, @kind)}
+                  :if={elem(group_counts(@summary, @kind), 1) > 0}
                   class="text-xs tabular-nums text-base-content/60"
                 >
-                  {group_tally(Map.get(@summary.unread, @kind, 0), @summary.total[@kind])}
+                  {group_tally(group_counts(@summary, @kind))}
                 </p>
               </div>
 
@@ -247,7 +247,7 @@ defmodule VarselWeb.NotificationsLive do
                 <.notification_row
                   :for={notification <- page_results(@notifications)}
                   notification={notification}
-                  show_kind?={false}
+                  show_kind?={@kind == :all}
                 />
               </.list_card>
             </section>
