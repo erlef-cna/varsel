@@ -93,7 +93,7 @@ defmodule VarselWeb.Storybook.Notifications.NotificationRow do
       count: Keyword.fetch!(opts, :count),
       last_event_at: ago(300),
       read_at: Keyword.get(opts, :read_at),
-      case_id: Keyword.get(opts, :case_id, Ecto.UUID.generate()),
+      case_id: Ecto.UUID.generate(),
       case: Keyword.fetch!(opts, :case)
     }
   end

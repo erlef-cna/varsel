@@ -52,14 +52,9 @@ defmodule Varsel.Notifications.Preference do
   """
   @spec for_kind([t()], Kind.t()) :: t()
   def for_kind(preferences, kind) do
-    Enum.find(
-      preferences,
-      struct(__MODULE__,
-        kind: kind,
-        in_app: Kind.on_by_default?(kind),
-        email: Kind.on_by_default?(kind)
-      ),
-      fn preference -> preference.kind == kind end
-    )
+    on? = Kind.on_by_default?(kind)
+    default = struct(__MODULE__, kind: kind, in_app: on?, email: on?)
+
+    Enum.find(preferences, default, &(&1.kind == kind))
   end
 end

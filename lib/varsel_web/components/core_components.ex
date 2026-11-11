@@ -1032,9 +1032,7 @@ defmodule VarselWeb.CoreComponents do
       assign(assigns,
         page_number: div(assigns.page.offset || 0, max(assigns.page.limit, 1)) + 1,
         last_page: last_page,
-        # `last_page/1` gives `:unknown` for a page whose total was never
-        # counted; show the pager then rather than hide a way forward.
-        pageable?: last_page == :unknown or last_page > 1
+        pageable?: pageable?(assigns.page)
       )
 
     ~H"""
@@ -1110,6 +1108,18 @@ defmodule VarselWeb.CoreComponents do
   """
   def paged?(%{count: count}) when is_integer(count) and count > 0, do: true
   def paged?(_page), do: false
+
+  @doc """
+  Whether a page has another page to reach, the guard for a footer that holds
+  only the pager. A page whose total was never counted counts as pageable,
+  so a way forward is never hidden.
+  """
+  def pageable?(page) do
+    case AshLiveView.last_page(page) do
+      :unknown -> true
+      last_page -> last_page > 1
+    end
+  end
 
   @doc """
   Renders the console list card's search: a magnifier icon inside a rounded
