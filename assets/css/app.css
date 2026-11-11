@@ -599,6 +599,13 @@
   }
 }
 
+/* The current choice in a console menu: a tinted row, with a check mark the
+   markup adds so the tint is not the only cue. */
+.menu-choice-active {
+  background-color: color-mix(in oklab, var(--eef-blue) 18%, transparent);
+  font-weight: 600;
+}
+
 /* Console buttons: solid EEF brand blue, and a quiet outline variant. */
 .btn-eef {
   --btn-color: var(--eef-blue);

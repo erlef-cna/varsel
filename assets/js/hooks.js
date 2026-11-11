@@ -112,10 +112,10 @@ export const BoardMove = {
   },
 }
 
-// Remembers the cases board's sort across visits. The element carries the
-// sort the URL names (data-sort, data-packages; absent for a default). A
-// visit whose URL names none gets the remembered one back through the
-// restore_sort event. A force-refresh, which the root layout marks on the
+// Remembers the cases board's sort and assignee filter across visits. The
+// element carries what the URL names (data-sort, data-packages,
+// data-assignee; absent for a default). A visit whose URL names none of
+// them gets the remembered ones back through the restore_sort event. A force-refresh, which the root layout marks on the
 // body, forgets it and resets the board through reset_sort; the mark lasts
 // as long as the page, so it is honoured once.
 const SORT_MEMORY_KEY = "cases:sort"
@@ -123,7 +123,11 @@ let forceReloadHonoured = false
 
 export const SortMemory = {
   chosen() {
-    return {sort: this.el.dataset.sort || null, packages: this.el.dataset.packages || null}
+    return {
+      sort: this.el.dataset.sort || null,
+      packages: this.el.dataset.packages || null,
+      assignee: this.el.dataset.assignee || null,
+    }
   },
   remembered() {
     try {
@@ -135,7 +139,7 @@ export const SortMemory = {
   remember() {
     const chosen = this.chosen()
 
-    if (chosen.sort || chosen.packages) {
+    if (chosen.sort || chosen.packages || chosen.assignee) {
       localStorage.setItem(SORT_MEMORY_KEY, JSON.stringify(chosen))
     } else {
       localStorage.removeItem(SORT_MEMORY_KEY)
@@ -143,7 +147,7 @@ export const SortMemory = {
   },
   mounted() {
     const chosen = this.chosen()
-    const named = chosen.sort || chosen.packages
+    const named = chosen.sort || chosen.packages || chosen.assignee
 
     if (document.body.hasAttribute("data-force-reload") && !forceReloadHonoured) {
       forceReloadHonoured = true
@@ -153,7 +157,9 @@ export const SortMemory = {
       this.remember()
     } else {
       const remembered = this.remembered()
-      if (remembered?.sort || remembered?.packages) this.pushEvent("restore_sort", remembered)
+      if (remembered?.sort || remembered?.packages || remembered?.assignee) {
+        this.pushEvent("restore_sort", remembered)
+      }
     }
   },
   updated() {

@@ -19,7 +19,8 @@ defmodule VarselWeb.CaseManagementLive do
   both faces, any search and the two sorts (the cases inside a row, and the
   package rows) and the assignee filter are deep-linkable and survive a face
   switch. The browser
-  remembers the two sorts and a visit that names none gets them back.
+  remembers the sorts and the assignee, and a visit that names none of them
+  gets them back.
   """
   use VarselWeb, :live_view
 
@@ -194,7 +195,14 @@ defmodule VarselWeb.CaseManagementLive do
 
     socket
     |> assign(:lanes, lanes)
-    |> assign(:assignee_options, [{"all", "Everyone"}, {"me", "Me"} | assignees])
+    |> assign(:assignee_options, [
+      {"all", "Everyone"},
+      {"me", "Me"} | Enum.map(assignees, &{&1.id, &1.display_name})
+    ])
+    |> assign(
+      :assignee_users,
+      Map.new([{"me", socket.assigns.current_user} | Enum.map(assignees, &{&1.id, &1})])
+    )
     |> assign(:assignee, assignee_value(socket.assigns.sort.assignee, assignee_id))
     |> assign(:pipeline_count, totals |> Map.values() |> Enum.sum())
     |> assign(:pipeline_match_count, length(cases))
@@ -207,7 +215,7 @@ defmodule VarselWeb.CaseManagementLive do
     cases =
       Cases.list_cases!(
         actor: socket.assigns.current_user,
-        load: [assignments: [user: [:display_name]]],
+        load: [assignments: [user: [:display_name, :avatar_url]]],
         query: Case |> Ash.Query.filter(state in ^@lane_states) |> Ash.Query.select([:state])
       )
 
@@ -223,7 +231,6 @@ defmodule VarselWeb.CaseManagementLive do
     |> Enum.reject(&(is_nil(&1) or &1.id == viewer.id))
     |> Enum.uniq_by(& &1.id)
     |> Enum.sort_by(&String.downcase(&1.display_name))
-    |> Enum.map(&{&1.id, &1.display_name})
   end
 
   defp parse_assignee("me"), do: "me"
@@ -240,7 +247,7 @@ defmodule VarselWeb.CaseManagementLive do
   # An id that no case in the pipeline is assigned to filters nothing.
   defp assignee_id(nil, _assignees, _viewer), do: nil
   defp assignee_id("me", _assignees, viewer), do: viewer.id
-  defp assignee_id(id, assignees, _viewer), do: if(List.keymember?(assignees, id, 0), do: id)
+  defp assignee_id(id, assignees, _viewer), do: if(Enum.any?(assignees, &(&1.id == id)), do: id)
 
   defp assignee_value("me", _assignee_id), do: "me"
   defp assignee_value(_assignee, nil), do: "all"
@@ -485,14 +492,15 @@ defmodule VarselWeb.CaseManagementLive do
     sort = %{
       socket.assigns.sort
       | cases: LaneSort.parse(params["sort"]),
-        packages: PackageSort.parse(params["packages"])
+        packages: PackageSort.parse(params["packages"]),
+        assignee: parse_assignee(params["assignee"])
     }
 
     {:noreply, push_patch(socket, to: pipeline_path(socket.assigns.query, sort))}
   end
 
   def handle_event("reset_sort", _params, socket) do
-    sort = %{socket.assigns.sort | cases: LaneSort.default(), packages: PackageSort.default()}
+    sort = %{cases: LaneSort.default(), packages: PackageSort.default(), assignee: nil}
 
     {:noreply, push_patch(socket, to: pipeline_path(socket.assigns.query, sort))}
   end
@@ -736,9 +744,10 @@ defmodule VarselWeb.CaseManagementLive do
               phx-click={group.event}
               phx-value-selection={value}
               aria-pressed={to_string(value == group.value)}
-              class={[value == group.value && "active font-semibold"]}
+              class={[value == group.value && "menu-choice-active"]}
             >
               {label}
+              <.icon :if={value == group.value} name="hero-check-mini" class="ml-auto size-4" />
             </button>
           </li>
         <% end %>
@@ -784,6 +793,7 @@ defmodule VarselWeb.CaseManagementLive do
             phx-hook="SortMemory"
             data-sort={LaneSort.param(@sort.cases)}
             data-packages={PackageSort.param(@sort.packages)}
+            data-assignee={@sort.assignee}
             hidden
           ></span>
           <.console_menu
@@ -794,7 +804,17 @@ defmodule VarselWeb.CaseManagementLive do
             value={@assignee}
             options={@assignee_options}
             event="assignee"
-          />
+          >
+            <:lead :let={value}>
+              <.avatar_disc :if={@assignee_users[value]} user={@assignee_users[value]} />
+              <span
+                :if={value == "all"}
+                class="inline-flex size-[21px] shrink-0 items-center justify-center text-base-content/60"
+              >
+                <.icon name="hero-users-mini" class="size-4" />
+              </span>
+            </:lead>
+          </.console_menu>
           <.sort_menu :if={@face == :pipeline} sort={@sort} />
           <.console_search id="case-search" value={@query} placeholder="Search all cases…" />
         </:actions>

@@ -1180,6 +1180,9 @@ defmodule VarselWeb.CoreComponents do
     default: "hero-bars-arrow-down-mini",
     doc: "what the control does: the default is for an order, a filter names its own"
 
+  slot :lead,
+    doc: "a mark before an option's label, such as an avatar; receives the option's value"
+
   attr :options, :list, required: true, doc: "{value, label} pairs, in menu order"
   attr :event, :string, required: true, doc: "pushed with the chosen value as `selection`"
 
@@ -1207,9 +1210,12 @@ defmodule VarselWeb.CoreComponents do
             type="button"
             phx-click={@event}
             phx-value-selection={value}
-            class={[value == @value && "active font-semibold"]}
+            aria-pressed={to_string(value == @value)}
+            class={[value == @value && "menu-choice-active"]}
           >
-            {label}
+            {render_slot(@lead, value)}
+            <span class="truncate">{label}</span>
+            <.icon :if={value == @value} name="hero-check-mini" class="ml-auto size-4 shrink-0" />
           </button>
         </li>
       </ul>
