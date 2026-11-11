@@ -31,7 +31,13 @@ defmodule VarselWeb.CaseLifecycle do
 
   # The case's own state, which every tab renders in the header and the
   # lifecycle buttons. A tab adds the kinds its body shows.
-  @lifecycle_kinds [:report_submitted, :review_requested, :case_published, :case_assigned]
+  @lifecycle_kinds [
+    :report_submitted,
+    :review_requested,
+    :unassigned_review_requested,
+    :case_published,
+    :case_assigned
+  ]
 
   @form_modals %{"split" => :split, "reject" => :reject, "close" => :close}
 

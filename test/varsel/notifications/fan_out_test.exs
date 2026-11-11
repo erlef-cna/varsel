@@ -14,6 +14,7 @@ defmodule Varsel.Notifications.FanOutTest do
 
   alias Ash.Error.Forbidden
   alias AshOban.Signals.Worker
+  alias Varsel.Accounts
   alias Varsel.Cases
   alias Varsel.Fixtures
   alias Varsel.Notifications
@@ -129,7 +130,30 @@ defmodule Varsel.Notifications.FanOutTest do
       assert [] = notifications_for(fellow_poc, :review_requested)
     end
 
-    test "with no POC assigned, notifies every POC but not the requester or supporters" do
+    test "with no POC assigned, notifies only the POCs who want unassigned reviews, as one" do
+      taker = Fixtures.register_user("fanout_review_taker_poc", :poc)
+      other_poc = Fixtures.register_user("fanout_review_non_taker_poc", :poc)
+      requester = Fixtures.register_user("fanout_review_taker_requester", :supporter)
+
+      Accounts.update_user_notification_settings!(
+        taker,
+        %{
+          notification_preferences: [
+            %{kind: :unassigned_review_requested, in_app: true, email: false}
+          ]
+        },
+        actor: taker
+      )
+
+      requester |> Fixtures.open_case() |> Cases.request_case_review!(actor: requester)
+
+      drain()
+
+      assert [%Notification{kind: :unassigned_review_requested}] = notifications_for(taker)
+      assert [] = notifications_for(other_poc)
+    end
+
+    test "with no POC assigned and none wanting unassigned reviews, every POC gets a plain review request" do
       poc = Fixtures.register_user("fanout_review_unassigned_poc", :poc)
       other_poc = Fixtures.register_user("fanout_review_unassigned_other_poc", :poc)
       requester = Fixtures.register_user("fanout_review_lone_supporter", :supporter)

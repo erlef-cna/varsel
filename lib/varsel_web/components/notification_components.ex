@@ -46,6 +46,7 @@ defmodule VarselWeb.NotificationComponents do
 
   @group_order [
     :review_requested,
+    :unassigned_review_requested,
     :report_submitted,
     :mentioned,
     :case_assigned,
@@ -67,6 +68,7 @@ defmodule VarselWeb.NotificationComponents do
   def group_label(:all), do: "All"
   def group_label(:mentioned), do: "Mentions"
   def group_label(:review_requested), do: "Review requests"
+  def group_label(:unassigned_review_requested), do: "Unassigned reviews"
   def group_label(:case_assigned), do: "Added to a case"
   def group_label(:report_submitted), do: "New reports"
   def group_label(:comment_posted), do: "Comments"
@@ -76,7 +78,7 @@ defmodule VarselWeb.NotificationComponents do
   @doc """
   How much a kind asks of the viewer, which sets the colour of its icon:
 
-    * `:review`: a case waits on their review
+    * `:review`: a case waits on their review, or on any POC's
     * `:act`: a new report waits to be triaged
     * `:mention`: someone asked them something in a comment
     * `:addressed`: it adds them to a case
@@ -87,6 +89,7 @@ defmodule VarselWeb.NotificationComponents do
   @spec kind_tone(Kind.t()) ::
           :review | :act | :mention | :addressed | :suggestion | :activity | :done
   def kind_tone(:review_requested), do: :review
+  def kind_tone(:unassigned_review_requested), do: :review
   def kind_tone(:report_submitted), do: :act
   def kind_tone(:mentioned), do: :mention
   def kind_tone(:case_assigned), do: :addressed
@@ -99,6 +102,7 @@ defmodule VarselWeb.NotificationComponents do
   def group_icon(:all), do: "hero-inbox-stack"
   def group_icon(:mentioned), do: "hero-at-symbol"
   def group_icon(:review_requested), do: "hero-clipboard-document-check"
+  def group_icon(:unassigned_review_requested), do: "hero-clipboard-document"
   def group_icon(:case_assigned), do: "hero-user-plus"
   def group_icon(:report_submitted), do: "hero-inbox-arrow-down"
   def group_icon(:comment_posted), do: "hero-chat-bubble-left-right"

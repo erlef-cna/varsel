@@ -21,5 +21,10 @@ defmodule Varsel.Notifications.PreferenceTest do
       assert %Preference{kind: :case_assigned, in_app: true, email: true} =
                Preference.for_kind([], :case_assigned)
     end
+
+    test "defaults to both channels off for an opt-in kind" do
+      assert %Preference{kind: :unassigned_review_requested, in_app: false, email: false} =
+               Preference.for_kind([], :unassigned_review_requested)
+    end
   end
 end
