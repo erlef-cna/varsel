@@ -11,3 +11,9 @@ path = ["priv/cve_schema/**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "https://github.com/CVEProject/cve-schema"
 SPDX-License-Identifier = "CC0-1.0"
+
+[[annotations]]
+path = ["priv/repo/seeds/cves/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Erlang Ecosystem Foundation"
+SPDX-License-Identifier = "Apache-2.0"
