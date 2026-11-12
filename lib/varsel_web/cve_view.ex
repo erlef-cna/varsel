@@ -308,21 +308,24 @@ defmodule VarselWeb.CveView do
   @spec registry_link(map()) :: {String.t(), String.t()} | nil
   def registry_link(%{"packageURL" => package_url} = entry) when not is_nil(package_url) do
     case Purl.new!(package_url) do
-      %Purl{type: "hex"} = purl ->
-        {"Hex.pm", "https://hex.pm/packages/#{purl_name(purl)}"}
-
-      %Purl{type: "npm"} = purl ->
-        {"npm", "https://www.npmjs.com/package/#{purl_name(purl)}"}
-
-      %Purl{type: "oci"} = purl ->
-        oci_registry_link(entry, purl)
-
-      _other ->
-        nil
+      %Purl{type: "oci"} = purl -> oci_registry_link(entry, purl)
+      purl -> registry_page(purl.type, purl_name(purl))
     end
   end
 
   def registry_link(_entry), do: nil
+
+  @doc """
+  Derives `{label, url}` for a package's page on its registry from the purl
+  type and the package's full name, namespace included. Nil for a type whose
+  registry has no page per package.
+  """
+  @spec registry_page(String.t() | nil, String.t() | nil) :: {String.t(), String.t()} | nil
+  def registry_page("hex", name) when is_binary(name), do: {"Hex.pm", "https://hex.pm/packages/#{name}"}
+
+  def registry_page("npm", name) when is_binary(name), do: {"npm", "https://www.npmjs.com/package/#{name}"}
+
+  def registry_page(_type, _name), do: nil
 
   defp oci_registry_link(entry, purl) do
     case oci_link(entry, purl) do

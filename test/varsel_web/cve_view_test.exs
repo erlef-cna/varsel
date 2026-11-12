@@ -434,6 +434,21 @@ defmodule VarselWeb.CveViewTest do
     end
   end
 
+  describe "registry_page/2" do
+    test "links the registries that have a page per package" do
+      assert CveView.registry_page("hex", "bandit") ==
+               {"Hex.pm", "https://hex.pm/packages/bandit"}
+
+      assert CveView.registry_page("npm", "@acme/left-pad") ==
+               {"npm", "https://www.npmjs.com/package/@acme/left-pad"}
+    end
+
+    test "is nil for any other type, and for a channel without a purl" do
+      assert CveView.registry_page("github", "erlang/otp") == nil
+      assert CveView.registry_page(nil, "") == nil
+    end
+  end
+
   describe "registry_link/1" do
     test "hex and npm purls get a registry link" do
       assert CveView.registry_link(%{"packageURL" => "pkg:hex/bandit"}) ==

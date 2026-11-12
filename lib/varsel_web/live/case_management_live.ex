@@ -1059,21 +1059,18 @@ defmodule VarselWeb.CaseManagementLive do
   # A case with several packages groups under its first.
   defp package_key(case_record), do: case_record |> package_chips() |> List.first()
 
-  # Where the package a row stands for lives, as `{label, url}`: its hex.pm
-  # page when it ships there, and its repository.
+  # Where the package a row stands for lives, as `{label, url}`: its page on
+  # each registry it ships to, and its repository.
   defp package_links(cards) do
     packages = Enum.flat_map(cards, &Enum.take(&1.affected_packages, 1))
 
-    hex =
-      packages
-      |> Enum.flat_map(& &1.channels)
-      |> Enum.find_value(fn
-        %{purl: "pkg:hex/" <> _name = purl} ->
-          VarselWeb.CveView.registry_link(%{"packageURL" => purl})
-
-        _channel ->
-          nil
-      end)
+    registries =
+      for package <- packages,
+          channel <- package.channels,
+          name = [channel.namespace, channel.name] |> Enum.reject(&is_nil/1) |> Enum.join("/"),
+          link = VarselWeb.CveView.registry_page(channel.purl_type, name),
+          uniq: true,
+          do: link
 
     forge =
       Enum.find_value(packages, fn package ->
@@ -1081,7 +1078,7 @@ defmodule VarselWeb.CaseManagementLive do
           {package.repo_url |> RepoUrl.parse() |> RepoUrl.forge_name(), package.repo_url}
       end)
 
-    Enum.reject([hex, forge], &is_nil/1)
+    registries ++ List.wrap(forge)
   end
 
   # One row per package across every state. The cases without a package

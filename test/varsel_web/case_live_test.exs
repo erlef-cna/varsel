@@ -659,6 +659,33 @@ defmodule VarselWeb.CaseLiveTest do
       assert_patched(lv, "/cases?sort=oldest")
     end
 
+    test "a package row links every registry the package ships to", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Ships to two registries"})
+      package = Fixtures.add_affected_package(poc, case_record)
+
+      for {type, name} <- [{"hex", "acme_lib"}, {"npm", "acme-lib"}] do
+        Cases.add_package_channel!(
+          %{
+            case_id: case_record.id,
+            affected_package_id: package.id,
+            purl_type: type,
+            name: name
+          },
+          actor: poc
+        )
+      end
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      assert has_element?(lv, ~s{[data-row] a[href="https://hex.pm/packages/acme_lib"]}, "Hex.pm")
+
+      assert has_element?(
+               lv,
+               ~s{[data-row] a[href="https://www.npmjs.com/package/acme-lib"]},
+               "npm"
+             )
+    end
+
     test "the assignee filter is for those who assign cases", %{
       conn: conn,
       poc: poc,
