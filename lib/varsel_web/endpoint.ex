@@ -36,6 +36,9 @@ defmodule VarselWeb.Endpoint do
     from: :varsel,
     gzip: not code_reloading?,
     only: VarselWeb.static_paths(),
+    # `phx.digest` renames root files to `favicon-<digest>.ico`, which `only`
+    # does not match.
+    only_matching: ~w(favicon icon apple-touch-icon manifest),
     raise_on_missing_only: code_reloading?
 
   if Mix.env() == :dev do
