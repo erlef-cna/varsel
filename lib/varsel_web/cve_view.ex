@@ -256,36 +256,23 @@ defmodule VarselWeb.CveView do
   ## ---------------------------------------------------------------- Package links
 
   @doc """
-  Derives `{label, url}` for an affected entry's package, mapping purl types
-  to their registry web pages. `url` is nil when no link applies (the caller
-  then renders just the label). Falls back to `vendor / product`.
+  Derives `{label, url}` for the package a purl names, mapping purl types to
+  their registry web pages. `url` is nil when no link applies (the caller
+  then renders just the label).
   """
-  @spec package_link(map()) :: {String.t(), String.t() | nil}
-  def package_link(%{"packageURL" => package_url}) when not is_nil(package_url) do
-    case Purl.new!(package_url) do
-      %Purl{type: "hex"} = purl ->
-        name = purl_name(purl)
-        {"pkg:hex/#{name}", "https://hex.pm/packages/#{name}"}
-
-      %Purl{type: "npm"} = purl ->
-        name = purl_name(purl)
-        {"pkg:npm/#{name}", "https://www.npmjs.com/package/#{name}"}
-
-      %Purl{type: "github"} = purl ->
-        path = purl_name(purl)
-        {"pkg:github/#{path}", "https://github.com/#{path}"}
-
-      %Purl{type: "oci"} = purl ->
-        {"pkg:oci/#{purl_name(purl)}", ghcr_package_url(purl)}
-
-      purl ->
-        {Purl.to_string(%{purl | version: nil, qualifiers: %{}, subpath: []}), nil}
-    end
+  @spec package_link(String.t()) :: {String.t(), String.t() | nil}
+  def package_link(purl) when is_binary(purl) do
+    purl = Purl.new!(purl)
+    {Purl.to_string(%{purl | version: nil, qualifiers: %{}, subpath: []}), package_page(purl)}
   end
 
-  def package_link(entry) when is_map(entry) do
-    {"#{entry["vendor"]} / #{entry["product"]}", nil}
-  end
+  defp package_page(%Purl{type: "hex"} = purl), do: "https://hex.pm/packages/#{purl_name(purl)}"
+
+  defp package_page(%Purl{type: "npm"} = purl), do: "https://www.npmjs.com/package/#{purl_name(purl)}"
+
+  defp package_page(%Purl{type: "github"} = purl), do: "https://github.com/#{purl_name(purl)}"
+  defp package_page(%Purl{type: "oci"} = purl), do: ghcr_package_url(purl)
+  defp package_page(_purl), do: nil
 
   # An OCI image's purl names its registry only in `repository_url`. On ghcr.io
   # that is `ghcr.io/<owner>/<image>`, and GitHub resolves `-` to the owner's
@@ -1110,12 +1097,12 @@ defmodule VarselWeb.CveView do
     doc: "name for an entry with no purl at all, e.g. a hosted service's vendor/product"
 
   def package_display_name(assigns) do
-    {_label, url} = package_link(%{"packageURL" => assigns.purl})
+    url = if assigns.link && assigns.purl, do: elem(package_link(assigns.purl), 1)
 
     assigns =
       assign(assigns,
         parts: package_name(assigns.purl, assigns.fallback),
-        url: assigns.link && url
+        url: url
       )
 
     ~H"""
