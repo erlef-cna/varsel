@@ -21,7 +21,7 @@ defmodule VarselWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets fonts images favicon.ico .well-known)
+  def static_paths, do: ~w(assets fonts images favicon.ico icon.svg apple-touch-icon.png manifest.webmanifest .well-known)
 
   def router do
     quote do
