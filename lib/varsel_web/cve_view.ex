@@ -310,9 +310,9 @@ defmodule VarselWeb.CveView do
   page, so it's covered by the `repo` header link instead of a redundant
   "GitHub ↗" registry entry (`entry["repo"]` renders separately).
   """
-  @spec registry_link(map()) :: {String.t(), String.t()} | nil
-  def registry_link(%{"packageURL" => package_url}) when not is_nil(package_url) do
-    case Purl.new!(package_url) do
+  @spec registry_link(String.t() | nil) :: {String.t(), String.t()} | nil
+  def registry_link(purl) when is_binary(purl) do
+    case Purl.new!(purl) do
       %Purl{type: "hex"} = purl ->
         {"Hex.pm", "https://hex.pm/packages/#{purl_name(purl)}"}
 
@@ -327,7 +327,7 @@ defmodule VarselWeb.CveView do
     end
   end
 
-  def registry_link(_entry), do: nil
+  def registry_link(nil), do: nil
 
   @doc """
   Renders an affected package's `versions[]` — one line per entry, as

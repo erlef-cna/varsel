@@ -448,34 +448,31 @@ defmodule VarselWeb.CveViewTest do
 
   describe "registry_link/1" do
     test "hex and npm purls get a registry link" do
-      assert CveView.registry_link(%{"packageURL" => "pkg:hex/bandit"}) ==
+      assert CveView.registry_link("pkg:hex/bandit") ==
                {"Hex.pm", "https://hex.pm/packages/bandit"}
 
-      assert CveView.registry_link(%{"packageURL" => "pkg:npm/%40acme/left-pad"}) ==
+      assert CveView.registry_link("pkg:npm/%40acme/left-pad") ==
                {"npm", "https://www.npmjs.com/package/@acme/left-pad"}
     end
 
     test "an oci image on ghcr.io links its GitHub package page" do
-      purl = "pkg:oci/gleam?repository_url=ghcr.io%2Fgleam-lang%2Fgleam"
-
-      assert CveView.registry_link(%{"packageURL" => purl}) ==
+      assert CveView.registry_link("pkg:oci/gleam?repository_url=ghcr.io%2Fgleam-lang%2Fgleam") ==
                {"Container registry", "https://github.com/-/gleam-lang/packages/container/package/gleam"}
     end
 
     test "an oci image on any other registry, or with none, has no registry link" do
-      assert CveView.registry_link(%{
-               "packageURL" => "pkg:oci/debian?repository_url=docker.io%2Flibrary%2Fdebian"
-             }) == nil
+      assert CveView.registry_link("pkg:oci/debian?repository_url=docker.io%2Flibrary%2Fdebian") ==
+               nil
 
-      assert CveView.registry_link(%{"packageURL" => "pkg:oci/redis"}) == nil
+      assert CveView.registry_link("pkg:oci/redis") == nil
     end
 
     test "a github purl has no registry link (Repository covers it)" do
-      assert CveView.registry_link(%{"packageURL" => "pkg:github/erlang/otp"}) == nil
+      assert CveView.registry_link("pkg:github/erlang/otp") == nil
     end
 
-    test "an unlinkable purl type has no registry link" do
-      assert CveView.registry_link(%{"vendor" => "Acme", "product" => "widget"}) == nil
+    test "no purl has no registry link" do
+      assert CveView.registry_link(nil) == nil
     end
   end
 
