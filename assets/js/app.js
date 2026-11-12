@@ -34,6 +34,7 @@ import {
   CommentAssist,
   CssVars,
   DragSort,
+  MenuFilter,
   SectionRail,
   BoardMemory,
 } from "./hooks"
@@ -144,6 +145,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     BoardMove,
     CommentAssist,
     DragSort,
+    MenuFilter,
     SectionRail,
     CssVars,
     BoardMemory,

@@ -638,6 +638,7 @@ defmodule VarselWeb.CaseLiveTest do
         |> LazyHTML.attribute("phx-value-selection")
 
       assert options == ["all", "me", supporter.id]
+      assert has_element?(lv, "#assignee-filter input[type=search][data-menu-filter]")
 
       lv
       |> element(~s{#assignee-filter button[phx-value-selection="#{supporter.id}"]})
@@ -656,6 +657,21 @@ defmodule VarselWeb.CaseLiveTest do
 
       lv |> element(~s{#assignee-filter button[phx-value-selection=all]}) |> render_click()
       assert_patched(lv, "/cases?sort=oldest")
+    end
+
+    test "the assignee filter is for those who assign cases", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      Fixtures.open_case(poc, %{title: "Only the POC's"})
+      shared = Fixtures.open_case(poc, %{title: "Shared with the supporter"})
+      Cases.assign_case_user!(%{case_id: shared.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases?assignee=#{poc.id}")
+
+      refute has_element?(lv, "#assignee-filter")
+      assert has_element?(lv, "[data-column=draft]", "Shared with the supporter")
     end
 
     test "an assignee with nothing in the pipeline says so; an unknown one filters nothing", %{

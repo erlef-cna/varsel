@@ -1191,6 +1191,10 @@ defmodule VarselWeb.CoreComponents do
     default: "hero-bars-arrow-down-mini",
     doc: "what the control does: the default is for an order, a filter names its own"
 
+  attr :searchable, :boolean,
+    default: false,
+    doc: "puts a box above the options that narrows them as you type, for a long list"
+
   slot :lead,
     doc: "a mark before an option's label, such as an avatar; receives the option's value"
 
@@ -1202,7 +1206,7 @@ defmodule VarselWeb.CoreComponents do
       end)
 
     ~H"""
-    <div id={@id} class="dropdown dropdown-end">
+    <div id={@id} class="dropdown dropdown-end" phx-hook={@searchable && "MenuFilter"}>
       <div
         tabindex="0"
         role="button"
@@ -1218,29 +1222,52 @@ defmodule VarselWeb.CoreComponents do
           </span>
         <% end %>
       </div>
-      <ul
+      <div
         tabindex="0"
-        class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-52 p-2 z-50"
+        class={[
+          "dropdown-content bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 p-2 z-50",
+          if(@searchable, do: "w-64", else: "w-52")
+        ]}
       >
-        <%= for set <- @sets do %>
-          <li :if={set.label} class="menu-title text-[0.65rem] uppercase tracking-wider">
-            {set.label}
+        <label :if={@searchable} class="input input-sm flex items-center gap-2 w-full rounded-lg mb-2">
+          <.icon name="hero-magnifying-glass-mini" class="size-4 text-base-content/40 shrink-0" />
+          <input
+            type="search"
+            data-menu-filter
+            aria-label={"Search #{String.downcase(@label)} options"}
+            placeholder="Search"
+            autocomplete="off"
+            class="grow min-w-0 bg-transparent focus:outline-none"
+          />
+        </label>
+        <ul class="menu flex-nowrap w-full p-0 max-h-80 overflow-y-auto">
+          <%= for set <- @sets do %>
+            <li :if={set.label} class="menu-title text-[0.65rem] uppercase tracking-wider">
+              {set.label}
+            </li>
+            <li :for={{value, label} <- set.options} data-menu-option={label}>
+              <button
+                type="button"
+                phx-click={set.event}
+                phx-value-selection={value}
+                aria-pressed={to_string(value == set.value)}
+                class={[value == set.value && "menu-active"]}
+              >
+                {render_slot(@lead, value)}
+                <span class="truncate">{label}</span>
+                <.icon
+                  :if={value == set.value}
+                  name="hero-check-mini"
+                  class="ml-auto size-4 shrink-0"
+                />
+              </button>
+            </li>
+          <% end %>
+          <li :if={@searchable} data-menu-empty hidden class="px-3 py-2 text-sm text-base-content/70">
+            No matches
           </li>
-          <li :for={{value, label} <- set.options}>
-            <button
-              type="button"
-              phx-click={set.event}
-              phx-value-selection={value}
-              aria-pressed={to_string(value == set.value)}
-              class={[value == set.value && "menu-active"]}
-            >
-              {render_slot(@lead, value)}
-              <span class="truncate">{label}</span>
-              <.icon :if={value == set.value} name="hero-check-mini" class="ml-auto size-4 shrink-0" />
-            </button>
-          </li>
-        <% end %>
-      </ul>
+        </ul>
+      </div>
     </div>
     """
   end

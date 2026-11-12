@@ -17,7 +17,7 @@ defmodule VarselWeb.CaseManagementLive do
 
   The face lives in `?face=`, and `page`, `q` and the board's view ride along
   in the URL: `sort` orders the cases inside a row, `packages` orders the
-  rows, `assignee` filters to one person's cases. So both faces, any search
+  rows, `assignee` filters to one person's cases for those who assign cases. So both faces, any search
   and the view are deep-linkable and survive a face switch. The browser
   remembers the view, and a visit that names none of it gets it back.
   """
@@ -178,7 +178,10 @@ defmodule VarselWeb.CaseManagementLive do
     pipeline = if query == "", do: cases, else: list_pipeline_overview(socket)
     totals = Enum.frequencies_by(pipeline, & &1.state)
     people = assignees(pipeline, viewer)
-    {assignee, assignee_id} = resolve_assignee(view.assignee, people, viewer)
+    assignable? = Cases.can_assign_case_user?(viewer, %{})
+
+    {assignee, assignee_id} =
+      if assignable?, do: resolve_assignee(view.assignee, people, viewer), else: {"all", nil}
 
     shown = cases |> assigned_to(assignee_id) |> LaneSort.sort(view.cases)
     shown_counts = Enum.frequencies_by(shown, & &1.state)
@@ -193,6 +196,7 @@ defmodule VarselWeb.CaseManagementLive do
     |> assign(
       columns: columns(totals, shown_counts, narrowed?),
       rows: package_rows(shown, view.packages),
+      assignable?: assignable?,
       assignee: assignee,
       assignee_label: assignee != "all" && assignee_options |> List.keyfind(assignee, 0) |> elem(1),
       assignee_options: assignee_options,
@@ -732,13 +736,14 @@ defmodule VarselWeb.CaseManagementLive do
             hidden
           ></span>
           <.console_menu
-            :if={@face == :pipeline}
+            :if={@face == :pipeline and @assignable?}
             id="assignee-filter"
             label="Assignee"
             icon="hero-user-mini"
             value={@assignee}
             options={@assignee_options}
             event="assignee"
+            searchable
           >
             <:lead :let={value}>
               <.avatar_disc :if={@assignee_users[value]} user={@assignee_users[value]} />

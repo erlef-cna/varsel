@@ -163,6 +163,61 @@ export const BoardMemory = {
   },
 }
 
+// Narrows a console menu's options to the ones whose label contains what is
+// typed in its search box. LiveView patches drop the `hidden` marks, so they
+// are re-applied after each one. The arrow keys walk from the trigger to the
+// search box and on through the options that are left, and back up.
+export const MenuFilter = {
+  mounted() {
+    this.input = this.el.querySelector("[data-menu-filter]")
+    this.input.addEventListener("input", () => this.apply())
+    this.input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return
+      event.preventDefault()
+      this.stops()[1]?.click()
+    })
+    this.el.querySelector("[role=button]").addEventListener("click", () => this.input.focus())
+    this.el.addEventListener("keydown", (event) => this.walk(event))
+  },
+  stops() {
+    return [this.input, ...this.el.querySelectorAll("[data-menu-option]:not([hidden]) button")]
+  },
+  walk(event) {
+    const stops = this.stops()
+    const at = stops.indexOf(document.activeElement)
+    const last = stops.length - 1
+
+    const to = {
+      ArrowDown: Math.min(at + 1, last),
+      ArrowUp: Math.max(at - 1, 0),
+      Home: at > 0 ? 1 : null,
+      End: at > 0 ? last : null,
+    }[event.key]
+
+    if (event.key === "Escape") {
+      document.activeElement.blur()
+    } else if (stops[to]) {
+      event.preventDefault()
+      stops[to].focus()
+      stops[to].scrollIntoView({block: "nearest"})
+    }
+  },
+  updated() {
+    this.apply()
+  },
+  apply() {
+    const term = this.input.value.trim().toLowerCase()
+    let shown = 0
+
+    for (const option of this.el.querySelectorAll("[data-menu-option]")) {
+      option.hidden = !option.dataset.menuOption.toLowerCase().includes(term)
+      if (!option.hidden) shown += 1
+    }
+
+    this.el.querySelector("[data-menu-empty]").hidden = shown > 0
+  },
+}
+
 // Applies dynamic, per-render style values without an inline `style`
 // attribute, which the strict Content-Security-Policy forbids. Every
 // `data-css-*` attribute is written to the element's CSSOM style

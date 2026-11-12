@@ -80,6 +80,21 @@ defmodule VarselWeb.Storybook.Core.ConsoleMenu do
         }
       },
       %Variation{
+        id: :searchable,
+        description:
+          "A long list gets a search box above its options, which narrows them as " <>
+            "you type. Enter picks the first one left.",
+        attributes: %{
+          id: "assignee-search",
+          label: "Assignee",
+          icon: "hero-user-mini",
+          value: "all",
+          options: [{"all", "Everyone"} | Enum.map(1..40, &{"user-#{&1}", "Person #{&1}"})],
+          event: "assignee",
+          searchable: true
+        }
+      },
+      %Variation{
         id: :groups,
         description:
           "A control that chooses more than one thing: each group is a titled set " <>
