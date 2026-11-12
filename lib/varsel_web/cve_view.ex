@@ -261,7 +261,7 @@ defmodule VarselWeb.CveView do
   then renders just the label). Falls back to `vendor / product`.
   """
   @spec package_link(map()) :: {String.t(), String.t() | nil}
-  def package_link(%{"packageURL" => package_url} = entry) when not is_nil(package_url) do
+  def package_link(%{"packageURL" => package_url}) when not is_nil(package_url) do
     case Purl.new!(package_url) do
       %Purl{type: "hex"} = purl ->
         name = purl_name(purl)
@@ -276,7 +276,7 @@ defmodule VarselWeb.CveView do
         {"pkg:github/#{path}", "https://github.com/#{path}"}
 
       %Purl{type: "oci"} = purl ->
-        oci_link(entry, purl)
+        {"pkg:oci/#{purl_name(purl)}", ghcr_package_url(purl)}
 
       purl ->
         {Purl.to_string(%{purl | version: nil, qualifiers: %{}, subpath: []}), nil}
@@ -287,16 +287,21 @@ defmodule VarselWeb.CveView do
     {"#{entry["vendor"]} / #{entry["product"]}", nil}
   end
 
-  defp oci_link(entry, purl) do
-    label = "pkg:oci/#{purl_name(purl)}"
+  # An OCI image's purl names its registry only in `repository_url`. On ghcr.io
+  # that is `ghcr.io/<owner>/<image>`, and GitHub resolves `-` to the owner's
+  # user or org account.
+  defp ghcr_package_url(%Purl{qualifiers: %{"repository_url" => "ghcr.io/" <> path}}) do
+    case String.split(path, "/", parts: 2) do
+      [owner, image] when owner != "" and image != "" ->
+        "https://github.com/-/#{owner}/packages/container/package/" <>
+          URI.encode(image, &URI.char_unreserved?/1)
 
-    if is_binary(entry["packageURL"]) and String.contains?(entry["packageURL"], "ghcr.io") and
-         entry["packageName"] do
-      {label, "https://github.com/#{entry["packageName"]}/pkgs/container/#{purl_name(purl)}"}
-    else
-      {label, nil}
+      _no_image ->
+        nil
     end
   end
+
+  defp ghcr_package_url(_purl), do: nil
 
   @doc """
   Derives `{label, url}` for the Affected card header's REGISTRY link, or nil
@@ -306,33 +311,23 @@ defmodule VarselWeb.CveView do
   "GitHub ↗" registry entry (`entry["repo"]` renders separately).
   """
   @spec registry_link(map()) :: {String.t(), String.t()} | nil
-  def registry_link(%{"packageURL" => package_url} = entry) when not is_nil(package_url) do
+  def registry_link(%{"packageURL" => package_url}) when not is_nil(package_url) do
     case Purl.new!(package_url) do
-      %Purl{type: "oci"} = purl -> oci_registry_link(entry, purl)
-      purl -> registry_page(purl.type, purl_name(purl))
+      %Purl{type: "hex"} = purl ->
+        {"Hex.pm", "https://hex.pm/packages/#{purl_name(purl)}"}
+
+      %Purl{type: "npm"} = purl ->
+        {"npm", "https://www.npmjs.com/package/#{purl_name(purl)}"}
+
+      %Purl{type: "oci"} = purl ->
+        if url = ghcr_package_url(purl), do: {"Container registry", url}
+
+      _other ->
+        nil
     end
   end
 
   def registry_link(_entry), do: nil
-
-  @doc """
-  Derives `{label, url}` for a package's page on its registry from the purl
-  type and the package's full name, namespace included. Nil for a type whose
-  registry has no page per package.
-  """
-  @spec registry_page(String.t() | nil, String.t() | nil) :: {String.t(), String.t()} | nil
-  def registry_page("hex", name) when is_binary(name), do: {"Hex.pm", "https://hex.pm/packages/#{name}"}
-
-  def registry_page("npm", name) when is_binary(name), do: {"npm", "https://www.npmjs.com/package/#{name}"}
-
-  def registry_page(_type, _name), do: nil
-
-  defp oci_registry_link(entry, purl) do
-    case oci_link(entry, purl) do
-      {_label, url} when is_binary(url) -> {"Container registry", url}
-      _no_link -> nil
-    end
-  end
 
   @doc """
   Renders an affected package's `versions[]` — one line per entry, as
@@ -601,16 +596,14 @@ defmodule VarselWeb.CveView do
     end
   end
 
-  def version_link(version, _type, entry) do
-    with purl_string when is_binary(purl_string) <- entry["packageURL"],
-         true <-
-           String.contains?(purl_string, "pkg:oci/") and String.contains?(purl_string, "ghcr.io") do
-      purl = Purl.new!(purl_string)
-      {version, "https://github.com/#{entry["packageName"]}/pkgs/container/#{purl_name(purl)}"}
-    else
+  def version_link(version, _type, %{"packageURL" => package_url}) when is_binary(package_url) do
+    case Purl.new!(package_url) do
+      %Purl{type: "oci"} = purl -> {version, ghcr_package_url(purl)}
       _other -> {version, nil}
     end
   end
+
+  def version_link(version, _type, _entry), do: {version, nil}
 
   @doc "Component rendering a version reference. Mirrors `version-link.html`."
   attr :version, :string, required: true

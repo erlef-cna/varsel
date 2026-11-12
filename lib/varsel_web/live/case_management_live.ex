@@ -1067,8 +1067,7 @@ defmodule VarselWeb.CaseManagementLive do
     registries =
       for package <- packages,
           channel <- package.channels,
-          name = [channel.namespace, channel.name] |> Enum.reject(&is_nil/1) |> Enum.join("/"),
-          link = VarselWeb.CveView.registry_page(channel.purl_type, name),
+          link = VarselWeb.CveView.registry_link(%{"packageURL" => channel.purl}),
           uniq: true,
           do: link
 

@@ -663,14 +663,17 @@ defmodule VarselWeb.CaseLiveTest do
       case_record = Fixtures.open_case(poc, %{title: "Ships to two registries"})
       package = Fixtures.add_affected_package(poc, case_record)
 
-      for {type, name} <- [{"hex", "acme_lib"}, {"npm", "acme-lib"}] do
+      for channel <- [
+            %{purl_type: "hex", name: "acme_lib"},
+            %{purl_type: "npm", name: "acme-lib"},
+            %{
+              purl_type: "oci",
+              name: "acme_lib",
+              qualifiers: %{"repository_url" => "ghcr.io/acme/acme_lib"}
+            }
+          ] do
         Cases.add_package_channel!(
-          %{
-            case_id: case_record.id,
-            affected_package_id: package.id,
-            purl_type: type,
-            name: name
-          },
+          Map.merge(channel, %{case_id: case_record.id, affected_package_id: package.id}),
           actor: poc
         )
       end
@@ -683,6 +686,12 @@ defmodule VarselWeb.CaseLiveTest do
                lv,
                ~s{[data-row] a[href="https://www.npmjs.com/package/acme-lib"]},
                "npm"
+             )
+
+      assert has_element?(
+               lv,
+               ~s{[data-row] a[href="https://github.com/-/acme/packages/container/package/acme_lib"]},
+               "Container registry"
              )
     end
 
