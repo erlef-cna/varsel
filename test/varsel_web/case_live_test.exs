@@ -52,22 +52,36 @@ defmodule VarselWeb.CaseLiveTest do
       assert_raise Ash.Error.Forbidden, fn -> live(conn, ~p"/cases") end
     end
 
-    test "pipeline is the default face and shows lanes for the four active states", %{
+    test "pipeline is the default face and shows a column per active state", %{
       conn: conn,
       poc: poc
     } do
       Fixtures.open_case(poc, %{title: "Draft case"})
 
-      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
 
       assert html =~ "Draft case"
-      assert html =~ "Draft"
-      assert html =~ "Review"
-      assert html =~ "Approved"
-      assert html =~ "Publishing"
+
+      for state <- ~w(submitted triage draft review approved) do
+        assert has_element?(lv, "#lane-#{state}")
+      end
+
       # The band tabs, not a stat-tile filter row.
       assert html =~ "Pipeline"
       assert html =~ "Archive"
+    end
+
+    test "the publishing column shows only while a case is publishing", %{conn: conn, poc: poc} do
+      Fixtures.open_case(poc, %{title: "Draft case"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      refute has_element?(lv, "#lane-publishing")
+
+      Ash.Seed.seed!(Varsel.Cases.Case, %{title: "Going out", state: :publishing})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      assert has_element?(lv, "#lane-publishing", "Publishing")
+      assert has_element?(lv, "[data-column=publishing]", "Going out")
     end
 
     test "a POC opens a case through the band's menu", %{conn: conn, poc: poc} do
@@ -364,14 +378,25 @@ defmodule VarselWeb.CaseLiveTest do
              |> render() =~ "is already linked to another case"
     end
 
-    test "pipeline cards show one package chip per affected package", %{conn: conn, poc: poc} do
-      case_record = Fixtures.open_case(poc, %{title: "Chipped case"})
-      Fixtures.add_affected_package(poc, case_record)
+    test "the pipeline groups cases into a row per affected package, the ones without leading",
+         %{conn: conn, poc: poc} do
+      packaged = Fixtures.open_case(poc, %{title: "Packaged case"})
+      Fixtures.add_affected_package(poc, packaged)
+      Fixtures.open_case(poc, %{title: "Bare case"})
 
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
 
-      [_before, card] = String.split(html, "Chipped case", parts: 2)
-      assert card =~ "acme_lib"
+      rows =
+        html
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("[data-row]")
+        |> Enum.map(&LazyHTML.text/1)
+
+      assert [bare, packaged] = rows
+      assert bare =~ "No package"
+      assert bare =~ "Bare case"
+      assert packaged =~ "acme_lib"
+      assert packaged =~ "Packaged case"
     end
 
     test "a supporter only sees assigned cases, policy-scoped same as before", %{
@@ -407,7 +432,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Archived case"
     end
 
-    test "lanes group by state, order newest-updated-first, and keep empty lanes in place", %{
+    test "columns group by state, order newest-updated-first, and keep empty columns in place", %{
       conn: conn,
       poc: poc
     } do
@@ -425,31 +450,133 @@ defmodule VarselWeb.CaseLiveTest do
       [_before, after_newer] = String.split(html, "Newer draft", parts: 2)
       assert String.contains?(after_newer, "Older draft")
 
-      assert has_element?(lv, "#lane-review", "In review")
-      # Approved is empty: the lane stays, as a strip holding its title and
+      assert has_element?(lv, "[data-column=review]", "In review")
+      # Approved is empty: the column stays, as a strip holding its title and
       # count and no cards.
       assert has_element?(lv, "#lane-approved", "Approved")
-      refute has_element?(lv, "#lane-approved a")
+      refute has_element?(lv, "[data-column=approved] a")
     end
 
-    test "a lane past 8 cards clips the tail with a \"Show all N\" footer that expands in place",
+    test "a column lists every case it holds", %{conn: conn, poc: poc} do
+      for n <- 1..9, do: Fixtures.open_case(poc, %{title: "Draft #{n}"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      assert lv
+             |> element("[data-column=draft]")
+             |> render()
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("a")
+             |> Enum.count() == 9
+    end
+
+    test "the package sort orders the rows, independently of the case sort, and persists in the URL",
          %{conn: conn, poc: poc} do
-      for n <- 1..9 do
-        Fixtures.open_case(poc, %{title: "Draft #{n}"})
-        Process.sleep(1)
+      for title <- ["Zeta one", "Zeta two"] do
+        zeta = Fixtures.open_case(poc, %{title: title})
+        Fixtures.add_affected_package(poc, zeta, %{product: "zeta_lib"})
       end
 
-      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+      alpha = Fixtures.open_case(poc, %{title: "Alpha one"})
+      Fixtures.add_affected_package(poc, alpha, %{product: "alpha_lib"})
 
-      assert html =~ "Show all 9"
-      # Newest-first clipping keeps the freshest intake in view: Draft 9 (the
-      # last one opened) shows; Draft 1 (the oldest) falls past the clip.
-      assert html =~ "Draft 9"
-      refute html =~ "Draft 1"
+      row_order = fn html ->
+        html
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("[data-row]")
+        |> Enum.map(fn row ->
+          Enum.find(["zeta_lib", "alpha_lib"], &(LazyHTML.text(row) =~ &1))
+        end)
+      end
 
-      html = lv |> element("button[phx-value-lane=draft]") |> render_click()
-      assert html =~ "Show fewer"
-      assert html =~ "Draft 1"
+      # The package updated last leads by default.
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases?sort=oldest")
+      assert row_order.(html) == ["alpha_lib", "zeta_lib"]
+
+      lv
+      |> element(~s{#board-sort button[phx-click=sort_packages][phx-value-selection=cases]})
+      |> render_click()
+
+      assert_patched(lv, "/cases?packages=cases&sort=oldest")
+      assert row_order.(render(lv)) == ["zeta_lib", "alpha_lib"]
+
+      # The case sort keeps the package order it was given.
+      lv
+      |> element(~s{#board-sort button[phx-click=sort][phx-value-selection=title]})
+      |> render_click()
+
+      assert_patched(lv, "/cases?packages=cases&sort=title")
+      assert row_order.(render(lv)) == ["zeta_lib", "alpha_lib"]
+
+      # Returning to the default drops the parameter.
+      lv
+      |> element(~s{#board-sort button[phx-click=sort_packages][phx-value-selection=recent]})
+      |> render_click()
+
+      assert_patched(lv, "/cases?sort=title")
+    end
+
+    test "a drag asks which columns the case may move to, as the policies decide", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Movable draft"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+      review_case = Cases.request_case_review!(case_record, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      render_hook(lv, "move_targets", %{"id" => review_case.id})
+      assert_reply lv, %{targets: targets}
+      assert Enum.sort(targets) == [:approved, :draft]
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases")
+      render_hook(lv, "move_targets", %{"id" => review_case.id})
+      assert_reply lv, %{targets: []}
+    end
+
+    test "dropping a card on an allowed column moves the case there", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Dragged draft"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+      assert has_element?(lv, ~s([data-column=draft] a[draggable][data-card="#{case_record.id}"]))
+
+      render_hook(lv, "move_case", %{"id" => case_record.id, "to" => "review"})
+
+      assert has_element?(lv, "[data-column=review]", "Dragged draft")
+      refute has_element?(lv, "[data-column=draft]", "Dragged draft")
+    end
+
+    test "a drop the workflow has no move for leaves the case where it is", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Stays a draft"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      for to <- ["approved", "publishing", "nowhere"] do
+        render_hook(lv, "move_case", %{"id" => case_record.id, "to" => to})
+      end
+
+      assert has_element?(lv, "[data-column=draft]", "Stays a draft")
+      assert Cases.get_case!(case_record.id, actor: poc).state == :draft
+    end
+
+    test "a drop the policies refuse says so and moves nothing", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "Not theirs to approve"})
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+      Cases.request_case_review!(case_record, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases")
+      render_hook(lv, "move_case", %{"id" => case_record.id, "to" => "approved"})
+
+      assert has_element?(lv, "[data-column=review]", "Not theirs to approve")
+      assert has_element?(lv, "#flash-error")
     end
 
     test "the sort picker reorders the lanes and persists in the URL", %{conn: conn, poc: poc} do
@@ -459,7 +586,9 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
 
-      lv |> element(~s{#lane-sort button[phx-value-selection=oldest]}) |> render_click()
+      lv
+      |> element(~s{#board-sort button[phx-click=sort][phx-value-selection=oldest]})
+      |> render_click()
 
       assert_patched(lv, "/cases?sort=oldest")
 
@@ -483,8 +612,181 @@ defmodule VarselWeb.CaseLiveTest do
 
       # Returning to the default drops the parameter rather than spelling it out.
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?sort=oldest")
-      lv |> element(~s{#lane-sort button[phx-value-selection=newest]}) |> render_click()
+
+      lv
+      |> element(~s{#board-sort button[phx-click=sort][phx-value-selection=newest]})
+      |> render_click()
+
       assert_patched(lv, "/cases")
+    end
+
+    test "the assignee filter lists the viewer first and the pipeline's assignees, and narrows the board",
+         %{conn: conn, poc: poc, supporter: supporter} do
+      # Opening assigns the opener.
+      Fixtures.open_case(poc, %{title: "Only the POC's"})
+      shared = Fixtures.open_case(poc, %{title: "Shared with the supporter"})
+      Cases.assign_case_user!(%{case_id: shared.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?sort=oldest")
+
+      options =
+        lv
+        |> element("#assignee-filter")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("button[phx-value-selection]")
+        |> LazyHTML.attribute("phx-value-selection")
+
+      assert options == ["all", "me", supporter.id]
+      assert has_element?(lv, "#assignee-filter input[type=search][data-menu-filter]")
+
+      lv
+      |> element(~s{#assignee-filter button[phx-value-selection="#{supporter.id}"]})
+      |> render_click()
+
+      assert_patched(lv, "/cases?assignee=#{supporter.id}&sort=oldest")
+      assert has_element?(lv, "[data-column=draft]", "Shared with the supporter")
+      refute has_element?(lv, "[data-column=draft]", "Only the POC's")
+      # The column counts what the filter leaves.
+      assert lv |> element("#lane-draft") |> render() =~ ~r/tabular-nums font-bold">\s*1\s*</
+
+      lv |> element(~s{#assignee-filter button[phx-value-selection=me]}) |> render_click()
+      assert_patched(lv, "/cases?assignee=me&sort=oldest")
+      assert has_element?(lv, "[data-column=draft]", "Only the POC's")
+      assert has_element?(lv, "[data-column=draft]", "Shared with the supporter")
+
+      lv |> element(~s{#assignee-filter button[phx-value-selection=all]}) |> render_click()
+      assert_patched(lv, "/cases?sort=oldest")
+    end
+
+    test "a package row links every registry the package ships to", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "Ships to two registries"})
+      package = Fixtures.add_affected_package(poc, case_record)
+
+      for channel <- [
+            %{purl_type: "hex", name: "acme_lib"},
+            %{purl_type: "npm", name: "acme-lib"},
+            %{
+              purl_type: "oci",
+              name: "acme_lib",
+              qualifiers: %{"repository_url" => "ghcr.io/acme/acme_lib"}
+            }
+          ] do
+        Cases.add_package_channel!(
+          Map.merge(channel, %{case_id: case_record.id, affected_package_id: package.id}),
+          actor: poc
+        )
+      end
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      assert has_element?(lv, ~s{[data-row] a[href="https://hex.pm/packages/acme_lib"]}, "Hex.pm")
+
+      assert has_element?(
+               lv,
+               ~s{[data-row] a[href="https://www.npmjs.com/package/acme-lib"]},
+               "npm"
+             )
+
+      assert has_element?(
+               lv,
+               ~s{[data-row] a[href="https://github.com/-/acme/packages/container/package/acme_lib"]},
+               "Container registry"
+             )
+    end
+
+    test "the assignee filter is for those who assign cases", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      Fixtures.open_case(poc, %{title: "Only the POC's"})
+      shared = Fixtures.open_case(poc, %{title: "Shared with the supporter"})
+      Cases.assign_case_user!(%{case_id: shared.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases?assignee=#{poc.id}")
+
+      refute has_element?(lv, "#assignee-filter")
+      assert has_element?(lv, "[data-column=draft]", "Shared with the supporter")
+    end
+
+    test "an assignee with nothing in the pipeline says so; an unknown one filters nothing", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      poc |> Fixtures.open_case(%{title: "Nobody's case"}) |> unassign_everyone(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?assignee=me")
+      assert has_element?(lv, "#no-assigned-cases")
+      refute has_element?(lv, "[data-row]")
+
+      for assignee <- [supporter.id, "not-a-user"] do
+        {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?#{[assignee: assignee]}")
+        assert has_element?(lv, "[data-column=draft]", "Nobody's case")
+        refute has_element?(lv, "#no-assigned-cases")
+      end
+    end
+
+    test "a remembered sort and assignee are restored, and a reset returns to the defaults", %{
+      conn: conn,
+      poc: poc
+    } do
+      Fixtures.open_case(poc, %{title: "Some draft"})
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
+
+      assert has_element?(
+               lv,
+               "#board-memory[phx-hook=BoardMemory]:not([data-sort]):not([data-packages])"
+             )
+
+      render_hook(lv, "restore_view", %{
+        "sort" => "severity",
+        "packages" => "name",
+        "assignee" => "me"
+      })
+
+      assert_patched(lv, "/cases?assignee=me&packages=name&sort=severity")
+
+      assert has_element?(
+               lv,
+               ~s{#board-memory[data-sort=severity][data-packages=name][data-assignee=me]}
+             )
+
+      # What the browser stored is not trusted to name a real order.
+      render_hook(lv, "restore_view", %{"sort" => "sideways", "packages" => nil})
+      assert_patched(lv, "/cases")
+
+      render_hook(lv, "restore_view", %{"sort" => "oldest", "assignee" => "me"})
+      render_hook(lv, "restore_view", %{})
+      assert_patched(lv, "/cases")
+      refute has_element?(lv, "#board-memory[data-sort]")
+      refute has_element?(lv, "#board-memory[data-assignee]")
+    end
+
+    test "the page is marked when the browser force-refreshes it", %{conn: conn, poc: poc} do
+      body = fn conn ->
+        conn
+        |> get(~p"/cases")
+        |> html_response(200)
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("body")
+      end
+
+      conn = log_in(conn, poc)
+
+      assert conn |> body.() |> LazyHTML.attribute("data-force-reload") == []
+
+      assert conn
+             |> put_req_header("cache-control", "no-cache")
+             |> body.()
+             |> LazyHTML.attribute("data-force-reload") == [""]
+
+      assert conn
+             |> put_req_header("cache-control", "max-age=0")
+             |> body.()
+             |> LazyHTML.attribute("data-force-reload") == []
     end
 
     test "an unknown sort falls back to the default instead of failing", %{conn: conn, poc: poc} do
@@ -517,10 +819,10 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases?face=archive")
 
-      refute html =~ ~s{id="lane-sort"}
+      refute html =~ ~s{id="board-sort"}
     end
 
-    test "staleness: a card past its lane's threshold names the lane in its age", %{
+    test "staleness: a card past its lane's threshold marks its age", %{
       conn: conn,
       poc: poc
     } do
@@ -532,10 +834,15 @@ defmodule VarselWeb.CaseLiveTest do
       fresh_review = Fixtures.open_case(poc, %{title: "Fresh review case"})
       Cases.request_case_review!(fresh_review, actor: poc)
 
-      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
 
-      assert html =~ "6 d in review"
-      assert html =~ "text-warning"
+      assert has_element?(
+               lv,
+               ~s{a[data-card="#{review_case.id}"] [data-stale]},
+               "6 d"
+             )
+
+      refute has_element?(lv, ~s{a[data-card="#{fresh_review.id}"] [data-stale]})
     end
 
     test "review/approved cards without an assignee show the dashed needs-owner circle; draft doesn't",
@@ -696,7 +1003,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       html = render(lv)
       assert html =~ "Live moving case"
-      assert lv |> element("#lane-review") |> render() =~ "Live moving case"
+      assert has_element?(lv, "[data-column=review]", "Live moving case")
     end
 
     test "zero matches on the active face points across to the archive", %{conn: conn, poc: poc} do
@@ -872,16 +1179,17 @@ defmodule VarselWeb.CaseLiveTest do
       refute html =~ "per page"
     end
 
-    test "an entirely empty pipeline still renders all four lanes plus the helper line", %{
+    test "an entirely empty pipeline still renders its columns plus the helper line", %{
       conn: conn,
       poc: poc
     } do
-      {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/cases")
+      {:ok, lv, html} = conn |> log_in(poc) |> live(~p"/cases")
 
-      assert html =~ "Draft"
-      assert html =~ "Review"
-      assert html =~ "Approved"
-      assert html =~ "Publishing"
+      for state <- ~w(submitted triage draft review approved) do
+        assert has_element?(lv, "#lane-#{state}")
+      end
+
+      refute has_element?(lv, "#lane-publishing")
       assert html =~ "No active cases."
       assert html =~ "Open a case"
       assert html =~ "archive"

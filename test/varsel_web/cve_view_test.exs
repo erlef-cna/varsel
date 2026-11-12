@@ -11,26 +11,21 @@ defmodule VarselWeb.CveViewTest do
 
   describe "package_link/1" do
     test "maps hex, npm, github and oci purls to registry URLs" do
-      assert CveView.package_link(%{"packageURL" => "pkg:hex/ash"}) ==
-               {"pkg:hex/ash", "https://hex.pm/packages/ash"}
+      assert CveView.package_link("pkg:hex/ash") == {"pkg:hex/ash", "https://hex.pm/packages/ash"}
 
-      assert CveView.package_link(%{"packageURL" => "pkg:npm/%40scope/pkg"}) ==
-               {"pkg:npm/@scope/pkg", "https://www.npmjs.com/package/@scope/pkg"}
+      assert CveView.package_link("pkg:npm/%40scope/pkg") ==
+               {"pkg:npm/%40scope/pkg", "https://www.npmjs.com/package/@scope/pkg"}
 
-      assert CveView.package_link(%{"packageURL" => "pkg:github/ash-project/ash"}) ==
+      assert CveView.package_link("pkg:github/ash-project/ash") ==
                {"pkg:github/ash-project/ash", "https://github.com/ash-project/ash"}
+
+      assert CveView.package_link("pkg:oci/gleam?repository_url=ghcr.io%2Fgleam-lang%2Fgleam") ==
+               {"pkg:oci/gleam", "https://github.com/-/gleam-lang/packages/container/package/gleam"}
     end
 
     test "strips purl qualifiers" do
-      assert {"pkg:hex/ash", "https://hex.pm/packages/ash"} =
-               CveView.package_link(%{
-                 "packageURL" => "pkg:hex/ash?repository_url=https://repo.hex.pm"
-               })
-    end
-
-    test "falls back to vendor / product without a packageURL" do
-      assert CveView.package_link(%{"vendor" => "Acme", "product" => "widget"}) ==
-               {"Acme / widget", nil}
+      assert CveView.package_link("pkg:hex/ash?repository_url=https://repo.hex.pm") ==
+               {"pkg:hex/ash", "https://hex.pm/packages/ash"}
     end
   end
 
@@ -57,6 +52,13 @@ defmodule VarselWeb.CveViewTest do
     test "links otp versions to the erlang.org patch page" do
       assert CveView.version_link("28.0.1", "otp", %{"packageName" => "erlang/otp"}) ==
                {"28.0.1", "https://www.erlang.org/patches/otp-28.0.1"}
+    end
+
+    test "links an oci image version on ghcr.io to its GitHub package page" do
+      entry = %{"packageURL" => "pkg:oci/gleam?repository_url=ghcr.io%2Fgleam-lang%2Fgleam"}
+
+      assert CveView.version_link("v1.0.0", "custom", entry) ==
+               {"v1.0.0", "https://github.com/-/gleam-lang/packages/container/package/gleam"}
     end
   end
 
@@ -436,19 +438,31 @@ defmodule VarselWeb.CveViewTest do
 
   describe "registry_link/1" do
     test "hex and npm purls get a registry link" do
-      assert CveView.registry_link(%{"packageURL" => "pkg:hex/bandit"}) ==
+      assert CveView.registry_link("pkg:hex/bandit") ==
                {"Hex.pm", "https://hex.pm/packages/bandit"}
 
-      assert CveView.registry_link(%{"packageURL" => "pkg:npm/left-pad"}) ==
-               {"npm", "https://www.npmjs.com/package/left-pad"}
+      assert CveView.registry_link("pkg:npm/%40acme/left-pad") ==
+               {"npm", "https://www.npmjs.com/package/@acme/left-pad"}
+    end
+
+    test "an oci image on ghcr.io links its GitHub package page" do
+      assert CveView.registry_link("pkg:oci/gleam?repository_url=ghcr.io%2Fgleam-lang%2Fgleam") ==
+               {"Container registry", "https://github.com/-/gleam-lang/packages/container/package/gleam"}
+    end
+
+    test "an oci image on any other registry, or with none, has no registry link" do
+      assert CveView.registry_link("pkg:oci/debian?repository_url=docker.io%2Flibrary%2Fdebian") ==
+               nil
+
+      assert CveView.registry_link("pkg:oci/redis") == nil
     end
 
     test "a github purl has no registry link (Repository covers it)" do
-      assert CveView.registry_link(%{"packageURL" => "pkg:github/erlang/otp"}) == nil
+      assert CveView.registry_link("pkg:github/erlang/otp") == nil
     end
 
-    test "an unlinkable purl type has no registry link" do
-      assert CveView.registry_link(%{"vendor" => "Acme", "product" => "widget"}) == nil
+    test "no purl has no registry link" do
+      assert CveView.registry_link(nil) == nil
     end
   end
 

@@ -38,6 +38,19 @@ defmodule Varsel.Cases.RepoUrlTest do
     end
   end
 
+  describe "forge_name/1" do
+    test "names a known forge, and falls back to the host for any other" do
+      assert "https://github.com/erlang/otp" |> RepoUrl.parse() |> RepoUrl.forge_name() ==
+               "GitHub"
+
+      assert "https://git.sr.ht/~user/repo" |> RepoUrl.parse() |> RepoUrl.forge_name() ==
+               "SourceHut"
+
+      assert "https://git.example.org/a/b" |> RepoUrl.parse() |> RepoUrl.forge_name() ==
+               "git.example.org"
+    end
+  end
+
   describe "commit_url/2" do
     @sha "a3253fb4fc7145aeb403537af1c24d3a8d51ffb1"
 

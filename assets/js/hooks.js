@@ -29,6 +29,196 @@ export const DragSort = {
   },
 }
 
+// Drag & drop of a board's cards between the columns of their own row. A
+// [data-card] is dragged; the [data-column] cells of its [data-row] are the
+// drop targets. On drag start the board asks the server (data-targets-event)
+// which columns the card may move to and marks each other cell of the row
+// data-drop="allowed" or "denied", which is what reveals the cell's
+// placeholder, sized to the dragged card through --board-card-height. Dropping on an allowed cell pushes data-move-event with the
+// card and the column.
+export const BoardMove = {
+  mounted() {
+    this.drag = null
+
+    this.clear = () => {
+      for (const cell of this.el.querySelectorAll("[data-drop], [data-drop-over]")) {
+        cell.removeAttribute("data-drop")
+        cell.removeAttribute("data-drop-over")
+      }
+      this.drag = null
+      this.over = null
+    }
+
+    this.targetCell = (event) => {
+      const cell = event.target.closest?.("[data-column]")
+      return this.drag && cell && cell.closest("[data-row]") === this.drag.row ? cell : null
+    }
+
+    this.el.addEventListener("dragstart", (event) => {
+      const card = event.target.closest?.("[data-card]")
+      if (!card) return
+
+      const id = card.dataset.card
+      const row = card.closest("[data-row]")
+      const from = card.closest("[data-column]")
+      this.drag = {id, row}
+      this.el.style.setProperty("--board-card-height", `${card.offsetHeight}px`)
+      event.dataTransfer.effectAllowed = "move"
+      event.dataTransfer.setData("text/plain", id)
+
+      this.pushEvent(this.el.dataset.targetsEvent, {id}, ({targets}) => {
+        if (this.drag?.id !== id) return
+
+        for (const cell of row.querySelectorAll("[data-column]")) {
+          if (cell !== from) {
+            cell.dataset.drop = targets.includes(cell.dataset.column) ? "allowed" : "denied"
+          }
+        }
+      })
+    })
+
+    this.el.addEventListener("dragover", (event) => {
+      const cell = this.targetCell(event)
+
+      if (this.over && this.over !== cell) this.over.removeAttribute("data-drop-over")
+
+      if (!this.drag) return
+
+      // LiveView accepts every dragover page-wide for its upload drop
+      // targets, so a refused cell has to say so itself to get the
+      // not-allowed cursor.
+      if (cell?.dataset.drop === "allowed") {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = "move"
+        cell.dataset.dropOver = ""
+        this.over = cell
+      } else {
+        event.dataTransfer.dropEffect = "none"
+      }
+    })
+
+    this.el.addEventListener("drop", (event) => {
+      const cell = this.targetCell(event)
+
+      if (cell?.dataset.drop === "allowed") {
+        event.preventDefault()
+        this.pushEvent(this.el.dataset.moveEvent, {id: this.drag.id, to: cell.dataset.column})
+      }
+
+      this.clear()
+    })
+
+    this.el.addEventListener("dragend", this.clear)
+  },
+}
+
+// Remembers the cases board's view (its two sorts and its assignee filter)
+// across visits. The element carries what the URL names (data-sort,
+// data-packages, data-assignee; absent for a default). A visit whose URL
+// names none of them gets the remembered ones back through the restore_view
+// event. A force-refresh, which the root layout marks on the body, forgets
+// them and resets the board; the mark lasts as long as the page, so it is
+// honoured once.
+const BOARD_MEMORY_KEY = "cases:view"
+let forceReloadHonoured = false
+
+const namesAny = (view) => Boolean(view?.sort || view?.packages || view?.assignee)
+
+export const BoardMemory = {
+  chosen() {
+    const {sort = null, packages = null, assignee = null} = this.el.dataset
+    return {sort, packages, assignee}
+  },
+  remember() {
+    const chosen = this.chosen()
+
+    if (namesAny(chosen)) {
+      localStorage.setItem(BOARD_MEMORY_KEY, JSON.stringify(chosen))
+    } else {
+      localStorage.removeItem(BOARD_MEMORY_KEY)
+    }
+  },
+  remembered() {
+    try {
+      return JSON.parse(localStorage.getItem(BOARD_MEMORY_KEY))
+    } catch (_error) {
+      return null
+    }
+  },
+  mounted() {
+    const named = namesAny(this.chosen())
+
+    if (document.body.hasAttribute("data-force-reload") && !forceReloadHonoured) {
+      forceReloadHonoured = true
+      localStorage.removeItem(BOARD_MEMORY_KEY)
+      if (named) this.pushEvent("restore_view", {})
+    } else if (named) {
+      this.remember()
+    } else if (namesAny(this.remembered())) {
+      this.pushEvent("restore_view", this.remembered())
+    }
+  },
+  updated() {
+    this.remember()
+  },
+}
+
+// Keyboard handling for a console menu. The arrow keys walk from the trigger
+// through the options, and back up. A searchable menu's box sits between the
+// trigger and the options, and narrows them to the ones whose label contains
+// what is typed in it. LiveView patches drop the `hidden` marks, so they are
+// re-applied after each one.
+export const ConsoleMenu = {
+  mounted() {
+    this.input = this.el.querySelector("[data-menu-filter]")
+    this.el.addEventListener("keydown", (event) => this.walk(event))
+
+    if (this.input) {
+      this.input.addEventListener("input", () => this.apply())
+      this.el.querySelector("[role=button]").addEventListener("click", () => this.input.focus())
+    }
+  },
+  walk(event) {
+    const focused = document.activeElement
+    const options = [...this.el.querySelectorAll("[data-menu-option]:not([hidden]) button")]
+    const stops = this.input ? [this.input, ...options] : options
+    const at = stops.indexOf(focused)
+    const inOptions = options.includes(focused)
+
+    const to = {
+      ArrowDown: stops[Math.min(at + 1, stops.length - 1)],
+      ArrowUp: stops[Math.max(at - 1, 0)],
+      Home: inOptions && options[0],
+      End: inOptions && options.at(-1),
+    }[event.key]
+
+    if (event.key === "Escape") {
+      focused.blur()
+    } else if (event.key === "Enter" && focused === this.input) {
+      event.preventDefault()
+      options[0]?.click()
+    } else if (to) {
+      event.preventDefault()
+      to.focus()
+      to.scrollIntoView({block: "nearest"})
+    }
+  },
+  updated() {
+    if (this.input) this.apply()
+  },
+  apply() {
+    const term = this.input.value.trim().toLowerCase()
+    let shown = 0
+
+    for (const option of this.el.querySelectorAll("[data-menu-option]")) {
+      option.hidden = !option.dataset.menuOption.toLowerCase().includes(term)
+      if (!option.hidden) shown += 1
+    }
+
+    this.el.querySelector("[data-menu-empty]").hidden = shown > 0
+  },
+}
+
 // Applies dynamic, per-render style values without an inline `style`
 // attribute, which the strict Content-Security-Policy forbids. Every
 // `data-css-*` attribute is written to the element's CSSOM style

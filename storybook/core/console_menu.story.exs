@@ -60,6 +60,58 @@ defmodule VarselWeb.Storybook.Core.ConsoleMenu do
           options: [{:mine, "Mine"}, {:everyone, "Everyone"}],
           event: "sort"
         }
+      },
+      %Variation{
+        id: :filter,
+        description:
+          "A filter names its own icon, and its options can be any value, such as a " <>
+            "record's id. A long choice is cut off in the trigger.",
+        attributes: %{
+          id: "assignee-filter",
+          label: "Assignee",
+          icon: "hero-user-mini",
+          value: "3f2a",
+          options: [
+            {"all", "Everyone"},
+            {"me", "Me"},
+            {"3f2a", "Someone with a rather long display name"}
+          ],
+          event: "assignee"
+        }
+      },
+      %Variation{
+        id: :searchable,
+        description:
+          "A long list gets a search box above its options, which narrows them as " <>
+            "you type. Enter picks the first one left.",
+        attributes: %{
+          id: "assignee-search",
+          label: "Assignee",
+          icon: "hero-user-mini",
+          value: "all",
+          options: [{"all", "Everyone"} | Enum.map(1..40, &{"user-#{&1}", "Person #{&1}"})],
+          event: "assignee",
+          searchable: true
+        }
+      },
+      %Variation{
+        id: :groups,
+        description:
+          "A control that chooses more than one thing: each group is a titled set " <>
+            "with its own current choice, and the trigger names them all.",
+        attributes: %{
+          id: "sort-groups",
+          label: "Sort",
+          groups: [
+            %{
+              label: "Packages",
+              event: "sort_packages",
+              value: :recent,
+              options: [{:recent, "Latest update"}, {:name, "Name"}]
+            },
+            %{label: "Cases", event: "sort", value: :newest, options: sort_options()}
+          ]
+        }
       }
     ]
   end

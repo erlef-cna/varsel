@@ -170,9 +170,9 @@ SPDX-License-Identifier: Apache-2.0
             fallback={"#{entry["vendor"]} / #{entry["product"]}"}
           />
         </:title>
-        <:actions :if={registry_link(entry)}>
-          <.link href={elem(registry_link(entry), 1)} target="_blank" rel="noopener">
-            {elem(registry_link(entry), 0)} ↗
+        <:actions :if={registry_link(entry["packageURL"])}>
+          <.link href={elem(registry_link(entry["packageURL"]), 1)} target="_blank" rel="noopener">
+            {elem(registry_link(entry["packageURL"]), 0)} ↗
           </.link>
         </:actions>
         <:actions :if={entry["repo"]}>

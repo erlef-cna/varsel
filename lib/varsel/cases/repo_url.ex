@@ -32,6 +32,19 @@ defmodule Varsel.Cases.RepoUrl do
     "gitee.com" => :gitee
   }
 
+  @forge_names %{
+    github: "GitHub",
+    gitlab: "GitLab",
+    bitbucket: "Bitbucket",
+    codeberg: "Codeberg",
+    sourcehut: "SourceHut",
+    gitee: "Gitee"
+  }
+
+  @doc "The forge's name as a reader knows it, or the host for a forge this module does not know."
+  @spec forge_name(t()) :: String.t()
+  def forge_name(%__MODULE__{forge: forge, host: host}), do: Map.get(@forge_names, forge, host)
+
   @doc "Parses an absolute `https://` repo URL into its forge and path."
   @spec parse(String.t()) :: t()
   def parse(repo_url) do

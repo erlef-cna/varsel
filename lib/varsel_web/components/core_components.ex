@@ -151,17 +151,29 @@ defmodule VarselWeb.CoreComponents do
   the subtitle and meta rows, settled against the foot of the band, so a
   wide set of actions never narrows the title. Below that everything stacks
   in one column and the actions come last.
+
+  A `primary` slot holds the page's one leading action at the end of the
+  title's row, above the other actions.
   """
+  attr :wide_actions, :boolean,
+    default: false,
+    doc: "lets the actions take most of the band, for a page that leads with its controls"
+
   slot :eyebrow, required: true, doc: ~s(context line above the title, e.g. "CNA Console")
   slot :title, required: true, doc: "heading content — plain text or rich"
   slot :subtitle, doc: "one-line description under the title — plain text or rich"
   slot :meta, doc: "tabs, state, chips — what the page holds rather than what it is"
   slot :actions
+  slot :primary, doc: "the page's leading action, at the end of the title's row"
 
   def page_header(assigns) do
     ~H"""
     <div class="console-band">
-      <div class="page-header container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6">
+      <div class={[
+        "page-header container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-6",
+        @wide_actions && "page-header-wide-actions",
+        @primary != [] && "page-header-with-primary"
+      ]}>
         <p class="page-header-eyebrow eef-eyebrow">{render_slot(@eyebrow)}</p>
         <h1 class="page-header-title text-2xl font-bold leading-tight">
           {render_slot(@title)}
@@ -169,6 +181,7 @@ defmodule VarselWeb.CoreComponents do
         <p :if={@subtitle != []} class="page-header-subtitle text-sm text-base-content/60">
           {render_slot(@subtitle)}
         </p>
+        <div :if={@primary != []} class="page-header-primary">{render_slot(@primary)}</div>
         <div :if={@meta != []} class="page-header-meta">{render_slot(@meta)}</div>
         <div
           :if={@actions != []}
@@ -431,7 +444,7 @@ defmodule VarselWeb.CoreComponents do
       "inline-block cursor-pointer pb-1",
       if(@active?,
         do: "font-bold text-base-content shadow-[inset_0_-2px_0_var(--eef-blue)]",
-        else: "text-base-content/60"
+        else: "text-base-content/70"
       )
     ]}>
       {@label}
@@ -440,9 +453,9 @@ defmodule VarselWeb.CoreComponents do
         class={[
           "font-semibold tabular-nums ml-1",
           cond do
-            @active? -> "text-primary"
+            @active? -> "text-[color:var(--eef-blue-text)]"
             @matched? -> "text-info"
-            true -> "text-base-content/50"
+            true -> "text-base-content/70"
           end
         ]}
       >
@@ -944,7 +957,7 @@ defmodule VarselWeb.CoreComponents do
     ~H"""
     <span class={[
       "inline-flex items-center rounded-[5px] border border-dashed border-base-content/25 px-[0.42rem] py-[0.07rem]",
-      "text-[0.67rem] font-semibold whitespace-nowrap text-base-content/50",
+      "text-[0.67rem] font-semibold whitespace-nowrap text-base-content/70",
       @class
     ]}>
       no score
@@ -1156,43 +1169,105 @@ defmodule VarselWeb.CoreComponents do
   A menu that picks one option, for a console control that sits beside the
   search box rather than inside a form.
 
-  The trigger names the current choice, so the board's order is readable
-  without opening the menu.
+  The trigger names the current choice, so the board's order, or what it is
+  filtered to, is readable without opening the menu.
+
+  A control that chooses more than one thing takes `groups` in place of
+  `value`, `options` and `event`: each group is a titled set of options with
+  its own current value and event, and the trigger names every group's
+  choice.
   """
   attr :id, :string, required: true
   attr :label, :string, required: true, doc: "what the control chooses, e.g. \"Sort\""
-  attr :value, :atom, required: true, doc: "the selected option"
-  attr :options, :list, required: true, doc: "{value, label} pairs, in menu order"
-  attr :event, :string, required: true, doc: "pushed with the chosen value as `selection`"
+  attr :value, :any, default: nil, doc: "the selected option's value"
+  attr :options, :list, default: [], doc: "{value, label} pairs, in menu order"
+  attr :event, :string, default: nil, doc: "pushed with the chosen value as `selection`"
+
+  attr :groups, :list,
+    default: nil,
+    doc: "maps of `label`, `value`, `options` and `event`, one per titled set of options"
+
+  attr :icon, :string,
+    default: "hero-bars-arrow-down-mini",
+    doc: "what the control does: the default is for an order, a filter names its own"
+
+  attr :searchable, :boolean,
+    default: false,
+    doc: "puts a box above the options that narrows them as you type, for a long list"
+
+  slot :lead,
+    doc: "a mark before an option's label, such as an avatar; receives the option's value"
 
   def console_menu(assigns) do
+    assigns =
+      assign_new(assigns, :sets, fn ->
+        assigns.groups ||
+          [%{label: nil, value: assigns.value, options: assigns.options, event: assigns.event}]
+      end)
+
     ~H"""
-    <div id={@id} class="dropdown dropdown-end">
+    <div id={@id} class="dropdown dropdown-end" phx-hook="ConsoleMenu">
       <div
         tabindex="0"
         role="button"
         aria-label={@label}
         class="btn btn-sm btn-ghost border border-base-300 font-normal gap-1.5"
       >
-        <.icon name="hero-bars-arrow-down-mini" class="size-4 text-base-content/50 shrink-0" />
-        <span class="text-base-content/60">{@label}:</span>
-        {Enum.find_value(@options, fn {value, label} -> value == @value && label end)}
+        <.icon name={@icon} class="size-4 text-base-content/50 shrink-0" />
+        <span class="text-base-content/70">{@label}:</span>
+        <%= for {set, index} <- Enum.with_index(@sets) do %>
+          <span :if={index > 0} class="text-base-content/70" aria-hidden="true">/</span>
+          <span class="max-w-40 truncate">
+            {Enum.find_value(set.options, fn {value, label} -> value == set.value && label end)}
+          </span>
+        <% end %>
       </div>
-      <ul
+      <div
         tabindex="0"
-        class="dropdown-content menu bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 w-48 p-2 z-50"
+        class={[
+          "dropdown-content bg-base-100 text-base-content rounded-box shadow-lg border border-base-300 mt-2 p-2 z-50",
+          if(@searchable, do: "w-64", else: "w-52")
+        ]}
       >
-        <li :for={{value, label} <- @options}>
-          <button
-            type="button"
-            phx-click={@event}
-            phx-value-selection={value}
-            class={[value == @value && "active font-semibold"]}
-          >
-            {label}
-          </button>
-        </li>
-      </ul>
+        <label :if={@searchable} class="input input-sm flex items-center gap-2 w-full rounded-lg mb-2">
+          <.icon name="hero-magnifying-glass-mini" class="size-4 text-base-content/40 shrink-0" />
+          <input
+            type="search"
+            data-menu-filter
+            aria-label={"Search #{String.downcase(@label)} options"}
+            placeholder="Search"
+            autocomplete="off"
+            class="grow min-w-0 bg-transparent focus:outline-none"
+          />
+        </label>
+        <ul class={["menu flex-nowrap w-full p-0", @searchable && "max-h-80 overflow-y-auto"]}>
+          <%= for set <- @sets do %>
+            <li :if={set.label} class="menu-title text-[0.65rem] uppercase tracking-wider">
+              {set.label}
+            </li>
+            <li :for={{value, label} <- set.options} data-menu-option={label}>
+              <button
+                type="button"
+                phx-click={set.event}
+                phx-value-selection={value}
+                aria-pressed={to_string(value == set.value)}
+                class={[value == set.value && "menu-active"]}
+              >
+                {render_slot(@lead, value)}
+                <span class="truncate">{label}</span>
+                <.icon
+                  :if={value == set.value}
+                  name="hero-check-mini"
+                  class="ml-auto size-4 shrink-0"
+                />
+              </button>
+            </li>
+          <% end %>
+          <li :if={@searchable} data-menu-empty hidden class="px-3 py-2 text-sm text-base-content/70">
+            No matches
+          </li>
+        </ul>
+      </div>
     </div>
     """
   end

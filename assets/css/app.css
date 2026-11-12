@@ -145,6 +145,9 @@
   --eef-navy: #1f2c34;
   --eef-navy-2: #17222a;
   --eef-blue: #1b85cb;
+  /* --eef-blue is a fill colour: as small text on a console surface it
+     falls short of 4.5:1 in both themes, so text takes this shade. */
+  --eef-blue-text: #1672b0;
   /* Approved-lane accent (pipeline board): distinct from the info blue used
      by Review/Publishing so all four lane dots read apart at a glance. */
   --violet: #7c5cbf;
@@ -152,6 +155,13 @@
 
 [data-theme="dark"] {
   --violet: #a78bfa;
+  --eef-blue-text: #6cb8ec;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --eef-blue-text: #6cb8ec;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -242,7 +252,7 @@
 }
 
 [data-theme="dark"] {
-  --sev-high: #f0716e;
+  --sev-high: #f58f8c;
   --sev-high-tint: color-mix(in oklab, var(--sev-high) 15%, transparent);
   --sev-medium: #e2953c;
   --sev-medium-tint: color-mix(in oklab, var(--sev-medium) 15%, transparent);
@@ -257,7 +267,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --sev-high: #f0716e;
+    --sev-high: #f58f8c;
     --sev-high-tint: color-mix(in oklab, var(--sev-high) 15%, transparent);
     --sev-medium: #e2953c;
     --sev-medium-tint: color-mix(in oklab, var(--sev-medium) 15%, transparent);
@@ -536,6 +546,23 @@
   margin-top: 0.75rem;
 }
 
+/* A leading action shares the title's row, at its far end, at every width. */
+.page-header-with-primary {
+  grid-template-areas:
+    "eyebrow  eyebrow"
+    "title    primary"
+    "subtitle subtitle"
+    "meta     meta"
+    "actions  actions";
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.page-header-primary {
+  grid-area: primary;
+  align-self: center;
+  justify-self: end;
+}
+
 /* The actions take what they need up to half the band, so a set of buttons
    stays on one line instead of wrapping into a stagger of one-button rows,
    while a wide set (a search field and buttons) still leaves the subtitle
@@ -548,6 +575,18 @@
       "subtitle actions"
       "meta     actions";
     grid-template-columns: minmax(0, 1fr) fit-content(50%);
+  }
+
+  .page-header-wide-actions {
+    grid-template-columns: minmax(0, 1fr) fit-content(88%);
+  }
+
+  .page-header-with-primary {
+    grid-template-areas:
+      "eyebrow  eyebrow"
+      "title    primary"
+      "subtitle actions"
+      "meta     actions";
   }
 
   .page-header-actions {
@@ -609,6 +648,10 @@
 
 .eef-band .eef-eyebrow {
   color: #6cb8ec;
+}
+
+.console-band .eef-eyebrow {
+  color: var(--eef-blue-text);
 }
 
 /* This file is for your main application CSS */
