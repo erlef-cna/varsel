@@ -14,8 +14,9 @@ defmodule VarselWeb.Plugs.SearchIndexing do
       crawlers that ignore `robots.txt` (and non-HTML responses like the JSON
       API) are still told not to index or follow.
 
-  Otherwise it serves the normal allow-everything `robots.txt` (pointing crawlers
-  at `/sitemap.xml`) and adds no header. Runs as an endpoint plug, ahead of the
+  Otherwise it serves a `robots.txt` that admits the public pages, disallows the
+  auth, API and sign-in-only paths, and points crawlers at `/sitemap.xml`. It
+  adds no header. Runs as an endpoint plug, ahead of the
   router, so it covers the HTML, JSON, GraphQL and MCP surfaces uniformly.
   """
   @behaviour Plug
@@ -61,7 +62,29 @@ defmodule VarselWeb.Plugs.SearchIndexing do
   defp robots(false) do
     """
     User-agent: *
-    Disallow:
+    Disallow: /auth/
+    Disallow: /sign-in
+    Disallow: /sign-out
+    Disallow: /register
+    Disallow: /reset
+    Disallow: /password-reset/
+    Disallow: /confirm_new_user/
+    Disallow: /magic_link/
+    Disallow: /oauth
+    Disallow: /.well-known/oauth-
+    Disallow: /settings/
+    Disallow: /cases
+    Disallow: /reports
+    Disallow: /report
+    Disallow: /users
+    Disallow: /notifications
+    Disallow: /cves/manage/
+    Disallow: /api/
+    Disallow: /gql
+    Disallow: /mcp
+    Disallow: /ws/
+    Disallow: /live/
+    Disallow: /*.json$
 
     Sitemap: #{url(~p"/sitemap.xml")}
     """
