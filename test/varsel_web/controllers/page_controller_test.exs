@@ -46,6 +46,35 @@ defmodule VarselWeb.PageControllerTest do
     assert html_response(conn, 200) =~ ~s(aria-label="Notifications")
   end
 
+  for page <- ["/", "/sign-in"] do
+    test "every icon linked from the #{page} head is served", %{conn: conn} do
+      hrefs =
+        conn
+        |> get(unquote(page))
+        |> html_response(200)
+        |> LazyHTML.from_document()
+        |> LazyHTML.query(~s(link[rel="icon"], link[rel="apple-touch-icon"], link[rel="manifest"]))
+        |> LazyHTML.attribute("href")
+
+      assert length(hrefs) == 4
+
+      for href <- hrefs do
+        assert build_conn() |> get(href) |> response(200)
+      end
+    end
+  end
+
+  test "every manifest icon is served", %{conn: conn} do
+    %{"name" => "EEF CNA", "icons" => icons} =
+      conn |> get("/manifest.webmanifest") |> response(200) |> Jason.decode!()
+
+    assert icons != []
+
+    for %{"src" => src} <- icons do
+      assert build_conn() |> get(src) |> response(200)
+    end
+  end
+
   test "the retired report triage page redirects to the case board", %{conn: conn} do
     conn = get(conn, "/reports")
 
