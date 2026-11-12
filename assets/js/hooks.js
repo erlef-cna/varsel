@@ -163,47 +163,52 @@ export const BoardMemory = {
   },
 }
 
-// Narrows a console menu's options to the ones whose label contains what is
-// typed in its search box. LiveView patches drop the `hidden` marks, so they
-// are re-applied after each one. The arrow keys walk from the trigger to the
-// search box and on through the options that are left, and back up.
-export const MenuFilter = {
+// Keyboard handling for a console menu. The arrow keys walk from the trigger
+// through the options, and back up. A searchable menu's box sits between the
+// trigger and the options, and narrows them to the ones whose label contains
+// what is typed in it. LiveView patches drop the `hidden` marks, so they are
+// re-applied after each one.
+export const ConsoleMenu = {
   mounted() {
     this.input = this.el.querySelector("[data-menu-filter]")
-    this.input.addEventListener("input", () => this.apply())
-    this.input.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") return
-      event.preventDefault()
-      this.stops()[1]?.click()
-    })
-    this.el.querySelector("[role=button]").addEventListener("click", () => this.input.focus())
     this.el.addEventListener("keydown", (event) => this.walk(event))
+
+    if (this.input) {
+      this.input.addEventListener("input", () => this.apply())
+      this.input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return
+        event.preventDefault()
+        this.options()[0]?.click()
+      })
+      this.el.querySelector("[role=button]").addEventListener("click", () => this.input.focus())
+    }
   },
-  stops() {
-    return [this.input, ...this.el.querySelectorAll("[data-menu-option]:not([hidden]) button")]
+  options() {
+    return [...this.el.querySelectorAll("[data-menu-option]:not([hidden]) button")]
   },
   walk(event) {
-    const stops = this.stops()
+    const options = this.options()
+    const stops = this.input ? [this.input, ...options] : options
     const at = stops.indexOf(document.activeElement)
-    const last = stops.length - 1
+    const inOptions = options.includes(document.activeElement)
 
     const to = {
-      ArrowDown: Math.min(at + 1, last),
-      ArrowUp: Math.max(at - 1, 0),
-      Home: at > 0 ? 1 : null,
-      End: at > 0 ? last : null,
+      ArrowDown: stops[Math.min(at + 1, stops.length - 1)],
+      ArrowUp: stops[Math.max(at - 1, 0)],
+      Home: inOptions && options[0],
+      End: inOptions && options.at(-1),
     }[event.key]
 
     if (event.key === "Escape") {
       document.activeElement.blur()
-    } else if (stops[to]) {
+    } else if (to) {
       event.preventDefault()
-      stops[to].focus()
-      stops[to].scrollIntoView({block: "nearest"})
+      to.focus()
+      to.scrollIntoView({block: "nearest"})
     }
   },
   updated() {
-    this.apply()
+    if (this.input) this.apply()
   },
   apply() {
     const term = this.input.value.trim().toLowerCase()

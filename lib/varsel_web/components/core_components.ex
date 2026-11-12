@@ -1206,7 +1206,7 @@ defmodule VarselWeb.CoreComponents do
       end)
 
     ~H"""
-    <div id={@id} class="dropdown dropdown-end" phx-hook={@searchable && "MenuFilter"}>
+    <div id={@id} class="dropdown dropdown-end" phx-hook="ConsoleMenu">
       <div
         tabindex="0"
         role="button"
@@ -1240,7 +1240,7 @@ defmodule VarselWeb.CoreComponents do
             class="grow min-w-0 bg-transparent focus:outline-none"
           />
         </label>
-        <ul class="menu flex-nowrap w-full p-0 max-h-80 overflow-y-auto">
+        <ul class={["menu flex-nowrap w-full p-0", @searchable && "max-h-80 overflow-y-auto"]}>
           <%= for set <- @sets do %>
             <li :if={set.label} class="menu-title text-[0.65rem] uppercase tracking-wider">
               {set.label}
