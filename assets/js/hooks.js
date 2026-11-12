@@ -175,22 +175,15 @@ export const ConsoleMenu = {
 
     if (this.input) {
       this.input.addEventListener("input", () => this.apply())
-      this.input.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter") return
-        event.preventDefault()
-        this.options()[0]?.click()
-      })
       this.el.querySelector("[role=button]").addEventListener("click", () => this.input.focus())
     }
   },
-  options() {
-    return [...this.el.querySelectorAll("[data-menu-option]:not([hidden]) button")]
-  },
   walk(event) {
-    const options = this.options()
+    const focused = document.activeElement
+    const options = [...this.el.querySelectorAll("[data-menu-option]:not([hidden]) button")]
     const stops = this.input ? [this.input, ...options] : options
-    const at = stops.indexOf(document.activeElement)
-    const inOptions = options.includes(document.activeElement)
+    const at = stops.indexOf(focused)
+    const inOptions = options.includes(focused)
 
     const to = {
       ArrowDown: stops[Math.min(at + 1, stops.length - 1)],
@@ -200,7 +193,10 @@ export const ConsoleMenu = {
     }[event.key]
 
     if (event.key === "Escape") {
-      document.activeElement.blur()
+      focused.blur()
+    } else if (event.key === "Enter" && focused === this.input) {
+      event.preventDefault()
+      options[0]?.click()
     } else if (to) {
       event.preventDefault()
       to.focus()

@@ -17,9 +17,10 @@ defmodule VarselWeb.CaseManagementLive do
 
   The face lives in `?face=`, and `page`, `q` and the board's view ride along
   in the URL: `sort` orders the cases inside a row, `packages` orders the
-  rows, `assignee` filters to one person's cases for those who assign cases. So both faces, any search
-  and the view are deep-linkable and survive a face switch. The browser
-  remembers the view, and a visit that names none of it gets it back.
+  rows, `assignee` filters to one person's cases for those who assign cases.
+  So both faces, any search and the view are deep-linkable and survive a face
+  switch. The browser remembers the view, and a visit that names none of it
+  gets it back.
   """
   use VarselWeb, :live_view
 
@@ -82,7 +83,8 @@ defmodule VarselWeb.CaseManagementLive do
        open_case_form: nil,
        advisory_form: nil,
        gh: nil,
-       gh_open?: false
+       gh_open?: false,
+       assignable?: Cases.can_assign_case_user?(socket.assigns.current_user, %{})
      )}
   end
 
@@ -171,14 +173,13 @@ defmodule VarselWeb.CaseManagementLive do
   defp check_gh_answer(socket), do: socket
 
   defp assign_board(cases, socket) do
-    %{view: view, query: query, current_user: viewer} = socket.assigns
+    %{view: view, query: query, current_user: viewer, assignable?: assignable?} = socket.assigns
 
     # A search narrows `cases`, so the totals and the people the pipeline's
     # cases are assigned to then need the whole pipeline.
     pipeline = if query == "", do: cases, else: list_pipeline_overview(socket)
     totals = Enum.frequencies_by(pipeline, & &1.state)
     people = assignees(pipeline, viewer)
-    assignable? = Cases.can_assign_case_user?(viewer, %{})
 
     {assignee, assignee_id} =
       if assignable?, do: resolve_assignee(view.assignee, people, viewer), else: {"all", nil}
@@ -196,7 +197,6 @@ defmodule VarselWeb.CaseManagementLive do
     |> assign(
       columns: columns(totals, shown_counts, narrowed?),
       rows: package_rows(shown, view.packages),
-      assignable?: assignable?,
       assignee: assignee,
       assignee_label: assignee != "all" && assignee_options |> List.keyfind(assignee, 0) |> elem(1),
       assignee_options: assignee_options,
