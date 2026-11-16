@@ -62,7 +62,7 @@ defmodule Varsel.Cases.CaseCreditTest do
 
       credit =
         Cases.add_case_credit!(
-          %{case_id: case_record.id, user_id: member.id, credit_type: :analyst},
+          %{case_id: case_record.id, user_id: member.id, credit_types: [:analyst]},
           actor: poc
         )
 
@@ -79,7 +79,7 @@ defmodule Varsel.Cases.CaseCreditTest do
     } do
       credit =
         Cases.add_case_credit!(
-          %{case_id: case_record.id, user_id: member.id, credit_type: :finder},
+          %{case_id: case_record.id, user_id: member.id, credit_types: [:finder]},
           actor: poc
         )
 
@@ -105,7 +105,7 @@ defmodule Varsel.Cases.CaseCreditTest do
             user_id: member.id,
             name: "J. Männchen",
             organization: "Erlef",
-            credit_type: :finder
+            credit_types: [:finder]
           },
           actor: poc
         )
@@ -123,7 +123,7 @@ defmodule Varsel.Cases.CaseCreditTest do
         Cases.add_case_credit!(
           %{
             case_id: case_record.id,
-            credit_type: :finder,
+            credit_types: [:finder],
             handles: [%{strategy: :github, username: " MAENNCHEN "}]
           },
           actor: poc
@@ -144,7 +144,7 @@ defmodule Varsel.Cases.CaseCreditTest do
         Cases.add_case_credit!(
           %{
             case_id: case_record.id,
-            credit_type: :finder,
+            credit_types: [:finder],
             handles: [%{strategy: :github, username: "OctoCat"}]
           },
           actor: poc
@@ -160,7 +160,7 @@ defmodule Varsel.Cases.CaseCreditTest do
         Cases.add_case_credit!(
           %{
             case_id: case_record.id,
-            credit_type: :reporter,
+            credit_types: [:reporter],
             handles: [%{strategy: :hex, username: "alice"}]
           },
           actor: poc
@@ -175,7 +175,7 @@ defmodule Varsel.Cases.CaseCreditTest do
                Cases.add_case_credit(
                  %{
                    case_id: case_record.id,
-                   credit_type: :finder,
+                   credit_types: [:finder],
                    handles: [%{strategy: :github, username: "nobody"}]
                  },
                  actor: poc
@@ -192,7 +192,7 @@ defmodule Varsel.Cases.CaseCreditTest do
                Cases.add_case_credit(
                  %{
                    case_id: case_record.id,
-                   credit_type: :finder,
+                   credit_types: [:finder],
                    handles: [%{strategy: :github, username: "octocat"}]
                  },
                  actor: poc
@@ -210,7 +210,7 @@ defmodule Varsel.Cases.CaseCreditTest do
         Cases.add_case_credit!(
           %{
             case_id: case_record.id,
-            credit_type: :finder,
+            credit_types: [:finder],
             handles: [%{strategy: :github, username: "Hermit"}]
           },
           actor: poc
@@ -226,7 +226,7 @@ defmodule Varsel.Cases.CaseCreditTest do
         Cases.add_case_credit!(
           %{
             case_id: case_record.id,
-            credit_type: :finder,
+            credit_types: [:finder],
             handles: [
               %{strategy: :github, username: "octocat"},
               %{strategy: :github, username: "nobody"}
@@ -239,13 +239,46 @@ defmodule Varsel.Cases.CaseCreditTest do
     end
   end
 
+  describe "one credit per person" do
+    test "refuses the same name and organization twice on a case, ignoring case", %{
+      poc: poc,
+      case: case_record
+    } do
+      add = fn name, organization ->
+        Cases.add_case_credit(
+          %{
+            case_id: case_record.id,
+            name: name,
+            organization: organization,
+            credit_types: [:finder]
+          },
+          actor: poc
+        )
+      end
+
+      assert {:ok, _credit} = add.("Ann Example", "EEF")
+      assert {:ok, _credit} = add.("Ann Example", nil)
+
+      assert {:error, %Invalid{errors: [%{field: :name}]}} = add.("ann example", "eef")
+      assert {:error, %Invalid{errors: [%{field: :name}]}} = add.("ANN EXAMPLE", nil)
+
+      other_case = Fixtures.open_case(poc)
+
+      assert {:ok, _credit} =
+               Cases.add_case_credit(
+                 %{case_id: other_case.id, name: "Ann Example", credit_types: [:finder]},
+                 actor: poc
+               )
+    end
+  end
+
   describe ":edit" do
     test "leaves stored handles alone and confirms only new ones", %{poc: poc, case: case_record} do
       credit =
         Cases.add_case_credit!(
           %{
             case_id: case_record.id,
-            credit_type: :finder,
+            credit_types: [:finder],
             handles: [%{strategy: :github, username: "octocat"}]
           },
           actor: poc
@@ -285,7 +318,7 @@ defmodule Varsel.Cases.CaseCreditTest do
             case_id: case_record.id,
             user_id: member.id,
             name: "Old Spelling",
-            credit_type: :finder
+            credit_types: [:finder]
           },
           actor: poc
         )
@@ -308,7 +341,7 @@ defmodule Varsel.Cases.CaseCreditTest do
             case_id: case_record.id,
             name: "Old Spelling",
             organization: "Kept",
-            credit_type: :finder,
+            credit_types: [:finder],
             handles: [%{strategy: :github, username: "octocat"}]
           },
           actor: poc
@@ -329,7 +362,7 @@ defmodule Varsel.Cases.CaseCreditTest do
           %{
             case_id: case_record.id,
             name: "New Comer",
-            credit_type: :finder,
+            credit_types: [:finder],
             handles: [%{strategy: :github, username: "newcomer"}]
           },
           actor: poc
@@ -348,7 +381,8 @@ defmodule Varsel.Cases.CaseCreditTest do
       case: case_record
     } do
       credit =
-        Cases.add_case_credit!(%{case_id: case_record.id, name: "Someone", credit_type: :finder},
+        Cases.add_case_credit!(
+          %{case_id: case_record.id, name: "Someone", credit_types: [:finder]},
           actor: poc
         )
 
@@ -360,7 +394,7 @@ defmodule Varsel.Cases.CaseCreditTest do
           %{
             case_id: case_record.id,
             name: "Hermit",
-            credit_type: :finder,
+            credit_types: [:finder],
             handles: [%{strategy: :github, username: "hermit"}]
           },
           actor: poc
@@ -379,7 +413,7 @@ defmodule Varsel.Cases.CaseCreditTest do
         Cases.add_case_credit!(
           %{
             case_id: case_record.id,
-            credit_type: :finder,
+            credit_types: [:finder],
             name: "N. Comer",
             handles: [%{strategy: :github, username: "newcomer"}]
           },
@@ -402,7 +436,7 @@ defmodule Varsel.Cases.CaseCreditTest do
         Ash.Seed.seed!(CaseCredit, %{
           case_id: published.id,
           name: "N. Comer",
-          credit_type: :finder,
+          credit_types: [:finder],
           handles: [%{strategy: :github, username: "newcomer"}]
         })
 
@@ -429,7 +463,7 @@ defmodule Varsel.Cases.CaseCreditTest do
           %{
             case_id: case_record.id,
             name: "Jonatan M.",
-            credit_type: :coordinator,
+            credit_types: [:coordinator],
             handles: [%{strategy: :github, username: "maennchen"}]
           },
           actor: poc
@@ -459,7 +493,7 @@ defmodule Varsel.Cases.CaseCreditTest do
 
       credit =
         Cases.add_case_credit!(
-          %{case_id: case_record.id, name: "Jonatan M.", credit_type: :finder},
+          %{case_id: case_record.id, name: "Jonatan M.", credit_types: [:finder]},
           actor: poc
         )
 

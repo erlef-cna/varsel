@@ -340,19 +340,20 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   defp put_credits(cna, credits) do
     rendered =
       credits
-      |> Enum.sort_by(& &1.position)
-      |> Enum.map(fn credit ->
+      |> Enum.flat_map(fn credit ->
         value =
           case credit.organization do
             nil -> credit.name
             organization -> "#{credit.name} / #{organization}"
           end
 
-        %{
-          "lang" => "en",
-          "type" => CreditType.render(credit.credit_type),
-          "value" => value
-        }
+        for type <- CreditType.sort(credit.credit_types), do: {type, value}
+      end)
+      |> Enum.sort_by(fn {type, value} ->
+        {CreditType.rank(type), String.downcase(value), value}
+      end)
+      |> Enum.map(fn {type, value} ->
+        %{"lang" => "en", "type" => CreditType.render(type), "value" => value}
       end)
 
     Map.put(cna, "credits", rendered)

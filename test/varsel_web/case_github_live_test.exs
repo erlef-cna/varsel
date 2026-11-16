@@ -230,12 +230,12 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     bob = Fixtures.register_user("advisory_live_bob")
 
     Cases.add_case_credit!(
-      %{case_id: case_record.id, name: "Bob", credit_type: :analyst, user_id: bob.id},
+      %{case_id: case_record.id, name: "Bob", credit_types: [:analyst], user_id: bob.id},
       actor: poc
     )
 
     Cases.add_case_credit!(
-      %{case_id: case_record.id, name: "Nobody Here", credit_type: :reporter},
+      %{case_id: case_record.id, name: "Nobody Here", credit_types: [:reporter]},
       actor: poc
     )
 

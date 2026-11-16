@@ -55,8 +55,23 @@ defmodule Varsel.Cases.GitHubAdvisory.ImportTest do
   describe "child_params/1 credits" do
     test "keeps accepted and pending credits with their login and role, drops declined ones" do
       assert Import.child_params(otp_advisory()).credits == [
-               %{login: "garazdawi", credit_type: :reporter, position: 0},
-               %{login: "Whaileee", credit_type: :remediation_reviewer, position: 1}
+               %{login: "garazdawi", credit_types: [:reporter]},
+               %{login: "Whaileee", credit_types: [:remediation_reviewer]}
+             ]
+    end
+
+    test "gathers one person's roles into one credit" do
+      advisory = %{
+        "credits" => [
+          %{"user" => %{"login" => "Bob"}, "type" => "remediation_developer"},
+          %{"user" => %{"login" => "carol"}, "type" => "analyst"},
+          %{"user" => %{"login" => "bob"}, "type" => "finder"}
+        ]
+      }
+
+      assert Import.child_params(advisory).credits == [
+               %{login: "Bob", credit_types: [:finder, :remediation_developer]},
+               %{login: "carol", credit_types: [:analyst]}
              ]
     end
 
@@ -64,7 +79,7 @@ defmodule Varsel.Cases.GitHubAdvisory.ImportTest do
       advisory = %{"credits" => [%{"user" => %{"login" => "bob"}, "type" => "brand_new_role"}]}
 
       assert Import.child_params(advisory).credits == [
-               %{login: "bob", credit_type: :other, position: 0}
+               %{login: "bob", credit_types: [:other]}
              ]
     end
   end

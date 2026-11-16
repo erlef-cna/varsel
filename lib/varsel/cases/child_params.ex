@@ -112,9 +112,21 @@ defmodule Varsel.Cases.ChildParams do
     params
     |> Map.drop(["github_username", "hex_username"])
     |> Map.put("handles", handles)
+    |> credit_types()
   end
 
   defp parse_credit_handles(params, _type), do: params
+
+  @doc """
+  The checked credit types of a credit form, without the empty value that
+  stands in for none checked.
+  """
+  @spec credit_types(map()) :: map()
+  def credit_types(%{"credit_types" => types} = params) when is_list(types) do
+    Map.put(params, "credit_types", Enum.reject(types, &(&1 == "")))
+  end
+
+  def credit_types(params), do: params
 
   # The since-creation checkbox stands in for the erlang/otp root commit and
   # reaches the changeset (and any proposal payload) as that commit, never as

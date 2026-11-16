@@ -357,7 +357,7 @@ you chose, and the one fact that decided it.
   the report says what the attacker gains; see the impact section below.
 - `propose_technical_analysis` and `propose_proof_of_concept` when the report carries them; see
   the section below.
-- `propose_credit` per person.
+- `propose_credit` per person, with all of their roles in `credit_types`.
 - `propose_reference` for the vendor advisory, with its `name` (the advisory title), unless the case is linked to its GitHub advisory in Varsel, which renders that reference itself. That is normally the *only* reference you propose;
   see the references note in the mechanics section below.
 
@@ -714,6 +714,9 @@ Credit roles are the CVE schema's, by their definitions: `finder` identified the
 `other`. Analyst and coordinator are distinct roles; never fold one into the other. Assign every
 role that applies per person: a GHSA carries at most one role per credit, the CVE record has no
 such limit, and several roles per person is the common case. Do not skip `pending` credits.
+
+Propose **one credit per person** with every role in `credit_types`, for example
+`["finder", "remediation_developer"]`. Never propose a second credit for a person to add a role.
 
 **`name` is the full real name only.** No handle, no affiliation, spelled with its correct
 diacritics. An affiliation goes in the separate `organization` field, never appended to the name,

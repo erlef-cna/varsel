@@ -34,6 +34,17 @@ defmodule Varsel.Cases.CaseCredit.CreditType do
   @spec render(t()) :: String.t()
   def render(type), do: type |> to_string() |> String.replace("_", " ")
 
+  @doc """
+  The credit types without repeats, in vocabulary order: the order the
+  published record lists a person's roles in.
+  """
+  @spec sort([t()]) :: [t()]
+  def sort(types), do: types |> Enum.uniq() |> Enum.sort_by(&rank/1)
+
+  @doc "The place of a credit type in the vocabulary, for sorting credits by type."
+  @spec rank(t()) :: non_neg_integer()
+  def rank(type), do: Enum.find_index(values(), &(&1 == type))
+
   @precedence [
     :remediation_developer,
     :finder,

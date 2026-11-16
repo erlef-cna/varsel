@@ -40,7 +40,13 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
 
       accept [:case_id, :reasoning]
       argument :name, :string, allow_nil?: false
-      argument :credit_type, Varsel.Cases.CaseCredit.CreditType, allow_nil?: false
+
+      argument :credit_types, {:array, Varsel.Cases.CaseCredit.CreditType} do
+        description "Every role the person had. The record lists one credit per role."
+        allow_nil? false
+        constraints min_length: 1
+      end
+
       argument :organization, :string
 
       argument :handles, {:array, Varsel.Cases.CaseCredit.Handle} do

@@ -95,7 +95,7 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecordTest do
       assert [%{cwe_id: 200}] = case_record.weaknesses
       assert [%{capec_id: 116}] = case_record.impacts
 
-      assert [%{name: "A Finder", organization: "EEF", credit_type: :finder}] =
+      assert [%{name: "A Finder", organization: "EEF", credit_types: [:finder]}] =
                case_record.credits
 
       assert [%{url: "https://example.com/advisory", tags: ["vendor-advisory"]}] =

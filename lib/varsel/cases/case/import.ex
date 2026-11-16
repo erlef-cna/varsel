@@ -282,24 +282,26 @@ defmodule Varsel.Cases.Case.Import do
 
   # "Name / Organization" is the EEF convention the renderer writes; split it
   # back apart so the fields are editable again. A value with no separator is
-  # all name.
+  # all name. The record lists a person once per role.
   defp credits(cna) do
-    for {credit, index} <- Enum.with_index(cna["credits"] || []),
-        value = credit["value"],
-        is_binary(value) and String.trim(value) != "" do
-      {name, organization} =
-        case String.split(value, " / ", parts: 2) do
-          [name, organization] -> {String.trim(name), blank_to_nil(String.trim(organization))}
-          [name] -> {String.trim(name), nil}
-        end
+    for_result =
+      for credit <- cna["credits"] || [],
+          value = credit["value"],
+          is_binary(value) and String.trim(value) != "" do
+        {name, organization} =
+          case String.split(value, " / ", parts: 2) do
+            [name, organization] -> {String.trim(name), blank_to_nil(String.trim(organization))}
+            [name] -> {String.trim(name), nil}
+          end
 
-      %{
-        name: name,
-        organization: organization,
-        credit_type: credit_type(credit["type"]),
-        position: index
-      }
-    end
+        %{name: name, organization: organization, credit_types: [credit_type(credit["type"])]}
+      end
+
+    for_result
+    |> Enum.group_by(&{String.downcase(&1.name), &1.organization && String.downcase(&1.organization)})
+    |> Enum.map(fn {_person, [credit | _rest] = credits} ->
+      %{credit | credit_types: credits |> Enum.flat_map(& &1.credit_types) |> CreditType.sort()}
+    end)
   end
 
   defp credit_type(type) when is_binary(type) do

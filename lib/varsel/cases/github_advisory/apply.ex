@@ -52,8 +52,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Apply do
   end
 
   @doc """
-  CaseCredit rows for the advisory's credits: the GitHub handle, the role and
-  the position. The credit's own action names the person from the handle
+  CaseCredit rows for the advisory's credits: the GitHub handle and the
+  roles. The credit's own action names the person from the handle
   (`Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser`).
   """
   @spec credit_rows([Import.credit()]) :: [map()]
@@ -61,8 +61,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Apply do
     for credit <- credits do
       %{
         handles: [%{strategy: :github, username: credit.login}],
-        credit_type: credit.credit_type,
-        position: credit.position
+        credit_types: credit.credit_types
       }
     end
   end

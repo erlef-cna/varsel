@@ -2269,7 +2269,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "A session <strong>outlives</strong> logout."
     end
 
-    test "credits append without a position field and reorder by drag & drop", %{
+    test "credits carry several types and list by name, without drag & drop", %{
       conn: conn,
       poc: poc
     } do
@@ -2277,36 +2277,46 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
 
-      for name <- ["Alice Finder", "Bob Fixer"] do
+      for {name, types} <- [
+            {"Bob Fixer", ["remediation_developer", "finder"]},
+            {"alice Finder", ["finder"]}
+          ] do
         lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
-        refute render(lv) =~ ~s(name="credit[position]")
 
         lv
-        |> form("#credit-handle-form", %{"credit" => %{"name" => name, "credit_type" => "finder"}})
+        |> form("#credit-handle-form", %{"credit" => %{"name" => name, "credit_types" => types}})
         |> render_submit()
       end
 
-      case_record = Ash.load!(case_record, [:credits], authorize?: false)
+      assert [
+               %{name: "alice Finder", credit_types: [:finder]},
+               %{name: "Bob Fixer", credit_types: [:finder, :remediation_developer]}
+             ] = Ash.load!(case_record, [:credits], authorize?: false).credits
 
-      assert [%{name: "Alice Finder", position: 0}, %{name: "Bob Fixer", position: 1}] =
-               Enum.sort_by(case_record.credits, & &1.position)
+      refute has_element?(lv, "#credits-rows[phx-hook]")
+      refute has_element?(lv, ~s{#credits-rows span[aria-hidden="true"]})
 
-      [alice, bob] = Enum.sort_by(case_record.credits, & &1.position)
+      assert lv
+             |> element("#credits-rows")
+             |> render()
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("li .badge")
+             |> Enum.map(&LazyHTML.text/1)
+             |> Enum.map(&String.trim/1) == ["finder", "finder", "remediation developer"]
+    end
+
+    test "a credit with every type unchecked is refused", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+      lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
 
       lv
-      |> element("#credits-rows")
-      |> render_hook("reorder_credits", %{"ids" => [bob.id, alice.id]})
+      |> form("#credit-handle-form", %{"credit" => %{"name" => "Nobody", "credit_types" => [""]}})
+      |> render_submit()
 
-      case_record = Ash.load!(case_record, [:credits], authorize?: false)
-
-      assert [%{name: "Bob Fixer", position: 0}, %{name: "Alice Finder", position: 1}] =
-               Enum.sort_by(case_record.credits, & &1.position)
-
-      # The rendered list follows the new order.
-      html = render(lv)
-      {bob_at, _} = :binary.match(html, "Bob Fixer")
-      {alice_at, _} = :binary.match(html, "Alice Finder")
-      assert bob_at < alice_at
+      assert has_element?(lv, "#credit-handle-form .text-error")
+      assert Ash.load!(case_record, [:credits], authorize?: false).credits == []
     end
 
     test "the credit picker credits an account as it asked to be", %{conn: conn, poc: poc} do
@@ -2324,16 +2334,61 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
 
       lv
-      |> form("#credit-user-form", %{"user_id" => member.id, "credit_type" => "analyst"})
+      |> form("#credit-user-form", %{
+        "credit_account" => %{
+          "user_id" => member.id,
+          "credit_types" => ["analyst", "coordinator"]
+        }
+      })
       |> render_submit()
 
       [credit] = Ash.load!(case_record, [:credits], authorize?: false).credits
       assert credit.user_id == member.id
+      assert credit.credit_types == [:analyst, :coordinator]
 
       html = render(lv)
       assert html =~ "Mem Ber / EEF"
       assert html =~ "github/credited_member"
       assert has_element?(lv, ~s{button[phx-click=refresh_credit][phx-value-id="#{credit.id}"]})
+    end
+
+    test "the credit picker shows a person credited twice on the form", %{conn: conn, poc: poc} do
+      member = Fixtures.register_user("credited_twice")
+      case_record = Fixtures.open_case(poc)
+
+      Cases.add_case_credit!(
+        %{case_id: case_record.id, user_id: member.id, credit_types: [:finder]},
+        actor: poc
+      )
+
+      Cases.add_case_credit!(%{case_id: case_record.id, name: "Ann", credit_types: [:finder]},
+        actor: poc
+      )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
+      lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
+
+      lv
+      |> form("#credit-user-form", %{
+        "credit_account" => %{"user_id" => member.id, "credit_types" => ["analyst"]}
+      })
+      |> render_submit()
+
+      lv
+      |> form("#credit-handle-form", %{
+        "credit" => %{"name" => "ann", "credit_types" => ["analyst"]}
+      })
+      |> render_submit()
+
+      assert has_element?(lv, "#credit-user-form .text-error", "is already credited on this case")
+
+      assert has_element?(
+               lv,
+               "#credit-handle-form .text-error",
+               "is already credited on this case"
+             )
+
+      refute has_element?(lv, "#flash-error")
     end
 
     # The account list is the User read policy's answer: a supporter sees
@@ -2349,8 +2404,8 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/edit")
       lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
 
-      assert has_element?(lv, ~s{#credit-user-form input[name=user_id][value="#{supporter.id}"]})
-      refute has_element?(lv, ~s{#credit-user-form input[name=user_id][value="#{poc.id}"]})
+      assert has_element?(lv, ~s{#credit-user-form input[value="#{supporter.id}"]})
+      refute has_element?(lv, ~s{#credit-user-form input[value="#{poc.id}"]})
       assert has_element?(lv, "#credit-handle-form")
     end
 
@@ -2363,12 +2418,15 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
 
       lv
-      |> form("#credit-user-form", %{"query" => "OCTOCAT", "credit_type" => "finder"})
+      |> form("#credit-user-form", %{
+        "query" => "OCTOCAT",
+        "credit_account" => %{"credit_types" => ["finder"]}
+      })
       |> render_change()
 
-      assert has_element?(lv, ~s{#credit-user-form input[name=user_id][value="#{member.id}"]})
-      refute has_element?(lv, ~s{#credit-user-form input[name=user_id][value="#{other.id}"]})
-      assert has_element?(lv, ~s{#credit-user-form option[value=finder][selected]})
+      assert has_element?(lv, ~s{#credit-user-form input[value="#{member.id}"]})
+      refute has_element?(lv, ~s{#credit-user-form input[value="#{other.id}"]})
+      assert has_element?(lv, ~s{#credit-user-form input[value=finder][checked]})
     end
 
     test "a proposed credit carries its handles", %{conn: conn, poc: poc, supporter: supporter} do
@@ -2382,7 +2440,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#child-form", %{
         "child" => %{
           "name" => "Octo Cat",
-          "credit_type" => "finder",
+          "credit_types" => ["", "finder"],
           "github_username" => "octocat"
         }
       })
@@ -2422,11 +2480,11 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/edit")
       lv |> element("button[phx-value-type=credit]", "Add credit") |> render_click()
 
-      unknown = %{"strategy" => "github", "username" => "nobody", "credit_type" => "finder"}
+      unknown = %{"strategy" => "github", "username" => "nobody", "credit_types" => ["finder"]}
       html = lv |> form("#credit-handle-form", %{"credit" => unknown}) |> render_submit()
       assert html =~ "nobody is not a GitHub account"
 
-      known = %{"strategy" => "github", "username" => "OctoCat", "credit_type" => "finder"}
+      known = %{"strategy" => "github", "username" => "OctoCat", "credit_types" => ["finder"]}
       lv |> form("#credit-handle-form", %{"credit" => known}) |> render_submit()
 
       html = render(lv)
@@ -2444,7 +2502,7 @@ defmodule VarselWeb.CaseLiveTest do
             case_id: case_record.id,
             user_id: member.id,
             name: "Old Spelling",
-            credit_type: :finder
+            credit_types: [:finder]
           },
           actor: poc
         )
@@ -2476,7 +2534,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       credit =
         Cases.add_case_credit!(
-          %{case_id: case_record.id, user_id: member.id, credit_type: :finder},
+          %{case_id: case_record.id, user_id: member.id, credit_types: [:finder]},
           actor: poc
         )
 

@@ -165,7 +165,7 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
     test "propose_credit packs the credit payload", %{poc: poc, case: case_record} do
       proposal =
         Cases.propose_credit!(
-          %{case_id: case_record.id, name: "Jane Doe", credit_type: :finder},
+          %{case_id: case_record.id, name: "Jane Doe", credit_types: [:finder, :analyst]},
           actor: poc
         )
 
@@ -175,7 +175,7 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
 
       # Enum atoms serialize to strings in the JSON envelope.
       assert proposal.proposed_value == %{
-               "value" => %{"name" => "Jane Doe", "credit_type" => "finder"}
+               "value" => %{"name" => "Jane Doe", "credit_types" => ["finder", "analyst"]}
              }
     end
 

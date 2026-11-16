@@ -316,26 +316,38 @@ defmodule Varsel.Cases.Case.ImportTest do
         )
 
       assert [
+               %{name: "Jonatan Männchen", organization: "EEF", credit_types: [:finder]},
+               %{name: "Someone Else", organization: nil, credit_types: [:remediation_developer]}
+             ] = Enum.sort_by(children.credits, & &1.name)
+    end
+
+    test "gathers the roles the record lists one by one into one credit per person" do
+      children =
+        Import.child_params(
+          record(%{
+            "credits" => [
+              %{"lang" => "en", "type" => "remediation developer", "value" => "Ann / EEF"},
+              %{"lang" => "en", "type" => "finder", "value" => "Ann / EEF"},
+              %{"lang" => "en", "type" => "finder", "value" => "Ann"}
+            ]
+          })
+        )
+
+      assert [
+               %{name: "Ann", organization: nil, credit_types: [:finder]},
                %{
-                 name: "Jonatan Männchen",
+                 name: "Ann",
                  organization: "EEF",
-                 credit_type: :finder,
-                 position: 0
-               },
-               %{
-                 name: "Someone Else",
-                 organization: nil,
-                 credit_type: :remediation_developer,
-                 position: 1
+                 credit_types: [:finder, :remediation_developer]
                }
-             ] = children.credits
+             ] = Enum.sort_by(children.credits, &(&1.organization || ""))
     end
 
     test "an unknown credit type falls back to finder rather than failing" do
       children =
         Import.child_params(record(%{"credits" => [%{"type" => "wizard", "value" => "A"}]}))
 
-      assert [%{credit_type: :finder}] = children.credits
+      assert [%{credit_types: [:finder]}] = children.credits
     end
 
     test "takes references with their tags, dropping the ones the renderer re-derives" do

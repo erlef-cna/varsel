@@ -233,7 +233,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
       Fixtures.seed_weakness(79, "Cross-site Scripting")
       Cases.add_case_weakness!(%{case_id: case_record.id, cwe_id: 79}, actor: poc)
 
-      Cases.add_case_credit!(%{case_id: case_record.id, name: "Bob", credit_type: :reporter},
+      Cases.add_case_credit!(%{case_id: case_record.id, name: "Bob", credit_types: [:reporter]},
         actor: poc
       )
 
@@ -244,13 +244,32 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
       assert reloaded.weaknesses |> Enum.map(&{&1.cwe_id, &1.position}) |> Enum.sort() ==
                [{79, 0}, {113, 1}]
 
-      assert Enum.map(reloaded.credits, &{&1.name, &1.credit_type, &1.user_id, &1.position}) == [
-               {"Bob", :reporter, nil, 0},
-               {"alice name", :finder, alice.id, 1}
+      assert Enum.map(reloaded.credits, &{&1.name, &1.credit_types, &1.user_id}) == [
+               {"alice name", [:finder], alice.id},
+               {"Bob", [:reporter], nil}
              ]
 
       assert {:ok, _link} = Cases.pull_github_advisory(link, [:weaknesses, :credits], actor: poc)
       assert length(reload(case_record, poc).credits) == 2
+    end
+
+    test "a pull adds a missing role to the person's existing credit", %{
+      poc: poc,
+      case: case_record,
+      link: link,
+      alice: alice
+    } do
+      Cases.add_case_credit!(
+        %{case_id: case_record.id, user_id: alice.id, credit_types: [:analyst]},
+        actor: poc
+      )
+
+      assert {:ok, _link} = Cases.pull_github_advisory(link, [:credits], actor: poc)
+
+      assert [%{user_id: user_id, credit_types: [:finder, :analyst]}] =
+               reload(case_record, poc).credits
+
+      assert user_id == alice.id
     end
 
     test "a credited person without an account here is named from their GitHub profile", %{
@@ -268,7 +287,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
 
       assert {:ok, _link} = Cases.pull_github_advisory(link, [:credits], actor: poc)
 
-      assert [%{name: "Carol Example", credit_type: :finder, user_id: nil}] =
+      assert [%{name: "Carol Example", credit_types: [:finder], user_id: nil}] =
                reload(case_record, poc).credits
     end
 
@@ -392,12 +411,12 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
       bob = Fixtures.register_user("bob")
 
       Cases.add_case_credit!(
-        %{case_id: case_record.id, name: "Bob", credit_type: :analyst, user_id: bob.id},
+        %{case_id: case_record.id, name: "Bob", credit_types: [:analyst], user_id: bob.id},
         actor: poc
       )
 
       Cases.add_case_credit!(
-        %{case_id: case_record.id, name: "Nobody Here", credit_type: :reporter},
+        %{case_id: case_record.id, name: "Nobody Here", credit_types: [:reporter]},
         actor: poc
       )
 

@@ -65,7 +65,7 @@ defmodule Varsel.Accounts.UserMergeTest do
       Cases.post_case_comment!(%{case_id: case_record.id, body: "Mine"}, actor: from)
 
       Cases.add_case_credit!(
-        %{case_id: case_record.id, user_id: from.id, name: "From", credit_type: :finder},
+        %{case_id: case_record.id, user_id: from.id, name: "From", credit_types: [:finder]},
         actor: poc
       )
 

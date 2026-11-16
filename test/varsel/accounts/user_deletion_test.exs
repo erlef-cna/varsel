@@ -120,7 +120,7 @@ defmodule Varsel.Accounts.UserDeletionTest do
             user_id: member.id,
             name: "Member Name",
             organization: "EEF",
-            credit_type: :finder
+            credit_types: [:finder]
           },
           actor: poc
         )

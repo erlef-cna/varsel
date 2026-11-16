@@ -5,10 +5,11 @@
 defmodule Varsel.Cases.GitHubAdvisory.People do
   @moduledoc """
   A case's credits as GitHub sees people. GitHub knows a person by login and
-  gives each person one role. A case credits a person once per role, by name,
-  with a GitHub handle where they have one. This module gathers either side's
-  credits per person, so `Varsel.Cases.GitHubAdvisory.Export` and
-  `Varsel.Cases.GitHubAdvisory.Diff` speak of the same people.
+  gives each person one role. A case credits a person by name, with every
+  role they carry and a GitHub handle where they have one. This module
+  gathers either side's credits per person, so
+  `Varsel.Cases.GitHubAdvisory.Export` and `Varsel.Cases.GitHubAdvisory.Diff`
+  speak of the same people.
   """
 
   @type person :: %{login: String.t() | nil, name: String.t(), roles: [atom()]}
@@ -23,18 +24,18 @@ defmodule Varsel.Cases.GitHubAdvisory.People do
     credits
     |> Enum.reduce([], fn credit, people ->
       {login, name} = identity(credit)
-      key = login || "name:" <> String.downcase(name)
+      key = person_key(credit)
 
       case List.keyfind(people, key, 0) do
         nil ->
-          [{key, %{login: login, name: name, roles: [credit.credit_type]}} | people]
+          [{key, %{login: login, name: name, roles: credit.credit_types}} | people]
 
         {^key, person} ->
           List.keyreplace(
             people,
             key,
             0,
-            {key, %{person | roles: person.roles ++ [credit.credit_type]}}
+            {key, %{person | roles: person.roles ++ credit.credit_types}}
           )
       end
     end)
@@ -43,14 +44,16 @@ defmodule Varsel.Cases.GitHubAdvisory.People do
   end
 
   @doc """
-  What identifies a credit on either side: the credited person, by GitHub
-  login where the case knows it and by name otherwise, with the role they
-  carry. Compared case-insensitively.
+  What identifies the person a credit names on either side: the GitHub login
+  where the case knows it, and the name otherwise. Compared
+  case-insensitively.
   """
-  @spec credit_key(map()) :: {String.t(), atom()}
-  def credit_key(%{credit_type: type} = credit) do
-    {login, name} = identity(credit)
-    {login || String.downcase(name), type}
+  @spec person_key(map()) :: String.t()
+  def person_key(credit) do
+    case identity(credit) do
+      {nil, name} -> "name:" <> String.downcase(name)
+      {login, _name} -> login
+    end
   end
 
   @doc "The GitHub login a case credit carries among its handles, or nil."

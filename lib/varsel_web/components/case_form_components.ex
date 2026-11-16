@@ -438,9 +438,7 @@ defmodule VarselWeb.CaseFormComponents do
       <.input field={@form[:organization]} type="text">
         <:label>Organization (optional)</:label>
       </.input>
-      <.input field={@form[:credit_type]} type="select" options={enum_options(CaseCredit.CreditType)}>
-        <:label>Credit type</:label>
-      </.input>
+      <.credit_types_input field={@form[:credit_types]} />
       <div class="grid sm:grid-cols-2 gap-x-4">
         <.input
           id={"#{@form.id}_github_username"}
@@ -466,10 +464,49 @@ defmodule VarselWeb.CaseFormComponents do
       <p :for={message <- translate_errors(@form.errors, :handles)} class="text-error text-sm mb-2">
         {message}
       </p>
-      <%!-- No position field: new credits append; the list is drag-sortable. --%>
       <.propose_form_fields propose?={@propose?} />
       {render_slot(@actions)}
     </.form>
+    """
+  end
+
+  @doc """
+  Renders one checkbox per credit type, for every role a person had.
+  """
+  attr :field, Phoenix.HTML.FormField,
+    required: true,
+    doc: "the credit_types field of a credit form"
+
+  def credit_types_input(assigns) do
+    errors = if used_input?(assigns.field), do: assigns.field.errors, else: []
+
+    assigns =
+      assigns
+      |> assign(:errors, Enum.map(errors, &translate_error/1))
+      |> assign(:selected, assigns.field.value |> List.wrap() |> Enum.map(&to_string/1))
+
+    ~H"""
+    <fieldset class="fieldset mb-2">
+      <label class="label">Credit types</label>
+      <%!-- Sentinel so unchecking every box still submits the field. --%>
+      <input type="hidden" name={@field.name <> "[]"} value="" />
+      <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+        <label
+          :for={{label, value} <- enum_options(CaseCredit.CreditType)}
+          class="flex items-center gap-2 text-sm cursor-pointer"
+        >
+          <input
+            type="checkbox"
+            name={@field.name <> "[]"}
+            value={value}
+            checked={to_string(value) in @selected}
+            class="checkbox checkbox-xs"
+          />
+          {label}
+        </label>
+      </div>
+      <p :for={message <- @errors} class="text-error text-sm">{message}</p>
+    </fieldset>
     """
   end
 

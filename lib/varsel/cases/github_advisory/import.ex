@@ -37,12 +37,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
   alias Varsel.Cases.GitHubAdvisory
   alias Varsel.Cases.GitHubAdvisory.Ranges
 
-  @typedoc "A credit as GitHub states it: a login and one role."
-  @type credit :: %{
-          login: String.t(),
-          credit_type: CreditType.t(),
-          position: non_neg_integer()
-        }
+  @typedoc "A person GitHub credits: a login and every role GitHub gives it."
+  @type credit :: %{login: String.t(), credit_types: [CreditType.t(), ...]}
 
   @typedoc "One `vulnerabilities[]` entry, ranges parsed."
   @type vulnerability :: %{
@@ -167,14 +163,22 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
     |> Enum.flat_map(fn credit ->
       case credit["login"] || get_in(credit, ["user", "login"]) do
         login when is_binary(login) and login != "" ->
-          [%{login: login, credit_type: credit_type(credit["type"])}]
+          [{login, credit_type(credit["type"])}]
 
         _no_login ->
           []
       end
     end)
-    |> Enum.with_index()
-    |> Enum.map(fn {credit, index} -> Map.put(credit, :position, index) end)
+    |> gather_by_login()
+  end
+
+  defp gather_by_login(entries) do
+    key = fn {login, _type} -> String.downcase(login) end
+    types = Enum.group_by(entries, key, fn {_login, type} -> type end)
+
+    for {login, _type} = entry <- Enum.uniq_by(entries, key) do
+      %{login: login, credit_types: CreditType.sort(Map.fetch!(types, key.(entry)))}
+    end
   end
 
   defp credit_type(type) when is_binary(type) do

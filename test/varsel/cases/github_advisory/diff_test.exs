@@ -32,7 +32,7 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
           credits: [
             %CaseCredit{
               name: "Alice Example",
-              credit_type: :finder,
+              credit_types: [:finder],
               handles: [%Handle{strategy: :github, username: "alice"}]
             }
           ],
@@ -162,10 +162,10 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
           credits: [
             %CaseCredit{
               name: "Lukas",
-              credit_type: :reporter,
+              credit_types: [:reporter],
               handles: [%Handle{strategy: :github, username: "GARAZDAWI"}]
             },
-            %CaseCredit{name: "Whaileee", credit_type: :remediation_reviewer, handles: []}
+            %CaseCredit{name: "Whaileee", credit_types: [:remediation_reviewer], handles: []}
           ]
         }),
         otp_advisory()
@@ -185,20 +185,20 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
           credits: [
             %CaseCredit{
               name: "Lukas",
-              credit_type: :analyst,
+              credit_types: [:analyst],
               handles: [%Handle{strategy: :github, username: "garazdawi"}]
             },
             %CaseCredit{
               name: "Lukas",
-              credit_type: :reporter,
+              credit_types: [:reporter],
               handles: [%Handle{strategy: :github, username: "garazdawi"}]
             },
             %CaseCredit{
               name: "W",
-              credit_type: :remediation_reviewer,
+              credit_types: [:remediation_reviewer],
               handles: [%Handle{strategy: :github, username: "Whaileee"}]
             },
-            %CaseCredit{name: "Nobody Here", credit_type: :finder, handles: []}
+            %CaseCredit{name: "Nobody Here", credit_types: [:finder], handles: []}
           ]
         }),
         otp_advisory()
@@ -220,7 +220,7 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
           credits: [
             %CaseCredit{
               name: "Alice",
-              credit_type: :analyst,
+              credit_types: [:analyst],
               handles: [%Handle{strategy: :github, username: "alice"}]
             }
           ]

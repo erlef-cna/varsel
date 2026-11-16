@@ -74,13 +74,18 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
   end
 
   defp pull_set(:credits, children, case_record, opts) do
-    present = MapSet.new(case_record.credits, &People.credit_key/1)
+    present = Map.new(case_record.credits, &{People.person_key(&1), &1})
 
-    children.credits
-    |> Enum.reject(&MapSet.member?(present, People.credit_key(&1)))
-    |> Apply.credit_rows()
-    |> after_existing(case_record.credits)
-    |> Apply.each(&Apply.add_credit(&1, case_record.id, opts))
+    Apply.each(children.credits, fn credit ->
+      case Map.fetch(present, People.person_key(credit)) do
+        :error ->
+          [row] = Apply.credit_rows([credit])
+          Apply.add_credit(row, case_record.id, opts)
+
+        {:ok, here} ->
+          add_roles(here, credit.credit_types, opts)
+      end
+    end)
   end
 
   defp pull_set(:affected, children, case_record, opts) do
@@ -90,6 +95,16 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
     |> Apply.each(fn {package, position} ->
       Apply.add_package(package, case_record.id, position, opts)
     end)
+  end
+
+  defp add_roles(credit, roles, opts) do
+    case roles -- credit.credit_types do
+      [] ->
+        {:ok, credit}
+
+      _missing ->
+        Cases.edit_case_credit(credit, %{credit_types: credit.credit_types ++ roles}, opts)
+    end
   end
 
   defp after_existing(rows, existing) do

@@ -30,10 +30,10 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
           credits: [
             %CaseCredit{
               name: "Alice",
-              credit_type: :finder,
+              credit_types: [:finder],
               handles: [%Handle{strategy: :github, username: "alice"}]
             },
-            %CaseCredit{name: "Bob Nobody", credit_type: :reporter, handles: []}
+            %CaseCredit{name: "Bob Nobody", credit_types: [:reporter], handles: []}
           ],
           affected_packages: []
         },
@@ -133,12 +133,12 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
     credits = [
       %CaseCredit{
         name: "Alice",
-        credit_type: :finder,
+        credit_types: [:finder],
         handles: [%Handle{strategy: :github, username: "alice"}]
       },
       %CaseCredit{
         name: "Alice",
-        credit_type: :remediation_developer,
+        credit_types: [:remediation_developer],
         handles: [%Handle{strategy: :github, username: "alice"}]
       }
     ]
