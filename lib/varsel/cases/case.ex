@@ -1176,7 +1176,7 @@ defmodule Varsel.Cases.Case do
 
     has_many :credits, Varsel.Cases.CaseCredit do
       public? true
-      sort position: :asc
+      sort ci_name: :asc, name: :asc, id: :asc
     end
 
     has_many :weaknesses, Varsel.Cases.CaseWeakness do

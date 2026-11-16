@@ -56,7 +56,7 @@ defmodule VarselWeb.Storybook.Case.CreditForm do
       id: Ash.UUID.generate(),
       name: "Jonatan Männchen",
       organization: "EEF",
-      credit_type: :analyst,
+      credit_types: [:analyst, :coordinator],
       handles: [
         %Handle{
           strategy: :github,

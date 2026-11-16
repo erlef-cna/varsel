@@ -47,7 +47,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
       :cve_id,
       :preview,
       weaknesses: [:cwe_id],
-      credits: [:name, :credit_type, :handles],
+      credits: [:name, :credit_types, :handles],
       affected_packages: [
         :product,
         :derivation_cache,

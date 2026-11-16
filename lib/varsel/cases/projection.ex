@@ -48,6 +48,7 @@ defmodule Varsel.Cases.Projection do
       case_record
       |> apply_sets(sets)
       |> apply_inserts(inserts)
+      |> Map.update!(:credits, &sort_credits/1)
 
     %__MODULE__{
       case: projected,
@@ -62,6 +63,13 @@ defmodule Varsel.Cases.Projection do
   def countered(%__MODULE__{set_proposals: set_proposals}, target, target_id, field_name) do
     Map.get(set_proposals, {target, target_id, field_name})
   end
+
+  # The order of `Varsel.Cases.Case`'s credits relationship.
+  defp sort_credits(credits) when is_list(credits) do
+    Enum.sort_by(credits, &{String.downcase(&1.name || ""), &1.name || ""})
+  end
+
+  defp sort_credits(credits), do: credits
 
   ## ------------------------------------------------------------------- sets
 

@@ -10,14 +10,14 @@ defmodule Varsel.Cases.GitHubAdvisory.PeopleTest do
   alias Varsel.Cases.GitHubAdvisory.People
 
   defp credit(name, type, handles \\ []) do
-    %CaseCredit{name: name, credit_type: type, handles: handles}
+    %CaseCredit{name: name, credit_types: List.wrap(type), handles: handles}
   end
 
   defp github(username), do: %Handle{strategy: :github, username: username}
 
   test "people/1 gathers a case's credits per GitHub login, then per name" do
     credits = [
-      credit("Lukas", :analyst, [github("garazdawi")]),
+      credit("Lukas", [:analyst, :coordinator], [github("garazdawi")]),
       credit("Lukas L.", :reporter, [github("GARAZDAWI")]),
       credit("Nobody Here", :finder),
       credit("nobody here", :finder),
@@ -25,7 +25,7 @@ defmodule Varsel.Cases.GitHubAdvisory.PeopleTest do
     ]
 
     assert People.people(credits) == [
-             %{login: "garazdawi", name: "Lukas", roles: [:analyst, :reporter]},
+             %{login: "garazdawi", name: "Lukas", roles: [:analyst, :coordinator, :reporter]},
              %{login: nil, name: "Nobody Here", roles: [:finder]},
              %{login: nil, name: "Alice", roles: [:sponsor]}
            ]
@@ -33,8 +33,8 @@ defmodule Varsel.Cases.GitHubAdvisory.PeopleTest do
 
   test "people/1 gathers an advisory's credits by login, named as the login" do
     credits = [
-      %{login: "Alice", credit_type: :finder, position: 0},
-      %{login: "alice", credit_type: :analyst, position: 1}
+      %{login: "Alice", credit_types: [:finder]},
+      %{login: "alice", credit_types: [:analyst]}
     ]
 
     assert People.people(credits) == [
@@ -42,12 +42,10 @@ defmodule Varsel.Cases.GitHubAdvisory.PeopleTest do
            ]
   end
 
-  test "credit_key/1 is the person and the role, case-insensitively" do
-    assert People.credit_key(credit("Lukas", :reporter, [github("Garazdawi")])) ==
-             {"garazdawi", :reporter}
-
-    assert People.credit_key(credit("Nobody Here", :finder)) == {"nobody here", :finder}
-    assert People.credit_key(%{login: "Alice", credit_type: :finder}) == {"alice", :finder}
+  test "person_key/1 is the GitHub login, else the name, case-insensitively" do
+    assert People.person_key(credit("Lukas", :reporter, [github("Garazdawi")])) == "garazdawi"
+    assert People.person_key(credit("Nobody Here", :finder)) == "name:nobody here"
+    assert People.person_key(%{login: "Alice", credit_types: [:finder]}) == "alice"
   end
 
   test "github_handle/1 finds the GitHub handle among a credit's handles" do

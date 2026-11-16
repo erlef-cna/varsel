@@ -123,21 +123,15 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     Cases.add_case_weakness!(%{case_id: case_record.id, cwe_id: 613}, actor: poc)
     Cases.add_case_impact!(%{case_id: case_record.id, capec_id: 593}, actor: poc)
 
-    for {name, organization, type, position} <- [
-          {"James Harton", nil, :remediation_reviewer, 0},
-          {"Zach Daniel", nil, :remediation_developer, 1},
-          {"Mike Buhot", nil, :analyst, 2},
-          {"Jonatan Männchen", "EEF", :analyst, 3},
-          {"Josh Price", nil, :analyst, 4}
+    for {name, organization, types} <- [
+          {"James Harton", nil, [:remediation_reviewer]},
+          {"Zach Daniel", nil, [:remediation_developer, :finder]},
+          {"Mike Buhot", nil, [:analyst]},
+          {"Jonatan Männchen", "EEF", [:analyst]},
+          {"josh Price", nil, [:analyst]}
         ] do
       Cases.add_case_credit!(
-        %{
-          case_id: case_record.id,
-          name: name,
-          organization: organization,
-          credit_type: type,
-          position: position
-        },
+        %{case_id: case_record.id, name: name, organization: organization, credit_types: types},
         actor: poc
       )
     end
@@ -369,11 +363,12 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
            ]
 
     assert cna(result)["credits"] == [
-             %{"lang" => "en", "type" => "remediation reviewer", "value" => "James Harton"},
-             %{"lang" => "en", "type" => "remediation developer", "value" => "Zach Daniel"},
-             %{"lang" => "en", "type" => "analyst", "value" => "Mike Buhot"},
+             %{"lang" => "en", "type" => "finder", "value" => "Zach Daniel"},
              %{"lang" => "en", "type" => "analyst", "value" => "Jonatan Männchen / EEF"},
-             %{"lang" => "en", "type" => "analyst", "value" => "Josh Price"}
+             %{"lang" => "en", "type" => "analyst", "value" => "josh Price"},
+             %{"lang" => "en", "type" => "analyst", "value" => "Mike Buhot"},
+             %{"lang" => "en", "type" => "remediation developer", "value" => "Zach Daniel"},
+             %{"lang" => "en", "type" => "remediation reviewer", "value" => "James Harton"}
            ]
 
     assert [

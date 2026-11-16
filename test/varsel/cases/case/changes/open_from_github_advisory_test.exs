@@ -111,7 +111,7 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisoryTest do
 
     assert Enum.map(case_record.weaknesses, & &1.cwe_id) == [113]
 
-    assert [%{name: "alice name", credit_type: :finder, position: 0, user_id: user_id}] =
+    assert [%{name: "alice name", credit_types: [:finder], user_id: user_id}] =
              case_record.credits
 
     assert user_id == alice.id
@@ -162,8 +162,8 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisoryTest do
 
     # Declined credits are dropped and pending ones stay. A person without an
     # account here is named as their GitHub profile is, or by login.
-    assert Enum.map(case_record.credits, &{&1.name, &1.credit_type}) ==
-             [{"Lukas Larsson", :reporter}, {"Whaileee", :remediation_reviewer}]
+    assert Enum.map(case_record.credits, &{&1.name, &1.credit_types}) ==
+             [{"Lukas Larsson", [:reporter]}, {"Whaileee", [:remediation_reviewer]}]
   end
 
   test "an elixir-lang/elixir advisory spells its applications as the preset does", %{poc: poc} do

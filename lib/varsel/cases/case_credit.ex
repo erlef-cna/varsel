@@ -6,9 +6,9 @@ defmodule Varsel.Cases.CaseCredit do
   @moduledoc """
   One credited person or organization, rendered into `credits[]`.
 
-  Renders as `{lang: "en", type, value}` where value is the person's real name
-  followed by ` / <organization>` when an organization is set (EEF convention,
-  e.g. "Jonatan Männchen / EEF").
+  Renders one `{lang: "en", type, value}` entry per credit type, where value
+  is the person's real name followed by ` / <organization>` when an
+  organization is set (EEF convention, e.g. "Jonatan Männchen / EEF").
 
   A credit names the person by their provider handles, and links to their
   account when one holds a handle, at creation or when they later sign in.
@@ -26,6 +26,7 @@ defmodule Varsel.Cases.CaseCredit do
 
   alias Varsel.Accounts.User
   alias Varsel.Cases.CaseCredit.Changes.ResolveCreditedUser
+  alias Varsel.Cases.CaseCredit.Changes.SortCreditTypes
   alias Varsel.Cases.CaseCredit.CreditType
   alias Varsel.Cases.CaseCredit.Handle
   alias Varsel.Cases.Changes.ApplyProposedField
@@ -39,6 +40,8 @@ defmodule Varsel.Cases.CaseCredit do
   postgres do
     table "case_credits"
     repo Varsel.Repo
+
+    calculations_to_sql ci_name: "(name::citext)", ci_organization: "(organization::citext)"
 
     references do
       reference :case, on_delete: :delete
@@ -200,6 +203,10 @@ defmodule Varsel.Cases.CaseCredit do
     publish_all :destroy, [[:case_id]]
   end
 
+  changes do
+    change SortCreditTypes, on: [:create, :update]
+  end
+
   attributes do
     uuid_primary_key :id
 
@@ -214,16 +221,11 @@ defmodule Varsel.Cases.CaseCredit do
       public? true
     end
 
-    attribute :credit_type, CreditType do
+    attribute :credit_types, {:array, CreditType} do
+      description "Every role the person had, each rendered as its own credits[] entry."
       allow_nil? false
-      default :finder
-      public? true
-    end
-
-    attribute :position, :integer do
-      description "Order within credits[]."
-      allow_nil? false
-      default 0
+      default [:finder]
+      constraints min_length: 1
       public? true
     end
 
@@ -258,6 +260,21 @@ defmodule Varsel.Cases.CaseCredit do
         read_action: :for_identity,
         args: [:strategy, :username],
         inputs: [user_id: :user_id]
+    end
+  end
+
+  calculations do
+    # The database collates bytewise, which sorts every capital before every
+    # lowercase letter.
+    calculate :ci_name, :ci_string, expr(type(name, :ci_string))
+    calculate :ci_organization, :ci_string, expr(type(organization, :ci_string))
+  end
+
+  identities do
+    identity :unique_person, [:case_id, :ci_name, :ci_organization] do
+      nils_distinct? false
+      field_names [:name]
+      message "is already credited on this case with this organization"
     end
   end
 end

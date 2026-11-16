@@ -104,6 +104,8 @@ Give each person every role that applies. GHSA allows only one role per
 person, so an advisory usually understates them; the CVE record has no such
 limit, and several roles per person is the common case.
 
+A case credits each person once, with all of their roles checked.
+
 Two more rules:
 
 - `name` holds the full real name with its correct diacritics, nothing else.

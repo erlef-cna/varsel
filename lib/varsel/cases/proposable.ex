@@ -75,7 +75,7 @@ defmodule Varsel.Cases.Proposable do
 
   @reference_fields [:url, :name, :tags, :position]
 
-  @credit_fields [:name, :organization, :credit_type, :position, :handles]
+  @credit_fields [:name, :organization, :credit_types, :handles]
 
   @weakness_fields [:cwe_id, :position]
 

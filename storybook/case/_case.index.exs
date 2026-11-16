@@ -42,6 +42,8 @@ defmodule VarselWeb.Storybook.Case do
 
   def entry("credit_form"), do: [name: "Credit form", icon: {:local, "hero-user"}]
 
+  def entry("credit_types_input"), do: [name: "Credit types input", icon: {:local, "hero-check"}]
+
   def entry("derivation_marker"), do: [name: "Derivation marker", icon: {:local, "hero-flag"}]
 
   def entry("derivation_status"), do: [name: "Derivation status", icon: {:local, "hero-signal"}]
