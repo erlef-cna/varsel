@@ -126,8 +126,9 @@ path from there to a published CVE.
    A case that has no advisory yet is reported from the same tab to the
    maintainers of one of its GitHub repositories, as a private vulnerability
    report in your name, with everything the case states and a description
-   you write for them. The advisory GitHub opens for the report becomes the
-   linked one. A repository that takes no private reports is flagged there,
+   you write for them. GitHub takes no credits on a private report, so push
+   them to the advisory after the report. The advisory GitHub opens for the
+   report becomes the linked one. A repository that takes no private reports is flagged there,
    with the [maintainer process](/maintainer-process) to point its
    maintainers at. Where you administer the repository, GitHub takes no
    report from you and the case opens a draft advisory in your name instead.
