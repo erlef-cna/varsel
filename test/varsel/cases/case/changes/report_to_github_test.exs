@@ -108,10 +108,10 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     assert body["summary"] == "Header injection in acme_lib"
     assert body["description"] == "Written for the maintainers."
     assert body["cwe_ids"] == ["CWE-113"]
-    assert body["credits"] == []
     assert body["vulnerabilities"] == []
     refute Map.has_key?(body, "cvss_vector_string")
     refute Map.has_key?(body, "cve_id")
+    refute Map.has_key?(body, "credits")
 
     assert %{ghsa_id: "GHSA-2cfg-hjmp-qrvw", state: :draft} = reported.github_advisory_link
     assert reported.references == []
@@ -151,6 +151,7 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHubTest do
     refute_received {:github, "POST", @report_path, _auth, _body}
     assert draft["summary"] == "Header injection in acme_lib"
     assert draft["description"] == "Written for the maintainers."
+    assert draft["credits"] == []
     assert %{ghsa_id: "GHSA-2cfg-hjmp-qrvw"} = reported.github_advisory_link
     assert reported.__metadata__.github_report == :draft
   end

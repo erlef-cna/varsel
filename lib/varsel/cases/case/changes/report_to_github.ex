@@ -16,7 +16,7 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHub do
   the repository. So with the actor's own token the case first reads from
   GitHub whether the actor administers it (`Varsel.GitHub.Repositories`). An
   administrator opens a draft advisory in their name, which carries the CVE
-  ID as well. With the installation token the App opens that draft directly:
+  ID and the credits as well. With the installation token the App opens that draft directly:
   it acts inside its own installation, and GitHub takes no private report
   from it. Which of the two happened is the case's `github_report` metadata.
   """
@@ -34,8 +34,9 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHub do
   @not_reportable "is not a repository you can report to on GitHub"
   @not_draftable "is not a repository where you can open an advisory on GitHub"
 
-  @fields [:title, :cvss_v4, :weaknesses, :credits, :affected]
-  @draft_fields [:cve_id | @fields]
+  # GitHub refuses a private report that names any field beyond these.
+  @fields [:title, :cvss_v4, :weaknesses, :affected]
+  @draft_fields [:cve_id, :credits | @fields]
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
@@ -113,7 +114,7 @@ defmodule Varsel.Cases.Case.Changes.ReportToGitHub do
   @doc """
   The request body of a draft advisory or a private report of the case,
   loaded as `Varsel.Cases.GitHubAdvisory.Export.load/0` says. A draft
-  carries the CVE ID as well.
+  carries the CVE ID and the credits as well.
   """
   @spec body(Varsel.Cases.Case.t(), :draft | :report, String.t()) :: map()
   def body(case_record, kind, description) do

@@ -444,9 +444,11 @@ defmodule Varsel.Cases.Case do
       description """
       Reports the case to the maintainers of `owner/repo` as a private
       vulnerability report on GitHub, as the caller, with what the case
-      states and the description written for them. A caller who administers
-      the repository opens a draft advisory in their name instead, as GitHub
-      requires. The advisory GitHub opens becomes the case's linked advisory,
+      states and the description written for them. A private report carries
+      no credits, because GitHub refuses them there. Push the credits after
+      the report. A caller who administers the repository opens a draft
+      advisory in their name instead, as GitHub requires. The draft carries
+      the credits. The advisory GitHub opens becomes the case's linked advisory,
       so the case must not be linked yet.
       """
 
