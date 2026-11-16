@@ -88,8 +88,6 @@ defmodule Varsel.CWE.CatalogSync do
     end
   end
 
-  # Req automatically unzips zip responses into a list of {filename, content} tuples.
-  # Handle both that case and a raw binary (e.g. in production with a real HTTP response).
   defp extract_xml(files) when is_list(files) do
     case Enum.find(files, fn {name, _} -> String.ends_with?(to_string(name), ".xml") end) do
       {_name, xml} -> {:ok, xml}
@@ -97,6 +95,8 @@ defmodule Varsel.CWE.CatalogSync do
     end
   end
 
+  # The ZIP comes from the compile-time MITRE URL over HTTPS. No actor supplies it.
+  # sobelow_skip ["DOS.Zip"]
   defp extract_xml(zip_binary) when is_binary(zip_binary) do
     case :zip.unzip(zip_binary, [:memory]) do
       {:ok, files} -> extract_xml(files)
