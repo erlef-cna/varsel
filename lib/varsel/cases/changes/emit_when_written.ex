@@ -8,6 +8,9 @@ defmodule Varsel.Cases.Changes.EmitWhenWritten do
   acting user as `actor_id`. An upsert that kept the existing row wrote
   nothing, so it emits nothing.
 
+  `actor_field` names a record field to take `actor_id` from instead, for a
+  row a service writes on behalf of the user who acted elsewhere.
+
   The action declares the signal with `emit ..., dynamic?: true`.
   """
 
@@ -19,10 +22,10 @@ defmodule Varsel.Cases.Changes.EmitWhenWritten do
 
   @impl Change
   def init(opts) do
-    if is_atom(opts[:signal]) and is_list(opts[:fields]) do
+    if is_atom(opts[:signal]) and is_list(opts[:fields]) and is_atom(opts[:actor_field]) do
       {:ok, opts}
     else
-      {:error, "requires a `signal` and the record `fields` it takes"}
+      {:error, "requires a `signal` and the record `fields` it takes, and `actor_field` must be an atom when set"}
     end
   end
 
@@ -36,7 +39,7 @@ defmodule Varsel.Cases.Changes.EmitWhenWritten do
         payload =
           record
           |> Map.take(opts[:fields])
-          |> Map.put(:actor_id, actor_id(context.actor))
+          |> Map.put(:actor_id, actor_id(record, opts[:actor_field], context.actor))
 
         with :ok <- Ash.Signals.emit(changeset, Signals, opts[:signal], payload) do
           {:ok, record}
@@ -44,6 +47,7 @@ defmodule Varsel.Cases.Changes.EmitWhenWritten do
     end)
   end
 
-  defp actor_id(%User{id: id}), do: id
-  defp actor_id(_actor), do: nil
+  defp actor_id(_record, nil, %User{id: id}), do: id
+  defp actor_id(_record, nil, _actor), do: nil
+  defp actor_id(record, field, _actor), do: Map.fetch!(record, field)
 end

@@ -162,7 +162,7 @@ defmodule Varsel.Cases.Comment do
         dynamic?: true,
         description: "When the comment is new or its body changed."
 
-      change {EmitWhenWritten, signal: :comment_posted, fields: [:case_id]}
+      change {EmitWhenWritten, signal: :comment_posted, fields: [:case_id], actor_field: :author_id}
     end
 
     update :claim_for_identity do
