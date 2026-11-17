@@ -11,27 +11,37 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecord do
   the rendered ADP container. Any blocker
   or validation error aborts the transaction (the case stays in its previous
   state).
+
+  With `require_change?: true`, a render that matches the published CVE and
+  OSV records aborts too.
   """
 
   use Ash.Resource.Change
 
+  alias Varsel.Cases.Case.Calculations.Preview.Diff
   alias Varsel.CVE.OwnContainer
 
   @impl Ash.Resource.Change
-  def change(changeset, _opts, context) do
-    Ash.Changeset.before_action(changeset, &publish(&1, context))
+  def change(changeset, opts, context) do
+    Ash.Changeset.before_action(changeset, &publish(&1, opts, context))
   end
 
-  defp publish(changeset, context) do
+  defp publish(changeset, opts, context) do
     case_record = changeset.data
     actor = context.actor
+    require_change? = Keyword.get(opts, :require_change?, false)
+
+    loads =
+      if require_change?,
+        do: [:preview, :validation, :published_container, :published_osv],
+        else: [:preview, :validation]
 
     with :ok <- require_cve_record(case_record),
          {:ok, refreshed} <- Varsel.Cases.refresh_case_derivation(case_record, actor: actor),
-         {:ok, %{preview: preview} = loaded} <-
-           Ash.load(refreshed, [:preview, :validation], actor: actor),
+         {:ok, %{preview: preview} = loaded} <- Ash.load(refreshed, loads, actor: actor),
          :ok <- check_blockers(preview.blockers),
-         :ok <- check_validation(loaded.validation) do
+         :ok <- check_validation(loaded.validation),
+         :ok <- check_change(require_change?, loaded) do
       hand_to_cve_record(changeset, case_record, preview.cve_record, context)
     else
       {:error, messages} ->
@@ -57,6 +67,14 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecord do
      Enum.map(errors, fn error ->
        "#{error.source}: #{error.path && error.path <> ": "}#{error.message}"
      end)}
+  end
+
+  defp check_change(false, _case_record), do: :ok
+
+  defp check_change(true, case_record) do
+    if Diff.published_changed?(case_record),
+      do: :ok,
+      else: {:error, ["the rendered record matches the published one; there is nothing to republish"]}
   end
 
   defp hand_to_cve_record(changeset, case_record, cve_json, context) do

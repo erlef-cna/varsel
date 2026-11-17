@@ -5,6 +5,8 @@
 defmodule Varsel.Cases.Case.Changes.CheckDriftTest do
   use Varsel.DataCase, async: false
 
+  import Ash.Signals.Test
+
   alias Ash.Error.Forbidden
   alias Varsel.Cases
   alias Varsel.Cases.Case
@@ -285,5 +287,91 @@ defmodule Varsel.Cases.Case.Changes.CheckDriftTest do
     seen = Cases.get_case!(case_record.id, actor: supporter)
     assert %Ash.ForbiddenField{} = seen.record_drift
     assert %Ash.ForbiddenField{} = seen.drift_checked_at
+  end
+
+  describe "republish" do
+    # The published record carries an older title than the case now renders.
+    defp stale_title(case_record) do
+      cve_record = Ash.get!(CveRecord, case_record.cve_record_id, authorize?: false)
+      container = %{OwnContainer.get(cve_record.cve_json) | "title" => "An older rendering"}
+      Ash.Seed.update!(cve_record, %{cve_json: OwnContainer.put(cve_record.cve_json, container)})
+      run_check()
+      reload(case_record)
+    end
+
+    test "a POC pushes the current render to MITRE and the case stays published", %{
+      poc: poc,
+      case_record: case_record
+    } do
+      case_record = stale_title(case_record)
+      assert case_record.record_drift == :drifted
+
+      republished =
+        refute_emits_signal(Cases.Signals, :case_published, fn ->
+          Cases.republish_case!(case_record, actor: poc)
+        end)
+
+      assert republished.state == :published
+      assert republished.record_drift == nil
+      assert republished.drift_checked_at == nil
+
+      cve_record = Ash.get!(CveRecord, case_record.cve_record_id, authorize?: false)
+      assert cve_record.state == :pending_update
+      assert get_in(cve_record.cve_json, ["containers", "cna", "title"]) == case_record.title
+
+      Req.Test.stub(Varsel.CVE.MitreCveApi, &Req.Test.json(&1, cve_record.cve_json))
+
+      refute_emits_signal(Cases.Signals, :case_published, fn ->
+        AshOban.Test.schedule_and_run_triggers({CveRecord, :push_update},
+          scheduled_actions?: false
+        )
+
+        Oban.drain_queue(queue: :cve_publishing, with_recursion: true)
+      end)
+
+      assert Ash.get!(CveRecord, case_record.cve_record_id, authorize?: false).state == :published
+      assert reload(case_record).state == :published
+    end
+
+    test "a render that matches the published record is refused", %{
+      poc: poc,
+      case_record: case_record
+    } do
+      assert {:error, error} = Cases.republish_case(case_record, actor: poc)
+      assert Exception.message(error) =~ "nothing to republish"
+    end
+
+    test "a render with publish blockers is refused", %{poc: poc, case_record: case_record} do
+      case_record = case_record |> stale_title() |> Ash.Seed.update!(%{cvss_v4: nil})
+
+      assert {:error, error} = Cases.republish_case(case_record, actor: poc)
+      assert Exception.message(error) =~ "CVSS v4 vector is missing"
+    end
+
+    test "only a POC may republish, and only a published case", %{
+      poc: poc,
+      case_record: case_record
+    } do
+      case_record = stale_title(case_record)
+
+      supporter =
+        Fixtures.register_user("republish_sup_#{System.unique_integer([:positive])}", :supporter)
+
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id},
+        authorize?: false
+      )
+
+      nobody = Fixtures.register_user("republish_nobody_#{System.unique_integer([:positive])}")
+
+      assert Cases.can_republish_case?(poc, case_record, validate?: true)
+
+      for actor <- [nil, nobody, supporter] do
+        refute Cases.can_republish_case?(actor, case_record, validate?: true)
+        assert {:error, %Forbidden{}} = Cases.republish_case(case_record, actor: actor)
+      end
+
+      draft = Ash.Seed.update!(case_record, %{state: :draft})
+      refute Cases.can_republish_case?(poc, draft, validate?: true)
+    end
   end
 end

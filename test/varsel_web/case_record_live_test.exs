@@ -228,6 +228,28 @@ defmodule VarselWeb.CaseRecordLiveTest do
       assert render_async(lv, @render_timeout) =~ ~s(<span class="l-diff-minus">)
     end
 
+    test "a POC republishes a published case from its diff", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      cve_record = Fixtures.published_cve_record("CVE-#{year}-55558", "Old title")
+      case_record = Fixtures.open_case(poc, %{title: "New title"})
+      link_published_record(case_record, cve_record)
+      Ash.Seed.update!(case_record, %{state: :published})
+
+      supporter = Fixtures.register_user("republish_viewer", :supporter)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/cve/diff")
+      render_async(lv, @render_timeout)
+      refute has_element?(lv, "#republish")
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve/diff")
+      render_async(lv, @render_timeout)
+      lv |> element("#republish") |> render_click()
+
+      # The bare case cannot pass validation, so the refusal comes back as a flash.
+      assert render_async(lv, @render_timeout) =~ "CVSS v4 vector is missing"
+    end
+
     test "never-published cases show no diff button", %{conn: conn, poc: poc} do
       case_record = Fixtures.open_case(poc)
 

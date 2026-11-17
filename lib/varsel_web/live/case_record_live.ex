@@ -79,6 +79,15 @@ defmodule VarselWeb.CaseRecordLive do
      |> start_async(:publish, fn -> Cases.publish_case(case_record, actor: actor) end)}
   end
 
+  def handle_event("republish", _params, socket) do
+    %{case_record: case_record, current_user: actor} = socket.assigns
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Republishing — rendering and validating the record…")
+     |> start_async(:republish, fn -> Cases.republish_case(case_record, actor: actor) end)}
+  end
+
   @impl Phoenix.LiveView
   def handle_async(:preview, {:ok, case_record}, socket) do
     validation =
@@ -109,6 +118,22 @@ defmodule VarselWeb.CaseRecordLive do
 
   def handle_async(:publish, {:exit, reason}, socket) do
     {:noreply, put_flash(socket, :error, "Publish failed: #{Exception.format_exit(reason)}")}
+  end
+
+  def handle_async(:republish, {:ok, {:ok, _case_record}}, socket) do
+    {:noreply,
+     socket
+     |> put_flash(:info, "Republish handed to MITRE.")
+     |> assign(diffs: %{})
+     |> maybe_start_diff()}
+  end
+
+  def handle_async(:republish, {:ok, {:error, error}}, socket) do
+    {:noreply, put_flash(socket, :error, errors_to_string(error))}
+  end
+
+  def handle_async(:republish, {:exit, reason}, socket) do
+    {:noreply, put_flash(socket, :error, "Republish failed: #{Exception.format_exit(reason)}")}
   end
 
   def handle_async({:diff, tab}, {:ok, lines}, socket) do
@@ -267,6 +292,9 @@ defmodule VarselWeb.CaseRecordLive do
           record_path={~p"/cases/#{@case_record.id}/cve"}
           diff_path={~p"/cases/#{@case_record.id}/cve/diff"}
           diff={@diffs[:cve]}
+          can_republish?={
+            @view == :diff and Cases.can_republish_case?(@current_user, @case_record, validate?: true)
+          }
         />
 
         <.record_pane
@@ -278,6 +306,9 @@ defmodule VarselWeb.CaseRecordLive do
           record_path={~p"/cases/#{@case_record.id}/osv"}
           diff_path={~p"/cases/#{@case_record.id}/osv/diff"}
           diff={@diffs[:osv]}
+          can_republish?={
+            @view == :diff and Cases.can_republish_case?(@current_user, @case_record, validate?: true)
+          }
         >
           <p :if={is_map(@preview)} class="text-sm text-base-content/60">
             No OSV record: {@preview.osv_status}
@@ -326,6 +357,7 @@ defmodule VarselWeb.CaseRecordLive do
   attr :record_path, :string, required: true
   attr :diff_path, :string, required: true
   attr :diff, :any, required: true, doc: "nil until requested, :loading, or the diff lines"
+  attr :can_republish?, :boolean, required: true
   slot :inner_block, doc: "shown instead of the document when there is none"
 
   defp record_pane(assigns) do
@@ -374,6 +406,16 @@ defmodule VarselWeb.CaseRecordLive do
             source={Enum.map_join(@diff, "\n", &diff_line_text/1)}
             language="diff"
           />
+          <button
+            :if={@can_republish? and Diff.changed?(@diff)}
+            id="republish"
+            type="button"
+            class="btn btn-sm btn-eef"
+            phx-click="republish"
+            data-confirm="Push these changes to the published record?"
+          >
+            Republish
+          </button>
         </div>
       </div>
     </div>

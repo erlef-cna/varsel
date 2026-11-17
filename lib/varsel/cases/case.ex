@@ -56,7 +56,9 @@ defmodule Varsel.Cases.Case do
   `:triage`, `:draft` and `:review`, and in `:approved` by a POC — enforced by the content-freeze
   policy on `:edit` / `:apply_proposal`, with the `:version` optimistic lock
   rejecting writes from stale snapshots. Amending a published case means
-  reopening it; the next publish pushes a MITRE update.
+  reopening it; the next publish pushes a MITRE update. A POC pushes a fresh
+  render of unchanged content with `:republish`, which keeps the case
+  `:published`.
 
   ## Escape hatch
 
@@ -83,6 +85,7 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.AffectedPackage.DerivationState
   alias Varsel.Cases.Case.Changes.InheritFromSource
   alias Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory
+  alias Varsel.Cases.Case.Changes.PublishToCveRecord
   alias Varsel.Cases.Case.Changes.TakeReport
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
@@ -630,7 +633,22 @@ defmodule Varsel.Cases.Case do
       require_atomic? false
 
       change transition_state(:publishing)
-      change Varsel.Cases.Case.Changes.PublishToCveRecord
+      change PublishToCveRecord
+    end
+
+    update :republish do
+      description """
+      Pushes a fresh render of a published case to its CVE record, without
+      reopening it. The case stays :published. Refused when the render matches
+      what is published.
+      """
+
+      accept []
+      require_atomic? false
+
+      change {PublishToCveRecord, require_change?: true}
+      change set_attribute(:record_drift, nil)
+      change set_attribute(:drift_checked_at, nil)
     end
 
     update :mark_published do
@@ -987,6 +1005,7 @@ defmodule Varsel.Cases.Case do
              :request_changes,
              :approve,
              :publish,
+             :republish,
              :close
            ]) do
       authorize_if actor_attribute_equals(:role, :poc)
@@ -1063,7 +1082,7 @@ defmodule Varsel.Cases.Case do
       authorize_if actor_attribute_equals(:role, :poc)
     end
 
-    policy action(:recheck_drift) do
+    policy action([:recheck_drift, :republish]) do
       authorize_if expr(state == :published)
     end
   end

@@ -67,6 +67,19 @@ Amending later means reopening the case, editing, and publishing again; the
 next publish reaches MITRE as an update. Fixes and improvements both
 qualify.
 
+Varsel also renders every published case again on a schedule: daily in the
+first month after publication, weekly in the first year, and monthly after
+that. A case whose current render differs from its published record, or
+can no longer be published, shows in the **Out of date** tab of the
+[Cases](/cases) archive. **Recheck all** runs the check again for every
+published case, for example after a fix to Varsel.
+
+Each row opens the diff to the published record. **Republish** there pushes
+the current render to MITRE as an update, without reopening the case. The
+case content stays the same, but the output can change in substance: a
+fix to how Varsel derives versions can change the affected ranges. Read the
+diff before you republish.
+
 ## Closing and CVE IDs
 
 Closing a case records a reason and is terminal. A case that already holds a

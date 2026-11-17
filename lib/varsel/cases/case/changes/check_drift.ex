@@ -11,7 +11,6 @@ defmodule Varsel.Cases.Case.Changes.CheckDrift do
   use Ash.Resource.Change
 
   alias Varsel.Cases.Case.Calculations.Preview.Diff
-  alias Varsel.CVE.OwnContainer
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
@@ -44,17 +43,6 @@ defmodule Varsel.Cases.Case.Changes.CheckDrift do
   defp verdict(%{validation: %{valid: false}}), do: :blocked
 
   defp verdict(case_record) do
-    cve_changed? =
-      Diff.changed?(
-        Diff.lines(
-          case_record.published_container || %{},
-          OwnContainer.get(case_record.preview.cve_record)
-        )
-      )
-
-    osv_changed? =
-      Diff.changed?(Diff.lines(case_record.published_osv || %{}, case_record.preview.osv_record || %{}))
-
-    if cve_changed? or osv_changed?, do: :drifted, else: :in_sync
+    if Diff.published_changed?(case_record), do: :drifted, else: :in_sync
   end
 end
