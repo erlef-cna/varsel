@@ -116,7 +116,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       end
 
     cve_record = cve_record(case_record, cna)
-    {osv_record, osv_status} = osv(cve_record, case_record.date_public)
+    {osv_record, osv_status} = osv(cve_record, osv_published_at(case_record))
 
     %Result{
       cve_record: cve_record,
@@ -128,13 +128,18 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
     }
   end
 
+  # The OSV sync converts MITRE's record, so once MITRE has published one its
+  # datePublished is the one the OSV document carries.
+  defp osv_published_at(%{cve_json: %{"cveMetadata" => %{"datePublished" => published}}}) when is_binary(published),
+    do: published
+
+  defp osv_published_at(case_record), do: DateTime.to_iso8601(case_record.date_public || DateTime.utc_now())
+
   # The converter expects a record as MITRE returns it, so the preview stamps
   # the datePublished MITRE would, unless MITRE's record of an upstream CVE
   # already holds it. A cna_override can hand it any shape, and the schema
   # validator reports that; here it only costs the OSV document.
-  defp osv(cve_record, date_public) do
-    published_at = DateTime.to_iso8601(date_public || DateTime.utc_now())
-
+  defp osv(cve_record, published_at) do
     with {:ok, osv} <-
            cve_record
            |> Map.update!("cveMetadata", &Map.put_new(&1, "datePublished", published_at))

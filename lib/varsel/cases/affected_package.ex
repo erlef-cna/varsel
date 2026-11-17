@@ -89,7 +89,7 @@ defmodule Varsel.Cases.AffectedPackage do
 
         where expr(
                 derivation_state in [:never, :outdated] and
-                  case.state in [:submitted, :triage, :draft, :review, :approved]
+                  case.state in [:submitted, :triage, :draft, :review, :approved, :published]
               )
 
         worker_module_name Varsel.Cases.AffectedPackage.DeriveWorker

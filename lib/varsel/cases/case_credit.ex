@@ -169,6 +169,7 @@ defmodule Varsel.Cases.CaseCredit do
     end
 
     policy action_type(:read) do
+      authorize_if AshOban.Checks.AshObanInteraction
       authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])

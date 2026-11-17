@@ -79,6 +79,7 @@ defmodule Varsel.Cases.Case do
     ],
     notifiers: [Ash.Notifier.PubSub]
 
+  alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.AffectedPackage.DerivationState
   alias Varsel.Cases.Case.Changes.InheritFromSource
   alias Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory
@@ -110,6 +111,20 @@ defmodule Varsel.Cases.Case do
 
   graphql do
     type :case
+  end
+
+  field_policies do
+    field_policy_bypass :*, AshObanInteraction do
+      authorize_if always()
+    end
+
+    field_policy [:record_drift, :drift_checked_at] do
+      authorize_if actor_attribute_equals(:role, :poc)
+    end
+
+    field_policy :* do
+      authorize_if always()
+    end
   end
 
   postgres do
@@ -203,6 +218,31 @@ defmodule Varsel.Cases.Case do
         scheduler_cron "*/15 * * * *"
         worker_opts unique: [period: :infinity, states: :incomplete, keys: [:primary_key]]
       end
+
+      trigger :check_drift do
+        action :check_drift
+
+        where expr(
+                state == :published and
+                  (is_nil(drift_checked_at) or
+                     cond do
+                       published_at > ago(30, :day) -> drift_checked_at < ago(1, :day)
+                       published_at > ago(365, :day) -> drift_checked_at < ago(7, :day)
+                       true -> drift_checked_at < ago(30, :day)
+                     end)
+              )
+
+        worker_module_name Varsel.Cases.Case.CheckDriftWorker
+        scheduler_module_name Varsel.Cases.Case.CheckDriftScheduler
+        queue :record_drift
+        max_attempts 3
+        scheduler_cron "0 3 * * *"
+        worker_opts unique: [period: :infinity, states: :incomplete, keys: [:primary_key]]
+
+        # Ash.Actions.Read.Relationships carries only context[:shared] into a
+        # related query, and the render reads the case's children.
+        shared_context [:ash_oban?]
+      end
     end
   end
 
@@ -213,7 +253,15 @@ defmodule Varsel.Cases.Case do
     # rather than serializing it into the `changes` map (which AshPaperTrail
     # cannot do for enum types).
     attributes_as_attributes [:state]
-    ignore_attributes [:inserted_at, :updated_at, :version]
+
+    ignore_attributes [
+      :inserted_at,
+      :updated_at,
+      :version,
+      :record_drift,
+      :drift_checked_at
+    ]
+
     only_when_changed? true
     store_action_name? true
     belongs_to_actor :user, Varsel.Accounts.User, domain: Varsel.Accounts
@@ -375,6 +423,25 @@ defmodule Varsel.Cases.Case do
       end
 
       change Varsel.Cases.Case.Changes.RefreshDerivation
+    end
+
+    update :check_drift do
+      description "Oban worker action: renders a published case with fresh derivations and records how it compares to the published records."
+      accept []
+      require_atomic? false
+      change Varsel.Cases.Case.Changes.CheckDrift
+    end
+
+    update :recheck_drift do
+      description "Queues a drift check of a published case now, whenever its last one ran."
+      accept []
+      change set_attribute(:drift_checked_at, nil)
+      change run_oban_trigger(:check_drift)
+    end
+
+    action :recheck_published_drift, Varsel.Types.OkResult do
+      description "Queues a drift check of every published case now, whenever its last one ran."
+      run Varsel.Cases.Case.Actions.RecheckPublishedDrift
     end
 
     update :grant_access do
@@ -813,7 +880,7 @@ defmodule Varsel.Cases.Case do
       authorize_if AshStateMachine.Checks.ValidNextState
     end
 
-    bypass AshOban.Checks.AshObanInteraction do
+    bypass AshObanInteraction do
       authorize_if always()
     end
 
@@ -974,9 +1041,17 @@ defmodule Varsel.Cases.Case do
       authorize_if expr(state != :merged)
     end
 
-    # :mark_published runs only through the AshOban bypass above.
-    policy action(:mark_published) do
+    # :mark_published and :check_drift run only through the AshOban bypass above.
+    policy action([:mark_published, :check_drift]) do
       forbid_if always()
+    end
+
+    policy action([:recheck_drift, :recheck_published_drift]) do
+      authorize_if actor_attribute_equals(:role, :poc)
+    end
+
+    policy action(:recheck_drift) do
+      authorize_if expr(state == :published)
     end
   end
 
@@ -1145,6 +1220,16 @@ defmodule Varsel.Cases.Case do
 
     attribute :published_at, :utc_datetime do
       description "When the case was first successfully published to MITRE."
+      public? true
+    end
+
+    attribute :record_drift, Varsel.Cases.Case.RecordDrift do
+      description "How the current render of a published case compares to its published records. Nil until checked."
+      public? true
+    end
+
+    attribute :drift_checked_at, :utc_datetime_usec do
+      description "When record_drift was last computed. Nil queues a check."
       public? true
     end
 

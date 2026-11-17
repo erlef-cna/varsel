@@ -175,7 +175,8 @@ config :varsel, Oban,
     osv_sync: 1,
     github_sync: 1,
     github_comments: 1,
-    derivation: 2
+    derivation: 2,
+    record_drift: 1
   ],
   repo: Varsel.Repo,
   plugins: [
