@@ -377,11 +377,16 @@ defmodule Varsel.Cases do
       define :assign_case_cve_id, action: :assign_cve_id
       define :link_case_upstream_cve, action: :link_upstream_cve, args: [:cve_id]
       define :publish_case, action: :publish
+      define :republish_case, action: :republish
       define :mark_case_published, action: :mark_published
       define :list_publishing_cases, action: :publishing
       define :reopen_case, action: :reopen
       define :close_case, action: :close
       define :refresh_case_derivation, action: :refresh_derivation
+      define :list_drifted_cases, action: :list_drifted
+      define :check_case_drift, action: :check_drift
+      define :recheck_case_drift, action: :recheck_drift
+      define :recheck_published_case_drift, action: :recheck_published_drift
       define :grant_case_access, action: :grant_access, args: [:strategy, :username]
       define :apply_case_proposal, action: :apply_proposal
       define :triage_case, action: :triage

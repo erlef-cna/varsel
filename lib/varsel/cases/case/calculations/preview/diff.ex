@@ -13,6 +13,8 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Diff do
   the changes stay readable.
   """
 
+  alias Varsel.CVE.OwnContainer
+
   @context_lines 3
   @collapse_threshold 8
 
@@ -40,6 +42,23 @@ defmodule Varsel.Cases.Case.Calculations.Preview.Diff do
   @doc "True when the diff contains any change."
   @spec changed?([line()]) :: boolean()
   def changed?(lines), do: Enum.any?(lines, &match?({kind, _} when kind in [:del, :ins], &1))
+
+  @doc """
+  True when a case's render differs from its published CVE or OSV record. The
+  case must have `:preview`, `:published_container` and `:published_osv`
+  loaded.
+  """
+  @spec published_changed?(map()) :: boolean()
+  def published_changed?(case_record) do
+    cve =
+      lines(
+        case_record.published_container || %{},
+        OwnContainer.get(case_record.preview.cve_record)
+      )
+
+    osv = lines(case_record.published_osv || %{}, case_record.preview.osv_record || %{})
+    changed?(cve) or changed?(osv)
+  end
 
   @doc "Pretty JSON with recursively sorted object keys (stable across runs)."
   @spec stable_json(term()) :: String.t()

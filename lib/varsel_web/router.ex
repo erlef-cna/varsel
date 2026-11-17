@@ -182,7 +182,9 @@ defmodule VarselWeb.Router do
       live "/cases/:id/comments", CaseCommentsLive, :index
       live "/cases/:id/github", CaseGitHubLive, :github
       live "/cases/:id/cve", CaseRecordLive, :cve
+      live "/cases/:id/cve/diff", CaseRecordLive, :cve_diff
       live "/cases/:id/osv", CaseRecordLive, :osv
+      live "/cases/:id/osv/diff", CaseRecordLive, :osv_diff
       live "/cases/:id/advisory", CaseRecordLive, :advisory
       live "/cases/:id/publication", CaseRecordLive, :publication
 

@@ -199,7 +199,8 @@ defmodule VarselWeb.CaseRecordLiveTest do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve")
       assert render_async(lv, @render_timeout) =~ "Diff to published"
 
-      lv |> element("button", "Diff to published") |> render_click()
+      lv |> element("a", "Diff to published") |> render_click()
+      assert_patch(lv, ~p"/cases/#{case_record.id}/cve/diff")
       html = render_async(lv, @render_timeout)
 
       # The published title leaves, the case title arrives, tinted by the
@@ -208,6 +209,45 @@ defmodule VarselWeb.CaseRecordLiveTest do
       assert html =~ "New title"
       assert html =~ ~s(<span class="l-diff-minus">)
       assert html =~ ~s(<span class="l-diff-plus">)
+
+      lv |> element("a", "Record") |> render_click()
+      assert_patch(lv, ~p"/cases/#{case_record.id}/cve")
+      refute render(lv) =~ ~s(<span class="l-diff-minus">)
+    end
+
+    test "the diff route opens the diff at once and survives a re-render", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      cve_record = Fixtures.published_cve_record("CVE-#{year}-55557", "Old title")
+      case_record = Fixtures.open_case(poc, %{title: "New title"})
+      link_published_record(case_record, cve_record)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve/diff")
+      assert render_async(lv, @render_timeout) =~ ~s(<span class="l-diff-minus">)
+
+      lv |> element("button", "Re-render") |> render_click()
+      assert render_async(lv, @render_timeout) =~ ~s(<span class="l-diff-minus">)
+    end
+
+    test "a POC republishes a published case from its diff", %{conn: conn, poc: poc} do
+      year = Date.utc_today().year
+      cve_record = Fixtures.published_cve_record("CVE-#{year}-55558", "Old title")
+      case_record = Fixtures.open_case(poc, %{title: "New title"})
+      link_published_record(case_record, cve_record)
+      Ash.Seed.update!(case_record, %{state: :published})
+
+      supporter = Fixtures.register_user("republish_viewer", :supporter)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/cve/diff")
+      render_async(lv, @render_timeout)
+      refute has_element?(lv, "#republish")
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/cve/diff")
+      render_async(lv, @render_timeout)
+      lv |> element("#republish") |> render_click()
+
+      # The bare case cannot pass validation, so the refusal comes back as a flash.
+      assert render_async(lv, @render_timeout) =~ "CVSS v4 vector is missing"
     end
 
     test "never-published cases show no diff button", %{conn: conn, poc: poc} do
@@ -302,7 +342,8 @@ defmodule VarselWeb.CaseRecordLiveTest do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/osv")
       render_async(lv, @render_timeout)
 
-      lv |> element(~s(button[phx-value-view="diff"])) |> render_click()
+      lv |> element("a", "Diff to published") |> render_click()
+      assert_patch(lv, ~p"/cases/#{case_record.id}/osv/diff")
       html = render_async(lv, @render_timeout)
 
       # The case has no packages, so the preview derives no OSV document: the

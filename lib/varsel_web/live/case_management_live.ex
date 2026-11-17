@@ -84,7 +84,8 @@ defmodule VarselWeb.CaseManagementLive do
        advisory_form: nil,
        gh: nil,
        gh_open?: false,
-       assignable?: Cases.can_assign_case_user?(socket.assigns.current_user, %{})
+       assignable?: Cases.can_assign_case_user?(socket.assigns.current_user, %{}),
+       drift_visible?: Cases.can_list_drifted_cases?(socket.assigns.current_user)
      )}
   end
 
@@ -333,7 +334,12 @@ defmodule VarselWeb.CaseManagementLive do
   # case) and the previously-stored page opts on every subsequent refetch —
   # PubSub-triggered reloads and LivePagination's change_page/jump_to_page.
   defp list_archive_cases(socket, page_opts) do
-    Cases.list_cases!(
+    list =
+      if socket.assigns.scope == "drifted",
+        do: &Cases.list_drifted_cases!/1,
+        else: &Cases.list_cases!/1
+
+    list.(
       actor: socket.assigns.current_user,
       load: [
         :cve_id,
@@ -369,6 +375,9 @@ defmodule VarselWeb.CaseManagementLive do
 
   defp filter_archive_scope(base, _all), do: base
 
+  defp archive_destination(case_record, "drifted"), do: ~p"/cases/#{case_record.id}/cve/diff"
+  defp archive_destination(case_record, _scope), do: ~p"/cases/#{case_record.id}"
+
   # `archive_count` stays unfiltered: an empty result reads differently when
   # the archive itself is empty.
   defp assign_archive_counts(_page, socket) do
@@ -388,7 +397,16 @@ defmodule VarselWeb.CaseManagementLive do
       |> Ash.Query.filter(state in ^@archive_states)
       |> Ash.count!(actor: socket.assigns.current_user)
 
+    drifted_count =
+      if socket.assigns.drift_visible? do
+        [actor: socket.assigns.current_user]
+        |> Cases.query_to_list_drifted_cases()
+        |> filter_search(socket.assigns.query)
+        |> Ash.count!()
+      end
+
     socket
+    |> assign(:archive_drifted_count, drifted_count)
     |> assign(:archive_published_count, published)
     |> assign(:archive_closed_count, closed)
     |> assign(:archive_count, archive_count)
@@ -508,6 +526,16 @@ defmodule VarselWeb.CaseManagementLive do
 
   def handle_event("scope", %{"scope" => scope}, socket) do
     {:noreply, push_patch(socket, to: archive_path(scope, socket.assigns.query, nil, socket.assigns.view))}
+  end
+
+  def handle_event("recheck_drift", _params, socket) do
+    socket =
+      case Cases.recheck_published_case_drift(actor: socket.assigns.current_user) do
+        {:ok, :ok} -> put_flash(socket, :info, "Rechecking every published case.")
+        {:error, error} -> put_flash(socket, :error, Exception.message(error))
+      end
+
+    {:noreply, socket}
   end
 
   def handle_event("paginate", %{"page" => target}, socket) do
@@ -826,6 +854,9 @@ defmodule VarselWeb.CaseManagementLive do
           query={@query}
           published_count={@archive_published_count}
           closed_count={@archive_closed_count}
+          drifted_count={@archive_drifted_count}
+          drift_visible?={@drift_visible?}
+          can_recheck?={Cases.can_recheck_published_case_drift?(@current_user)}
           archive_count={@archive_count}
           archive_match_count={@archive_match_count}
           view={@view}
@@ -1197,6 +1228,9 @@ defmodule VarselWeb.CaseManagementLive do
   attr :query, :string, required: true
   attr :published_count, :integer, required: true
   attr :closed_count, :integer, required: true
+  attr :drifted_count, :integer, default: nil
+  attr :drift_visible?, :boolean, required: true
+  attr :can_recheck?, :boolean, required: true
   attr :archive_count, :integer, required: true
   attr :archive_match_count, :integer, required: true
   attr :view, :map, required: true
@@ -1229,11 +1263,28 @@ defmodule VarselWeb.CaseManagementLive do
           query={@query}
           view={@view}
         />
+        <.scope_link
+          :if={@drift_visible?}
+          scope={@scope}
+          value="drifted"
+          label="Out of date"
+          count={@drifted_count}
+          query={@query}
+          view={@view}
+        />
       </:tabs>
+      <:note :if={@scope == "drifted" and @can_recheck?}>
+        <button
+          id="recheck-drift"
+          type="button"
+          phx-click="recheck_drift"
+          class="btn btn-xs btn-eef-quiet"
+        >
+          Recheck all
+        </button>
+      </:note>
       <:empty>
-        {if @archive_count == 0,
-          do: "Nothing archived yet — cases land here when they are published or closed.",
-          else: "No archived cases match."}
+        {archive_empty_text(@scope, @archive_count)}
       </:empty>
 
       <div class="overflow-x-auto hidden md:block">
@@ -1252,7 +1303,7 @@ defmodule VarselWeb.CaseManagementLive do
             <tr
               :for={case_record <- @cases.results}
               class="hover:bg-base-300/40 group cursor-pointer"
-              phx-click={JS.navigate(~p"/cases/#{case_record.id}")}
+              phx-click={JS.navigate(archive_destination(case_record, @scope))}
             >
               <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
                 {if case_record.state != :published, do: "—", else: case_record.cve_id || "—"}
@@ -1281,7 +1332,7 @@ defmodule VarselWeb.CaseManagementLive do
                 />
               </td>
               <td>
-                <.archive_state_cell case_record={case_record} />
+                <.archive_state_cell case_record={case_record} scope={@scope} />
               </td>
               <td class="font-mono text-xs whitespace-nowrap text-base-content/60">
                 {if case_record.state != :published,
@@ -1298,7 +1349,7 @@ defmodule VarselWeb.CaseManagementLive do
           :for={case_record <- @cases.results}
           class="border-b border-base-300 last:border-0 px-3.5 py-2.5"
         >
-          <.link navigate={~p"/cases/#{case_record.id}"} class="block">
+          <.link navigate={archive_destination(case_record, @scope)} class="block">
             <div class={[
               "text-[0.8rem] font-semibold leading-snug",
               case_record.state != :published && "text-base-content/50 font-normal"
@@ -1337,7 +1388,22 @@ defmodule VarselWeb.CaseManagementLive do
     """
   end
 
+  defp archive_empty_text(_scope, 0), do: "Nothing archived yet — cases land here when they are published or closed."
+
+  defp archive_empty_text("drifted", _count), do: "Every checked published record matches its current render."
+
+  defp archive_empty_text(_scope, _count), do: "No archived cases match."
+
   attr :case_record, :any, required: true
+  attr :scope, :string, required: true
+
+  defp archive_state_cell(%{scope: "drifted"} = assigns) do
+    ~H"""
+    <span class={["whitespace-nowrap text-sm", drift_ink(@case_record.record_drift)]}>
+      ● {drift_label(@case_record.record_drift)}
+    </span>
+    """
+  end
 
   defp archive_state_cell(assigns) do
     ~H"""
@@ -1355,6 +1421,13 @@ defmodule VarselWeb.CaseManagementLive do
     </span>
     """
   end
+
+  defp drift_label(:drifted), do: "Drifted"
+  defp drift_label(:blocked), do: "Blocked"
+  defp drift_label(:failed), do: "Check failed"
+
+  defp drift_ink(:drifted), do: "text-[var(--warning-ink)]"
+  defp drift_ink(_blocked_or_failed), do: "text-[var(--error-ink)]"
 
   attr :scope, :string, required: true
   attr :value, :string, required: true

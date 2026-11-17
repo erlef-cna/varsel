@@ -16,11 +16,10 @@ defmodule Varsel.Cases.Case.Changes.RefreshDerivation do
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
-    actor = context.actor
     refresh? = Ash.Changeset.get_argument(changeset, :refresh)
 
     Ash.Changeset.after_action(changeset, fn _changeset, case_record ->
-      loaded = Ash.load!(case_record, :affected_packages, actor: actor)
+      loaded = Ash.load!(case_record, :affected_packages, Ash.Context.to_opts(context))
 
       if refresh?, do: refresh_repos(loaded.affected_packages)
 

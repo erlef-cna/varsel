@@ -10,6 +10,7 @@ defmodule VarselWeb.CaseLiveTest do
   alias AshAuthentication.Plug.Helpers, as: AuthPlug
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage.Preset
+  alias Varsel.Cases.Case
   alias Varsel.Fixtures
   alias Varsel.HexPm
   alias Varsel.Notifications
@@ -77,7 +78,7 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
       refute has_element?(lv, "#lane-publishing")
 
-      Ash.Seed.seed!(Varsel.Cases.Case, %{title: "Going out", state: :publishing})
+      Ash.Seed.seed!(Case, %{title: "Going out", state: :publishing})
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases")
       assert has_element?(lv, "#lane-publishing", "Publishing")
@@ -1280,7 +1281,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ "Take the next free ID"
       assert html =~ "Or choose a specific ID"
       # Opening the picker must not have taken an ID.
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == nil
+      assert Ash.get!(Case, case_record.id, authorize?: false).cve_record_id == nil
     end
 
     # A supporter cannot read the reservations, so an empty listing tells them
@@ -1313,7 +1314,7 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> element("button", "Assign CVE ID") |> render_click()
       lv |> element("button", "Assign the next free ID") |> render_click()
 
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == lowest.id
+      assert Ash.get!(Case, case_record.id, authorize?: false).cve_record_id == lowest.id
       # The workspace names the assigned ID; that is the feedback.
       assert render(lv) =~ "CVE-#{year}-31002"
     end
@@ -1345,7 +1346,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#choose-cve-id", %{cve_record_id: chosen.id})
       |> render_submit()
 
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == chosen.id
+      assert Ash.get!(Case, case_record.id, authorize?: false).cve_record_id == chosen.id
       assert render(lv) =~ "CVE-#{year}-31005"
     end
 
@@ -1379,7 +1380,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#choose-cve-id", %{cve_record_id: held.id})
       |> render_submit()
 
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == held.id
+      assert Ash.get!(Case, case_record.id, authorize?: false).cve_record_id == held.id
       assert Ash.get!(Varsel.CVE.CveRecord, held.id, authorize?: false).state == :draft
     end
 
@@ -1406,7 +1407,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       html = render(lv)
       refute html =~ "cve-picker-modal"
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).cve_record_id == nil
+      assert Ash.get!(Case, case_record.id, authorize?: false).cve_record_id == nil
     end
   end
 
@@ -1474,7 +1475,7 @@ defmodule VarselWeb.CaseLiveTest do
       lv |> form("#close-case-form", %{closed_reason: "Not affected"}) |> render_submit()
 
       assert %{state: :closed, cve_record_id: nil} =
-               Ash.get!(Cases.Case, case_record.id, authorize?: false)
+               Ash.get!(Case, case_record.id, authorize?: false)
 
       assert render(lv) =~ "Case closed."
     end
@@ -1591,7 +1592,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#case-content-form", %{"form" => %{"title" => "Renamed case"}})
       |> render_submit()
 
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Renamed case"
+      assert Ash.get!(Case, case_record.id, authorize?: false).title == "Renamed case"
       assert render(lv) =~ "Renamed case"
     end
 
@@ -1633,7 +1634,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert render(lv) =~ "2026-11-01 09:30:15 UTC"
 
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).date_public ==
+      assert Ash.get!(Case, case_record.id, authorize?: false).date_public ==
                ~U[2026-11-01 09:30:15Z]
 
       lv
@@ -1676,7 +1677,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#case-content-form")
       |> render_submit()
 
-      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      case_record = Ash.get!(Case, case_record.id, authorize?: false)
       assert case_record.description_md == "Uses `zip:unzip/1` **unsafely**."
 
       # Saving closes the editor; reopening shows the saved markdown.
@@ -1720,7 +1721,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#case-severity-form")
       |> render_submit()
 
-      case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      case_record = Ash.get!(Case, case_record.id, authorize?: false)
 
       assert case_record.cvss_v4.vector ==
                "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
@@ -1766,16 +1767,16 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
       lv |> element("button", "Request review") |> render_click()
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :review
+      assert Ash.get!(Case, case_record.id, authorize?: false).state == :review
 
       lv |> element("button", "Approve") |> render_click()
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :approved
+      assert Ash.get!(Case, case_record.id, authorize?: false).state == :approved
 
       # A POC still edits an approved case directly, so suggesting stays off.
       assert has_element?(lv, "#suggest-toggle input:not([checked])")
 
       lv |> element("button", "Reopen") |> render_click()
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :draft
+      assert Ash.get!(Case, case_record.id, authorize?: false).state == :draft
       assert has_element?(lv, "#suggest-toggle input:not([checked])")
     end
 
@@ -2646,7 +2647,7 @@ defmodule VarselWeb.CaseLiveTest do
       |> form("#resolve-#{proposal.id}")
       |> render_submit(%{"decision" => "accept", "resolution_note" => "makes sense"})
 
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Proposed title"
+      assert Ash.get!(Case, case_record.id, authorize?: false).title == "Proposed title"
       assert Ash.get!(Cases.Proposal, proposal.id, authorize?: false).state == :accepted
 
       # Resolved proposals leave the inline card and the rail queue for the
@@ -3389,7 +3390,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert html =~ "Accepted 2 suggestions."
 
-      reloaded = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      reloaded = Ash.get!(Case, case_record.id, authorize?: false)
       assert reloaded.title == "Bulk title"
       assert reloaded.description_md == "Bulk description"
 
@@ -3496,7 +3497,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       # The case itself is untouched; the change became a proposal. The
       # untouched date public, rendered without its zone, proposes nothing.
-      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).title == "Frozen case"
+      assert Ash.get!(Case, case_record.id, authorize?: false).title == "Frozen case"
 
       assert [proposal] = Cases.list_open_case_proposals!(case_record.id, actor: poc)
       assert proposal.field_name == "title"
@@ -3561,7 +3562,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert render(lv) =~ "Corrected after approval"
 
-      reloaded = Ash.get!(Cases.Case, case_record.id, authorize?: false)
+      reloaded = Ash.get!(Case, case_record.id, authorize?: false)
       assert reloaded.title == "Corrected after approval"
       assert reloaded.state == :approved
     end
@@ -3940,6 +3941,56 @@ defmodule VarselWeb.CaseLiveTest do
 
       assert render(lv) =~ case_record.title
       assert [_still_unread] = Notifications.list_unread_notifications!(actor: supporter)
+    end
+  end
+
+  describe "the out-of-date archive scope" do
+    defp drifted_case(title, drift) do
+      Fixtures.archived_case(:published, title, DateTime.utc_now(), %{
+        record_drift: drift,
+        drift_checked_at: DateTime.utc_now()
+      })
+    end
+
+    test "lists the drifted, blocked and failed published cases", %{conn: conn, poc: poc} do
+      drifted = drifted_case("Drifted record", :drifted)
+      drifted_case("Blocked record", :blocked)
+      drifted_case("Failed record", :failed)
+      drifted_case("Synced record", :in_sync)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?face=archive&scope=drifted")
+      html = render(lv)
+
+      assert html =~ "Drifted record"
+      assert html =~ "Blocked record"
+      assert html =~ "Failed record"
+      refute html =~ "Synced record"
+      assert html =~ "Check failed"
+
+      assert lv
+             |> element(~s{a[href*="scope=drifted"] .tabular-nums})
+             |> render()
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.text()
+             |> String.trim() == "3"
+
+      assert has_element?(lv, ~s{a[href="/cases/#{drifted.id}/cve/diff"]})
+    end
+
+    test "is not offered below POC", %{conn: conn, supporter: supporter} do
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases?face=archive")
+
+      refute has_element?(lv, ~s{a[href*="scope=drifted"]})
+    end
+
+    test "rechecks every published case", %{conn: conn, poc: poc} do
+      drifted = drifted_case("Drifted record", :drifted)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases?face=archive&scope=drifted")
+      lv |> element("#recheck-drift") |> render_click()
+
+      assert render(lv) =~ "Rechecking every published case."
+      assert Ash.get!(Case, drifted.id, authorize?: false).drift_checked_at == nil
     end
   end
 end

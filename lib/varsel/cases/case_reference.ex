@@ -119,6 +119,7 @@ defmodule Varsel.Cases.CaseReference do
 
   policies do
     policy action_type(:read) do
+      authorize_if AshOban.Checks.AshObanInteraction
       authorize_if actor_attribute_equals(:role, :poc)
       authorize_if relates_to_actor_via([:case, :assignments, :user])
     end

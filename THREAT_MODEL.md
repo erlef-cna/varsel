@@ -818,9 +818,12 @@ none of the authorization properties, by construction rather than by defect.
    Only a POC can move a CVE toward MITRE (`request_publish`, `update`,
    `reject`), publish the enrichment of an upstream CVE
    (`publish_enrichment`), or move a case toward publication (`approve`,
-   `publish`). The Oban worker actions that actually call MITRE (`:publish`,
-   `:push_update`, `mark_published`) are reachable *only* through the AshOban
-   bypass — never from a request.
+   `publish`). Only a POC can push a fresh render of a published case
+   (`republish`). It stays `:published` and skips review, so a POC can
+   update the published record without a new approval. The Oban worker
+   actions that actually call MITRE (`:publish`, `:push_update`,
+   `mark_published`) are reachable *only* through the AshOban bypass — never
+   from a request.
    - *Violation symptom:* a non-POC causes a write to MITRE or publishes an
      enrichment, or an un-approved case reaches `publishing`.
    - *Severity:* `critical`.
@@ -1070,7 +1073,11 @@ none of the authorization properties, by construction rather than by defect.
    Case content may change only in `:submitted`, `:triage`, `:draft` and
    `:review`, or in `:approved` by a POC, and the freeze is a policy that reads the stored state — on the
    case and on every child row — so nothing past `:approved` changes without a
-   reopen.
+   reopen. The record rendered from that content is not frozen: a
+   `republish` publishes the current render of unchanged content, and a
+   change to the rendering code can change its substance, the affected
+   versions included. Its only affordance sits beside the diff to the
+   published record (`case_record_live.ex`).
    Every update on the three state-machine resources carries the optimistic
    lock described in §4: a write from a snapshot the database has moved past
    is refused and rolls back whole, so no lifecycle decision or content edit
