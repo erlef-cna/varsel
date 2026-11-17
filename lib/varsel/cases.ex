@@ -382,6 +382,7 @@ defmodule Varsel.Cases do
       define :reopen_case, action: :reopen
       define :close_case, action: :close
       define :refresh_case_derivation, action: :refresh_derivation
+      define :list_drifted_cases, action: :list_drifted
       define :check_case_drift, action: :check_drift
       define :recheck_case_drift, action: :recheck_drift
       define :recheck_published_case_drift, action: :recheck_published_drift

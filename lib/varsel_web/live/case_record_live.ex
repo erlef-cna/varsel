@@ -10,7 +10,7 @@ defmodule VarselWeb.CaseRecordLive do
 
   Each tab shows the record as it renders now, rendered once on mount and
   again on request. A case with a published record also offers a diff
-  against it.
+  against it, at the CVE and OSV tabs' `/diff` routes.
   """
   use VarselWeb, :live_view
 
@@ -40,10 +40,10 @@ defmodule VarselWeb.CaseRecordLive do
       |> assign(
         preview: :loading,
         validation: nil,
-        record_views: %{cve: "record", osv: "record"},
         diffs: %{},
         advisory_sections: Advisory.keys()
       )
+      |> assign_tab()
       |> CaseLifecycle.mount(id, load: [:cve_id, :cve_record], after_fetch: &after_fetch/2)
       |> render_preview()
 
@@ -55,27 +55,13 @@ defmodule VarselWeb.CaseRecordLive do
   end
 
   @impl Phoenix.LiveView
-  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+  def handle_params(_params, _uri, socket) do
+    {:noreply, socket |> assign_tab() |> maybe_start_diff()}
+  end
 
   @impl Phoenix.LiveView
   def handle_event("render", _params, socket) do
     {:noreply, render_preview(socket)}
-  end
-
-  def handle_event("record_view", %{"view" => view}, socket) when view in ["record", "diff"] do
-    tab = socket.assigns.live_action
-    socket = assign(socket, record_views: Map.put(socket.assigns.record_views, tab, view))
-
-    # A diff (against what is published) is computed lazily the first time it
-    # is shown.
-    socket =
-      if view == "diff" and not Map.has_key?(socket.assigns.diffs, tab) do
-        start_diff(socket, tab)
-      else
-        socket
-      end
-
-    {:noreply, socket}
   end
 
   def handle_event("advisory_sections", params, socket) do
@@ -141,7 +127,7 @@ defmodule VarselWeb.CaseRecordLive do
   # The static render has no case to render yet when the mount redirected.
   defp render_preview(%{assigns: %{case_record: %{} = case_record}} = socket) do
     actor = socket.assigns.current_user
-    load = Map.fetch!(@preview_loads, socket.assigns.live_action)
+    load = Map.fetch!(@preview_loads, socket.assigns.tab)
 
     if connected?(socket) do
       socket
@@ -149,12 +135,34 @@ defmodule VarselWeb.CaseRecordLive do
       |> start_async(:preview, fn ->
         Cases.get_case!(case_record.id, load: load, actor: actor)
       end)
+      |> maybe_start_diff()
     else
       socket
     end
   end
 
   defp render_preview(socket), do: socket
+
+  defp assign_tab(socket) do
+    {tab, view} =
+      case socket.assigns.live_action do
+        :cve_diff -> {:cve, :diff}
+        :osv_diff -> {:osv, :diff}
+        tab -> {tab, :record}
+      end
+
+    assign(socket, tab: tab, view: view)
+  end
+
+  # A diff (against what is published) is computed lazily the first time it
+  # is shown.
+  defp maybe_start_diff(%{assigns: %{view: :diff, tab: tab, diffs: diffs}} = socket) do
+    if connected?(socket) and not Map.has_key?(diffs, tab),
+      do: start_diff(socket, tab),
+      else: socket
+  end
+
+  defp maybe_start_diff(socket), do: socket
 
   defp start_diff(socket, tab) do
     %{case_record: case_record, current_user: actor} = socket.assigns
@@ -221,20 +229,20 @@ defmodule VarselWeb.CaseRecordLive do
         case_record={@case_record}
         public_href={CaseLifecycle.public_cve_href(@case_record)}
         tabs={CaseLifecycle.tabs(@case_record)}
-        active={@live_action}
+        active={@tab}
       >
         <:actions>
           <CaseLifecycle.lifecycle_actions
             case_record={@case_record}
             current_user={@current_user}
-            active_tab={@live_action}
+            active_tab={@tab}
           />
         </:actions>
       </.case_header>
 
       <.page_container>
         <.upstream_cve_notice
-          :if={@live_action == :cve and @case_record.upstream_cve}
+          :if={@tab == :cve and @case_record.upstream_cve}
           id="upstream-cve"
           class="mb-4"
           cve_id={@case_record.cve_id}
@@ -251,22 +259,24 @@ defmodule VarselWeb.CaseRecordLive do
         </.upstream_cve_notice>
 
         <.record_pane
-          :if={@live_action == :cve}
-          tab={:cve}
+          :if={@tab == :cve}
           loading={@preview == :loading}
           record={if(is_map(@preview), do: @preview.cve_record)}
           amendment={amendment?(@case_record)}
-          view={@record_views.cve}
+          view={@view}
+          record_path={~p"/cases/#{@case_record.id}/cve"}
+          diff_path={~p"/cases/#{@case_record.id}/cve/diff"}
           diff={@diffs[:cve]}
         />
 
         <.record_pane
-          :if={@live_action == :osv}
-          tab={:osv}
+          :if={@tab == :osv}
           loading={@preview == :loading}
           record={if(is_map(@preview), do: @preview.osv_record)}
           amendment={amendment?(@case_record)}
-          view={@record_views.osv}
+          view={@view}
+          record_path={~p"/cases/#{@case_record.id}/osv"}
+          diff_path={~p"/cases/#{@case_record.id}/osv/diff"}
           diff={@diffs[:osv]}
         >
           <p :if={is_map(@preview)} class="text-sm text-base-content/60">
@@ -275,14 +285,14 @@ defmodule VarselWeb.CaseRecordLive do
         </.record_pane>
 
         <.advisory_pane
-          :if={@live_action == :advisory}
+          :if={@tab == :advisory}
           loading={@preview == :loading}
           container={if(is_map(@preview), do: OwnContainer.get(@preview.cve_record))}
           included={@advisory_sections}
         />
 
         <.publication_pane
-          :if={@live_action == :publication}
+          :if={@tab == :publication}
           case_record={@case_record}
           current_user={@current_user}
           preview={@preview}
@@ -309,11 +319,12 @@ defmodule VarselWeb.CaseRecordLive do
     """
   end
 
-  attr :tab, :atom, required: true
   attr :loading, :boolean, required: true
   attr :record, :map, required: true, doc: "the rendered document, nil while absent"
   attr :amendment, :boolean, required: true
-  attr :view, :string, required: true
+  attr :view, :atom, required: true, values: [:record, :diff]
+  attr :record_path, :string, required: true
+  attr :diff_path, :string, required: true
   attr :diff, :any, required: true, doc: "nil until requested, :loading, or the diff lines"
   slot :inner_block, doc: "shown instead of the document when there is none"
 
@@ -322,9 +333,14 @@ defmodule VarselWeb.CaseRecordLive do
     <div class="space-y-3">
       <div class="flex items-center justify-between gap-3">
         <div :if={@amendment} class="join">
-          <button
-            :for={{view, label} <- [{"record", "Record"}, {"diff", "Diff to published"}]}
-            type="button"
+          <.link
+            :for={
+              {view, label, path} <- [
+                {:record, "Record", @record_path},
+                {:diff, "Diff to published", @diff_path}
+              ]
+            }
+            patch={path}
             class={[
               "join-item btn btn-xs",
               if(@view == view,
@@ -332,16 +348,14 @@ defmodule VarselWeb.CaseRecordLive do
                 else: "bg-base-200 text-base-content/80 border-base-300 hover:bg-base-300"
               )
             ]}
-            phx-click="record_view"
-            phx-value-view={view}
           >
             {label}
-          </button>
+          </.link>
         </div>
         <div class="ml-auto"><.render_link loading={@loading} /></div>
       </div>
 
-      <div :if={@view == "record"}>
+      <div :if={@view == :record}>
         <p :if={@loading} class="text-sm text-base-content/60">Rendering…</p>
         <.code_block :if={@record} source={pretty_json(@record)} />
         <%= if not @loading and is_nil(@record) do %>
@@ -349,7 +363,7 @@ defmodule VarselWeb.CaseRecordLive do
         <% end %>
       </div>
 
-      <div :if={@view == "diff"}>
+      <div :if={@view == :diff}>
         <p :if={@diff == :loading} class="text-sm text-base-content/60">Diffing…</p>
         <div :if={is_list(@diff)} class="space-y-2">
           <p :if={not Diff.changed?(@diff)} class="text-sm text-base-content/60">

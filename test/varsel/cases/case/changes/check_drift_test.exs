@@ -5,6 +5,7 @@
 defmodule Varsel.Cases.Case.Changes.CheckDriftTest do
   use Varsel.DataCase, async: false
 
+  alias Ash.Error.Forbidden
   alias Varsel.Cases
   alias Varsel.Cases.Case
   alias Varsel.CVE.CveRecord
@@ -240,13 +241,30 @@ defmodule Varsel.Cases.Case.Changes.CheckDriftTest do
       for actor <- [nil, nobody, supporter] do
         refute Cases.can_recheck_case_drift?(actor, case_record)
         refute Cases.can_recheck_published_case_drift?(actor)
-        assert {:error, %Ash.Error.Forbidden{}} = Cases.recheck_published_case_drift(actor: actor)
+        assert {:error, %Forbidden{}} = Cases.recheck_published_case_drift(actor: actor)
       end
     end
 
     test "only a published case may be rechecked", %{poc: poc, case_record: case_record} do
       draft = Ash.Seed.update!(case_record, %{state: :draft})
       refute Cases.can_recheck_case_drift?(poc, draft)
+    end
+  end
+
+  test "only a POC may list the out-of-date cases", %{poc: poc, case_record: case_record} do
+    Ash.Seed.update!(case_record, %{record_drift: :drifted, drift_checked_at: DateTime.utc_now()})
+
+    supporter =
+      Fixtures.register_user("drift_lister_#{System.unique_integer([:positive])}", :supporter)
+
+    nobody = Fixtures.register_user("drift_nolister_#{System.unique_integer([:positive])}")
+
+    assert [%{id: id}] = Cases.list_drifted_cases!(actor: poc)
+    assert id == case_record.id
+
+    for actor <- [nil, nobody, supporter] do
+      refute Cases.can_list_drifted_cases?(actor)
+      assert {:error, %Forbidden{}} = Cases.list_drifted_cases(actor: actor)
     end
   end
 

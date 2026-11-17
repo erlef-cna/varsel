@@ -294,6 +294,18 @@ defmodule Varsel.Cases.Case do
                  required?: false
     end
 
+    read :list_drifted do
+      description "Lists published cases whose current render differs from their published records or can no longer be published."
+      filter expr(state == :published and record_drift in [:drifted, :blocked, :failed])
+      prepare build(sort: [drift_checked_at: :desc])
+
+      pagination offset?: true,
+                 keyset?: true,
+                 countable: :by_default,
+                 default_limit: 25,
+                 required?: false
+    end
+
     create :open do
       description "Opens a new case in the :draft state, assigned to whoever opened it."
       # Opening an empty case is how a case normally starts; :adopt_cve_record
@@ -1046,7 +1058,8 @@ defmodule Varsel.Cases.Case do
       forbid_if always()
     end
 
-    policy action([:recheck_drift, :recheck_published_drift]) do
+    policy action([:list_drifted, :recheck_drift, :recheck_published_drift]) do
+      access_type :strict
       authorize_if actor_attribute_equals(:role, :poc)
     end
 
