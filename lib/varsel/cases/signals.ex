@@ -67,7 +67,8 @@ defmodule Varsel.Cases.Signals do
       description "A comment was written on a case, here or on its linked GitHub advisory."
       argument :case_id, :uuid, allow_nil?: false
 
-      argument :actor_id, :uuid, description: "The user who wrote the comment here, when a user did."
+      argument :actor_id, :uuid,
+        description: "The user who wrote the comment, or nil for a GitHub comment whose login no account holds."
     end
 
     signal :users_mentioned do

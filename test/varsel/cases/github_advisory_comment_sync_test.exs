@@ -274,6 +274,23 @@ defmodule Varsel.Cases.GitHubAdvisoryCommentSyncTest do
 
       assert [_notification] = unread_comment_notifications(supporter)
     end
+
+    test "does not tell the author about their own comment", %{case: case_record, poc: poc} do
+      author = Fixtures.register_user("octocat", :supporter)
+      other = Fixtures.register_user("comment_sync_other", :supporter)
+
+      for user <- [author, other] do
+        Cases.assign_case_user!(%{case_id: case_record.id, user_id: user.id}, actor: poc)
+      end
+
+      stub_comments([comment(1, "Written by me on GitHub", "octocat")])
+
+      poll!(link!(case_record, poc))
+      Oban.drain_queue(queue: :default)
+
+      assert [] = unread_comment_notifications(author)
+      assert [_notification] = unread_comment_notifications(other)
+    end
   end
 
   describe "naming the account behind a GitHub login" do
