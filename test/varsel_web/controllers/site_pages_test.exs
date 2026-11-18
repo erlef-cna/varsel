@@ -71,6 +71,20 @@ defmodule VarselWeb.SitePagesTest do
     assert response(conn, 200) =~ "Contact: mailto:cna@erlef.org"
   end
 
+  # The file is PGP-signed with the cna@erlef.org key, so renewal is a manual
+  # step. The margin leaves time to sign before the file expires.
+  test "security.txt does not expire within the next 30 days", %{conn: conn} do
+    conn = get(conn, "/.well-known/security.txt")
+
+    [expires] =
+      for "Expires: " <> value <- String.split(response(conn, 200), "\n"), do: value
+
+    {:ok, expires, 0} = DateTime.from_iso8601(String.trim(expires))
+
+    assert DateTime.after?(expires, DateTime.shift(DateTime.utc_now(), day: 30)),
+           "security.txt expires at #{expires}. Renew the Expires field and sign the file again."
+  end
+
   describe "OSV id redirect" do
     test "GET /osv/EEF-CVE-....html 301-redirects to the canonical CVE .html page", %{conn: conn} do
       conn = get(conn, "/osv/EEF-CVE-2025-48042.html")
