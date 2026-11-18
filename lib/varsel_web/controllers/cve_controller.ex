@@ -10,7 +10,9 @@ defmodule VarselWeb.CveController do
   alias Varsel.CVE
   alias Varsel.CVE.OwnContainer
   alias Varsel.CWE
+  alias VarselWeb.CveLinks
   alias VarselWeb.CveView
+  alias VarselWeb.StructuredData
 
   require Ash.Query
 
@@ -43,16 +45,25 @@ defmodule VarselWeb.CveController do
   end
 
   def show_html(conn, %{"cve_id" => cve_id}) do
-    record = CVE.get_cve_record_by_cve_id!(cve_id, actor: nil)
+    record =
+      CVE.get_cve_record_by_cve_id!(cve_id,
+        actor: nil,
+        load: [osv_record: Ash.Query.select(CVE.OsvRecord, [:osv_id])]
+      )
+
     cve = record.cve_json
     container = OwnContainer.get(cve) || %{}
+    upstream = CveView.upstream_summary(cve)
+    alternates = CveLinks.alternates(cve["cveMetadata"]["cveId"], record.osv_record)
 
     conn
     |> assign(:page_title, cve["cveMetadata"]["cveId"])
+    |> assign(:alternate_links, alternates)
+    |> assign(:structured_data, StructuredData.cve(cve, container, upstream, alternates))
     |> render(:show,
       cve: cve,
       container: container,
-      upstream: CveView.upstream_summary(cve),
+      upstream: upstream,
       cwe_names: cwe_names(container),
       capec_names: capec_names(container)
     )
@@ -66,7 +77,9 @@ defmodule VarselWeb.CveController do
     record =
       CVE.get_cve_record_by_cve_id!(cve_id, actor: nil, query: query, load: [], strict?: true)
 
-    json(conn, record.cve_json)
+    conn
+    |> CveLinks.put_canonical(record.cve_json["cveMetadata"]["cveId"])
+    |> json(record.cve_json)
   rescue
     Invalid -> render_404(conn, :json)
   end

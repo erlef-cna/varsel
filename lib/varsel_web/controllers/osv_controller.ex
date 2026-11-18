@@ -6,6 +6,7 @@ defmodule VarselWeb.OsvController do
   use VarselWeb, :controller
 
   alias Varsel.CVE
+  alias VarselWeb.CveLinks
 
   def index(conn, _params) do
     query = Ash.Query.select(CVE.OsvRecord, [:modified_at, :osv_id])
@@ -22,13 +23,19 @@ defmodule VarselWeb.OsvController do
   end
 
   defp show_json(conn, %{"osv_id" => osv_id}) do
-    query = Ash.Query.select(CVE.OsvRecord, [:osv_json])
+    query = Ash.Query.select(CVE.OsvRecord, [:osv_id, :osv_json])
     record = CVE.get_osv_record!(osv_id, actor: nil, query: query, load: [], strict?: true)
-    json(conn, record.osv_json)
+
+    conn
+    |> put_canonical(record.osv_id)
+    |> json(record.osv_json)
   rescue
     Ash.Error.Invalid ->
       render_404(conn, :json)
   end
+
+  defp put_canonical(conn, "EEF-" <> cve_id), do: CveLinks.put_canonical(conn, cve_id)
+  defp put_canonical(conn, _osv_id), do: conn
 
   defp redirect_to_cve(conn, params)
 

@@ -84,7 +84,6 @@ defmodule VarselWeb.Plugs.SearchIndexing do
     Disallow: /mcp
     Disallow: /ws/
     Disallow: /live/
-    Disallow: /*.json$
 
     Sitemap: #{url(~p"/sitemap.xml")}
     """

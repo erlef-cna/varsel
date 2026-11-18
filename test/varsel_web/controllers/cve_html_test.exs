@@ -666,7 +666,13 @@ defmodule VarselWeb.CveHtmlTest do
 
       publish(cve_json)
 
-      body = conn |> get(~p"/cves/#{@cve_id <> ".html"}") |> html_response(200)
+      body =
+        conn
+        |> get(~p"/cves/#{@cve_id <> ".html"}")
+        |> html_response(200)
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("#references")
+        |> LazyHTML.to_html()
 
       advisory_pos = pos(body, "GHSA-jj4j-x5ww-cwh9")
       patch_pos = pos(body, "abc123")

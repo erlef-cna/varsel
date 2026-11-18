@@ -142,6 +142,7 @@ defmodule VarselWeb.CommonWeaknessesController do
 
     conn
     |> assign(:page_title, "#{weakness.name} · #{page.title}")
+    |> assign(:canonical_url, canonical_url(view.view_id, weakness.cwe_id))
     |> render(:show,
       view: view,
       weakness: weakness,
@@ -154,6 +155,16 @@ defmodule VarselWeb.CommonWeaknessesController do
     )
   rescue
     Invalid -> render_404(conn)
+  end
+
+  # A weakness reads the same in every view, so its page in the default view
+  # is the canonical one. A weakness the default view no longer reaches, such
+  # as one MITRE deprecated but another view still lists, keeps its own page.
+  defp canonical_url(@default_view_id, _cwe_id), do: nil
+
+  defp canonical_url(_view_id, cwe_id) do
+    if in_view?(@default_view_id, cwe_id),
+      do: url(~p"/common-weaknesses/#{@default_view_id}/#{cwe_id}")
   end
 
   defp in_view?(view_id, cwe_id) do

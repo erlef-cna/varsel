@@ -135,6 +135,10 @@ defmodule VarselWeb.PageControllerTest do
             "/cves/CVE-2026-0001.html",
             "/cves/CVE-2026-0001",
             "/osv/EEF-CVE-2026-0001",
+            "/cves/index.json",
+            "/cves/CVE-2026-0001.json",
+            "/osv/all.json",
+            "/osv/EEF-CVE-2026-0001.json",
             "/feed.atom",
             "/sitemap.xml",
             "/.well-known/security.txt"
@@ -166,11 +170,7 @@ defmodule VarselWeb.PageControllerTest do
             "/api/hex/reports",
             "/gql",
             "/mcp",
-            "/live/websocket",
-            "/cves/index.json",
-            "/cves/CVE-2026-0001.json",
-            "/osv/all.json",
-            "/osv/EEF-CVE-2026-0001.json"
+            "/live/websocket"
           ] do
         assert blocked?(rules, path), "#{path} is allowed"
       end
