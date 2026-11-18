@@ -146,6 +146,19 @@ defmodule Varsel.Cases.GitHubManualRequest do
       change MintToken
     end
 
+    create :prepare_add_collaborator do
+      description "Prepares adding `user_id`, a person assigned to the case, to the linked advisory's collaborators."
+
+      argument :link_id, :uuid, allow_nil?: false
+      argument :user_id, :uuid, allow_nil?: false
+
+      metadata :token, :string, description: "The one-time token, given here and nowhere else."
+
+      change relate_actor(:user)
+      change BuildRequest
+      change MintToken
+    end
+
     create :prepare_report do
       description """
       Prepares a draft advisory (`draft`, for a person who administers the
@@ -236,6 +249,7 @@ defmodule Varsel.Cases.GitHubManualRequest do
              :prepare_refresh,
              :prepare_pull,
              :prepare_push,
+             :prepare_add_collaborator,
              :prepare_report
            ]) do
       forbid_unless actor_attribute_equals(:role, :poc)
@@ -288,6 +302,11 @@ defmodule Varsel.Cases.GitHubManualRequest do
 
     attribute :fields, {:array, :atom} do
       description "The fields a pull takes over or a push writes. nil otherwise."
+      public? true
+    end
+
+    attribute :collaborator, :string do
+      description "The GitHub login an `add_collaborator` request adds. nil otherwise."
       public? true
     end
 

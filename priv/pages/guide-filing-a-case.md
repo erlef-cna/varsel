@@ -113,9 +113,10 @@ path from there to a published CVE.
    app as the author.
 
    Where the app is not installed, a Point of Contact does the request from
-   their own terminal with the GitHub CLI, `gh`. Link, Refresh, Pull, Push
-   and Report each offer to do it with gh, and show one command. Opening a
-   case from an advisory offers the same command on the cases console. The
+   their own terminal with the GitHub CLI, `gh`. Link, Refresh, Pull, Push,
+   Report and adding a collaborator each offer to do it with gh, and show one
+   command. Opening a case from an advisory offers the same command on the
+   cases console. The
    command fetches the request from here, sends it to GitHub with `gh api` as
    your GitHub account, and posts GitHub's answer back. The tab then records the
    answer as you and updates. The command works once, for 15 minutes. The
@@ -134,12 +135,16 @@ path from there to a published CVE.
    report from you and the case opens a draft advisory in your name instead.
    A report a Point of Contact makes through the app opens a draft advisory
    as the app.
-   A linked advisory also lists who sees it on GitHub, its collaborators,
-   its teams and the organization's owners, marks who is on the case, and
-   gives the rest access with one click, as an assignment or an invite. The
-   invite email goes to the address GitHub lists for the person, and an
-   account without one is invited without an email: they already see the
-   advisory on GitHub.
+   Below the fields, the same table sets who has access on either side, one
+   row per person: on the case as an assignment or an invite, and on GitHub
+   as a collaborator, a team member or an owner of the organization. A
+   person on GitHub alone is given access to the case with one click, as an
+   assignment or an invite. The invite email goes to the address GitHub
+   lists for the person, and an account without one is invited without an
+   email: they already see the advisory on GitHub. A Point of Contact adds a
+   person on the case alone to the advisory's collaborators with one click.
+   GitHub gives a collaborator write access to the advisory. A person
+   without a linked GitHub account cannot be added.
 
 6. **Take a CVE ID and hand it to review**
 

@@ -131,6 +131,9 @@ defmodule VarselWeb.GitHubManualController do
   defp recorded(%{operation: :push, ghsa_id: ghsa_id}, _answer),
     do: "Pushed to #{ghsa_id}. The case now holds the advisory as GitHub answered."
 
+  defp recorded(%{operation: :add_collaborator, collaborator: login, ghsa_id: ghsa_id}, _answer),
+    do: "Added #{login} to the collaborators of #{ghsa_id}."
+
   defp recorded(%{operation: :report, path: path}, answer) do
     if String.ends_with?(path, "/reports"),
       do: "Reported to the maintainers. #{answer["ghsa_id"]} is linked to the case.",

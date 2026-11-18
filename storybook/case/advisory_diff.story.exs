@@ -14,6 +14,19 @@ defmodule VarselWeb.Storybook.Case.AdvisoryDiff do
 
   @vector "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
 
+  defp access(name, login, on_case, github, opts \\ []) do
+    %{
+      row_id: "access-#{login || name |> String.downcase() |> String.replace(" ", "-")}",
+      name: name,
+      login: login,
+      user_id: "user-#{name}",
+      case: on_case,
+      github: github,
+      grant?: Keyword.get(opts, :grant?, false),
+      offer: Keyword.get(opts, :offer)
+    }
+  end
+
   def variations do
     [
       %Variation{
@@ -163,6 +176,48 @@ defmodule VarselWeb.Storybook.Case.AdvisoryDiff do
             },
             %{field: :cvss_v4, ours: nil, theirs: @vector, status: :theirs_only},
             %{field: :weaknesses, ours: [113, 79], theirs: [113], status: :differs}
+          ]
+        }
+      },
+      %Variation{
+        id: :access,
+        description:
+          "Who has access on either side. A POC adds an assignee on GitHub and gives a " <>
+            "GitHub collaborator access to the case.",
+        attributes: %{
+          rows: [
+            %{field: :title, ours: "Header injection", theirs: "Header injection", status: :same}
+          ],
+          access: [
+            access("Lukas Larsson", "garazdawi", :assigned, ["collaborator", "owner"]),
+            access("Bram", "voltone", :assigned, [], offer: :app),
+            access("Peter Ullrich", "PJUllrich", :invited, []),
+            access("A hex.pm user", nil, :assigned, []),
+            access("kikofernandez", "kikofernandez", nil, ["team security"], grant?: true)
+          ]
+        }
+      },
+      %Variation{
+        id: :access_gh,
+        description:
+          "Where the App is not installed a POC adds with gh. The organization's owners are " <>
+            "not readable with the viewer's GitHub account.",
+        attributes: %{
+          rows: [],
+          access: [
+            access("Bram", "voltone", :assigned, :unknown, offer: :gh),
+            access("Eric Meadows-Jönsson", "ericmj", :assigned, ["collaborator"])
+          ]
+        }
+      },
+      %Variation{
+        id: :access_loading,
+        description: "While GitHub is asked who sees the advisory, and for a viewer who may change neither side.",
+        attributes: %{
+          rows: [],
+          access: [
+            access("Bram", "voltone", :assigned, :loading),
+            access("A hex.pm user", nil, :assigned, [])
           ]
         }
       },

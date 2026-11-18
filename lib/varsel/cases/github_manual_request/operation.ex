@@ -11,6 +11,7 @@ defmodule Varsel.Cases.GitHubManualRequest.Operation do
     values: [
       read: "Reads the advisory: to link it, refresh the link, or refresh and pull fields.",
       push: "Writes fields of the case onto the linked advisory.",
+      add_collaborator: "Reads the linked advisory and adds a person on the case to its collaborators.",
       report: "Opens a draft advisory or a private report on a repository."
     ]
 end

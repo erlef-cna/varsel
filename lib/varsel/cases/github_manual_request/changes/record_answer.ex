@@ -8,10 +8,10 @@ defmodule Varsel.Cases.GitHubManualRequest.Changes.RecordAnswer do
   records it after its own request, as the person who prepared the request.
 
   A read links the advisory, or stores it on the link and then pulls the
-  request's fields. A push stores the advisory on the link. A report links
-  the advisory GitHub opened. The nested writes carry the
-  `github_manual_answer?` stamp, which the link's attested actions demand
-  next to their actor rule.
+  request's fields. A push or an added collaborator stores the advisory on
+  the link. A report links the advisory GitHub opened. The nested writes
+  carry the `github_manual_answer?` stamp, which the link's attested actions
+  demand next to their actor rule.
 
   The answer is what the person posted, attested by them. Nothing reads it
   again from GitHub.

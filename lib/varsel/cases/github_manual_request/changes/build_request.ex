@@ -10,8 +10,9 @@ defmodule Varsel.Cases.GitHubManualRequest.Changes.BuildRequest do
   `Varsel.Cases.Case.Changes.ReportToGitHub.body/3` build for it. The case
   and the link are read as the actor.
 
-  The path goes into a shell command that a person pastes into a terminal.
-  So an owner or a repository name that GitHub would not give is refused.
+  The path and the login of a collaborator go into a shell command that a
+  person pastes into a terminal. So an owner, a repository name or a login
+  that GitHub would not give is refused.
   """
 
   use Ash.Resource.Change
@@ -23,6 +24,7 @@ defmodule Varsel.Cases.GitHubManualRequest.Changes.BuildRequest do
   alias Varsel.GitHub.Advisories
 
   @name ~r/\A[A-Za-z0-9_.-]+\z/
+  @login ~r/\A[A-Za-z0-9-]{1,39}\z/
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
@@ -112,6 +114,40 @@ defmodule Varsel.Cases.GitHubManualRequest.Changes.BuildRequest do
 
       {:error, error} ->
         Changeset.add_error(changeset, error)
+    end
+  end
+
+  defp from_link(%{action: %{name: :prepare_add_collaborator}} = changeset, link, opts) do
+    user_id = Changeset.get_argument(changeset, :user_id)
+
+    case Cases.get_github_collaborator_assignment(link.case_id, user_id, opts) do
+      {:ok, %{user: %{github_username: login}}} when is_binary(login) ->
+        collaborator(changeset, link, login)
+
+      _not_assigned ->
+        Changeset.add_error(changeset,
+          field: :user_id,
+          message: "is not assigned to the case with a GitHub account linked"
+        )
+    end
+  end
+
+  defp collaborator(changeset, link, login) do
+    if Regex.match?(@login, login) do
+      Changeset.force_change_attributes(changeset, %{
+        operation: :add_collaborator,
+        method: :patch,
+        path: advisory_path(link.owner, link.repo, link.ghsa_id),
+        collaborator: login,
+        owner: link.owner,
+        repo: link.repo,
+        ghsa_id: link.ghsa_id
+      })
+    else
+      Changeset.add_error(changeset,
+        field: :user_id,
+        message: "has a login GitHub could not have"
+      )
     end
   end
 
