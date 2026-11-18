@@ -40,6 +40,16 @@ mcp__varsel__list_case_reports(id: <case-id>)
 mcp__varsel__list_case_comments(case_id: <case-id>)
 ```
 
+A case a maintainer opened from their own GitHub advisory holds no report. Its claim is the
+advisory, which `get_case_github_advisory(case_id: <case-id>)` returns. The case holds only the
+advisory's title. Fields are taken over with `pull_github_advisory` once the case is accepted.
+Treat the advisory as the report in the steps below. A report whose `report_json` holds
+`github_advisory` names an advisory the case is not linked to. Read it as part of the claim.
+Everyone on a case can read its linked advisory and the advisory's comments, and the reporter
+is on the case. Do not call `link_github_advisory` yourself. Tell the POC to check on GitHub
+that the reporter already has access to the advisory before linking it. Knowing its address
+does not give access to it.
+
 A case whose `state` is neither `submitted` nor `triage` has been decided. Say so and stop. A
 case that already holds an automated triage recommendation in its comments has been triaged.
 Say so and stop, unless the user asks for a second one.

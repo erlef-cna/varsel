@@ -332,7 +332,10 @@ moment. (`socket_disconnect.ex`, `disconnect_sockets.ex`, `graphql_socket.ex`)
    `:submitted` opened with the submitter assigned → a `report_submitted`
    notification to every POC, in-app and as a content-free email per their
    preferences; the payload itself never leaves the authenticated console
-   (`case.ex`, `take_report.ex`, `notifications/`).
+   (`case.ex`, `take_report.ex`, `notifications/`). A maintainer submits a
+   GitHub advisory the same way through `Case.submit_from_github_advisory`:
+   the advisory is read from GitHub as them (§6), and the case opens with its
+   title and linked to it, with no report.
 2a. **hex.pm report intake** — hex.pm (service token, no actor) →
    `Case.submit_report_from_hex` → report, and a case in `:submitted` that gives the
    reporter and the maintainers hex.pm named access at once: an assignment
@@ -565,7 +568,7 @@ from controlling only its size.
 
 | Surface | Parameter | Control kind | Attacker-controllable? | Sink / caller must |
 | --- | --- | --- | --- | --- |
-| `Case.submit_report` | `report_json`, `report_body`, `summary` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The resulting notification emails are content-free (link only), so the payload never leaves the authenticated console. |
+| `Case.submit_report` | `report_json`, `report_body`, `summary`, `advisory_url` | data + size | **Yes — any authenticated user** | Persisted (size-capped, and rate-capped for a role-less reporter — §8); triage UI (escaped, §7/§8). The resulting notification emails are content-free (link only), so the payload never leaves the authenticated console. |
 | `Case.submit_report_from_hex` (`/api/hex/reports`) | `summary`, `description`, `package` | data + size | **Yes — whoever holds a configured signing key**, on behalf of a hex.pm user who is not authenticated here | Persisted whole in `report_json`; same triage UI and content-free notification emails as a web report. |
 | `Case.submit_report_from_hex` | `reporter` / `maintainers` (`username`, `email`) | data | **Yes — same** | Each handle becomes access to the report's case: read, propose and comment while a POC decides, the report payload included. The reporter's handle is stored on the report, and a later hex sign-in with it makes that account the reporter. hex.pm asserts these people are real and their addresses verified; we store the assertion, not a verified fact (§8) |
 | `erase_hex_contact` (`/api/hex/erasures`) | `username`, `email` | data | **Yes — whoever holds a configured signing key** | Clears `email` on every hex.pm invite matching either, cancelling an invite email not yet sent. Nothing else is written and nothing is returned, so a key holder can blank any hex.pm-named person's address and learns nothing (§10 7a) |
@@ -574,7 +577,7 @@ from controlling only its size.
 | `AffectedPackage` create/update | `repo_url` | resource name | **Yes — POC / assigned supporter only**; constrained to `https://` and to a host that resolves to a public address | `Exgit.clone(repo_url)` → outbound https git egress to a public host (§4, §9) |
 | `AffectedPackage` create/update | the repository *contents* at that `repo_url` | data + size | **Yes — whoever runs that host**, who need not hold a role here (§7) | Commit graph fetched and walked in memory, bounded per derivation (§8); parsed by `exgit` (§6b) |
 | `Case.report_to_github` | `owner`, `repo`, `description` | resource name + data | **Yes — POC / assigned supporter only**, on an unlinked case in `:draft` or `:review`, decided before the write (`case.ex`) | `owner` and `repo` become path segments of one `api.github.com` read and one write, encoded; the host is fixed. The read asks whether the caller administers the repository. The write then carries the description and the case's content to that repository's maintainers as a private vulnerability report, or opens a draft advisory there when the caller administers it. Both are made with the caller's own GitHub token, and only when the caller's login reaches the App's installation on the repository, as the synced rows record it. A POC with no GitHub identity, a POC whose login does not reach it, a POC whose own token does not renew, and a POC whose request GitHub answers with 404 or 403 open a draft advisory directly with the App's installation token on that repository (`report_to_github.ex`, `credentials.ex`, `repositories.ex`, `advisories.ex`) |
-| `Case.open_from_github_advisory` / `GitHubAdvisoryLink.link` | `advisory_url` | resource name | **Yes — POC / supporter** (open) or **POC / assigned supporter** (link) (`case.ex`, `github_advisory_link.ex`) | Parsed into the owner, repository and GHSA id of one `api.github.com` read, path-encoded; the host is fixed. A repository advisory is read with the caller's own GitHub token when their login reaches the App's installation on the repository. A POC with no GitHub identity, a POC whose login does not reach it, a POC whose own token does not renew, and a POC whose read GitHub answers with 404 or 403 read it with that installation's token. A global database entry is read with the home organization's installation token (`credentials.ex`). The answer is stored whole on the link and compared as data (`fetch.ex`, `advisories.ex`, `store_advisory.ex`). Opening a case from it writes the advisory's prose into the case markdown, which renders through the sanitizing sinks of §6a like prose imported from a CVE record, and its logins into credit handles confirmed at GitHub like hand-entered ones (`import.ex`, `resolve_credited_user.ex`) |
+| `Case.open_from_github_advisory` / `Case.submit_from_github_advisory` / `GitHubAdvisoryLink.link` | `advisory_url` | resource name | **Yes — POC / supporter** (open), **any authenticated user** (submit), or **POC / assigned supporter** (link) (`case.ex`, `github_advisory_link.ex`) | A submission takes only a repository advisory and writes only its title onto the case. A role-less caller has no credential but their own token, so a submission reads only what their own GitHub login sees on a repository the App's installation reaches them on (`advisory_url.ex`). Parsed into the owner, repository and GHSA id of one `api.github.com` read, path-encoded; the host is fixed. A repository advisory is read with the caller's own GitHub token when their login reaches the App's installation on the repository. A POC with no GitHub identity, a POC whose login does not reach it, a POC whose own token does not renew, and a POC whose read GitHub answers with 404 or 403 read it with that installation's token. A global database entry is read with the home organization's installation token (`credentials.ex`). The answer is stored whole on the link and compared as data (`fetch.ex`, `advisories.ex`, `store_advisory.ex`). Opening a case from it writes the advisory's prose into the case markdown, which renders through the sanitizing sinks of §6a like prose imported from a CVE record, and its logins into credit handles confirmed at GitHub like hand-entered ones (`import.ex`, `resolve_credited_user.ex`) |
 | `GitHubManualRequest.complete` (`/api/github/manual/:id/result`) | the posted JSON, GitHub's answer as the command relays it | data + size | **Yes — whoever holds the request's one-time token** (§4), on the POC's attestation that it is GitHub's answer; nothing reads it again from GitHub | JSON only, bounded by the endpoint parser like every request body. Accepted only as an advisory whose `html_url` names the request's repository and, where the request names one, its GHSA id. Then stored whole on the case's link as the POC, as a read from GitHub is, and on a pull its fields taken onto the case through the case's own actions. It reaches the same diff and the same sanitizing sinks of §6a as an advisory Varsel read itself (`answer_names_request.ex`, `record_answer.ex`, `store_advisory.ex`, `pull.ex`) |
 | `VersionEvent` | `commit_sha` | data | Yes — POC / assigned supporter | Regex-constrained to hex SHA before git use (`affected_package.ex`) |
 | `CveRecord.request_publish` / `update` | `cve_json` (CNA container) | data | POC only | Validated (`ValidCveRecord`, cvelint, schema) then pushed to MITRE |
@@ -984,8 +987,8 @@ none of the authorization properties, by construction rather than by defect.
    The size cap sits on the report's only create, `:intake`, which both
    intake actions on `Varsel.Cases.Case` reach. The rate limit sits on
    `:submit_report` itself, so the form, GraphQL and MCP all draw from the
-   same budget; POCs and supporters are deliberately
-   exempt. The counter is ETS (`Varsel.Hammer`), replicated across the cluster
+   same budget, and `:submit_from_github_advisory` draws from it too; POCs
+   and supporters are deliberately exempt. The counter is ETS (`Varsel.Hammer`), replicated across the cluster
    over PubSub: it resets on restart/deploy, and because replication is
    asynchronous, concurrent hits on different nodes can each be allowed before
    the other's broadcast lands.
@@ -1140,7 +1143,7 @@ number.
 | Commit-graph walk | 250k commits |
 | Orphaned Oban jobs | `Lifeline` rescue at 30 min |
 | `report_json` | 256 KiB, configurable |
-| Report submissions, role-less reporter | 25 per 24 h |
+| Report and advisory submissions, role-less user | 25 per 24 h, together |
 | Free-text and markdown fields | `max_length` on every one |
 
 - *Violation symptom:* an operation outruns its bound, or a bound the table

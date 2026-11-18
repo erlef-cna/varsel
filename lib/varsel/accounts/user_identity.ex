@@ -116,6 +116,14 @@ defmodule Varsel.Accounts.UserIdentity do
       filter expr(strategy == ^arg(:strategy) and username == ^arg(:username))
     end
 
+    read :poc_github_handles do
+      description "The GitHub handles of the Points of Contact. Each row holds only the handle."
+      public? false
+
+      filter expr(strategy == "github" and not is_nil(username) and user.role == :poc)
+      prepare build(select: [:username], sort: [username: :asc])
+    end
+
     # Mirrors the action AshAuthentication would generate (see
     # `AshAuthentication.UserIdentity.Transformer`), with the provider's email
     # recorded alongside the tokens so each linked provider keeps the address
@@ -182,9 +190,16 @@ defmodule Varsel.Accounts.UserIdentity do
     # People read identities through the user they belong to, whose own
     # policy already decided whether that row is visible. The OAuth tokens
     # are private fields, so they are never readable through the API at all.
-    policy action_type(:read) do
+    policy action([:read, :for_handle]) do
       authorize_if actor_attribute_equals(:system, :identity_claim)
       authorize_if accessing_from(User, :identities)
+    end
+
+    # The Maintainer Process page publishes these handles. A reporter needs
+    # them to add the CNA to a GitHub advisory.
+    policy action(:poc_github_handles) do
+      access_type :strict
+      authorize_if actor_present()
     end
 
     policy action(:refresh_access_token) do

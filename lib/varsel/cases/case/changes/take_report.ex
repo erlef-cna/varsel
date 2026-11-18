@@ -67,9 +67,15 @@ defmodule Varsel.Cases.Case.Changes.TakeReport do
   # A structured `report_json` wins over a free-text body, so a structured
   # submission is never clobbered when both arrive.
   defp report_json(changeset) do
-    case {Changeset.get_argument(changeset, :report_json), Changeset.get_argument(changeset, :report_body)} do
-      {nil, body} when is_binary(body) -> %{"report" => body}
-      {report_json, _body} -> report_json
+    report_json =
+      case {Changeset.get_argument(changeset, :report_json), Changeset.get_argument(changeset, :report_body)} do
+        {nil, body} when is_binary(body) -> %{"report" => body}
+        {report_json, _body} -> report_json
+      end
+
+    case Changeset.get_argument(changeset, :advisory_url) do
+      url when is_binary(url) -> Map.put(report_json || %{}, "github_advisory", String.trim(url))
+      _none -> report_json
     end
   end
 
