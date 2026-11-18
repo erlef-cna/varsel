@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Captures the guide screenshots from a dev server staged by
-// docs_screenshots.exs, into priv/static/images/guide/. Dependency-free:
+// docs_screenshots.exs, into priv/static/images/. Dependency-free:
 // plain Node (>= 22, for the built-in WebSocket) driving a headless Chrome
 // over the DevTools protocol.
 //
@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:4000";
-const OUT = "priv/static/images/guide";
+const IMAGES = "priv/static/images";
 const CHROME =
   process.env.CHROME_BIN ??
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -33,9 +33,11 @@ const manifest = JSON.parse(
 );
 const caseUrl = `/cases/${manifest.main_case_id}`;
 
-// One entry per published screenshot. `scrollTo` scrolls the first h2/h3
-// whose text contains the string into view before capturing; `height` clips
-// the viewport; `evaluate` runs before the capture.
+// One entry per published screenshot, written to `dir` (default "guide")
+// under priv/static/images/. `scrollTo` scrolls the first h2/h3 whose text
+// contains the string into view before capturing; `height` clips the
+// viewport; `evaluate` runs before the capture, and `wait` is how long the
+// page then gets to settle (default 200 ms).
 //
 // The triage and users shots must show seeded data only, whatever else the
 // local dev database holds: the POC's board is searched down to the seeded
@@ -44,6 +46,22 @@ const shots = [
   { role: "supporter", path: "/cases", file: "case-board.png" },
   { role: "supporter", path: caseUrl, file: "case-workspace.png" },
   { role: "supporter", path: caseUrl, scrollTo: "Affected", file: "affected-packages.png" },
+  {
+    role: "supporter",
+    path: caseUrl,
+    dir: "coordinator-process",
+    file: "case-request-review.png",
+    height: 560,
+    evaluate: `window.scrollTo({ top: 0, behavior: "instant" });`,
+  },
+  {
+    role: "supporter",
+    path: `/cases/${manifest.report_case_id}`,
+    dir: "coordinator-process",
+    file: "case-triage.png",
+    height: 560,
+    evaluate: `document.querySelector('[aria-label="More case actions"]').focus();`,
+  },
   { role: "poc", path: "/cases?q=webhook_relay", file: "report-triage.png", height: 560 },
   {
     role: "poc",
@@ -60,6 +78,36 @@ const shots = [
     `,
   },
   { role: "none", path: caseUrl, file: "maintainer-view.png" },
+  {
+    role: "none",
+    path: `${caseUrl}/github`,
+    dir: "maintainer-process",
+    file: "case-github-tab.png",
+    height: 1440,
+  },
+  {
+    role: "none",
+    path: `${caseUrl}/comments`,
+    dir: "maintainer-process",
+    file: "case-advisory-comments.png",
+    height: 1060,
+  },
+  {
+    // The fictional repository has no installation of the app, so the form
+    // asks whether the maintainer can install it.
+    role: "none",
+    path: "/report/advisory",
+    dir: "maintainer-process",
+    file: "report-advisory.png",
+    height: 600,
+    wait: 1200,
+    evaluate: `
+      const input = document.querySelector("#github-advisory-form input[type=text]");
+      input.value = "https://github.com/acme/webhook_relay/security/advisories/GHSA-4h8v-f6jx-m2qp";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector("#github-advisory-form button[type=submit]").click();
+    `,
+  },
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -146,8 +194,6 @@ try {
     await sleep(1200); // LiveView connect + first patch
   };
 
-  await mkdir(OUT, { recursive: true });
-
   let role;
   for (const shot of shots) {
     if (shot.role !== role) {
@@ -173,7 +219,7 @@ try {
 
     if (shot.evaluate) {
       await evaluate(shot.evaluate);
-      await sleep(200);
+      await sleep(shot.wait ?? 200);
     }
 
     if (shot.scrollTo) {
@@ -192,7 +238,9 @@ try {
     }
 
     const { data } = await cdp.send("Page.captureScreenshot", { format: "png" }, sessionId);
-    await writeFile(join(OUT, shot.file), Buffer.from(data, "base64"));
+    const dir = join(IMAGES, shot.dir ?? "guide");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, shot.file), Buffer.from(data, "base64"));
     console.log(`${shot.file} (${shot.role} @ ${shot.path})`);
   }
 

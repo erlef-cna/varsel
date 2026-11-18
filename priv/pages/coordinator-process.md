@@ -106,64 +106,65 @@ this schema, and this site validates them against it before publication (see
 ## 6. The Coordination Process
 
 :::steps
-1. **Receive the Report**
+1. **Get Assigned to a Case**
 
-   We will contact you privately with a vulnerability report. Treat all details
-   as confidential until the advisory is published.
+   A CNA Point of Contact assigns you to a reported case while it is still
+   *Submitted*. You are notified, and the case shows on your [Cases](/cases)
+   board. Treat everything on it as confidential until the advisory is
+   published.
 
 2. **Triage**
 
-   Determine whether the report warrants a CVE. Check our
-   [CVE Criteria](/cve-criteria) page for guidance.
+   Check the report against our [CVE Criteria](/cve-criteria). Reproduce the
+   claim with a minimal proof of concept: it confirms the report, gives the
+   maintainer something concrete, and informs the CVSS score. Then decide on
+   the case page:
 
-   - **If yes:** open a case in Varsel and take the next free CVE ID; see
-     [Filing a CVE](/guide/filing-a-case).
-   - **If no:** it may still be a bug worth reporting. Open an issue or send a PR to the affected project instead.
+   - **Accept** the case, and it opens as a draft.
+   - **Reject** it with a reason. A report that is not a vulnerability may
+     still be a bug worth an issue or a PR on the affected project.
+   - **Merge** it into a case for the same finding. You need to be on both
+     cases.
+   - **Split** off a new case for each further finding the report holds.
 
-3. **Find Contact Information**
+   Mark the case *Under triage* while you work on it, so others see it is
+   taken.
 
-   Work through these options in order to find how to reach the maintainer:
+   ![A submitted case with Accept case, Under triage, and the menu with split, merge and reject](/images/coordinator-process/case-triage.png)
 
-   - Check for a `SECURITY.md` file in the repository.
-   - Check if GitHub Private Vulnerability Reporting is enabled.
-   - Look for an email on the Hex.pm user profile or GitHub profile.
-   - If no email is public, check the git log; commit author emails are often
-     available there.
+3. **Take a CVE ID**
 
-   When coordinating via email, always CC **cna@erlef.org** on all communications.
+   Once the case is accepted, take the next free CVE ID on the case yourself.
 
-4. **Write a Proof of Concept**
+4. **Fill In the Record**
 
-   Demonstrate that the vulnerability actually exists with a minimal reproducible
-   example. This confirms the report is valid and gives the maintainer something
-   concrete to work with, and it also informs accurate CVSS scoring.
+   Write the description, score CVSS v4.0, classify the CWE and CAPEC, enter
+   the affected versions, and credit the people involved.
+   [Filing a CVE](/guide/filing-a-case) walks through the case, and
+   [Record Conventions](/guide/record-conventions) is the house style.
 
-5. **Assess CVSS, CWE, and Affected Versions**
+5. **Bring the Maintainer In**
 
-   Score the vulnerability using CVSS v4.0, identify the CWE weakness type, and
-   determine which version ranges are affected.
+   Invite the maintainers to the case by their GitHub or Hex.pm handles, and
+   mark them as *Maintainer*. Their invite email asks them to respond and
+   links the [Maintainer Process](/maintainer-process).
 
-6. **Report to the Maintainer**
+   When the repository has GitHub Private Vulnerability Reporting enabled,
+   also report the vulnerability from the case's **GitHub** tab. It sends the
+   maintainers a private vulnerability report with everything the case
+   states, and links the advisory GitHub opens to the case. When an advisory
+   already exists, link it there instead. Ask the maintainers to install the
+   EEF CNA GitHub App, so the advisory and the case stay in sync.
 
-   Your report should include:
+   Coordinate on the advisory or in the case comments.
 
-   - A description of the vulnerability
-   - The proof of concept
-   - The CVE ID
-   - CVSS score and CWE classification
-   - Affected packages and version ranges (including any related artifacts such
-     as Docker images)
-   - A link to the [Maintainer Process](/maintainer-process) page
+6. **Coordinate the Fix**
 
-   If you have a patch ready, include it as well.
-
-7. **Coordinate with the Maintainer**
-
-   Work with the maintainer to get a patch written, reviewed, and a release date
-   agreed. Refer them to the [Maintainer Process](/maintainer-process) page for
+   Work with the maintainer to get a patch written, reviewed, and a release
+   date agreed. The [Maintainer Process](/maintainer-process) gives them
    step-by-step guidance.
 
-8. **Prepare the Public Summary**
+7. **Prepare the Public Summary**
 
    The initial report contained full details including a proof of concept. The
    public advisory should be concise. Write a public-facing summary following the
@@ -172,6 +173,17 @@ this schema, and this site validates them against it before publication (see
    versions. Leave out exploit details and internal investigation notes. See
    [this advisory](https://github.com/ex-aws/ex_aws_sns/security/advisories/GHSA-8jgf-23q5-x7xx)
    as an example.
+
+8. **Request Approval**
+
+   Request review as soon as the record is complete and
+   [verifies clean](/guide/record-conventions). Do not wait for the patch or
+   the release: an early request gives the Points of Contact ample time to
+   review. A Point of Contact sends the case back with findings, or approves
+   it. Late details, such as the fixed version, still fit after approval: a
+   Point of Contact adds them, or you reopen the case.
+
+   ![A draft case with its Request review button](/images/coordinator-process/case-request-review.png)
 
 9. **Observe Timelines**
 
@@ -185,16 +197,11 @@ this schema, and this site validates them against it before publication (see
      follow up via alternative channels. If there is still no response after 14 days,
      we will publish without maintainer involvement.
 
-10. **Prepare the CVE Record**
+10. **Publication**
 
-    Work the case in Varsel until it
-    [verifies clean](/guide/record-conventions), then send it to review for a
-    CNA Point of Contact.
-
-11. **Trigger Publication**
-
-    Once the maintainer has merged the fix, released a new version, and published
-    the advisory, a CNA Point of Contact publishes the CVE from the approved case.
+    Only a CNA Point of Contact publishes. Once the maintainer has released
+    the fix and published the advisory, a Point of Contact publishes the CVE
+    from the approved case. Tell them when the disclosure date is set.
 :::
 
 ## 7. CNA Internal Process & Tooling
@@ -206,7 +213,9 @@ feeds.
 
 As a coordinator you work in it directly: sign in with GitHub or Hex.pm, and
 once we grant you the `supporter` role (the app's name for the coordinator
-job), you open cases, draft records, and send them to review. The
+job), you work the cases a Point of Contact assigns you: triage, CVE IDs,
+records, and review requests. You can also open a case for a finding of your
+own. The
 [Varsel Guide](/guide) documents all of it; start with
 [Filing a CVE](/guide/filing-a-case).
 

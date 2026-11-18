@@ -7,108 +7,167 @@
 This page explains how coordinated disclosure works when the EEF CNA is involved,
 whether we reached out to you or you came to us with a report from a third party.
 
-## 1. How You May Be Contacted
+## 1. How We Work Together
 
-### 1.1 The CNA Contacts You
+You and the CNA each own one part of the disclosure:
 
-If we have received a vulnerability report concerning your project, we will reach out to
-you directly. You can expect a personal email from one of our Points of Contact, or an
-invitation to a **GitHub Security Advisory** on your repository.
+- **You own the advisory and the fix.** You triage the report, write the patch,
+  release it, and publish your GitHub Security Advisory.
+- **The CNA owns the CVE record.** We assign the CVE ID and write the published
+  record: description, severity, weakness classification, affected versions, and
+  credits. We publish it to [CVE.org](https://www.cve.org/),
+  [OSV.dev](https://osv.dev/), and [Hex.pm](https://hex.pm/).
 
-Our initial message will include:
+The **EEF CNA GitHub App** connects the two. With the app installed on your
+repository, the CNA reads your advisory, follows its discussion, and writes the
+CVE ID and the record details back onto it. You keep working on GitHub, and we
+do not have to copy anything by hand. We strongly encourage you to install it.
+[§4](#4-what-the-github-integration-does) lists what the app does.
 
-- A summary of the reported vulnerability
-- The CVE ID we have reserved (or a note that we will assign one)
-- A request to confirm your preferred coordination channel (GitHub Advisory or email)
-- Access to follow the in-progress CVE record on this site (see
-  [§4](#4-following-the-cve-record-on-this-site))
+## 2. Enable Private Vulnerability Reporting
 
-### 1.2 You Contact the CNA
+We strongly recommend
+[GitHub Private Vulnerability Reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability).
+It lets reporters and the CNA report a vulnerability to you privately. It keeps
+all communication, patches, and timelines in one private advisory.
 
-If you have received a vulnerability report from a third party and need a CVE number,
-[report it on this site](/report). When the vulnerability already has a GitHub Security
-Advisory on your repository, the form takes the advisory itself (see [§2](#2-preferred-channel-github-private-vulnerability-reporting)).
-You can also reach out to us via our [Contact](/contact) page. We will acknowledge your
-report within **two business days** and guide you through the rest of the process.
+In your GitHub repository, go to the *Security and Quality* page and click
+*"Enable vulnerability reporting"*. This opens the repository settings. Click
+*"Enable"* in the *Private vulnerability reporting* section.
 
-## 2. Preferred Channel: GitHub Private Vulnerability Reporting
+![Security and Quality page with Enable vulnerability reporting button highlighted](/images/maintainer-process/enable-private-reporting-1.png)
 
-We strongly recommend using [GitHub Private Vulnerability Reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability)
-for coordinating disclosure. It keeps all communication, patches, and timelines in one
-place, and makes it easy to collaborate privately.
+![Repository settings with Enable button in Private vulnerability reporting section](/images/maintainer-process/enable-private-reporting-2.png)
+
+## 3. Getting Started
+
+### 3.1 You Have a GitHub Security Advisory
+
+This is the preferred way to bring a vulnerability to the CNA. It applies when a
+third party reported a vulnerability to you and the advisory is on your
+repository.
 
 :::steps
-1. **Enable Private Vulnerability Reporting**
+1. **Report the advisory on this site**
 
-   In your GitHub repository, go to the *Security and Quality* page and click
-   *"Enable vulnerability reporting"*. This will navigate you to the repository
-   settings — click *"Enable"* in the *Private vulnerability reporting* section.
+   Sign in with GitHub and open the [report form](/report). Answer that there is
+   an advisory and that you maintain the repository, then paste the advisory's
+   URL.
 
-   ![Security and Quality page with Enable vulnerability reporting button highlighted](/images/maintainer-process/enable-private-reporting-1.png)
+2. **Install the EEF CNA GitHub App**
 
-   ![Repository settings with Enable button in Private vulnerability reporting section](/images/maintainer-process/enable-private-reporting-2.png)
+   When the app is not yet installed on the repository, the form asks whether you
+   can install it, and links to it. Installing an app takes owner rights on the
+   account that holds the repository. It takes admin rights on the repository
+   when the owner lets admins install apps. After the install, click *Check
+   again* and submit.
 
-2. **Submit the Advisory to the CNA**
+   ![The report form asking whether you can install the EEF CNA GitHub App on the advisory's repository](/images/maintainer-process/report-advisory.png)
 
-   [Report the vulnerability on this site](/report): answer that there is an
-   advisory and that you maintain the repository, and paste the advisory's URL.
-   The CNA reads the advisory with your own GitHub login through the EEF CNA
-   GitHub App, opens a case for it, and follows its discussion from then on.
-   You are on the case from the start. When the app is not yet installed on the
-   repository, the form asks whether you can install it and links to it.
+3. **Follow the case**
 
-   If you cannot install a GitHub App on the repository, the form asks you to add
-   our Points of Contact to the private advisory as collaborators instead, and to
-   send us its URL with a short report:
-
-   - `@IngelaAndin` — Ingela Andin, OTP Core Contributor
-   - `@maennchen` — Jonatan Männchen, CISO, EEF
-   - `@voltone` — Bram Verburg, Security WG Chair
-
-   ![GitHub advisory collaborators section](/images/maintainer-process/collaborators.png)
-
-3. **Set the CVE ID Field**
-
-   When creating the advisory, choose *"Request CVE ID later"*. Once we
-   provide the CVE ID, edit the advisory and select *"I have an existing CVE ID"*.
-
-   ![Advisory creation form with Request CVE ID later option selected](/images/maintainer-process/cve-later.png)
-
-   ![Advisory edit form with I have an existing CVE ID option and input field](/images/maintainer-process/cve-input.png)
+   The form opens a case for the advisory on this site, and you are on it from
+   the start. The CNA acknowledges it within **two business days**. From here,
+   [§6](#6-the-disclosure-process) describes the rest.
 :::
 
-## 3. Email Alternative
+If you cannot install a GitHub App on the repository, answer *No*. The form then
+asks you to add our Points of Contact to the advisory as collaborators, and to
+send us the advisory's URL with a short report. Everything still works, but each
+sync step becomes a manual step on our side.
 
-If your project is not hosted on GitHub, or you prefer email, you can coordinate
-everything through **cna@erlef.org**. Encrypted communication is also supported; see
-the [Contact page](/contact) for our GPG key and fingerprint.
+![GitHub advisory collaborators section](/images/maintainer-process/collaborators.png)
 
-## 4. Following the CVE Record on This Site
+### 3.2 The CNA Contacts You
 
-While the advisory and the patch work happen on GitHub or by email, the CVE
-record itself is drafted on this site, and granting you access to the
-in-progress case is our standard practice: we grant it to your GitHub or
-Hex.pm handle, and signing in with that account is all it takes. No prior
+When we receive a vulnerability report about your project, we contact you
+directly. On GitHub, we send you a private vulnerability report, which opens a
+draft advisory on your repository. Otherwise, we email you.
+
+You also get an email that invites you to the case on this site. It tells you
+what to expect and when we need an answer. You do not need a fix to reply.
+
+Install the EEF CNA GitHub App on the repository, so the case and the advisory
+stay in sync (see [§4](#4-what-the-github-integration-does)). Your CNA contact
+sends you the link.
+
+### 3.3 Without GitHub
+
+If your project is not hosted on GitHub, [report the vulnerability on this
+site](/report) without an advisory. The form opens a case, and you are on it
+from the start. Coordinate in the case's comments: they stay with the CVE
+record, and everyone on the case sees them.
+
+Use email only when the case does not work for you. Write to
+**cna@erlef.org**. Encrypted communication is also supported. See the
+[Contact page](/contact) for our GPG key and fingerprint.
+
+## 4. What the GitHub Integration Does
+
+With the EEF CNA GitHub App installed, the CNA's case and your advisory stay
+connected:
+
+| What | Direction | When |
+| --- | --- | --- |
+| Advisory discussion | Advisory → case | Automatically, every few minutes, while the case is open |
+| Case comments | Case → advisory | When the author ticks *Also post this comment on the linked GitHub advisory* |
+| CVE ID, severity, weaknesses, description, affected versions, credits | Case → advisory | When the CNA pushes them |
+| Credits, affected versions, title | Advisory → case | When the CNA pulls them |
+| People | Both ways | The CNA adds people on the case as advisory collaborators, and gives people on the advisory access to the case |
+
+You do not need to fill in every field of the advisory:
+
+- **Credits: please fill them in.** Credit everyone who found, reported, or
+  helped fix the vulnerability, with their GitHub login. You know these people
+  best, and we take the credits over into the CVE record.
+- **Affected and patched versions:** fill them in if you know them. We verify
+  them against the repository.
+- **CVSS and CWE: optional.** The CNA sets the severity and the weakness
+  classification of the CVE record, and pushes them to the advisory.
+- **CVE ID: leave it to us.** Choose *"Request CVE ID later"* when you create
+  the advisory. Do **not** request a CVE ID from GitHub. We push the CVE ID to
+  the advisory.
+
+  ![Advisory creation form with Request CVE ID later option selected](/images/maintainer-process/cve-later.png)
+
+The case's **GitHub** tab sets the case against the advisory, field by field, and
+shows who has access on either side.
+
+![The GitHub tab of a case: the CVE record and the advisory field by field](/images/maintainer-process/case-github-tab.png)
+
+The discussion on the advisory and the comments on the case show in one stream.
+
+![Case comments, with a comment synced from the advisory and the option to post on the advisory as well](/images/maintainer-process/case-advisory-comments.png)
+
+Without the app, the CNA does these steps by hand. Then you enter the CVE ID on
+the advisory yourself: go to *Edit* → *CVE identifier* → *I have an existing CVE
+ID*, and enter the ID we give you.
+
+![Advisory edit form with I have an existing CVE ID option and input field](/images/maintainer-process/cve-input.png)
+
+## 5. Following the CVE Record on This Site
+
+The CVE record is drafted on this site. We give you access to the case by your
+GitHub or Hex.pm handle, and you sign in with that account. No prior
 registration is needed.
 
 On the case you see the draft record exactly as it will be published: the
 description, severity, affected version ranges, and credits. You can comment,
 and you can propose corrections to any field. Maintainers usually know the
-affected versions and the fix timeline better than anyone, and a proposal is
-exactly the right way to hand us that knowledge. The CNA reviews every
-proposal, and what is ultimately published is the CNA's decision, per our
-[governance policy](https://github.com/erlef-cna/.github/blob/main/GOVERNANCE.md).
+affected versions and the fix timeline better than anyone, so a proposal is the
+right way to give us that knowledge. The CNA reviews every proposal.
 
 ![An invited maintainer's view of an in-progress case: the draft record, their own suggestions, and the discussion](/images/guide/maintainer-view.png)
 
-One caveat: the site sends no emails yet. Your CNA contact tells you when
-there is something to look at, and nobody is notified of comments, so keep
-anything time-sensitive on the advisory thread or email.
+The bell in the header shows comments, mentions, and changes to your cases. In
+the [notification settings](/settings/notifications) you choose what you hear
+about and whether it also reaches you by email. Notification emails carry no
+case details, only a link back here.
 
 Everything on an unpublished case is embargoed and visible only to the people
 on it. The [Varsel Guide](/guide) has the rest of the detail.
 
-## 5. The Disclosure Process
+## 6. The Disclosure Process
 
 Once initial contact is established, the typical workflow is as follows:
 
@@ -124,20 +183,23 @@ Once initial contact is established, the typical workflow is as follows:
 
    ![GitHub advisory collaborators section](/images/maintainer-process/collaborators.png)
 
-3. **Set the CVE ID**
+3. **Fill In the Credits**
 
-   We will provide you with a CVE ID. In the advisory, go to
-   *Edit* → *CVE identifier* → *I have an existing CVE ID*
-   and enter the ID we give you. Do **not** request a CVE ID from GitHub.
-
-   ![Advisory edit form with I have an existing CVE ID option and input field](/images/maintainer-process/cve-input.png)
+   Credit the reporters and everyone else who helped on the advisory (see
+   [§4](#4-what-the-github-integration-does)). The CNA pushes the CVE ID to the
+   advisory. Without the app, enter the ID we give you yourself.
 
 4. **Create a Private Fork**
 
    Use GitHub's *"Start a temporary private fork"* button on the advisory page.
    All patch development should happen in this private fork, not on your public
-   repository. If you are coordinating via email, you can also send the patch as an
-   attachment or inline diff instead.
+   repository. Without GitHub, post the patch as a diff in a case comment.
+
+   CI does not run on the private fork, so run your tests locally. When you
+   merge, GitHub merges all open PRs of the fork at once, and only one of them
+   may target `main`. GitHub's guide to
+   [collaborating in a temporary private fork](https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/collaborating-in-a-temporary-private-fork-to-resolve-a-repository-security-vulnerability)
+   has the details.
 
    ![Advisory page with Start a temporary private fork button](/images/maintainer-process/temporary-fork-start.png)
 
@@ -156,16 +218,18 @@ Once initial contact is established, the typical workflow is as follows:
 6. **Review & Test**
 
    Reporters test the patch and provide feedback. Iterate privately until everyone
-   is satisfied with the fix. In parallel, the CNA will fill in the advisory details:
+   is satisfied with the fix. In parallel, the CNA writes the CVE record: the
    [CWE](https://cwe.mitre.org/) (weakness type),
-   [CVSS](https://www.first.org/cvss/) (severity score), credits, and
-   the public description.
+   [CVSS](https://www.first.org/cvss/) (severity score), affected versions,
+   credits, and the public description. With the app installed, we push them to
+   your advisory.
 
 7. **Coordinate Release Date**
 
    Agree on a publication date with the CNA. We appreciate a heads-up so we can
-   be ready to publish the CVE promptly. You can use the GHSA comments to
-   coordinate; comments remain private even after the advisory is published.
+   be ready to publish the CVE promptly. Use the advisory's comments to
+   coordinate. With the app installed, they also reach the case. Comments stay
+   private even after the advisory is published.
 
 8. **Merge & Release**
 
@@ -185,9 +249,9 @@ Once initial contact is established, the typical workflow is as follows:
 
     Once the advisory is published, we will publish the CVE to
     [CVE.org](https://www.cve.org/), [OSV.dev](https://osv.dev/),
-    and [Hex.pm](https://hex.pm/). In the near future, `mix deps.get`,
-    `rebar3 deps get`, and `gleam deps download` will warn users
-    when they install a package with a known vulnerability.
+    and [Hex.pm](https://hex.pm/). `mix deps.get` then warns users when
+    they install a package with a known vulnerability. In the near future,
+    `rebar3 deps get` and `gleam deps download` will warn them too.
 
     ![CVE published on cna.erlef.org](/images/maintainer-process/advisory-cna.erlef.org.png)
 
@@ -205,7 +269,7 @@ Once initial contact is established, the typical workflow is as follows:
     its own announcements.
 :::
 
-## 6. Timelines & Embargo
+## 7. Timelines & Embargo
 
 > **Note:** **Do not make anything public before the advisory is published.** This includes public Pull Requests, commits to main, public issues, blog posts, social media posts, or any other public communication referencing the vulnerability. **If information becomes public, our disclosure timeline immediately shifts to 24 hours or less**, regardless of whether a patch is ready.
 
@@ -222,7 +286,7 @@ Key timeframes:
 Please remain reachable throughout the process. We will always try to give you a
 heads-up before we publish.
 
-## 7. What Not to Do
+## 8. What Not to Do
 
 The following actions break the embargo and can cause the CVE to be published
 immediately, even if no patch is available:
@@ -234,7 +298,7 @@ immediately, even if no patch is available:
 - Announcing a "security release" before the advisory is ready
 - Posting about the vulnerability on social media, a blog, or a mailing list
 
-## 8. Feedback
+## 9. Feedback
 
 Once you are through the process, we would love to hear your feedback on this document.
 If anything took extra time to figure out or required clarification, we want to know so
@@ -242,7 +306,7 @@ we can make it clearer for future maintainers. You can reach us via the
 [Contact](/contact) page, or send a Pull Request directly to
 [this file on GitHub](https://github.com/erlef-cna/varsel/blob/main/priv/pages/maintainer-process.md).
 
-## 9. Further Resources
+## 10. Further Resources
 
 - [Contact](/contact) — Reach out to the CNA
 - [CVE Criteria](/cve-criteria) — What qualifies for a CVE
