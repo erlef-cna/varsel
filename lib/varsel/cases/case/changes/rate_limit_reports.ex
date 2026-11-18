@@ -4,9 +4,9 @@
 
 defmodule Varsel.Cases.Case.Changes.RateLimitReports do
   @moduledoc """
-  Rate limits `:submit_report` to 25 reports per day and reporter for users
-  without a role. Users the CNA has vouched for (POC or supporter) are not
-  limited.
+  Rate limits `:submit_report` and `:submit_from_github_advisory` to 25
+  submissions per day and reporter for users without a role, both counted
+  together. Users the CNA has vouched for (POC or supporter) are not limited.
   """
 
   use Ash.Resource.Change

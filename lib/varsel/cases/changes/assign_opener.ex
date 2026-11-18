@@ -6,6 +6,7 @@ defmodule Varsel.Cases.Changes.AssignOpener do
   @moduledoc """
   Fills the `:open` action's `assignments` argument with the acting user, so
   the managed relationship creates their assignment alongside the case.
+  `note` says why they are on it, "Opened the case" unless given.
 
   Whoever opens a case is working it, and for a supporter the assignment is
   what grants access at all — without it they would open a case and lose
@@ -16,9 +17,9 @@ defmodule Varsel.Cases.Changes.AssignOpener do
   use Ash.Resource.Change
 
   @impl Ash.Resource.Change
-  def change(changeset, _opts, %{actor: %{id: user_id}}) do
+  def change(changeset, opts, %{actor: %{id: user_id}}) do
     Ash.Changeset.set_argument(changeset, :assignments, [
-      %{user_id: user_id, note: "Opened the case"}
+      %{user_id: user_id, note: Keyword.get(opts, :note, "Opened the case")}
     ])
   end
 

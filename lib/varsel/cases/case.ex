@@ -86,12 +86,15 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.Changes.InheritFromSource
   alias Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory
   alias Varsel.Cases.Case.Changes.PublishToCveRecord
+  alias Varsel.Cases.Case.Changes.RateLimitReports
   alias Varsel.Cases.Case.Changes.TakeReport
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
   alias Varsel.Cases.Changes.AssignOpener
   alias Varsel.Cases.Signals
+  alias Varsel.Cases.Validations.AdvisoryIsFree
+  alias Varsel.Cases.Validations.AdvisoryUrl
   alias Varsel.Cases.Validations.CveIdAssignable
   alias Varsel.Cases.VulnerabilityReport
   alias Varsel.Types.TSVector
@@ -374,7 +377,7 @@ defmodule Varsel.Cases.Case do
         public? false
       end
 
-      validate Varsel.Cases.Validations.AdvisoryIsFree
+      validate AdvisoryIsFree
 
       change AssignOpener
       change manage_relationship(:assignments, type: :create)
@@ -399,6 +402,42 @@ defmodule Varsel.Cases.Case do
       change AssignOpener
       change manage_relationship(:assignments, type: :create)
       change OpenFromGitHubAdvisory
+    end
+
+    create :submit_from_github_advisory do
+      description """
+      A repository's maintainer submits the GitHub security advisory they hold
+      on it, which opens a case in :submitted that they are assigned to. The
+      case takes the advisory's title and is linked to it. Nothing else of the
+      advisory is written to the case. Only a repository advisory is taken.
+
+      The advisory is read with the caller's own GitHub token, so the EEF CNA
+      app must be installed on the repository and reach the caller's login.
+      Reporters without a role are rate limited to 25 submissions per day,
+      counted together with `:submit_report`.
+      """
+
+      accept []
+
+      argument :advisory_url, :string do
+        allow_nil? false
+        description "The advisory's URL on its repository's GitHub security page."
+      end
+
+      argument :assignments, {:array, :map} do
+        public? false
+      end
+
+      validate {AdvisoryUrl, repository?: true}
+      validate AdvisoryIsFree
+
+      change set_attribute(:state, :submitted)
+      change RateLimitReports
+      change {AssignOpener, note: "Submitted the advisory as a maintainer"}
+      change manage_relationship(:assignments, type: :create)
+      change {OpenFromGitHubAdvisory, content?: false}
+
+      emit Signals, :report_submitted, fields: [case_id: :id], values: [actor_id: actor(:id)]
     end
 
     update :edit do
@@ -699,7 +738,9 @@ defmodule Varsel.Cases.Case do
       A signed-in reporter submits a vulnerability report, which opens a case
       in :submitted that they are assigned to. The report is free-form:
       either arbitrary `report_json`, or a free-text `report_body` stored as
-      `%{"report" => body}`. The reporter must confirm both that the report
+      `%{"report" => body}`. A GitHub advisory the reporter names is kept in
+      the report as `"github_advisory"`, for the CNA to link. The reporter must
+      confirm both that the report
       matches the CVE criteria and that the vulnerability is in scope for
       the CNA. These are submission-time affirmations, validated but not
       stored. Reporters without a role are rate limited to 25 submissions per
@@ -722,11 +763,17 @@ defmodule Varsel.Cases.Case do
         constraints allow_empty?: true, trim?: false, max_length: 200_000
       end
 
+      argument :advisory_url, :string do
+        description "The GitHub advisory the vulnerability already has, by URL or GHSA id."
+      end
+
       argument :confirms_criteria, :boolean, allow_nil?: false
       argument :confirms_in_scope, :boolean, allow_nil?: false
 
       argument :report, :map, public?: false
       argument :assignments, {:array, :map}, public?: false
+
+      validate AdvisoryUrl
 
       validate argument_equals(:confirms_criteria, true) do
         message "You must confirm the report matches the CVE criteria."
@@ -737,7 +784,7 @@ defmodule Varsel.Cases.Case do
       end
 
       change set_attribute(:state, :submitted)
-      change Varsel.Cases.Case.Changes.RateLimitReports
+      change RateLimitReports
       change TakeReport
       change AssignOpener
       change manage_relationship(:report, :vulnerability_reports, type: :create)
@@ -1050,8 +1097,9 @@ defmodule Varsel.Cases.Case do
     end
 
     # Any signed-in user may report a vulnerability, and is recorded as the
-    # reporter.
-    policy action(:submit_report) do
+    # reporter. Submitting an advisory needs no role either: GitHub decides
+    # whether the caller's own token may read it.
+    policy action([:submit_report, :submit_from_github_advisory]) do
       authorize_if actor_present()
     end
 
@@ -1113,7 +1161,16 @@ defmodule Varsel.Cases.Case do
 
     change set_attribute(:accepted_at, &DateTime.utc_now/0),
       on: [:create],
-      where: [negate(action_is([:submit_report, :submit_report_from_hex, :split]))]
+      where: [
+        negate(
+          action_is([
+            :submit_report,
+            :submit_report_from_hex,
+            :submit_from_github_advisory,
+            :split
+          ])
+        )
+      ]
   end
 
   attributes do

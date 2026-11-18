@@ -17,6 +17,19 @@ maintainers hex.pm named are on the case from the start. You and the
 supporters on it can edit the case while you triage it. The reporter and the
 maintainers comment and suggest.
 
+A maintainer whose repository has the EEF CNA app installed submits their
+GitHub advisory on the form instead of a report. Their case holds no report.
+It arrives with the advisory's title and linked to it, with the maintainer on
+it, and the advisory is the claim you triage. Pull what the case should
+take from the advisory on its GitHub tab once you accept it. A report can also name an
+advisory the case is not linked to, as `github_advisory` beside its text.
+Everyone on a case can read its linked advisory and the advisory's comments,
+and the reporter is on the case. Before you link that advisory, check on
+GitHub that the reporter already has access to it, for example as a
+collaborator. Knowing an advisory's address does not give access to it. When
+the reporter has access, link the advisory on the case's GitHub tab once you
+accept it.
+
 Hold each case against the [CVE criteria](/cve-criteria) and decide on the
 case page:
 

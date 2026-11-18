@@ -362,6 +362,7 @@ defmodule Varsel.Cases do
       define :submit_vulnerability_report, action: :submit_report
       define :submit_hex_vulnerability_report, action: :submit_report_from_hex
       define :open_case_from_github_advisory, action: :open_from_github_advisory
+      define :submit_github_advisory, action: :submit_from_github_advisory
 
       define :open_case_from_github_advisory_attested,
         action: :open_from_github_advisory_attested

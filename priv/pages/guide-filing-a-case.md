@@ -4,8 +4,8 @@
 }
 ---
 
-Vulnerabilities reach us as GitHub advisory invites, email, reports
-submitted [on this site](/report), and findings of our own. This page is the
+Vulnerabilities reach us as GitHub advisory invites, email, reports and
+GitHub advisories submitted [on this site](/report), and findings of our own. This page is the
 path from there to a published CVE.
 
 :::steps

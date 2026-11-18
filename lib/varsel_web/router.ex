@@ -172,7 +172,12 @@ defmodule VarselWeb.Router do
       live "/cves", CveListLive, :index
       live "/cves/manage/:id", VarselEditLive, :edit
 
-      live "/report", VulnerabilityReportLive, :new
+      live "/report", VulnerabilityReportLive, :start
+      live "/report/new", VulnerabilityReportLive, :report
+      live "/report/maintainer", VulnerabilityReportLive, :maintainer
+      live "/report/reporter", VulnerabilityReportLive, :reporter
+      live "/report/advisory", VulnerabilityReportLive, :advisory
+      live "/report/collaborators", VulnerabilityReportLive, :collaborators
 
       live "/cases", CaseManagementLive, :index
       live "/cases/:id", CaseDetailLive, :view

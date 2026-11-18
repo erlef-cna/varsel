@@ -26,8 +26,10 @@ Our initial message will include:
 ### 1.2 You Contact the CNA
 
 If you have received a vulnerability report from a third party and need a CVE number,
-please reach out to us via our [Contact](/contact) page. We will acknowledge your report
-within **two business days** and guide you through the rest of the process.
+[report it on this site](/report). When the vulnerability already has a GitHub Security
+Advisory on your repository, the form takes the advisory itself (see [§2](#2-preferred-channel-github-private-vulnerability-reporting)).
+You can also reach out to us via our [Contact](/contact) page. We will acknowledge your
+report within **two business days** and guide you through the rest of the process.
 
 ## 2. Preferred Channel: GitHub Private Vulnerability Reporting
 
@@ -46,9 +48,18 @@ place, and makes it easy to collaborate privately.
 
    ![Repository settings with Enable button in Private vulnerability reporting section](/images/maintainer-process/enable-private-reporting-2.png)
 
-2. **Invite the CNA as Collaborators**
+2. **Submit the Advisory to the CNA**
 
-   Add our Points of Contact to the private advisory so we can assist with triage, assign the CVE ID, and coordinate publication.
+   [Report the vulnerability on this site](/report): answer that there is an
+   advisory and that you maintain the repository, and paste the advisory's URL.
+   The CNA reads the advisory with your own GitHub login through the EEF CNA
+   GitHub App, opens a case for it, and follows its discussion from then on.
+   You are on the case from the start. When the app is not yet installed on the
+   repository, the form asks whether you can install it and links to it.
+
+   If you cannot install a GitHub App on the repository, the form asks you to add
+   our Points of Contact to the private advisory as collaborators instead, and to
+   send us its URL with a short report:
 
    - `@IngelaAndin` — Ingela Andin, OTP Core Contributor
    - `@maennchen` — Jonatan Männchen, CISO, EEF

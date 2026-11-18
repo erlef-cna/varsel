@@ -17,24 +17,43 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory do
   case exists (`Varsel.Cases.GitHubAdvisory.Apply`), so the validations and
   policies that apply to adding the row by hand apply here too. The first
   child refused takes the whole create down with it.
+
+  With `content?: false` the case takes only the advisory's title and the
+  link, and no child rows.
   """
 
   use Ash.Resource.Change
 
   alias Ash.Changeset
+  alias Ash.Resource.Change
   alias Varsel.Cases.GitHubAdvisory.Apply
   alias Varsel.Cases.GitHubAdvisory.Fetch
   alias Varsel.Cases.GitHubAdvisory.Import
 
   @advisory_key :github_advisory
 
-  @impl Ash.Resource.Change
-  def change(changeset, _opts, context) do
+  @impl Change
+  def init(opts) do
+    if is_boolean(Keyword.get(opts, :content?, true)) do
+      {:ok, opts}
+    else
+      {:error, "`content?` must be a boolean"}
+    end
+  end
+
+  @impl Change
+  def change(changeset, opts, context) do
+    content? = Keyword.get(opts, :content?, true)
+
     changeset
     |> attest_or_fetch(context.actor)
-    |> Changeset.before_action(&fill/1)
-    |> Changeset.after_action(&add_children(&1, &2, context))
+    |> Changeset.before_action(&fill(&1, content?))
+    |> children(content?, context)
   end
+
+  defp children(changeset, true, context), do: Changeset.after_action(changeset, &add_children(&1, &2, context))
+
+  defp children(changeset, false, _context), do: changeset
 
   # An attested open carries the advisory the POC read with `gh`. Nothing
   # reads it again from GitHub, as `RecordAnswer` states for every answer.
@@ -57,13 +76,14 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory do
     end
   end
 
-  defp fill(%{valid?: false} = changeset), do: changeset
+  defp fill(%{valid?: false} = changeset, _content?), do: changeset
 
-  defp fill(changeset) do
+  defp fill(changeset, content?) do
     advisory = changeset.context[@advisory_key]
+    params = Import.case_params(advisory)
 
     changeset
-    |> Changeset.force_change_attributes(Import.case_params(advisory))
+    |> Changeset.force_change_attributes(if(content?, do: params, else: Map.take(params, [:title])))
     |> Changeset.manage_relationship(:github_advisory_link, %{advisory: advisory},
       type: :create,
       on_no_match: {:create, :record},
