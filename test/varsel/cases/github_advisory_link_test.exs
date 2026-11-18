@@ -635,6 +635,149 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
     end
   end
 
+  describe "add collaborator" do
+    setup %{poc: poc, case: case_record} do
+      link = link!(case_record, poc)
+      alice = Fixtures.register_user("collab-alice#{System.unique_integer([:positive])}")
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: alice.id}, actor: poc)
+
+      %{link: link, alice: Ash.load!(alice, :github_username, authorize?: false)}
+    end
+
+    defp stub_collaborators(listed) do
+      test_pid = self()
+
+      advisory =
+        Map.put(hex_advisory(), "collaborating_users", Enum.map(listed, &%{"login" => &1}))
+
+      GitHubApi.stub(fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        auth = Plug.Conn.get_req_header(conn, "authorization")
+
+        case conn.method do
+          "GET" ->
+            send(test_pid, {:github, "GET", auth})
+            Req.Test.json(conn, advisory)
+
+          "PATCH" ->
+            %{"collaborating_users" => logins} = sent = JSON.decode!(body)
+            send(test_pid, {:github, "PATCH", auth, sent})
+
+            Req.Test.json(
+              conn,
+              Map.put(advisory, "collaborating_users", Enum.map(logins, &%{"login" => &1}))
+            )
+        end
+      end)
+    end
+
+    test "writes the list GitHub reads right before, with the assignee added, as the caller", %{
+      poc: poc,
+      link: link,
+      alice: alice
+    } do
+      stub_collaborators(["Existing"])
+
+      assert {:ok, added} = Cases.add_github_advisory_collaborator(link, alice.id, actor: poc)
+
+      assert_received {:github, "GET", ["Bearer gho_token"]}
+      assert_received {:github, "PATCH", ["Bearer gho_token"], body}
+      assert body == %{"collaborating_users" => ["Existing", alice.github_username]}
+
+      assert [%{"login" => "Existing"}, %{"login" => login}] =
+               added.advisory["collaborating_users"]
+
+      assert login == alice.github_username
+    end
+
+    test "a login GitHub lists already is not written again", %{
+      poc: poc,
+      link: link,
+      alice: alice
+    } do
+      stub_collaborators([String.upcase(alice.github_username)])
+
+      assert {:ok, _link} = Cases.add_github_advisory_collaborator(link, alice.id, actor: poc)
+
+      assert_received {:github, "GET", _auth}
+      refute_received {:github, "PATCH", _auth, _body}
+    end
+
+    test "a POC without a GitHub account adds as the App", %{link: link, alice: alice} do
+      hex_poc = Fixtures.sign_in_with_hex("collab_hex", "collab_hex")
+      hex_poc = Ash.update!(hex_poc, %{role: :poc}, action: :set_role, authorize?: false)
+      stub_collaborators([])
+
+      assert {:ok, _link} = Cases.add_github_advisory_collaborator(link, alice.id, actor: hex_poc)
+      assert_received {:github, "PATCH", ["Bearer ghs_acme_lib"], _body}
+    end
+
+    test "only a person assigned to the case with a GitHub account is added", %{
+      poc: poc,
+      case: case_record,
+      link: link
+    } do
+      off_case = Fixtures.register_user("collab_off_case")
+      hex_user = Fixtures.sign_in_with_hex("collab_hex_only", "collab_hex_only")
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: hex_user.id}, actor: poc)
+      stub_github_unreachable()
+
+      for user <- [off_case, hex_user] do
+        assert {:error, %Invalid{errors: [%{field: :user_id, message: message}]}} =
+                 Cases.add_github_advisory_collaborator(link, user.id, actor: poc)
+
+        assert message == "is not assigned to the case with a GitHub account linked"
+      end
+    end
+
+    test "a refusal from GitHub is stated and changes nothing here", %{
+      poc: poc,
+      link: link,
+      alice: alice
+    } do
+      GitHubApi.stub(fn
+        %{method: "GET"} = conn ->
+          Req.Test.json(conn, hex_advisory())
+
+        conn ->
+          conn
+          |> Plug.Conn.put_status(422)
+          |> Req.Test.json(%{
+            "message" => "User 'gone' not found, collaborating_users cannot be modified"
+          })
+      end)
+
+      assert {:error, %Invalid{errors: [%{field: :user_id, message: message}]}} =
+               Cases.add_github_advisory_collaborator(link, alice.id, actor: poc)
+
+      assert message ==
+               "was refused by GitHub: User 'gone' not found, collaborating_users cannot be modified"
+
+      assert Ash.reload!(link, authorize?: false).advisory == link.advisory
+    end
+
+    test "only a POC adds, and anyone else is refused before GitHub is asked", %{
+      poc: poc,
+      case: case_record,
+      link: link,
+      alice: alice
+    } do
+      supporter = Fixtures.register_user("collab_supporter", :supporter)
+      GitHubApp.seed_user_installations(supporter, [7])
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+      stub_github_unreachable()
+
+      for actor <- [nil, supporter, alice] do
+        assert {:error, %Forbidden{}} =
+                 Cases.add_github_advisory_collaborator(link, alice.id, actor: actor)
+
+        refute Cases.can_add_github_advisory_collaborator?(actor, link, alice.id, %{}, validate?: true)
+      end
+
+      assert Cases.can_add_github_advisory_collaborator?(poc, link, alice.id, %{}, validate?: true)
+    end
+  end
+
   test "the diff sets the case against the stored advisory", %{poc: poc, case: case_record} do
     link = link!(case_record, poc)
 

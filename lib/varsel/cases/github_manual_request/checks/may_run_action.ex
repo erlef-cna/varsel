@@ -60,6 +60,16 @@ defmodule Varsel.Cases.GitHubManualRequest.Checks.MayRunAction do
     )
   end
 
+  defp allowed?(:prepare_add_collaborator, actor, changeset) do
+    user_id = Changeset.get_argument(changeset, :user_id)
+
+    with_link(
+      actor,
+      changeset,
+      &Cases.can_add_github_advisory_collaborator?(actor, &1, user_id, %{}, validate?: true)
+    )
+  end
+
   defp allowed?(_action, _actor, _changeset), do: false
 
   defp with_case(actor, changeset, ask) do

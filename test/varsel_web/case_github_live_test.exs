@@ -619,12 +619,12 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
     render_async(lv)
 
-    assert has_element?(lv, "#audience-alice button", "Give access")
-    assert has_element?(lv, "#audience-bob button", "Give access")
-    assert has_element?(lv, "#audience-carol", "invited")
-    refute has_element?(lv, "#audience-carol button")
-    assert has_element?(lv, "#audience-advisory_live_dana", "on the case")
-    refute has_element?(lv, "#audience-advisory_live_dana button")
+    assert has_element?(lv, "#access-alice button", "Give access")
+    assert has_element?(lv, "#access-bob button", "Give access")
+    assert has_element?(lv, "#access-carol", "invited")
+    refute has_element?(lv, "#access-carol button")
+    assert has_element?(lv, "#access-advisory_live_dana", "assigned")
+    refute has_element?(lv, "#access-advisory_live_dana button")
   end
 
   test "giving access assigns an account here and invites everyone else", %{
@@ -639,17 +639,17 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
     render_async(lv)
 
-    lv |> element("#audience-bob button", "Give access") |> render_click()
+    lv |> element("#access-bob button", "Give access") |> render_click()
 
     assert has_element?(lv, "#flash-info", "bob has access to the case.")
-    assert has_element?(lv, "#audience-bob", "on the case")
-    refute has_element?(lv, "#audience-bob button")
+    assert has_element?(lv, "#access-bob", "assigned")
+    refute has_element?(lv, "#access-bob button")
 
-    lv |> element("#audience-alice button", "Give access") |> render_click()
+    lv |> element("#access-alice button", "Give access") |> render_click()
 
     assert has_element?(lv, "#flash-info", "alice has access to the case.")
-    assert has_element?(lv, "#audience-alice", "invited")
-    refute has_element?(lv, "#audience-alice button")
+    assert has_element?(lv, "#access-alice", "invited")
+    refute has_element?(lv, "#access-alice button")
 
     assignments = Cases.get_case!(case_record.id, actor: poc, load: [:assignments, :invites])
     assert Enum.any?(assignments.assignments, &(&1.user_id == bob.id))
@@ -670,9 +670,87 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     {:ok, lv, _html} = conn |> log_in(collaborator) |> live(~p"/cases/#{case_record.id}/github")
     render_async(lv)
 
-    assert has_element?(lv, "#audience-alice")
-    assert has_element?(lv, "#audience-bob")
-    refute has_element?(lv, "#advisory-audience button")
+    assert has_element?(lv, "#access-alice")
+    assert has_element?(lv, "#access-bob")
+    refute has_element?(lv, "#advisory-diff [id^=access-] button")
+  end
+
+  describe "the case's people on GitHub" do
+    setup %{poc: poc, case: case_record} do
+      link!(case_record, poc)
+      alice = Fixtures.register_user("advisory-live-alice")
+      hex_user = Fixtures.sign_in_with_hex("advisory_live_hex", "advisory_live_hex")
+      assign!(case_record, alice, poc)
+      assign!(case_record, hex_user, poc)
+
+      %{alice: alice, hex_user: hex_user}
+    end
+
+    defp stub_collaborators do
+      test_pid = self()
+
+      GitHubApi.stub(fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+        case {conn.method, conn.path_info} do
+          {"PATCH", _path} ->
+            %{"collaborating_users" => logins} = JSON.decode!(body)
+            send(test_pid, {:github, "PATCH", logins})
+
+            Req.Test.json(
+              conn,
+              Map.put(hex_advisory(), "collaborating_users", Enum.map(logins, &%{"login" => &1}))
+            )
+
+          {"GET", ["repos" | _rest]} ->
+            Req.Test.json(conn, hex_advisory())
+
+          {"GET", _orgs} ->
+            Req.Test.json(conn, [])
+        end
+      end)
+    end
+
+    test "a POC adds an assignee as a collaborator, who then sees it", %{
+      conn: conn,
+      poc: poc,
+      case: case_record,
+      hex_user: hex_user
+    } do
+      stub_collaborators()
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}/github")
+      render_async(lv)
+
+      assert has_element?(lv, "#access-user-#{hex_user.id}", "no GitHub account linked")
+      refute has_element?(lv, "#access-user-#{hex_user.id} button")
+      assert has_element?(lv, "#access-advisory-live-alice", "case only")
+
+      lv |> element("#access-advisory-live-alice button", "Add on GitHub") |> render_click()
+      render_async(lv)
+
+      assert_received {:github, "PATCH", ["advisory-live-alice"]}
+      assert has_element?(lv, "#flash-info", "Added as a collaborator on the advisory.")
+      assert has_element?(lv, "#access-advisory-live-alice", "same")
+      refute has_element?(lv, "#access-advisory-live-alice button")
+    end
+
+    test "anyone but a POC sees the people without buttons", %{
+      conn: conn,
+      poc: poc,
+      case: case_record
+    } do
+      supporter = Fixtures.register_user("advisory_live_collab_supporter", :supporter)
+      GitHubApp.seed_user_installations(supporter, [@acme_lib])
+      assign!(case_record, supporter, poc)
+      stub_collaborators()
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}/github")
+      render_async(lv)
+
+      assert has_element?(lv, "#access-advisory-live-alice", "advisory-live-alice")
+      refute has_element?(lv, "#advisory-diff [id^=access-] button")
+    end
   end
 
   test "a frozen case links, pulls and unlinks nothing, and still refreshes and pushes", %{
@@ -1054,6 +1132,41 @@ defmodule VarselWeb.CaseGitHubLiveTest do
 
       assert String.starts_with?(command(lv), without_whitespace("gh api #{path}"))
       assert has_element?(lv, "#gh-command", "reads #{@other_lib_ghsa} again and pulls Title")
+    end
+
+    test "adding a collaborator reads the list and writes it back with the login added", %{
+      conn: conn,
+      poc: poc
+    } do
+      uninstalled = Fixtures.open_case(poc, %{title: "Header injection in other_lib"})
+      seed_uninstalled_link!(uninstalled)
+      alice = Fixtures.register_user("advisory-live-gh-alice")
+      assign!(uninstalled, alice, poc)
+      path = "/repos/acme/other_lib/security-advisories/#{@other_lib_ghsa}"
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{uninstalled.id}/github")
+      render_async(lv)
+
+      lv |> element("#access-advisory-live-gh-alice button", "Add with gh") |> render_click()
+      add = command(lv)
+      parts = command_parts(add)
+
+      filter =
+        ~s<{collaborating_users: ([.collaborating_users[]?.login | select(ascii_downcase != "advisory-live-gh-alice")] + ["advisory-live-gh-alice"])}>
+
+      assert String.starts_with?(add, without_whitespace("gh api #{path} \\\n  --jq '#{filter}'"))
+      assert add =~ without_whitespace("| gh api -X PATCH #{path} --input - \\\n")
+      assert occurrences(add, parts.token) == 1
+      assert has_element?(lv, "#gh-command", "adds advisory-live-gh-alice to the collaborators")
+
+      listed = [%{"login" => "advisory-live-gh-alice"}]
+
+      assert %{"ok" => true} =
+               post_answer(parts, other_lib_answer(%{"collaborating_users" => listed}))
+
+      render_async(lv)
+      assert has_element?(lv, "#access-advisory-live-gh-alice", "same")
+      refute has_element?(lv, "#access-advisory-live-gh-alice button")
     end
 
     test "the page closes the command and shows the advisory once GitHub's answer is posted", %{

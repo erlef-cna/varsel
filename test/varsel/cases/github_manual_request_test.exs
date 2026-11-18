@@ -93,6 +93,40 @@ defmodule Varsel.Cases.GitHubManualRequestTest do
       assert request.body == %{"summary" => "Header injection, revised"}
     end
 
+    test "adding a collaborator names the assignee's login and carries no body", %{
+      poc: poc,
+      case: case_record
+    } do
+      link = seed_link!(case_record)
+      alice = Fixtures.register_user("manual-alice#{System.unique_integer([:positive])}")
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: alice.id}, actor: poc)
+
+      request = Cases.prepare_manual_add_collaborator!(link.id, alice.id, actor: poc)
+
+      assert %{operation: :add_collaborator, method: :patch, ghsa_id: @ghsa_id, body: nil} =
+               request
+
+      assert request.path == "/repos/acme/other_lib/security-advisories/#{@ghsa_id}"
+
+      assert request.collaborator ==
+               Ash.load!(alice, :github_username, authorize?: false).github_username
+    end
+
+    test "a collaborator off the case or without a GitHub account is refused", %{
+      poc: poc,
+      case: case_record
+    } do
+      link = seed_link!(case_record)
+      off_case = Fixtures.register_user("manual_off#{System.unique_integer([:positive])}")
+      hex_user = Fixtures.sign_in_with_hex("manual_hex", "manual_hex")
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: hex_user.id}, actor: poc)
+
+      for user <- [off_case, hex_user] do
+        assert {:error, %Invalid{errors: [%{field: :user_id}]}} =
+                 Cases.prepare_manual_add_collaborator(link.id, user.id, actor: poc)
+      end
+    end
+
     test "a report targets the draft endpoint by default and the report endpoint on request", %{
       poc: poc,
       case: case_record
@@ -141,6 +175,9 @@ defmodule Varsel.Cases.GitHubManualRequestTest do
 
       assert {:error, %Forbidden{}} =
                Cases.prepare_manual_push(link.id, [:title], actor: supporter)
+
+      assert {:error, %Forbidden{}} =
+               Cases.prepare_manual_add_collaborator(link.id, supporter.id, actor: supporter)
     end
 
     test "a POC prepares only what they may do on the case", %{poc: poc, case: case_record} do

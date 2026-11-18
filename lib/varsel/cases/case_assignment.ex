@@ -56,6 +56,21 @@ defmodule Varsel.Cases.CaseAssignment do
   actions do
     defaults [:read]
 
+    read :github_collaborator do
+      description "The assignment of `user_id` on `case_id`, when that user has a GitHub login."
+      get? true
+
+      argument :case_id, :uuid, allow_nil?: false
+      argument :user_id, :uuid, allow_nil?: false
+
+      filter expr(
+               case_id == ^arg(:case_id) and user_id == ^arg(:user_id) and
+                 not is_nil(user.github_username)
+             )
+
+      prepare build(load: [user: [:github_username]])
+    end
+
     create :assign do
       description "Grants a user access to a case. A user who has access keeps the assignment they have."
       primary? true

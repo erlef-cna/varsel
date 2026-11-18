@@ -4,8 +4,8 @@
 
 defmodule VarselWeb.AdvisoryComponents do
   @moduledoc """
-  The GitHub tab's pieces: the card of the advisory a case is linked to, who
-  sees it on GitHub, and the case set against it field by field.
+  The GitHub tab's pieces: the card of the advisory a case is linked to, and
+  the case set against it field by field and person by person.
   """
   use VarselWeb, :html
 
@@ -96,105 +96,6 @@ defmodule VarselWeb.AdvisoryComponents do
   defp state_label(state), do: to_string(state)
 
   @doc """
-  Renders who sees the linked advisory on GitHub, as
-  `Varsel.Cases.GitHubAdvisory.Audience` resolved it: the collaborators, each
-  team's members and the organization's owners, each marked when they are on
-  the case already. With `can_grant`, everyone else offers to be given access.
-  `loading` shows the panel while GitHub is asked.
-  """
-  attr :audience, :map, default: nil, doc: "the resolved `Varsel.Cases.GitHubAdvisory.Audience`"
-
-  attr :on_case, :map,
-    default: %{},
-    doc: "downcased GitHub login to `:assigned` or `:invited` for everyone on the case"
-
-  attr :can_grant, :boolean, default: false
-  attr :loading, :boolean, default: false
-
-  def advisory_audience(assigns) do
-    ~H"""
-    <.panel id="advisory-audience">
-      <:title>Who sees it on GitHub</:title>
-      <p :if={@loading} class="text-sm text-base-content/60">Asking GitHub…</p>
-      <div :if={!@loading} class="space-y-3 text-sm">
-        <.audience_group
-          :if={@audience.users != []}
-          label="Collaborators"
-          logins={@audience.users}
-          on_case={@on_case}
-          can_grant={@can_grant}
-        />
-        <.audience_group
-          :for={team <- @audience.teams}
-          label={"Team #{team.slug}"}
-          logins={team.members}
-          on_case={@on_case}
-          can_grant={@can_grant}
-        />
-        <.audience_group
-          label="Organization owners"
-          logins={@audience.owners}
-          on_case={@on_case}
-          can_grant={@can_grant}
-        />
-      </div>
-    </.panel>
-    """
-  end
-
-  attr :label, :string, required: true
-
-  attr :logins, :any,
-    required: true,
-    doc: "the logins, or `:unknown` when the viewer cannot list them"
-
-  attr :on_case, :map, required: true
-  attr :can_grant, :boolean, required: true
-
-  defp audience_group(assigns) do
-    ~H"""
-    <div>
-      <p class="text-[0.66rem] font-semibold uppercase tracking-wider text-base-content/50">
-        {@label}
-      </p>
-      <p :if={@logins == :unknown} class="text-base-content/60">
-        Not readable with your GitHub account. GitHub lists an organization's people to its
-        members.
-      </p>
-      <p :if={@logins == []} class="text-base-content/60">Nobody.</p>
-      <ul :if={is_list(@logins) and @logins != []} class="divide-y divide-base-300">
-        <li :for={login <- @logins} class="flex items-center gap-3 py-1" id={"audience-#{login}"}>
-          <.link
-            href={"https://github.com/#{login}"}
-            target="_blank"
-            rel="noopener"
-            class="link link-hover font-mono text-xs"
-          >
-            {login}
-          </.link>
-          <.state :if={@on_case[String.downcase(login)] == :assigned} dot="bg-success" class="text-xs">
-            on the case
-          </.state>
-          <.state :if={@on_case[String.downcase(login)] == :invited} dot="bg-info" class="text-xs">
-            invited
-          </.state>
-          <button
-            :if={@can_grant and is_nil(@on_case[String.downcase(login)])}
-            type="button"
-            phx-click="grant_access"
-            phx-value-login={login}
-            data-confirm={"Give #{login} access to this case?"}
-            class="btn btn-xs btn-ghost ml-auto"
-          >
-            Give access
-          </button>
-        </li>
-      </ul>
-    </div>
-    """
-  end
-
-  @doc """
   Renders the diff rows of `Varsel.Cases.GitHubAdvisory.Diff` as a table:
   each field with what the case says, what the advisory says, and how the
   two relate. With `can_pull`, a row the advisory can add to offers to pull
@@ -203,8 +104,24 @@ defmodule VarselWeb.AdvisoryComponents do
   holds every pull and push while a request to GitHub runs. `gh_pull` and
   `gh_push` offer a read and pull, or a push, as a command for the viewer's
   own terminal instead.
+
+  `access` follows with one row per person on either side: on the case as
+  an assignment or an invite, and on GitHub as a collaborator, a team member
+  or an owner. A person on GitHub alone offers `grant?` to bring them onto
+  the case. A person on the case alone offers `offer` to make them a
+  collaborator: `:app` from here, `:gh` as a command. Pull all and Push all
+  leave these rows alone.
   """
   attr :rows, :list, required: true
+
+  attr :access, :list,
+    default: [],
+    doc: """
+    one map per person: `row_id`, `name`, `login` (nil without GitHub), `user_id` (nil unless
+    assigned), `case` (`:assigned`, `:invited` or nil), `github` (a list of how they see the
+    advisory, `:unknown`, `:loading` or `[]`), `grant?` and `offer` (`:app`, `:gh` or nil)
+    """
+
   attr :can_pull, :boolean, default: false
   attr :can_push, :boolean, default: false
   attr :gh_pull, :boolean, default: false
@@ -214,6 +131,9 @@ defmodule VarselWeb.AdvisoryComponents do
   def advisory_diff(assigns) do
     assigns =
       assign(assigns,
+        actions?:
+          assigns.can_pull or assigns.can_push or assigns.gh_push or
+            Enum.any?(assigns.access, &(&1.grant? or not is_nil(&1.offer))),
         rows_with_ids: row_ids(assigns.rows),
         pullable_fields: fields_where(assigns.rows, &Diff.pullable?/1),
         pushable_fields: fields_where(assigns.rows, &Diff.pushable?/1),
@@ -275,7 +195,7 @@ defmodule VarselWeb.AdvisoryComponents do
               <th>Case</th>
               <th>GitHub</th>
               <th class="w-28"></th>
-              <th :if={@can_pull or @can_push or @gh_push} class="w-24"></th>
+              <th :if={@actions?} class="w-28"></th>
             </tr>
           </thead>
           <tbody>
@@ -291,10 +211,7 @@ defmodule VarselWeb.AdvisoryComponents do
                 <.diff_value row={row} side={:theirs} />
               </td>
               <td class="align-top whitespace-nowrap"><.diff_status status={row.status} /></td>
-              <td
-                :if={@can_pull or @can_push or @gh_push}
-                class="align-top whitespace-nowrap text-right"
-              >
+              <td :if={@actions?} class="align-top whitespace-nowrap text-right">
                 <button
                   :if={@can_pull and Diff.pullable?(row)}
                   type="button"
@@ -327,12 +244,101 @@ defmodule VarselWeb.AdvisoryComponents do
                 </button>
               </td>
             </tr>
+            <tr :for={person <- @access} id={person.row_id}>
+              <td class="font-medium align-top">Access · {person.name}</td>
+              <td class="align-top text-sm"><.access_case person={person} /></td>
+              <td class="align-top text-sm"><.access_github person={person} /></td>
+              <td class="align-top whitespace-nowrap">
+                <.diff_status :if={access_status(person)} status={access_status(person)} />
+              </td>
+              <td :if={@actions?} class="align-top whitespace-nowrap text-right">
+                <button
+                  :if={person.grant?}
+                  type="button"
+                  phx-click="grant_access"
+                  phx-value-login={person.login}
+                  data-confirm={"Give #{person.login} access to this case?"}
+                  class="btn btn-xs btn-ghost"
+                >
+                  Give access
+                </button>
+                <button
+                  :if={person.offer == :app}
+                  type="button"
+                  phx-click="add_collaborator"
+                  phx-value-user_id={person.user_id}
+                  data-confirm={"Give #{person.login} write access to the advisory on GitHub?"}
+                  class="btn btn-xs btn-ghost"
+                  disabled={@busy}
+                >
+                  Add on GitHub
+                </button>
+                <button
+                  :if={person.offer == :gh}
+                  type="button"
+                  phx-click="gh_add_collaborator"
+                  phx-value-user_id={person.user_id}
+                  class="btn btn-xs btn-ghost"
+                >
+                  Add with gh
+                </button>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
     </.panel>
     """
   end
+
+  attr :person, :map, required: true
+
+  defp access_case(assigns) do
+    ~H"""
+    <span :if={@person.case} class="text-base-content/80">{@person.case}</span>
+    <span :if={is_nil(@person.case)} class="text-base-content/40">—</span>
+    """
+  end
+
+  attr :person, :map, required: true
+
+  defp access_github(assigns) do
+    ~H"""
+    <span :if={is_nil(@person.login)} class="text-xs text-base-content/50">
+      no GitHub account linked
+    </span>
+    <span :if={@person.login} class="flex flex-wrap items-baseline gap-x-2">
+      <.link
+        href={"https://github.com/#{@person.login}"}
+        target="_blank"
+        rel="noopener"
+        class="link link-hover font-mono text-xs"
+      >
+        {@person.login}
+      </.link>
+      <%= case @person.github do %>
+        <% :loading -> %>
+          <span class="text-xs text-base-content/50">asking GitHub…</span>
+        <% :unknown -> %>
+          <span
+            class="text-xs text-base-content/50"
+            title="GitHub lists an organization's teams and owners to its members only."
+          >
+            not readable
+          </span>
+        <% [] -> %>
+          <span class="text-xs text-base-content/40">no access</span>
+        <% ways -> %>
+          <span class="text-base-content/80">{Enum.join(ways, ", ")}</span>
+      <% end %>
+    </span>
+    """
+  end
+
+  defp access_status(%{case: on_case, github: [_way | _rest]}) when not is_nil(on_case), do: :same
+  defp access_status(%{case: on_case, github: []}) when not is_nil(on_case), do: :ours_only
+  defp access_status(%{case: nil, github: [_way | _rest]}), do: :theirs_only
+  defp access_status(_person), do: nil
 
   defp fields_where(rows, pred), do: rows |> Enum.filter(pred) |> Enum.map(& &1.field) |> Enum.uniq()
 
@@ -442,7 +448,7 @@ defmodule VarselWeb.AdvisoryComponents do
   """
   attr :request, :map,
     required: true,
-    doc: "the request: `id`, `operation`, `method`, `path`, `owner`, `repo`, `ghsa_id` and `fields`"
+    doc: "the request: `id`, `operation`, `method`, `path`, `owner`, `repo`, `ghsa_id`, `fields` and `collaborator`"
 
   attr :token, :string, required: true
   attr :base_url, :string, required: true
@@ -486,15 +492,27 @@ defmodule VarselWeb.AdvisoryComponents do
     result =
       ~s(curl -sS --fail-with-body #{auth} -H "Content-Type: application/json" #{endpoint}/result --data-binary @-)
 
-    case request.method do
-      :get ->
+    case request do
+      %{method: :get} ->
         "gh api #{request.path} \\\n  | #{result}"
 
-      method ->
+      %{operation: :add_collaborator, collaborator: login} ->
+        "gh api #{request.path} \\\n" <>
+          "  --jq '#{collaborators_filter(login)}' \\\n" <>
+          "  | gh api -X PATCH #{request.path} --input - \\\n" <>
+          "  | #{result}"
+
+      %{method: method} ->
         "curl -sf #{auth} #{endpoint}/request \\\n" <>
           "  | gh api -X #{method |> Atom.to_string() |> String.upcase()} #{request.path} --input - \\\n" <>
           "  | #{result}"
     end
+  end
+
+  # GitHub replaces the whole collaborator list on an update, so the command
+  # reads the list as it stands and writes it back with the login added.
+  defp collaborators_filter(login) do
+    ~s<{collaborating_users: ([.collaborating_users[]?.login | select(ascii_downcase != "#{String.downcase(login)}")] + ["#{login}"])}>
   end
 
   defp gh_summary(%{operation: :read, advisory_url: url, case_id: nil, ghsa_id: ghsa_id}) when is_binary(url),
@@ -510,6 +528,9 @@ defmodule VarselWeb.AdvisoryComponents do
 
   defp gh_summary(%{operation: :push, fields: fields, ghsa_id: ghsa_id}),
     do: "writes #{Enum.map_join(fields, ", ", &field_label/1)} to #{ghsa_id}"
+
+  defp gh_summary(%{operation: :add_collaborator, collaborator: login, ghsa_id: ghsa_id}),
+    do: "adds #{login} to the collaborators of #{ghsa_id}"
 
   defp gh_summary(%{operation: :report, path: path, owner: owner, repo: repo}) do
     if String.ends_with?(path, "/reports"),

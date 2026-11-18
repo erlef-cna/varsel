@@ -412,6 +412,12 @@ defmodule Varsel.Cases do
 
     resource CaseAssignment do
       define :list_case_assignments, action: :read
+
+      define :get_github_collaborator_assignment,
+        action: :github_collaborator,
+        args: [:case_id, :user_id],
+        get?: true
+
       define :assign_case_user, action: :assign
       define :unassign_case_user, action: :unassign
     end
@@ -569,6 +575,7 @@ defmodule Varsel.Cases do
       define :refresh_github_advisory_attested, action: :refresh_attested, args: [:advisory]
       define :pull_github_advisory, action: :pull, args: [:fields]
       define :push_github_advisory, action: :push, args: [:fields]
+      define :add_github_advisory_collaborator, action: :add_collaborator, args: [:user_id]
       define :unlink_github_advisory, action: :unlink
       define :sync_github_advisory_comments, action: :sync_comments
     end
@@ -581,6 +588,10 @@ defmodule Varsel.Cases do
       define :prepare_manual_refresh, action: :prepare_refresh, args: [:link_id]
       define :prepare_manual_pull, action: :prepare_pull, args: [:link_id, :fields]
       define :prepare_manual_push, action: :prepare_push, args: [:link_id, :fields]
+
+      define :prepare_manual_add_collaborator,
+        action: :prepare_add_collaborator,
+        args: [:link_id, :user_id]
 
       define :prepare_manual_report,
         action: :prepare_report,

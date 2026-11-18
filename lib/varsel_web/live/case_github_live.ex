@@ -5,9 +5,10 @@
 defmodule VarselWeb.CaseGitHubLive do
   @moduledoc """
   The GitHub tab of a case: the security advisory it is linked to, read as
-  the person looking, who sees it on GitHub, and the case set against it
-  field by field. A case without an advisory reports itself to a
-  repository's maintainers from here.
+  the person looking, and the case set against it field by field and person
+  by person: who is on the case, and who sees the advisory on GitHub. A case
+  without an advisory reports itself to a repository's maintainers from
+  here.
 
   What the viewer can do on the advisory's repository
   (`Varsel.GitHub.Credentials.reach/3`) is asked once per repository, off
@@ -22,6 +23,7 @@ defmodule VarselWeb.CaseGitHubLive do
   import VarselWeb.CaseComponents, only: [case_header: 1]
 
   alias Varsel.Cases
+  alias Varsel.Cases.GitHubAdvisory
   alias Varsel.Cases.GitHubAdvisory.Audience
   alias Varsel.Cases.GitHubAdvisory.Export
   alias Varsel.Cases.GitHubAdvisory.ReportTargets
@@ -32,7 +34,7 @@ defmodule VarselWeb.CaseGitHubLive do
 
   require Logger
 
-  @github_requests ["refresh_advisory", "push_advisory", "report_to_github"]
+  @github_requests ["refresh_advisory", "push_advisory", "add_collaborator", "report_to_github"]
 
   @impl Phoenix.LiveView
   def mount(%{"id" => id}, _session, socket) do
@@ -55,7 +57,9 @@ defmodule VarselWeb.CaseGitHubLive do
         gh: nil,
         gh_link?: false,
         gh_kind: "draft",
-        gh_offers: %{refresh: false, pull: false, push: false, report: false}
+        gh_offers: %{refresh: false, pull: false, push: false, report: false},
+        collaborator_offers: %{},
+        access: []
       )
       |> CaseLifecycle.mount(id,
         load: [
@@ -63,7 +67,7 @@ defmodule VarselWeb.CaseGitHubLive do
           :cve_record,
           :preview,
           affected_packages: [],
-          assignments: [user: [:github_username]],
+          assignments: [user: [:github_username, :display_name]],
           invites: [],
           github_advisory_link: [:diff]
         ],
@@ -78,7 +82,7 @@ defmodule VarselWeb.CaseGitHubLive do
     link = case_record.github_advisory_link
 
     socket
-    |> assign(page_title: case_record.title || "Case", link: link, on_case: on_case(case_record))
+    |> assign(page_title: case_record.title || "Case", link: link)
     |> assign(permissions(actor, case_record, link))
     |> assign_form(link)
     |> assign_report_form(case_record, link)
@@ -114,7 +118,36 @@ defmodule VarselWeb.CaseGitHubLive do
           %{refresh: false, pull: false, push: false, report: false}
       end
 
-    assign(socket, gh_offers: offers)
+    socket
+    |> assign(gh_offers: offers, collaborator_offers: collaborator_offers(socket.assigns))
+    |> assign_access()
+  end
+
+  defp collaborator_offers(%{link: %GitHubAdvisoryLink{owner: owner} = link} = assigns) when is_binary(owner) do
+    %{current_user: actor, reach: reach, case_record: case_record} = assigns
+
+    Map.new(case_record.assignments, fn %{user: user} ->
+      {user.id, collaborator_offer(actor, link, reach, user)}
+    end)
+  end
+
+  defp collaborator_offers(_assigns), do: %{}
+
+  defp collaborator_offer(_actor, _link, _reach, %{github_username: nil}), do: nil
+
+  defp collaborator_offer(actor, link, reach, user) do
+    cond do
+      Credentials.acts?(reach) and
+          Cases.can_add_github_advisory_collaborator?(actor, link, user.id, %{}, validate?: true) ->
+        :app
+
+      reach == :not_installed and
+          Cases.can_prepare_manual_add_collaborator?(actor, link.id, user.id) ->
+        :gh
+
+      true ->
+        nil
+    end
   end
 
   defp gh_report?(actor, case_record, targets) do
@@ -188,19 +221,77 @@ defmodule VarselWeb.CaseGitHubLive do
     }
   end
 
-  defp on_case(case_record) do
+  # One row per person on either side: the case's assignments and GitHub
+  # invites first, then whoever else sees the advisory on GitHub.
+  defp assign_access(%{assigns: %{link: %GitHubAdvisoryLink{}}} = socket) do
+    %{case_record: case_record, audience: audience} = socket.assigns
+
     assigned =
-      for %{user: %{github_username: login}} <- case_record.assignments, is_binary(login) do
-        {String.downcase(login), :assigned}
+      for %{user: user} <- case_record.assignments do
+        %{name: user.display_name, login: user.github_username, user_id: user.id, case: :assigned}
       end
 
     invited =
       for %{strategy: :github, username: login} <- case_record.invites do
-        {login |> to_string() |> String.downcase(), :invited}
+        %{name: to_string(login), login: to_string(login), user_id: nil, case: :invited}
       end
 
-    Map.new(invited ++ assigned)
+    on_github =
+      for login <- audience_logins(audience) do
+        %{name: login, login: login, user_id: nil, case: nil}
+      end
+
+    rows =
+      (assigned ++ invited ++ on_github)
+      |> Enum.uniq_by(&person_key/1)
+      |> Enum.map(&access_row(&1, socket.assigns))
+
+    assign(socket, access: rows)
   end
+
+  defp assign_access(socket), do: assign(socket, access: [])
+
+  defp access_row(person, assigns) do
+    github = github_access(assigns.audience, person.login)
+    sees? = match?([_way | _rest], github)
+
+    Map.merge(person, %{
+      row_id: "access-" <> (person |> person_key() |> String.replace(~r/[^a-z0-9_-]/, "-")),
+      github: github,
+      grant?: assigns.can_grant? and is_nil(person.case) and is_binary(person.login),
+      offer: if(sees?, do: nil, else: assigns.collaborator_offers[person.user_id])
+    })
+  end
+
+  defp person_key(%{login: login}) when is_binary(login), do: String.downcase(login)
+  defp person_key(%{user_id: user_id}), do: "user-#{user_id}"
+
+  defp audience_logins(%{users: users, teams: teams, owners: owners}) do
+    [users | Enum.map(teams, & &1.members)]
+    |> Enum.concat([owners])
+    |> Enum.filter(&is_list/1)
+    |> Enum.concat()
+    |> Enum.uniq_by(&String.downcase/1)
+  end
+
+  defp audience_logins(_resolving), do: []
+
+  # How `login` sees the advisory: as a collaborator, a team's member, an
+  # owner. `:unknown` when it is in none and a group could not be listed.
+  defp github_access(_audience, nil), do: []
+  defp github_access(nil, _login), do: :loading
+
+  defp github_access(%{users: users, teams: teams, owners: owners}, login) do
+    groups =
+      [{"collaborator", users}] ++
+        Enum.map(teams, &{"team #{&1.slug}", &1.members}) ++ [{"owner", owners}]
+
+    ways = for {way, logins} <- groups, is_list(logins), listed?(logins, login), do: way
+
+    if ways == [] and Enum.any?(groups, &match?({_way, :unknown}, &1)), do: :unknown, else: ways
+  end
+
+  defp listed?(logins, login), do: Enum.any?(logins, &(String.downcase(&1) == String.downcase(login)))
 
   # A notification on the case refetches it while the viewer types, so the
   # form they are filling in stays.
@@ -236,19 +327,29 @@ defmodule VarselWeb.CaseGitHubLive do
 
   defp resolve_audience(socket, nil), do: assign(socket, audience: nil, audience_for: nil)
 
-  defp resolve_audience(%{assigns: %{audience_for: resolved}} = socket, %{id: id, fetched_at: at})
-       when resolved == {id, at}, do: socket
-
   defp resolve_audience(socket, link) do
-    if connected?(socket) do
-      actor = socket.assigns.current_user
+    key = audience_key(link)
 
-      socket
-      |> assign(audience: nil, audience_for: {link.id, link.fetched_at})
-      |> start_async(:audience, fn -> Audience.resolve(link, actor) end)
-    else
-      socket
+    cond do
+      socket.assigns.audience_for == key ->
+        socket
+
+      connected?(socket) ->
+        actor = socket.assigns.current_user
+
+        socket
+        |> assign(audience: nil, audience_for: key)
+        |> start_async(:audience, fn -> Audience.resolve(link, actor) end)
+
+      true ->
+        socket
     end
+  end
+
+  # `fetched_at` counts whole seconds, so a write stored in the second of the
+  # last read keeps it. The collaborators the write changed tell them apart.
+  defp audience_key(link) do
+    {link.id, link.fetched_at, link.advisory["collaborating_users"], link.advisory["collaborating_teams"]}
   end
 
   defp check_report_targets(socket, case_record) do
@@ -351,6 +452,12 @@ defmodule VarselWeb.CaseGitHubLive do
     {:noreply, open_gh(socket, Cases.prepare_manual_push(link.id, fields, actor: actor))}
   end
 
+  def handle_event("gh_add_collaborator", %{"user_id" => user_id}, socket) do
+    %{link: link, current_user: actor} = socket.assigns
+
+    {:noreply, open_gh(socket, Cases.prepare_manual_add_collaborator(link.id, user_id, actor: actor))}
+  end
+
   def handle_event("close_gh", _params, socket), do: {:noreply, assign(socket, gh: nil)}
 
   def handle_event("report_to_github", %{"report" => params, "via" => "gh"} = all, socket) do
@@ -411,6 +518,17 @@ defmodule VarselWeb.CaseGitHubLive do
      socket
      |> assign(busy?: true)
      |> start_async(:push, fn -> Cases.push_github_advisory(link, fields, actor: actor) end)}
+  end
+
+  def handle_event("add_collaborator", %{"user_id" => user_id}, socket) do
+    %{link: link, current_user: actor} = socket.assigns
+
+    {:noreply,
+     socket
+     |> assign(busy?: true)
+     |> start_async(:add_collaborator, fn ->
+       Cases.add_github_advisory_collaborator(link, user_id, actor: actor)
+     end)}
   end
 
   def handle_event("unlink_advisory", _params, socket) do
@@ -486,6 +604,16 @@ defmodule VarselWeb.CaseGitHubLive do
     {:noreply, assign(socket, busy?: false)}
   end
 
+  def handle_async(:add_collaborator, {:ok, result}, socket) do
+    socket =
+      case result do
+        {:ok, _link} -> put_flash(socket, :info, "Added as a collaborator on the advisory.")
+        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
+      end
+
+    {:noreply, assign(socket, busy?: false)}
+  end
+
   def handle_async(:report, {:ok, result}, socket) do
     socket =
       case result do
@@ -510,11 +638,18 @@ defmodule VarselWeb.CaseGitHubLive do
   end
 
   def handle_async(:audience, {:ok, audience}, socket) do
-    {:noreply, assign(socket, audience: audience)}
+    {:noreply, socket |> assign(audience: audience) |> assign_access()}
   end
 
+  # The collaborators come from the stored advisory. Only the groups GitHub
+  # lists on request stay unknown.
   def handle_async(:audience, {:exit, _reason}, socket) do
-    {:noreply, assign(socket, audience: nil, audience_for: nil)}
+    collaborators = GitHubAdvisory.summary(socket.assigns.link.advisory).collaborators
+
+    {:noreply,
+     socket
+     |> assign(audience: %{users: collaborators, teams: [], owners: :unknown})
+     |> assign_access()}
   end
 
   def handle_async(:report_targets, {:ok, targets}, socket) do
@@ -531,7 +666,7 @@ defmodule VarselWeb.CaseGitHubLive do
 
   def handle_async(:report_targets, {:exit, _reason}, socket), do: {:noreply, socket}
 
-  def handle_async(task, {:exit, reason}, socket) when task in [:refresh, :push, :report] do
+  def handle_async(task, {:exit, reason}, socket) when task in [:refresh, :push, :add_collaborator, :report] do
     {:noreply,
      socket
      |> assign(busy?: false)
@@ -589,15 +724,9 @@ defmodule VarselWeb.CaseGitHubLive do
             can_unlink={@can_unlink?}
             busy={@busy?}
           />
-          <.advisory_audience
-            :if={@audience_for}
-            audience={@audience}
-            on_case={@on_case}
-            can_grant={@can_grant?}
-            loading={is_nil(@audience)}
-          />
           <.advisory_diff
             rows={@link.diff}
+            access={@access}
             can_pull={@can_pull?}
             can_push={Credentials.acts?(@reach) and @can_push?}
             gh_pull={@gh_offers.pull}

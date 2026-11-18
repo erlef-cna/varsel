@@ -28,6 +28,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.Case
   alias Varsel.Cases.GitHubAdvisory.State
+  alias Varsel.Cases.GitHubAdvisoryLink.Changes.AddCollaborator
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.FetchAdvisory
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.Pull
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.Push
@@ -215,6 +216,23 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
       change StoreAdvisory
     end
 
+    update :add_collaborator do
+      description """
+      Makes `user_id`, a person assigned to the case with a GitHub account
+      linked, a collaborator on the advisory at GitHub, as the caller. GitHub
+      gives a collaborator write access to the advisory. Stores the advisory
+      as GitHub then answered.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :user_id, :uuid, allow_nil?: false
+
+      change AddCollaborator
+      change StoreAdvisory
+    end
+
     destroy :unlink do
       description "Unlinks the advisory."
       primary? true
@@ -244,6 +262,10 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
                      ^actor(:role) == :supporter and
                        exists(case.assignments, user_id == ^actor(:id))
                    )
+    end
+
+    policy action(:add_collaborator) do
+      authorize_if actor_attribute_equals(:role, :poc)
     end
 
     # Content freeze: the link and the case may only change while the case is

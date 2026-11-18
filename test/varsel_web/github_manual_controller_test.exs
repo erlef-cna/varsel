@@ -212,6 +212,32 @@ defmodule VarselWeb.GitHubManualControllerTest do
       assert [%{title: "Header injection, revised"}] = link_of(case_record, poc)
     end
 
+    test "of an added collaborator stores the advisory GitHub answered", %{
+      conn: conn,
+      poc: poc,
+      case: case_record
+    } do
+      link = seed_link!(case_record)
+      alice = Fixtures.register_user("manual-api-alice#{System.unique_integer([:positive])}")
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: alice.id}, actor: poc)
+      request = Cases.prepare_manual_add_collaborator!(link.id, alice.id, actor: poc)
+      listed = [%{"login" => request.collaborator}]
+
+      assert %{"ok" => true, "message" => message} =
+               conn
+               |> post_result(
+                 request,
+                 request.__metadata__.token,
+                 answer(%{"collaborating_users" => listed})
+               )
+               |> json_response(200)
+
+      assert message == "Added #{request.collaborator} to the collaborators of #{@ghsa_id}."
+
+      assert [%{advisory: %{"collaborating_users" => ^listed}}] =
+               case_record |> link_of(poc) |> Ash.load!(:advisory, authorize?: false)
+    end
+
     test "of a report links the advisory GitHub opened", %{
       conn: conn,
       poc: poc,
