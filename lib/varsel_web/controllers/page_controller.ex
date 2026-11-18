@@ -7,6 +7,7 @@ defmodule VarselWeb.PageController do
 
   alias Varsel.CVE
   alias VarselWeb.Charts
+  alias VarselWeb.StructuredData
 
   def home(conn, _params) do
     latest =
@@ -18,7 +19,8 @@ defmodule VarselWeb.PageController do
 
     render(conn, :home,
       activity_data: Charts.cve_activity_data(),
-      latest: latest
+      latest: latest,
+      structured_data: StructuredData.home()
     )
   end
 
@@ -34,6 +36,14 @@ defmodule VarselWeb.PageController do
     # /api-access) reference this deployment's own URL.
     page = Varsel.Content.get_page!(conn.assigns.page_id)
     body = String.replace(page.body, "%BASE_URL%", VarselWeb.Endpoint.url())
-    render(conn, :page, page: %{page | body: body}, page_title: page.title)
+
+    render(conn, :page,
+      page: %{page | body: body},
+      page_title: page.title,
+      structured_data: structured_data(page.id)
+    )
   end
+
+  defp structured_data("contact"), do: StructuredData.contact()
+  defp structured_data(_page_id), do: nil
 end

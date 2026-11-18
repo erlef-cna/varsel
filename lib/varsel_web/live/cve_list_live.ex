@@ -25,6 +25,7 @@ defmodule VarselWeb.CveListLive do
   alias Varsel.CVE
   alias Varsel.CVE.CveRecord
   alias Varsel.Types.CVSS
+  alias VarselWeb.StructuredData
 
   require Ash.Query
 
@@ -48,6 +49,7 @@ defmodule VarselWeb.CveListLive do
     socket =
       assign(socket,
         page_title: if(console?, do: "CVE records", else: "Issued CVEs"),
+        structured_data: StructuredData.cve_catalog(),
         console?: console?,
         may_adopt?: Ash.can?({Cases.Case, :adopt_cve_record}, socket.assigns.current_user),
         mitre_sync: :idle,

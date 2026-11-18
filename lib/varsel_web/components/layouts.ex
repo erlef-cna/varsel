@@ -42,6 +42,33 @@ defmodule VarselWeb.Layouts do
   end
 
   @doc """
+  The page's canonical URL and the other formats it is served in, for the
+  root layout's head. The canonical URL is `canonical_url` where a page names
+  one, and otherwise the page's own path on the configured host, without its
+  query. An error page names neither.
+  """
+  attr :conn, Plug.Conn, required: true
+  attr :canonical_url, :string, default: nil
+
+  attr :alternates, :list,
+    default: [],
+    doc: "maps of `href` and `type`, one per other format of the page"
+
+  def head_links(%{conn: %{status: status}} = assigns) when status not in [nil, 200], do: ~H""
+
+  def head_links(assigns) do
+    assigns =
+      assign_new(assigns, :canonical, fn ->
+        assigns.canonical_url || VarselWeb.Endpoint.url() <> assigns.conn.request_path
+      end)
+
+    ~H"""
+    <link rel="canonical" href={@canonical} />
+    <link :for={alternate <- @alternates} rel="alternate" type={alternate.type} href={alternate.href} />
+    """
+  end
+
+  @doc """
   The page chrome — nav, main, footer — wrapped around every page's content.
 
   It is a component rather than part of the root layout because the root
@@ -262,6 +289,7 @@ defmodule VarselWeb.Layouts do
           <.link
             :if={is_nil(@current_user)}
             navigate={VarselWeb.SignInPath.for(@current_path)}
+            rel="nofollow"
             aria-label="Sign in"
             data-tip="Sign in"
             class="btn btn-ghost btn-sm btn-circle text-white hover:bg-white/10 tooltip tooltip-bottom"
