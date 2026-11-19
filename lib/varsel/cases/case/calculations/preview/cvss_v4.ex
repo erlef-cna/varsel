@@ -79,13 +79,18 @@ defmodule Varsel.Cases.Case.Calculations.Preview.CvssV4 do
     %{
       "version" => "4.0",
       "vectorString" => cvss.vector,
-      "baseScore" => cvss.score,
+      "baseScore" => json_number(cvss.score),
       "baseSeverity" => cvss.severity |> to_string() |> String.upcase()
     }
     |> put_metrics(@base, metrics, :require)
     |> put_metrics(@supplemental, metrics, {:default, "X"})
     |> put_metrics(@optional, metrics, :when_present)
   end
+
+  # MITRE returns integral scores without a fraction (`7`, not `7.0`). The
+  # drift check compares the render to that text.
+  defp json_number(score) when score == trunc(score), do: trunc(score)
+  defp json_number(score), do: score
 
   defp parse_vector("CVSS:4.0/" <> rest) do
     rest
