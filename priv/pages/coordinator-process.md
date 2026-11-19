@@ -105,6 +105,12 @@ this schema, and this site validates them against it before publication (see
 
 ## 6. The Coordination Process
 
+We do not expect you to write the record by hand. Connect your local AI
+agent to this site over MCP ([API Access](/api-access)), and use the Varsel
+skills ([AI Tooling](/guide/ai-tooling)) for the writing and research work:
+triage, the record, CVSS, CWE and CAPEC, the affected versions, and the final
+check. The agent proposes, and you review and decide on the case page.
+
 :::steps
 1. **Get Assigned to a Case**
 
@@ -127,7 +133,8 @@ this schema, and this site validates them against it before publication (see
      cases.
    - **Split** off a new case for each further finding the report holds.
 
-   Mark the case *Under triage* while you work on it, so others see it is
+   The `triage-report` skill checks the claim, looks for duplicates, and
+   posts a recommendation on the case. Mark the case *Under triage* while you work on it, so others see it is
    taken.
 
    ![A submitted case with Accept case, Under triage, and the menu with split, merge and reject](/images/coordinator-process/case-triage.png)
@@ -138,9 +145,10 @@ this schema, and this site validates them against it before publication (see
 
 4. **Fill In the Record**
 
-   Write the description, score CVSS v4.0, classify the CWE and CAPEC, enter
-   the affected versions, and credit the people involved.
-   [Filing a CVE](/guide/filing-a-case) walks through the case, and
+   The record needs a description, a CVSS v4.0 score, the CWE and CAPEC, the
+   affected versions, and credits. The `new-case` skill drafts all of it as
+   proposals, and `verify` checks the result. Review every proposal before you
+   accept it. [Filing a CVE](/guide/filing-a-case) walks through the case, and
    [Record Conventions](/guide/record-conventions) is the house style.
 
 5. **Bring the Maintainer In**
