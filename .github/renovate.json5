@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Erlang Ecosystem Foundation
+
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  enabledManagers: ["nix"],
+  nix: {
+    enabled: true,
+  },
+  schedule: ["* * * * 1"],
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ["* * * * 1"],
+  },
+}
