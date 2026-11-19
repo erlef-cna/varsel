@@ -24,6 +24,7 @@ defmodule Varsel.Content do
   page "guide-affected-versions.md"
   page "guide-ai-tooling.md"
   page "guide-filing-a-case.md"
+  page "guide-github-advisories.md"
   page "guide-record-conventions.md"
   page "guide-review-and-publication.md"
   page "maintainer-process.md"

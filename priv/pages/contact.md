@@ -38,5 +38,7 @@ backup:
 For general questions, use
 [GitHub Discussions](https://github.com/orgs/erlef-cna/discussions).
 
-> **Note:** GitHub Discussions are public. Never report or include vulnerability
-> details there.
+:::warning
+**GitHub Discussions are public.** Never report or include vulnerability
+details there.
+:::

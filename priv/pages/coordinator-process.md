@@ -123,19 +123,11 @@ check. The agent proposes, and you review and decide on the case page.
 
    Check the report against our [CVE Criteria](/cve-criteria). Reproduce the
    claim with a minimal proof of concept: it confirms the report, gives the
-   maintainer something concrete, and informs the CVSS score. Then decide on
-   the case page:
-
-   - **Accept** the case, and it opens as a draft.
-   - **Reject** it with a reason. A report that is not a vulnerability may
-     still be a bug worth an issue or a PR on the affected project.
-   - **Merge** it into a case for the same finding. You need to be on both
-     cases.
-   - **Split** off a new case for each further finding the report holds.
-
-   The `triage-report` skill checks the claim, looks for duplicates, and
-   posts a recommendation on the case. Mark the case *Under triage* while you work on it, so others see it is
-   taken.
+   maintainer something concrete, and informs the CVSS score. The
+   `triage-report` skill checks the claim, looks for duplicates, and posts a
+   recommendation on the case. Then accept, reject, merge, or split the case,
+   as [Filing a CVE](/guide/filing-a-case) describes. A rejected report may
+   still be a bug worth an issue or a PR on the affected project.
 
    ![A submitted case with Accept case, Under triage, and the menu with split, merge and reject](/images/coordinator-process/case-triage.png)
 
@@ -233,7 +225,11 @@ submission. [AI Tooling](/guide/ai-tooling) covers installing the plugin and
 connecting the MCP server; [API Access](/api-access) covers authentication
 and automating your work with other tooling.
 
-> **Note:** AI can be very helpful for these tasks, but every result must be verified by a human before submission. Do not rely on AI output without checking it yourself.
+:::warning
+AI can be very helpful for these tasks, but **every result must be verified
+by a human before submission.** Do not rely on AI output without checking it
+yourself.
+:::
 
 ## 8. Further Resources
 

@@ -32,6 +32,7 @@ defmodule VarselWeb.SitePagesTest do
         {"/guide/affected-versions", "Affected Versions"},
         {"/guide/record-conventions", "Record Conventions"},
         {"/guide/ai-tooling", "AI Tooling"},
+        {"/guide/github-advisories", "GitHub Advisories"},
         {"/privacy-policy", "Privacy Policy"},
         {"/terms-and-conditions", "Terms &amp; Conditions"}
       ] do

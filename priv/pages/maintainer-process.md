@@ -252,7 +252,9 @@ on it. The [Varsel Guide](/guide) has the rest of the detail.
 
 ## 7. Timelines & Embargo
 
-> **Note:** **Do not make anything public before the advisory is published.** This includes public Pull Requests, commits to main, public issues, blog posts, social media posts, or any other public communication referencing the vulnerability. **If information becomes public, our disclosure timeline immediately shifts to 24 hours or less**, regardless of whether a patch is ready.
+:::warning
+**Do not make anything public before the advisory is published.** This includes public Pull Requests, commits to main, public issues, blog posts, social media posts, or any other public communication referencing the vulnerability. **If information becomes public, our disclosure timeline immediately shifts to 24 hours or less**, regardless of whether a patch is ready.
+:::
 
 Key timeframes:
 

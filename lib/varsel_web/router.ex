@@ -143,7 +143,8 @@ defmodule VarselWeb.Router do
           {"/guide/review-and-publication", "guide-review-and-publication"},
           {"/guide/affected-versions", "guide-affected-versions"},
           {"/guide/record-conventions", "guide-record-conventions"},
-          {"/guide/ai-tooling", "guide-ai-tooling"}
+          {"/guide/ai-tooling", "guide-ai-tooling"},
+          {"/guide/github-advisories", "guide-github-advisories"}
         ] do
       get path, PageController, :page, assigns: %{page_id: page_id}
     end
