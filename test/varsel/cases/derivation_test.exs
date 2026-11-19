@@ -347,6 +347,42 @@ defmodule Varsel.Cases.DerivationTest do
            ]
   end
 
+  # The hexpm shape of CVE-2026-21618: a repository with no releases, deployed
+  # as a service. Its commits are the only versions a CPE range can name.
+  test "a service deployed from its repository matches by commit", %{poc: poc, case: case_record} do
+    StubGitBackend.stub_tags(%{{@repo, @intro_sha} => [], {@repo, @fix_sha} => []})
+    StubGitBackend.stub_commits(%{{@repo, @intro_sha} => [@fix_sha], {@repo, @fix_sha} => []})
+
+    {package, _channels} =
+      package_with_channels(
+        poc,
+        case_record,
+        [],
+        [
+          %{event: :introduced, commit_sha: @intro_sha},
+          %{event: :fixed, commit_sha: @fix_sha}
+        ]
+      )
+
+    Cases.add_package_channel!(
+      %{
+        case_id: case_record.id,
+        affected_package_id: package.id,
+        kind: :service,
+        domain: "acme.example"
+      },
+      actor: poc
+    )
+
+    package = Ash.load!(package, [:channels, :version_events], authorize?: false)
+
+    assert {:ok, derivation} = Derivation.derive(package)
+
+    assert derivation["cpe_matches"] == [
+             %{"versionStartIncluding" => @intro_sha, "versionEndExcluding" => @fix_sha}
+           ]
+  end
+
   test "OTP packages resolve per-application versions and emit both blocks on the git channel", %{
     poc: poc,
     case: case_record
