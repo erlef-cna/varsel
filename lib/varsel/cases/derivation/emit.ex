@@ -115,6 +115,30 @@ defmodule Varsel.Cases.Derivation.Emit do
   end
 
   @doc """
+  cpeApplicability matches for a product that publishes no release, so its
+  commit SHAs are the only versions it has. Each introducing commit opens one
+  match, bounded by the fix that closes it. No closing fix, or several, leave
+  the match open: a CPE range has one upper bound, and the worst reading of
+  several is none. The default status widens the matches as `cpe_matches/2`
+  describes, with no fix-carrying span known in commit terms.
+  """
+  @spec git_cpe_matches(keyword()) :: [map()]
+  def git_cpe_matches(opts) do
+    descendants = Keyword.get(opts, :descendants, %{})
+    fix_shas = Keyword.get(opts, :fix_shas, [])
+
+    ranges =
+      for intro <- Keyword.get(opts, :intro_shas, []) do
+        case Reachability.closing(descendants, intro, fix_shas) do
+          [fix] -> %{from: intro, until: fix}
+          _none_or_several -> %{from: intro, until: :unbounded}
+        end
+      end
+
+    cpe_matches(ranges, Keyword.put(opts, :fixed_ranges, []))
+  end
+
+  @doc """
   GitHub's `vulnerabilities[]` ranges for a channel: the spans `cpe_matches/2`
   states as possibly affected, each as one `vulnerable_version_range` with the
   versions closing it as `patched_versions`, in the channel's own vocabulary.

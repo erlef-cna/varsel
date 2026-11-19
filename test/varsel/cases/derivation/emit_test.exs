@@ -900,6 +900,44 @@ defmodule Varsel.Cases.Derivation.EmitTest do
     end
   end
 
+  describe "git_cpe_matches/1" do
+    @intro String.duplicate("1", 40)
+    @fix String.duplicate("2", 40)
+    @backport String.duplicate("3", 40)
+
+    test "one match per introducing commit, bounded by its closing fix" do
+      opts = [
+        intro_shas: [@intro],
+        fix_shas: [@fix],
+        descendants: %{@intro => [@fix], @fix => []}
+      ]
+
+      assert Emit.git_cpe_matches(opts) == [
+               %{"versionStartIncluding" => @intro, "versionEndExcluding" => @fix}
+             ]
+    end
+
+    test "several closing fixes leave the match open" do
+      opts = [
+        intro_shas: [@intro],
+        fix_shas: [@fix, @backport],
+        descendants: %{@intro => [@fix, @backport], @fix => [], @backport => []}
+      ]
+
+      assert Emit.git_cpe_matches(opts) == [
+               %{"versionStartIncluding" => @intro, "versionEndExcluding" => nil}
+             ]
+    end
+
+    test "an affected default matches everything" do
+      opts = [default_status: :affected, intro_shas: [@intro], fix_shas: [@fix], descendants: %{}]
+
+      assert Emit.git_cpe_matches(opts) == [
+               %{"versionStartIncluding" => nil, "versionEndExcluding" => nil}
+             ]
+    end
+  end
+
   describe "cpe_matches/2 under an affected default" do
     # CPE has one status, so everything not proven safe is matched.
     test "matches the gap below the only fix" do

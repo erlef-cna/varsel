@@ -92,10 +92,22 @@ defmodule Varsel.Cases.Derivation do
     {:ok,
      %{
        "channels" => channels,
-       "cpe_matches" => Emit.cpe_matches(reach.ranges, emit_opts),
+       "cpe_matches" => cpe_matches(package, reach, emit_opts),
        "call_outs" => reach.call_outs,
        "issues" => reach.issues
      }}
+  end
+
+  # A package whose every distributed channel publishes commits (a service
+  # deployed from its repository) has no release for a CPE range to name.
+  defp cpe_matches(package, reach, emit_opts) do
+    distributed = Enum.reject(package.channels, &(&1.kind == :service))
+
+    if distributed != [] and Enum.all?(distributed, &(Emit.version_type(&1) == :git)) do
+      Emit.git_cpe_matches(emit_opts)
+    else
+      Emit.cpe_matches(reach.ranges, emit_opts)
+    end
   end
 
   defp reachability(%{repo_url: nil}, _platform, _events), do: empty_reachability()

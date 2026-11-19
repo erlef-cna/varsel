@@ -383,6 +383,20 @@ defmodule Varsel.Cases.Description.AffectedSummaryTest do
                "This issue affects hexpm: from 617e44c before c692438."
     end
 
+    # A service's deployment dates are no release of the code (CVE-2026-21618).
+    test "a commit entry beside a service entry is kept" do
+      affected = [
+        entry("hexpm/hexpm", "pkg:github/hexpm/hexpm", [
+          version("617e44c", "c692438", "affected", "git")
+        ]),
+        entry("hex.pm", nil, [version("2025-10-01", "2026-01-19", "affected", "date")])
+      ]
+
+      assert Summary.summarize(affected) ==
+               "This issue affects hexpm/hexpm: from 617e44c before c692438; " <>
+                 "hex.pm: from 2025-10-01 before 2026-01-19."
+    end
+
     # An image tag restates the release version once per flavor.
     test "an oci entry beside a version entry is dropped" do
       affected = [

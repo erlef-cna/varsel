@@ -34,9 +34,10 @@ defmodule Varsel.Cases.Description.AffectedSummary do
     * Rows that are not `status: "affected"`. An `unknown` row says the record
       does not know, which "this issue affects" would misreport as certainty.
     * Commit-versioned entries, when the same product is also described by
-      version — the commit range is the same fact in a vocabulary the sentence
-      cannot read aloud. A product known ONLY by commit keeps them, since that
-      is all there is to say.
+      package version — the commit range is the same fact in a vocabulary the
+      sentence cannot read aloud. A product known ONLY by commit keeps them,
+      since that is all there is to say. A service entry (no `packageURL`)
+      does not count as a package version, so it keeps them too.
     * OCI entries, on the same grounds: an image tag restates the release
       version, once per tag flavor, so a ten-flavor channel would otherwise
       repeat one range ten times.
@@ -103,15 +104,16 @@ defmodule Varsel.Cases.Description.AffectedSummary do
           do: %{name: product_name(entry), purl: entry["packageURL"], ranges: ranges}
 
     described
-    |> drop_restatements(&commit_ranges?(&1.ranges))
+    |> drop_restatements(&commit_ranges?(&1.ranges), &package?/1)
     |> drop_restatements(&oci_entry?/1)
   end
 
   # A commit range or an image tag restates a version range we already read
   # aloud — and an OCI entry repeats it once per tag flavor. Both only survive
-  # when they are all there is to say.
-  defp drop_restatements(described, restatement?) do
-    if Enum.any?(described, &(not restatement?.(&1))) do
+  # when they are all there is to say. A service's deployment dates are no
+  # release of the code, so they leave its commit range the only one.
+  defp drop_restatements(described, restatement?, restates? \\ fn _entry -> true end) do
+    if Enum.any?(described, &(not restatement?.(&1) and restates?.(&1))) do
       Enum.reject(described, restatement?)
     else
       described
@@ -119,6 +121,8 @@ defmodule Varsel.Cases.Description.AffectedSummary do
   end
 
   defp commit_ranges?(ranges), do: Enum.all?(ranges, &(&1.type == "git"))
+
+  defp package?(%{purl: purl}), do: is_binary(purl)
 
   defp oci_entry?(%{purl: purl}) when is_binary(purl) do
     match?(%Purl{type: "oci"}, Purl.new!(purl))
