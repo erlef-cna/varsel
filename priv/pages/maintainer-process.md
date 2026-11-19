@@ -20,9 +20,9 @@ You and the CNA each own one part of the disclosure:
 
 The **EEF CNA GitHub App** connects the two. With the app installed on your
 repository, the CNA reads your advisory, follows its discussion, and writes the
-CVE ID and the record details back onto it. You keep working on GitHub, and we
+CVE ID and the record's metadata on it. You keep working on GitHub, and we
 do not have to copy anything by hand. We strongly encourage you to install it.
-[§4](#4-what-the-github-integration-does) lists what the app does.
+[§5](#5-the-github-integration) lists what the app does.
 
 ## 2. Enable Private Vulnerability Reporting
 
@@ -68,7 +68,7 @@ repository.
 
    The form opens a case for the advisory on this site, and you are on it from
    the start. The CNA acknowledges it within **two business days**. From here,
-   [§6](#6-the-disclosure-process) describes the rest.
+   [§4](#4-the-disclosure-process) describes the rest.
 :::
 
 If you cannot install a GitHub App on the repository, answer *No*. The form then
@@ -88,7 +88,7 @@ You also get an email that invites you to the case on this site. It tells you
 what to expect and when we need an answer. You do not need a fix to reply.
 
 Install the EEF CNA GitHub App on the repository, so the case and the advisory
-stay in sync (see [§4](#4-what-the-github-integration-does)). Your CNA contact
+stay in sync (see [§5](#5-the-github-integration)). Your CNA contact
 sends you the link.
 
 ### 3.3 Without GitHub
@@ -102,72 +102,7 @@ Use email only when the case does not work for you. Write to
 **cna@erlef.org**. Encrypted communication is also supported. See the
 [Contact page](/contact) for our GPG key and fingerprint.
 
-## 4. What the GitHub Integration Does
-
-With the EEF CNA GitHub App installed, the CNA's case and your advisory stay
-connected:
-
-| What | Direction | When |
-| --- | --- | --- |
-| Advisory discussion | Advisory → case | Automatically, every few minutes, while the case is open |
-| Case comments | Case → advisory | When the author ticks *Also post this comment on the linked GitHub advisory* |
-| CVE ID, severity, weaknesses, description, affected versions, credits | Case → advisory | When the CNA pushes them |
-| Credits, affected versions, title | Advisory → case | When the CNA pulls them |
-| People | Both ways | The CNA adds people on the case as advisory collaborators, and gives people on the advisory access to the case |
-
-You do not need to fill in every field of the advisory:
-
-- **Credits: please fill them in.** Credit everyone who found, reported, or
-  helped fix the vulnerability, with their GitHub login. You know these people
-  best, and we take the credits over into the CVE record.
-- **Affected and patched versions:** fill them in if you know them. We verify
-  them against the repository.
-- **CVSS and CWE: optional.** The CNA sets the severity and the weakness
-  classification of the CVE record, and pushes them to the advisory.
-- **CVE ID: leave it to us.** Choose *"Request CVE ID later"* when you create
-  the advisory. Do **not** request a CVE ID from GitHub. We push the CVE ID to
-  the advisory.
-
-  ![Advisory creation form with Request CVE ID later option selected](/images/maintainer-process/cve-later.png)
-
-The case's **GitHub** tab sets the case against the advisory, field by field, and
-shows who has access on either side.
-
-![The GitHub tab of a case: the CVE record and the advisory field by field](/images/maintainer-process/case-github-tab.png)
-
-The discussion on the advisory and the comments on the case show in one stream.
-
-![Case comments, with a comment synced from the advisory and the option to post on the advisory as well](/images/maintainer-process/case-advisory-comments.png)
-
-Without the app, the CNA does these steps by hand. Then you enter the CVE ID on
-the advisory yourself: go to *Edit* → *CVE identifier* → *I have an existing CVE
-ID*, and enter the ID we give you.
-
-![Advisory edit form with I have an existing CVE ID option and input field](/images/maintainer-process/cve-input.png)
-
-## 5. Following the CVE Record on This Site
-
-The CVE record is drafted on this site. We give you access to the case by your
-GitHub or Hex.pm handle, and you sign in with that account. No prior
-registration is needed.
-
-On the case you see the draft record exactly as it will be published: the
-description, severity, affected version ranges, and credits. You can comment,
-and you can propose corrections to any field. Maintainers usually know the
-affected versions and the fix timeline better than anyone, so a proposal is the
-right way to give us that knowledge. The CNA reviews every proposal.
-
-![An invited maintainer's view of an in-progress case: the draft record, their own suggestions, and the discussion](/images/guide/maintainer-view.png)
-
-The bell in the header shows comments, mentions, and changes to your cases. In
-the [notification settings](/settings/notifications) you choose what you hear
-about and whether it also reaches you by email. Notification emails carry no
-case details, only a link back here.
-
-Everything on an unpublished case is embargoed and visible only to the people
-on it. The [Varsel Guide](/guide) has the rest of the detail.
-
-## 6. The Disclosure Process
+## 4. The Disclosure Process
 
 Once initial contact is established, the typical workflow is as follows:
 
@@ -183,11 +118,25 @@ Once initial contact is established, the typical workflow is as follows:
 
    ![GitHub advisory collaborators section](/images/maintainer-process/collaborators.png)
 
-3. **Fill In the Credits**
+3. **Write the Advisory**
 
-   Credit the reporters and everyone else who helped on the advisory (see
-   [§4](#4-what-the-github-integration-does)). The CNA pushes the CVE ID to the
-   advisory. Without the app, enter the ID we give you yourself.
+   Describe the vulnerability in enough detail for the CNA to understand it.
+   We draft the full advisory text for the CVE. You can take it over to your
+   advisory, or write your own. Credit everyone who found, reported, or
+   helped fix the vulnerability, with their GitHub login. You know these
+   people best, and we take the credits over into the CVE record. Leave the
+   severity and the weaknesses to us.
+
+   For the CVE ID, choose *"Request CVE ID later"* when you create the
+   advisory. Do **not** request a CVE ID from GitHub. We set the CVE ID on the
+   advisory through the integration.
+
+   ![Advisory creation form with Request CVE ID later option selected](/images/maintainer-process/cve-later.png)
+
+   Without the app, enter the ID we give you yourself: go to *Edit* → *CVE
+   identifier* → *I have an existing CVE ID*.
+
+   ![Advisory edit form with I have an existing CVE ID option and input field](/images/maintainer-process/cve-input.png)
 
 4. **Create a Private Fork**
 
@@ -221,8 +170,8 @@ Once initial contact is established, the typical workflow is as follows:
    is satisfied with the fix. In parallel, the CNA writes the CVE record: the
    [CWE](https://cwe.mitre.org/) (weakness type),
    [CVSS](https://www.first.org/cvss/) (severity score), affected versions,
-   credits, and the public description. With the app installed, we push them to
-   your advisory.
+   credits, and the CVE description. With the app installed, we set the
+   metadata on your advisory.
 
 7. **Coordinate Release Date**
 
@@ -268,6 +217,38 @@ Once initial contact is established, the typical workflow is as follows:
     CVE has high severity or the package has wide adoption, the CNA may also publish
     its own announcements.
 :::
+
+## 5. The GitHub Integration
+
+When your advisory is linked to the case and the EEF CNA GitHub App is
+installed on the repository:
+
+- **Comments sync.** The advisory's discussion shows on the case
+  automatically. A comment on the case can be posted on the advisory as well.
+- **The CNA keeps the metadata up to date.** We set the CVE ID, severity,
+  weaknesses, and affected versions on your advisory through the integration.
+- **The description is yours.** We draft a full advisory text for the CVE.
+  You decide whether your advisory takes it over or keeps your own.
+
+The case's **GitHub** tab shows the case and the advisory field by field.
+
+![The GitHub tab of a case: the CVE record and the advisory field by field](/images/maintainer-process/case-github-tab.png)
+
+![Case comments, with a comment synced from the advisory and the option to post on the advisory as well](/images/maintainer-process/case-advisory-comments.png)
+
+Without the app, the CNA does these steps by hand.
+
+## 6. Following the Case on This Site
+
+The CVE record is drafted on this site. We give you access to the case by your
+GitHub or Hex.pm handle, and you sign in with that account. No prior
+registration is needed. You can comment, and you can propose corrections to any
+field of the record.
+
+Everything on an unpublished case is embargoed and visible only to the people
+on it. The [Varsel Guide](/guide) has the rest of the detail.
+
+![An invited maintainer's view of an in-progress case: the draft record, their own suggestions, and the discussion](/images/guide/maintainer-view.png)
 
 ## 7. Timelines & Embargo
 
