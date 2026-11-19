@@ -115,7 +115,7 @@ check. The agent proposes, and you review and decide on the case page.
 1. **Get Assigned to a Case**
 
    A CNA Point of Contact assigns you to a reported case while it is still
-   *Submitted*. You are notified, and the case shows on your [Cases](/cases)
+   *Submitted*. You are notified, and the case shows on your [Cases](/cases){rel=nofollow}
    board. Treat everything on it as confidential until the advisory is
    published.
 

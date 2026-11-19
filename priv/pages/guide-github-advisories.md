@@ -18,7 +18,7 @@ act depends on the role:
 - **Supporters and everyone else on the case** act with their own GitHub
   account. The app must be installed on the repository, and the account must
   have access to the repository on GitHub. Link a GitHub account in
-  [account settings](/settings/account) if yours has none. The settings page
+  [account settings](/settings/account){rel=nofollow} if yours has none. The settings page
   also shows where the app can act for you.
 - **Points of Contact** act through the app when their own account cannot,
   and with the GitHub CLI where the app is not installed. See
@@ -29,11 +29,11 @@ repository without the app needs its owner to install it.
 
 ## Cases That Start from an Advisory
 
-- **You have the advisory.** On [Cases](/cases), open a case from the
+- **You have the advisory.** On [Cases](/cases){rel=nofollow}, open a case from the
   advisory's URL or GHSA id. The case arrives filled in from the advisory and
   linked to it.
 - **A maintainer submitted it.** A maintainer whose repository has the app
-  installed submits their advisory on the [report form](/report). The case
+  installed submits their advisory on the [report form](/report){rel=nofollow}. The case
   holds no report, only the advisory's title and the link, and the maintainer
   is on it. The advisory is the claim you triage. Pull its fields once you
   accept the case.

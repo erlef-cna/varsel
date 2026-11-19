@@ -50,7 +50,7 @@ repository.
 :::steps
 1. **Report the advisory on this site**
 
-   Sign in with GitHub and open the [report form](/report). Answer that there is
+   Sign in with GitHub and open the [report form](/report){rel=nofollow}. Answer that there is
    an advisory and that you maintain the repository, then paste the advisory's
    URL.
 
@@ -94,7 +94,7 @@ sends you the link.
 ### 3.3 Without GitHub
 
 If your project is not hosted on GitHub, [report the vulnerability on this
-site](/report) without an advisory. The form opens a case, and you are on it
+site](/report){rel=nofollow} without an advisory. The form opens a case, and you are on it
 from the start. Coordinate in the case's comments: they stay with the CVE
 record, and everyone on the case sees them.
 

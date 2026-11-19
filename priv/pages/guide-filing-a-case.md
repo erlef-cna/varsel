@@ -12,7 +12,7 @@ drafts most of the record as suggestions, and you review and decide.
 1. **Take on the case**
 
    A Point of Contact assigns you to a reported case while it waits in the
-   Submitted column of [Cases](/cases). Nothing about it is visible to anyone
+   Submitted column of [Cases](/cases){rel=nofollow}. Nothing about it is visible to anyone
    but the people on the case and the Points of Contact. Mark it *Under
    triage* while you work on it, hold it against the
    [CVE criteria](/cve-criteria), and decide on the case page:
@@ -26,7 +26,7 @@ drafts most of the record as suggestions, and you review and decide.
    A reporter may withdraw until you accept, and follows the outcome on the
    case.
 
-   You can also open a case yourself under [Cases](/cases), for a finding of
+   You can also open a case yourself under [Cases](/cases){rel=nofollow}, for a finding of
    your own or
    [from a GitHub advisory](/guide/github-advisories#cases-that-start-from-an-advisory).
    You are on it automatically.
@@ -71,7 +71,7 @@ drafts most of the record as suggestions, and you review and decide.
    GitHub or Hex.pm handle. Someone without an account gets an invite that
    becomes access on their first sign-in. Assigning someone notifies them
    in-app and by email, per their [notification
-   settings](/settings/notifications).
+   settings](/settings/notifications){rel=nofollow}.
 
    An invited person gets one email with a sign-in link, at the primary
    address Hex.pm holds for them or the public address on their GitHub

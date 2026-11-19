@@ -17,28 +17,60 @@ defmodule VarselWeb.SitePagesTest do
     assert body =~ "<svg"
   end
 
-  for {path, needle} <- [
-        {"/scope", "Scope"},
-        {"/contact", "Report a Vulnerability"},
-        {"/cve-criteria", "CVE Assignment Criteria"},
-        {"/security-policy", "Security Policy"},
-        {"/data-licensing", "Data Licensing"},
-        {"/api-access", "API Access"},
-        {"/coordinator-process", "Coordinator Process"},
-        {"/maintainer-process", "Maintainer Process"},
-        {"/guide", "Varsel Guide"},
-        {"/guide/filing-a-case", "Filing a CVE"},
-        {"/guide/review-and-publication", "Review &amp; Publication"},
-        {"/guide/affected-versions", "Affected Versions"},
-        {"/guide/record-conventions", "Record Conventions"},
-        {"/guide/ai-tooling", "AI Tooling"},
-        {"/guide/github-advisories", "GitHub Advisories"},
-        {"/privacy-policy", "Privacy Policy"},
-        {"/terms-and-conditions", "Terms &amp; Conditions"}
-      ] do
+  @content_pages [
+    {"/scope", "Scope"},
+    {"/contact", "Report a Vulnerability"},
+    {"/cve-criteria", "CVE Assignment Criteria"},
+    {"/security-policy", "Security Policy"},
+    {"/data-licensing", "Data Licensing"},
+    {"/api-access", "API Access"},
+    {"/coordinator-process", "Coordinator Process"},
+    {"/maintainer-process", "Maintainer Process"},
+    {"/guide", "Varsel Guide"},
+    {"/guide/filing-a-case", "Filing a CVE"},
+    {"/guide/review-and-publication", "Review &amp; Publication"},
+    {"/guide/affected-versions", "Affected Versions"},
+    {"/guide/record-conventions", "Record Conventions"},
+    {"/guide/ai-tooling", "AI Tooling"},
+    {"/guide/github-advisories", "GitHub Advisories"},
+    {"/privacy-policy", "Privacy Policy"},
+    {"/terms-and-conditions", "Terms &amp; Conditions"}
+  ]
+
+  for {path, needle} <- @content_pages do
     test "GET #{path} renders", %{conn: conn} do
       conn = get(conn, unquote(path))
       assert html_response(conn, 200) =~ unquote(needle)
+    end
+  end
+
+  describe "links to sign-in-only paths" do
+    setup do
+      previous = Application.fetch_env!(:varsel, :test_deployment?)
+      Application.put_env(:varsel, :test_deployment?, false)
+      on_exit(fn -> Application.put_env(:varsel, :test_deployment?, previous) end)
+    end
+
+    test "carry rel=nofollow on every content page", %{conn: conn} do
+      disallowed =
+        for "Disallow: " <> prefix <-
+              conn |> get("/robots.txt") |> response(200) |> String.split("\n"),
+            do: prefix
+
+      links =
+        for {path, _needle} <- @content_pages,
+            link <-
+              build_conn()
+              |> get(path)
+              |> html_response(200)
+              |> LazyHTML.from_document()
+              |> LazyHTML.query(".prose a[href]"),
+            [href] = LazyHTML.attribute(link, "href"),
+            Enum.any?(disallowed, &String.starts_with?(href, &1)),
+            do: {path, href, LazyHTML.attribute(link, "rel")}
+
+      refute links == []
+      assert Enum.reject(links, &match?({_path, _href, ["nofollow"]}, &1)) == []
     end
   end
 

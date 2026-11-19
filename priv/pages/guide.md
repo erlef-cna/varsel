@@ -14,9 +14,9 @@ Point of Contact gives you and by the cases you are on.
 
 The bell in the header tracks what needs your attention (comments,
 mentions, proposals, review requests, publication) and links to the full
-list at [Notifications](/notifications). Pick what you hear about and
+list at [Notifications](/notifications){rel=nofollow}. Pick what you hear about and
 whether it also reaches you by email at [Notification
-settings](/settings/notifications); notification emails carry no case
+settings](/settings/notifications){rel=nofollow}; notification emails carry no case
 details, just a link back here.
 
 ## Who Does What
