@@ -6,8 +6,31 @@ SPDX-License-Identifier: Apache-2.0
 
 # Contributing
 
-The [Development](README.md#development) section of the README tells you how
-to set up the environment. Run `mix precommit` before you commit.
+## Development
+
+The development environment is managed with [devenv](https://devenv.sh/) as a
+Nix flake:
+
+```shell
+nix develop --no-pure-eval
+devenv up        # starts PostgreSQL
+mix setup        # installs dependencies, creates and migrates the database
+mix phx.server
+```
+
+The application is then available at [`localhost:4000`](http://localhost:4000).
+Run `mix precommit` before committing; it formats, lints and runs the test
+suite.
+
+Signing in creates an account with no role. To give yourself the POC role,
+open [AshAdmin](http://localhost:4000/dev/admin), find your user and set
+`role` to `poc`. From an `iex -S mix phx.server` session instead:
+
+```elixir
+Varsel.Accounts.User
+|> Ash.get!("<user-id>", authorize?: false)
+|> Ash.update!(%{role: :poc}, action: :set_role, authorize?: false)
+```
 
 ## Releasing
 
