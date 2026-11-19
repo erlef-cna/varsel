@@ -18,7 +18,17 @@
       "repository": "https://github.com/erlef-cna/varsel",
       "homepage": "https://github.com/erlef-cna/varsel",
       "category": "security",
-      "keywords": ["cve", "cna", "security", "vulnerability", "varsel", "mcp", "eef", "erlang", "elixir"]
+      "keywords": [
+        "cve",
+        "cna",
+        "security",
+        "vulnerability",
+        "varsel",
+        "mcp",
+        "eef",
+        "erlang",
+        "elixir"
+      ]
     }
   ]
 }
