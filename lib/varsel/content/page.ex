@@ -24,14 +24,16 @@ defmodule Varsel.Content.Page do
 
   # `header_id_prefix` gives every heading an id and a permalink anchor, which
   # the table of contents addresses. `block_directive` enables the `:::steps`
-  # fences the process pages use. These pages are repo content, so
-  # `unsafe: true` carries no sanitize pass.
+  # and `:::warning` fences. `link_attributes` carries the `{rel=nofollow}` on
+  # links to sign-in-only paths, and renders only with `unsafe: true`. These
+  # pages are repo content, so `unsafe: true` carries no sanitize pass.
   @options [
     extension: [
       table: true,
       autolink: true,
       strikethrough: true,
       block_directive: true,
+      link_attributes: true,
       header_id_prefix: ""
     ],
     render: [hardbreaks: false, unsafe: true]

@@ -4,27 +4,48 @@
 }
 ---
 
-Vulnerabilities reach us as GitHub advisory invites, email, reports and
-GitHub advisories submitted [on this site](/report), and findings of our own. This page is the
-path from there to a published CVE.
+This page is a supporter's path through a case, from a reported
+vulnerability to a record in review. The [AI tooling](/guide/ai-tooling)
+drafts most of the record as suggestions, and you review and decide.
 
 :::steps
-1. **Open the case**
+1. **Take on the case**
 
-   If the vulnerability warrants a CVE (check the
-   [criteria](/cve-criteria)), open a case under [Cases](/cases). You are on
-   it automatically, and nothing about it is visible to anyone but the
-   people on the case and the Points of Contact. A vulnerability that
-   reached you as a GitHub security advisory opens from the same place:
-   paste the advisory's URL or GHSA id, and the case arrives filled in from
-   it, with the advisory linked.
+   A Point of Contact assigns you to a reported case while it waits in the
+   Submitted column of [Cases](/cases){rel=nofollow}. Nothing about it is visible to anyone
+   but the people on the case and the Points of Contact. Mark it *Under
+   triage* while you work on it, hold it against the
+   [CVE criteria](/cve-criteria), and decide on the case page:
 
-2. **Write the record**
+   - **Accept** it, and it opens for filing as a draft.
+   - **Reject** it with a reason. Its open invites are withdrawn.
+   - **Merge** it into a case for the same finding. That case cites the
+     report and takes over its people. You need to be on both cases.
+   - **Split** off a new case for each further finding the report holds.
+
+   A reporter may withdraw until you accept, and follows the outcome on the
+   case.
+
+   You can also open a case yourself under [Cases](/cases){rel=nofollow}, for a finding of
+   your own or
+   [from a GitHub advisory](/guide/github-advisories#cases-that-start-from-an-advisory).
+   You are on it automatically.
+
+2. **Take a CVE ID**
+
+   Once the case is accepted, take the next free CVE ID on it.
+
+   Is the vulnerability in code the package vendors from a project outside
+   the CNA's [scope](/scope), such as a C library? Then the CNA responsible
+   for that project assigns the CVE. Take no ID from the pool: a Point of
+   Contact links the
+   [upstream CVE](/guide/review-and-publication#upstream-cves) to the case.
+
+3. **Write the record**
 
    Fill in the summary, the CVSS vector, the CWE/CAPEC classification,
    references, and credits. [Record Conventions](/guide/record-conventions)
-   is the house style, and the [AI tooling](/guide/ai-tooling) drafts most
-   of this for you as suggestions.
+   is the house style.
 
    Every change is either a direct edit or a suggestion, the same split as
    editing and suggesting in a shared document. Edit when you are sure,
@@ -33,135 +54,62 @@ path from there to a published CVE.
 
    ![Case workspace: the draft record, two open suggestions, and the activity feed](/images/guide/case-workspace.png)
 
-3. **Enter the affected versions**
+4. **Enter the affected versions**
 
    Add the affected package (the `otp` / `elixir` / `gleam` presets prefill
    vendor, product, repository, and channels) and record two facts: the
    commit that introduced the vulnerability and the commit or commits that
    fixed it. Everything version-shaped in the published record is derived
-   from those facts and the repository, so verify them: full commit SHAs,
-   never trusted from the advisory.
-
-   After you change them, derivation runs again on its own within a few
-   seconds. An out-of-date derivation shows up as *no affected versions*. If the
-   derived ranges disagree with the advisory, a boundary commit is wrong.
-   [Affected Versions](/guide/affected-versions) covers the details and the
-   odd cases: unreleased hotfixes, missing repositories, prereleases.
+   from them. [Affected Versions](/guide/affected-versions) covers the facts,
+   the derivation, and the odd cases.
 
    ![The affected package with its channels and the derived version ranges](/images/guide/affected-packages.png)
 
-4. **Bring the maintainer in**
+5. **Bring people in**
 
    Grant the maintainer (and the reporter, if there is one) access by their
    GitHub or Hex.pm handle. Someone without an account gets an invite that
    becomes access on their first sign-in. Assigning someone notifies them
    in-app and by email, per their [notification
-   settings](/settings/notifications). An invited person gets one email with
-   a sign-in link, at the primary address Hex.pm holds for them or the
-   public address on their GitHub profile. When the provider lists no
-   address, enter one you found at a trusted source, such as the author
-   email on their commits in the affected repository. When you find no
-   trusted address, tick *Send no email* and reach the person another way.
+   settings](/settings/notifications){rel=nofollow}.
+
+   An invited person gets one email with a sign-in link, at the primary
+   address Hex.pm holds for them or the public address on their GitHub
+   profile. When the provider lists no address, enter one you found at a
+   trusted source, such as the author email on their commits in the affected
+   repository. When you find no trusted address, tick *Send no email* and
+   reach the person another way. The people panel shows what became of each
+   invite email.
+
    Mark someone who maintains an affected package as a *Maintainer*: their
    invite email asks them to respond, says no fix is needed to start, and
    says we may publish without one after 14 days of silence, as the
    [maintainer process](/maintainer-process) states. Everyone else gets a
    plain invite. Hex.pm reports mark the package's maintainers for you.
-   The people panel shows what became of each invite email.
-   Notification emails never carry case details, only a link, so the
-   advisory thread is still where they hear what changed. The same holds for
-   comments and proposals: keep anything time-sensitive on the advisory
-   thread and use case comments for what should stay on record with the
-   case. On a case linked to an advisory, a comment can be both: the comment
-   form offers to post it on the advisory as well. It posts as you where
-   your GitHub login may write there, and as the EEF CNA app naming you
-   where it may not. Type `@` in a comment to mention someone on the case;
-   they are notified, and the advisory copy carries their name without
-   mentioning anyone on GitHub.
 
-5. **Verify**
+   When the repository takes private vulnerability reports, also report the
+   case to its maintainers from the **GitHub** tab; see
+   [GitHub Advisories](/guide/github-advisories#reporting-to-the-maintainers).
 
-   Open the case's **Publication** tab and clear everything it flags:
-   publish blockers are hard stops, and the built-in validation (CVE schema,
-   cvelint, hex.pm package check) must pass. Then cross-check the rendered
-   record on the **CVE** tab against the advisory one last time: ranges,
-   credits, resolved `TODO`s.
+   Notification emails never carry case details, only a link. Keep anything
+   time-sensitive on the advisory thread, and use case comments for what
+   should stay on record with the case. Type `@` in a comment to mention
+   someone on the case.
 
-   The **GitHub** tab does that cross-check for a GitHub security advisory.
-   Link the advisory by its URL or its GHSA id, and the tab sets the case
-   against it field by field: title, description, CVE ID, CVSS vector, CWEs,
-   credits, and the derived ranges of each channel, spelled the way GitHub
-   spells them. Pull a field when the advisory should win, or push it when
-   the case should. A pull adds and replaces and never removes. A push
-   writes to the advisory as you, so GitHub decides whether you may. Refresh
-   reads the advisory again after it changed on GitHub. The linked advisory
-   leads the published references as the vendor advisory, and no stored
-   reference is needed for it. Unlink takes it out again. Linking, pulling
-   and unlinking are edits and follow the same freeze as the case content:
-   approval stops them for everyone but a Point of Contact. Advisories are
-   read and written with your GitHub account, on repositories where the
-   repository's owner installed the EEF CNA app and your account is an
-   owner, collaborator or member. When your account cannot act on the
-   repository, the tab says so and holds Refresh, Push and Report, and its
-   owner needs to install the EEF CNA app. When no GitHub account is linked
-   to yours, the tab holds them until you
-   [link GitHub in account settings](/settings/account). The settings page
-   then shows where the app can act for you and links to GitHub to change
-   it. A Point of Contact without a linked GitHub account, or whose account
-   cannot act on a repository with the app installed, or whose request
-   GitHub refuses there, acts through the app instead, and GitHub shows the
-   app as the author.
+6. **Verify**
 
-   Where the app is not installed, a Point of Contact does the request from
-   their own terminal with the GitHub CLI, `gh`. Link, Refresh, Pull, Push,
-   Report and adding a collaborator each offer to do it with gh, and show one
-   command. Opening a case from an advisory offers the same command on the
-   cases console. The
-   command fetches the request from here, sends it to GitHub with `gh api` as
-   your GitHub account, and posts GitHub's answer back. The tab then records the
-   answer as you and updates. The command works once, for 15 minutes. The
-   tab cannot ask GitHub whether you administer the repository, so for a
-   report choose a draft advisory when you do and a private report when you
-   do not.
+   Clear the **Publication** tab and cross-check the rendered record, as
+   [Verifying Before Review](/guide/record-conventions#verifying-before-review)
+   lists. On a case linked to an advisory, the **GitHub** tab sets the two
+   against each other field by field.
 
-   A case that has no advisory yet is reported from the same tab to the
-   maintainers of one of its GitHub repositories, as a private vulnerability
-   report in your name, with everything the case states and a description
-   you write for them. GitHub takes no credits on a private report, so push
-   them to the advisory after the report. The advisory GitHub opens for the
-   report becomes the linked one. A repository that takes no private reports is flagged there,
-   with the [maintainer process](/maintainer-process) to point its
-   maintainers at. Where you administer the repository, GitHub takes no
-   report from you and the case opens a draft advisory in your name instead.
-   A report a Point of Contact makes through the app opens a draft advisory
-   as the app.
-   Below the fields, the same table sets who has access on either side, one
-   row per person: on the case as an assignment or an invite, and on GitHub
-   as a collaborator, a team member or an owner of the organization. A
-   person on GitHub alone is given access to the case with one click, as an
-   assignment or an invite. The invite email goes to the address GitHub
-   lists for the person, and an account without one is invited without an
-   email: they already see the advisory on GitHub. A Point of Contact adds a
-   person on the case alone to the advisory's collaborators with one click.
-   GitHub gives a collaborator write access to the advisory. A person
-   without a linked GitHub account cannot be added.
+7. **Request review**
 
-6. **Take a CVE ID and hand it to review**
-
-   Take the next free CVE ID, then send the case to review. The Points of
-   Contact assigned to the case are notified. While none is, the request
-   goes to the Points of Contact who turned on **Unassigned review** in
-   their notification settings, or to every one of them while nobody has.
-   A Point of Contact sends it back with findings, or approves it and, once
-   the advisory is public,
-   [publishes](/guide/review-and-publication): Varsel pushes the record to
-   MITRE, and the OSV feed and hex.pm advisories follow automatically.
-
-   Is the vulnerability in code the package vendors from a project outside
-   the CNA's [scope](/scope), such as a C library? Then the CNA responsible
-   for that project assigns the CVE, not this CNA. Take no ID from the pool:
-   a Point of Contact links the
-   [upstream CVE](/guide/review-and-publication#upstream-cves) to the case.
+   Request review as soon as the record is complete. Do not wait for the
+   patch or the release: an early request gives the Points of Contact time to
+   review. [Review & Publication](/guide/review-and-publication#review)
+   covers who is notified and what happens next. A Point of Contact publishes
+   once the advisory is public.
 :::
 
 ## When Plans Change
@@ -175,4 +123,4 @@ everyone but a Point of Contact; publishing freezes it for everyone.
 - **Not becoming a CVE after all?** A Point of Contact closes the case with
   a reason. An already-assigned CVE ID goes back to the pool, or the Point
   of Contact rejects it at MITRE. That is
-  [their call](/guide/review-and-publication).
+  [their call](/guide/review-and-publication#closing-and-cve-ids).

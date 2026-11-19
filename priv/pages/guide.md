@@ -14,20 +14,21 @@ Point of Contact gives you and by the cases you are on.
 
 The bell in the header tracks what needs your attention (comments,
 mentions, proposals, review requests, publication) and links to the full
-list at [Notifications](/notifications). Pick what you hear about and
+list at [Notifications](/notifications){rel=nofollow}. Pick what you hear about and
 whether it also reaches you by email at [Notification
-settings](/settings/notifications); notification emails carry no case
+settings](/settings/notifications){rel=nofollow}; notification emails carry no case
 details, just a link back here.
 
 ## Who Does What
 
 - **Supporters** ([coordinators](/coordinator-process)) do the case work:
-  open a case, write the record, bring the maintainer in, take a CVE ID, and
-  hand the finished case to review, accepting or declining suggestions from
-  collaborators along the way. Publishing is not theirs; a Point of Contact
-  signs off.
-- **Points of Contact** run the CNA: they triage inbound reports, review and
-  publish cases, and manage roles and case access. They see every case.
+  triage the reported cases they are assigned to, take a CVE ID, write the
+  record, bring the maintainer in, and hand the finished case to review,
+  accepting or declining suggestions from collaborators along the way.
+  Publishing is not theirs; a Point of Contact signs off.
+- **Points of Contact** run the CNA: they hand inbound reports to
+  supporters, review and publish cases, and manage roles and case access.
+  They see every case.
 - **Everyone else**, maintainers and reporters invited to a case, needs no
   role at all: they read the draft, comment, and suggest changes. The
   [Maintainer Process](/maintainer-process) explains what to expect.
@@ -38,6 +39,8 @@ details, just a link back here.
   published record. Start here.
 - [Review & Publication](/guide/review-and-publication) — triage, review,
   publishing, and user management, for Points of Contact.
+- [GitHub Advisories](/guide/github-advisories) — linking a case to its
+  GitHub advisory, syncing the two, and reporting to maintainers.
 - [Affected Versions](/guide/affected-versions) — what version facts to
   enter and how the published ranges are derived from them.
 - [Record Conventions](/guide/record-conventions) — house style for

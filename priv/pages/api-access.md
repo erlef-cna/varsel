@@ -61,7 +61,7 @@ the surface URL (RFC 8707). A token for the other surface is rejected with
 ## Personal API Tokens
 
 For clients without OAuth support, create a personal access token under
-[API Tokens](/settings/tokens) (login required) and send it as an
+[API Tokens](/settings/tokens){rel=nofollow} (login required) and send it as an
 `Authorization: Bearer` header. These tokens act as you on both surfaces
 without scope restrictions, so prefer OAuth where possible and give manual
 tokens an expiry.

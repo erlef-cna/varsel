@@ -860,7 +860,7 @@ defmodule VarselWeb.CaseGitHubLive do
             {repository_name(@target)} does not accept private vulnerability reports. Ask the
             maintainers to turn them on, as the
             <.link
-              href={~p"/maintainer-process" <> "#2-preferred-channel-github-private-vulnerability-reporting"}
+              href={~p"/maintainer-process" <> "#2-enable-private-vulnerability-reporting"}
               target="_blank"
               class="link link-hover font-semibold"
             >

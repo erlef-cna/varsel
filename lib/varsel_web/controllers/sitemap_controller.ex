@@ -119,6 +119,7 @@ defmodule VarselWeb.SitemapController do
       ~p"/guide/affected-versions",
       ~p"/guide/record-conventions",
       ~p"/guide/ai-tooling",
+      ~p"/guide/github-advisories",
       ~p"/security-policy",
       ~p"/data-licensing",
       ~p"/api-access",

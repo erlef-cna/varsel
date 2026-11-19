@@ -4,46 +4,24 @@
 }
 ---
 
-Points of Contact see every case and handle what
-[supporters](/guide/filing-a-case) cannot: triage, review, publication, and
-user management.
+Points of Contact see every case. They hand reported cases to supporters,
+and handle what [supporters](/guide/filing-a-case) cannot: review,
+publication, CVE IDs beyond the next free one, and user management.
 
 ## Triage
 
-Each report from [the form](/report), the API, or hex.pm opens a case at
-once. It waits in the Submitted column of the [Cases](/cases) board, and
+Each report from [the form](/report){rel=nofollow}, the API, or hex.pm opens a case at
+once. It waits in the Submitted column of the [Cases](/cases){rel=nofollow} board, and
 moves to the Triage column when you mark it under triage. The reporter and the
 maintainers hex.pm named are on the case from the start. You and the
 supporters on it can edit the case while you triage it. The reporter and the
 maintainers comment and suggest.
 
-A maintainer whose repository has the EEF CNA app installed submits their
-GitHub advisory on the form instead of a report. Their case holds no report.
-It arrives with the advisory's title and linked to it, with the maintainer on
-it, and the advisory is the claim you triage. Pull what the case should
-take from the advisory on its GitHub tab once you accept it. A report can also name an
-advisory the case is not linked to, as `github_advisory` beside its text.
-Everyone on a case can read its linked advisory and the advisory's comments,
-and the reporter is on the case. Before you link that advisory, check on
-GitHub that the reporter already has access to it, for example as a
-collaborator. Knowing an advisory's address does not give access to it. When
-the reporter has access, link the advisory on the case's GitHub tab once you
-accept it.
-
-Hold each case against the [CVE criteria](/cve-criteria) and decide on the
-case page:
-
-- **Accept** it, and it opens for filing as a draft.
-- **Reject** it with a reason. Its open invites are withdrawn.
-- **Merge** it into a case for the same finding. That case cites the report
-  and takes over its people.
-- **Split** off a new case for each further finding the report holds.
-
-A supporter you assign to a reported case takes the same decisions on it. A
-merge needs them on both cases.
-
-A reporter may withdraw until you accept. Reporters follow the outcome on the
-case, which their own board shows.
+Assign a supporter to the case to triage it, or triage it yourself. The
+decisions are the same either way, and
+[Filing a CVE](/guide/filing-a-case) lists them. A maintainer can also submit
+their GitHub advisory in place of a report; see
+[GitHub Advisories](/guide/github-advisories#cases-that-start-from-an-advisory).
 
 ![The case board with a reported case in the Submitted column](/images/guide/report-triage.png)
 
@@ -53,16 +31,16 @@ Cases arrive in review when a supporter considers them ready. A
 supporter's request notifies the Points of Contact assigned to the case, so
 assign yourself to a case you mean to review. On a case with none assigned
 it notifies the Points of Contact who turned on **Unassigned review** in
-[Notification settings](/settings/notifications), or every Point of Contact
+[Notification settings](/settings/notifications){rel=nofollow}, or every Point of Contact
 while nobody has. Sending a case to review yourself notifies nobody. The
-[Cases](/cases) board shows the whole pipeline.
+[Cases](/cases){rel=nofollow} board shows the whole pipeline.
 
 ![Cases board with a case in the draft column and one in review](/images/guide/case-board.png)
 
-Send a case back with your findings in the case comments, or approve it,
-which freezes the content for everyone but a Point of Contact. A Point of
-Contact still edits an approved case and accepts suggestions on it, so late
-detail needs no reopen. Publishing freezes the content for everyone.
+Send a case back with your findings in the case comments, or approve it. You
+still edit an approved case and accept suggestions on it, so late detail
+needs no reopen. [When Plans Change](/guide/filing-a-case#when-plans-change)
+has the freeze rules.
 
 Approval is judgement, not a second checklist: the record makes sense, the
 [conventions](/guide/record-conventions) were followed, the CVSS holds, the
@@ -84,7 +62,7 @@ Varsel also renders every published case again on a schedule: daily in the
 first month after publication, weekly in the first year, and monthly after
 that. A case whose current render differs from its published record, or
 can no longer be published, shows in the **Out of date** tab of the
-[Cases](/cases) archive. **Recheck all** runs the check again for every
+[Cases](/cases){rel=nofollow} archive. **Recheck all** runs the check again for every
 published case, for example after a fix to Varsel.
 
 Each row opens the diff to the published record. **Republish** there pushes
@@ -129,14 +107,11 @@ reject.
 
 ## People
 
-Roles are granted under [Users](/users): new coordinators get the
+Roles are granted under [Users](/users){rel=nofollow}: new coordinators get the
 supporter role once they have signed in, and a change takes effect
 immediately, open sessions included. No email goes out on a role change, so
-tell the person. Case access works from the case by GitHub or Hex.pm handle
-and reaches people without an account via invites; granting it notifies the
-person in-app and by email, per their [notification
-settings](/settings/notifications). That email is content-free, so still
-tell them what changed on the advisory thread. Removing someone is yours alone and sends
-nothing.
+tell the person. Case access is granted from the case, as
+[Filing a CVE](/guide/filing-a-case) describes. Removing someone from a case
+is yours alone and sends nothing.
 
 ![The user management table with one account per role](/images/guide/user-management.png)

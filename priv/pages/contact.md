@@ -12,7 +12,7 @@ vulnerabilities to us.
 
 ## Report a Vulnerability
 
-**Use the [report form](/report).** It reaches the Points of Contact directly,
+**Use the [report form](/report){rel=nofollow}.** It reaches the Points of Contact directly,
 asks for what we need up front, and gives your report a tracked case from the
 start. The form requires a sign-in with GitHub or Hex.pm so we can reach you
 about the report.
@@ -38,5 +38,7 @@ backup:
 For general questions, use
 [GitHub Discussions](https://github.com/orgs/erlef-cna/discussions).
 
-> **Note:** GitHub Discussions are public. Never report or include vulnerability
-> details there.
+:::warning
+**GitHub Discussions are public.** Never report or include vulnerability
+details there.
+:::

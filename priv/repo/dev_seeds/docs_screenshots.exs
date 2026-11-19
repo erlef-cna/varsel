@@ -5,7 +5,8 @@
 # Stages the fictional in-progress case the documentation screenshots show:
 # the mock users in every role, a draft case with affected package, boundary
 # facts, cached derivation, open and resolved proposals, comments, an invite,
-# a second case in review, and a submitted vulnerability report.
+# a linked GitHub advisory with a comment synced from it, a second case in
+# review, and a submitted vulnerability report.
 #
 #     mix run priv/repo/dev_seeds/docs_screenshots.exs
 #
@@ -30,6 +31,8 @@ defmodule DevSeed.DocsScreenshots do
   @report_summary "Forged webhook events accepted by webhook_relay when the signature header is empty"
   @intro_sha "3f7c2a91d4b8e6f0a1c5d9e8b7a6f5c4d3e2b1a0"
   @fix_sha "9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b"
+  @ghsa_id "GHSA-7q3m-w2xp-c9rv"
+  @advisory_url "https://github.com/acme/webhook_relay/security/advisories/#{@ghsa_id}"
 
   @description """
   Improper Verification of Cryptographic Signature vulnerability in acme \
@@ -50,11 +53,19 @@ defmodule DevSeed.DocsScreenshots do
 
     kase = seed_main_case(poc, supporter, collaborator)
     review_case = seed_review_case(supporter)
-    seed_report(collaborator)
+    report_case = seed_report(collaborator, supporter, poc)
 
     # Contract with docs_screenshots_capture.mjs: where to find the case ids.
     manifest = Path.join(__DIR__, ".docs_screenshots_manifest.json")
-    File.write!(manifest, Jason.encode!(%{main_case_id: kase.id, review_case_id: review_case.id}))
+
+    File.write!(
+      manifest,
+      Jason.encode!(%{
+        main_case_id: kase.id,
+        review_case_id: review_case.id,
+        report_case_id: report_case.id
+      })
+    )
 
     IO.puts("Seeded docs screenshot data: main case #{kase.id} (#{@cve_id}).")
     IO.puts("Manifest for the capture script: #{manifest}")
@@ -104,6 +115,7 @@ defmodule DevSeed.DocsScreenshots do
           {"case_assignments_versions", "case_assignments"},
           {"case_invites_versions", "case_invites"},
           {"case_comments_versions", "case_comments"},
+          {"case_github_advisory_links_versions", "case_github_advisory_links"},
           {"case_affected_packages_versions", "case_affected_packages"},
           {"case_package_channels_versions", "case_package_channels"},
           {"case_version_events_versions", "case_version_events"},
@@ -261,6 +273,12 @@ defmodule DevSeed.DocsScreenshots do
                   "versionType" => "semver"
                 }
               ],
+              "github_ranges" => [
+                %{
+                  "vulnerable_version_range" => ">= 1.2.0, < 2.0.3",
+                  "patched_versions" => ["2.0.3"]
+                }
+              ],
               "pending" => [],
               "issues" => []
             },
@@ -291,14 +309,7 @@ defmodule DevSeed.DocsScreenshots do
     Varsel.Cases.add_case_weakness!(%{case_id: kase.id, cwe_id: 347}, actor: supporter)
     Varsel.Cases.add_case_impact!(%{case_id: kase.id, capec_id: 475}, actor: supporter)
 
-    Varsel.Cases.add_case_reference!(
-      %{
-        case_id: kase.id,
-        url: "https://github.com/acme/webhook_relay/security/advisories/GHSA-docs-seed-demo",
-        tags: ["vendor-advisory", "related"]
-      },
-      actor: supporter
-    )
+    seed_advisory_link(kase)
 
     Varsel.Cases.add_case_reference!(
       %{
@@ -310,7 +321,7 @@ defmodule DevSeed.DocsScreenshots do
     )
 
     Varsel.Cases.add_case_credit!(
-      %{case_id: kase.id, name: "Riley Sandoval", credit_type: :finder},
+      %{case_id: kase.id, name: "Riley Sandoval", credit_types: [:finder]},
       actor: supporter
     )
 
@@ -333,7 +344,7 @@ defmodule DevSeed.DocsScreenshots do
         %{
           case_id: kase.id,
           name: "Noa Lindqvist",
-          credit_type: :remediation_developer,
+          credit_types: [:remediation_developer],
           reasoning: "Wrote and released the 2.0.3 fix."
         },
         actor: collaborator
@@ -369,9 +380,22 @@ defmodule DevSeed.DocsScreenshots do
     Varsel.Cases.post_case_comment!(
       %{
         case_id: kase.id,
-        body: "Release is scheduled for Thursday. The advisory draft is ready on the repo, GHSA-docs-seed-demo."
+        body: "Release is scheduled for Thursday. The advisory draft is ready on the repo, #{@ghsa_id}."
       },
       actor: collaborator
+    )
+
+    Ash.create!(
+      Varsel.Cases.Comment,
+      %{
+        case_id: kase.id,
+        github_comment_id: 909_090_001,
+        github_author_login: "octocat",
+        github_html_url: "#{@advisory_url}#advisorycomment-909090001",
+        body: "Confirmed the fix on the private fork: an empty signature header is now refused with 401."
+      },
+      action: :sync_from_github,
+      authorize?: false
     )
 
     Varsel.Cases.post_case_comment!(
@@ -384,6 +408,58 @@ defmodule DevSeed.DocsScreenshots do
     )
 
     kase
+  end
+
+  # The draft advisory as the maintainer wrote it on GitHub, stored as if the
+  # link had read it: no CVE ID, CVSS or CWE yet, which the CNA pushes, and
+  # the reporter credited, which the CNA pulls. Storing the document directly
+  # keeps the seed offline. The fictional repository has no advisory to read.
+  defp seed_advisory_link(kase) do
+    Ash.create!(
+      Varsel.Cases.GitHubAdvisoryLink,
+      %{
+        case_id: kase.id,
+        advisory: %{
+          "ghsa_id" => @ghsa_id,
+          "cve_id" => nil,
+          "html_url" => @advisory_url,
+          "state" => "draft",
+          "severity" => "high",
+          "summary" => "Empty signature header bypasses webhook verification",
+          "description" =>
+            "`WebhookRelay.Verifier.verify/2` accepts a request whose `x-relay-signature` " <>
+              "header is empty, so forged events reach the handlers.\r\n\r\nUpgrade to 2.0.3.",
+          "published_at" => nil,
+          "updated_at" => "2026-11-12T09:30:00Z",
+          "withdrawn_at" => nil,
+          "cvss_severities" => %{
+            "cvss_v3" => %{"score" => nil, "vector_string" => nil},
+            "cvss_v4" => %{"score" => nil, "vector_string" => nil}
+          },
+          "cwe_ids" => [],
+          "credits" => [%{"login" => "octocat", "type" => "reporter"}],
+          "credits_detailed" => [
+            %{
+              "state" => "accepted",
+              "type" => "reporter",
+              "user" => %{"login" => "octocat", "id" => 583_231}
+            }
+          ],
+          "collaborating_users" => [],
+          "collaborating_teams" => nil,
+          "vulnerabilities" => [
+            %{
+              "package" => %{"ecosystem" => "erlang", "name" => "webhook_relay"},
+              "patched_versions" => "2.0.3",
+              "vulnerable_functions" => [],
+              "vulnerable_version_range" => ">= 1.2.0, < 2.0.3"
+            }
+          ]
+        }
+      },
+      action: :record,
+      authorize?: false
+    )
   end
 
   # The CWE/CAPEC catalogs sync weekly from MITRE; a fresh dev database may
@@ -441,22 +517,28 @@ defmodule DevSeed.DocsScreenshots do
   end
 
   # ── an untriaged report, whose case fills the POC's submitted lane ────────
+  # The supporter is assigned to it, as a POC hands a report to a coordinator.
 
-  defp seed_report(reporter) do
-    Varsel.Cases.submit_vulnerability_report!(
-      %{
-        summary: @report_summary,
-        report_body: """
-        webhook_relay accepts any event when the x-relay-signature header is present but \
-        empty. Verifier.verify/2 returns :ok on `""` before comparing digests. Reproduced \
-        on 1.9.4 with a plain curl against a default mount; forged payloads reach the \
-        handler. 2.0.3 refuses the same request.\
-        """,
-        confirms_criteria: true,
-        confirms_in_scope: true
-      },
-      actor: reporter
-    )
+  defp seed_report(reporter, supporter, poc) do
+    report_case =
+      Varsel.Cases.submit_vulnerability_report!(
+        %{
+          summary: @report_summary,
+          report_body: """
+          webhook_relay accepts any event when the x-relay-signature header is present but \
+          empty. Verifier.verify/2 returns :ok on `""` before comparing digests. Reproduced \
+          on 1.9.4 with a plain curl against a default mount; forged payloads reach the \
+          handler. 2.0.3 refuses the same request.\
+          """,
+          confirms_criteria: true,
+          confirms_in_scope: true
+        },
+        actor: reporter
+      )
+
+    Varsel.Cases.assign_case_user!(%{case_id: report_case.id, user_id: supporter.id}, actor: poc)
+
+    report_case
   end
 end
 

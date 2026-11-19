@@ -427,7 +427,7 @@ defmodule VarselWeb.CaseGitHubLiveTest do
 
     assert has_element?(
              lv,
-             "#reporting-disabled a[href='/maintainer-process#2-preferred-channel-github-private-vulnerability-reporting']"
+             "#reporting-disabled a[href='/maintainer-process#2-enable-private-vulnerability-reporting']"
            )
 
     assert has_element?(lv, "#report-advisory-form button[disabled]", "Report privately")
