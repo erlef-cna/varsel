@@ -10,20 +10,34 @@ defmodule Varsel.Cases.GitHubAdvisory.ImportTest do
   alias Varsel.Cases.GitHubAdvisory.Import
 
   describe "case_params/1" do
-    test "takes the summary, description, v4 vector and publication date" do
+    test "takes the summary, description and publication date" do
       assert Import.case_params(otp_advisory()) == %{
                title: "Unbounded resource use in inets",
                description_md: "The inets HTTP server allocates without limit.\n\nUpgrade.",
-               cvss_v4: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
                date_public: ~U[2026-08-20 09:00:00Z]
              }
     end
 
-    test "leaves out what the advisory lacks: a v3-only score, an unpublished date" do
+    test "leaves out what the advisory lacks: an unpublished date" do
       assert Import.case_params(hex_advisory()) == %{
                title: "Header injection in acme_lib",
                description_md: "acme_lib passes user input into response headers."
              }
+    end
+  end
+
+  describe "child_params/1 metrics" do
+    test "takes the v4 vector as the GENERAL scenario" do
+      assert Import.child_params(otp_advisory()).metrics == [
+               %{
+                 scenario: "GENERAL",
+                 cvss_v4: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+               }
+             ]
+    end
+
+    test "leaves out a v3-only score" do
+      assert Import.child_params(hex_advisory()).metrics == []
     end
 
     test "treats blanks as absent" do

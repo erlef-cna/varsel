@@ -74,21 +74,15 @@ defmodule Varsel.Cases.ProposalTest do
                    case_id: case_record.id,
                    target: :case,
                    operation: :set,
-                   field_name: "cvss_v4",
-                   proposed_value: %{"value" => "not a vector"}
+                   field_name: "discovery",
+                   proposed_value: %{"value" => "telepathy"}
                  },
                  actor: poc
                )
 
       assert Exception.message(error) =~ "does not accept the proposed value"
 
-      assert %Proposal{} =
-               propose_set(
-                 poc,
-                 case_record,
-                 "cvss_v4",
-                 "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
-               )
+      assert %Proposal{} = propose_set(poc, case_record, "discovery", "external")
     end
 
     test "rejects a value without the envelope", %{poc: poc, case: case_record} do

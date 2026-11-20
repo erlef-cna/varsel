@@ -12,6 +12,7 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
   alias Varsel.Cases.Case.Calculations.Preview
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseCredit.Handle
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.GitHubAdvisory.Diff
   alias Varsel.Cases.PackageChannel
@@ -27,7 +28,7 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
           title: "Header injection in acme_lib",
           description_md: "acme_lib passes user input into response headers.",
           cve_id: nil,
-          cvss_v4: nil,
+          general_metric: nil,
           weaknesses: [%CaseWeakness{cwe_id: 113}],
           credits: [
             %CaseCredit{
@@ -146,10 +147,11 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
   test "a value one side lacks is that side's alone" do
     {:ok, vector} = CVSS.cast_input(@vector, version: [:v4])
 
-    rows = Diff.rows(case_record(%{cvss_v4: vector}), hex_advisory())
+    metric = %CaseMetric{scenario: "GENERAL", cvss_v4: vector}
+    rows = Diff.rows(case_record(%{general_metric: metric}), hex_advisory())
     assert %{status: :ours_only, ours: @vector, theirs: nil} = one(rows, :cvss_v4)
 
-    rows = Diff.rows(case_record(%{cvss_v4: nil, title: nil}), otp_advisory())
+    rows = Diff.rows(case_record(%{general_metric: nil, title: nil}), otp_advisory())
     assert %{status: :theirs_only, theirs: @vector} = one(rows, :cvss_v4)
     assert one(rows, :title).status == :theirs_only
   end

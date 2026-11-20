@@ -26,7 +26,8 @@ defmodule Varsel.Cases.Proposal.Target do
       :reference,
       :credit,
       :weakness,
-      :impact
+      :impact,
+      :metric
     ]
 
   @impl AshGraphql.Type
@@ -45,6 +46,7 @@ defmodule Varsel.Cases.Proposal.Target do
   def resource(:credit), do: Varsel.Cases.CaseCredit
   def resource(:weakness), do: Varsel.Cases.CaseWeakness
   def resource(:impact), do: Varsel.Cases.CaseImpact
+  def resource(:metric), do: Varsel.Cases.CaseMetric
 
   @doc "The parent kind of a target: nil for the case, :case or :affected_package for children."
   @spec parent(t()) :: t() | nil

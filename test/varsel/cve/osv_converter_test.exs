@@ -101,11 +101,33 @@ defmodule Varsel.CVE.OsvConverterTest do
 
   defp put_cna(cve_json, key, value), do: put_in(cve_json, ["containers", "cna", key], value)
 
+  describe "convert/1 severity" do
+    test "carries only the GENERAL v4 score" do
+      general = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+      rce = "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+
+      cve_json =
+        put_cna(@cve_json, "metrics", [
+          %{
+            "scenarios" => [%{"lang" => "en", "value" => "RCE"}],
+            "cvssV4_0" => %{"vectorString" => rce}
+          },
+          %{
+            "scenarios" => [%{"lang" => "en", "value" => "GENERAL"}],
+            "cvssV4_0" => %{"vectorString" => general}
+          }
+        ])
+
+      assert {:ok, %{"severity" => [%{"type" => "CVSS_V4", "score" => ^general}]}} =
+               OsvConverter.convert(cve_json)
+    end
+  end
+
   describe "convert/1" do
     test "converts a full CVE record" do
       assert {:ok, osv} = OsvConverter.convert(@cve_json)
 
-      assert osv["schema_version"] == "1.7.3"
+      assert osv["schema_version"] == "1.8.0"
       assert osv["id"] == "EEF-#{@cve_id}"
       assert osv["published"] == "2025-09-07T16:01:01.470Z"
       assert osv["aliases"] == ["GHSA-jj4j-x5ww-cwh9", @cve_id]
@@ -119,7 +141,8 @@ defmodule Varsel.CVE.OsvConverterTest do
       assert osv["severity"] == [
                %{
                  "type" => "CVSS_V4",
-                 "score" => "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:N/VI:H/VA:L/SC:N/SI:N/SA:N"
+                 "score" => "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:N/VI:H/VA:L/SC:N/SI:N/SA:N",
+                 "source" => "CNA"
                }
              ]
 
@@ -171,7 +194,16 @@ defmodule Varsel.CVE.OsvConverterTest do
       assert osv["id"] == "EEF-#{@cve_id}"
       assert osv["aliases"] == ["GHSA-jj4j-x5ww-cwh9"]
       assert osv["upstream"] == [@cve_id]
-      assert Map.drop(osv, ["aliases", "upstream"]) == Map.drop(own, ["aliases", "upstream"])
+
+      # The score is our ADP container's, so this database is its source.
+      assert [%{"source" => "SELF"}] = osv["severity"]
+      assert [%{"source" => "CNA"}] = own["severity"]
+
+      assert Map.drop(osv, ["aliases", "upstream", "severity"]) ==
+               Map.drop(own, ["aliases", "upstream", "severity"])
+
+      assert Enum.map(osv["severity"], &Map.delete(&1, "source")) ==
+               Enum.map(own["severity"], &Map.delete(&1, "source"))
     end
 
     test "converts hex and git affected entries" do

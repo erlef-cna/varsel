@@ -7,7 +7,7 @@ defmodule Varsel.Cases.Case do
   The structured, editorial representation of one vulnerability from intake to
   publication — everything needed to render a full CVE JSON 5.2 CNA container.
 
-  A case stores *facts* (markdown prose, a CVSS vector, affected packages with
+  A case stores *facts* (markdown prose, CVSS vectors per scenario, affected packages with
   their distribution channels and version boundary events, references, credits,
   CWE/CAPEC classifications). Derived data — version ranges deduced from commit
   SHAs, enumerated versions, `cpeApplicability` — is computed at render time by
@@ -91,6 +91,7 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.Changes.AssignOpener
   alias Varsel.Cases.Signals
   alias Varsel.Cases.Validations.AdvisoryIsFree
@@ -108,7 +109,6 @@ defmodule Varsel.Cases.Case do
     :technical_analysis_md,
     :proof_of_concept_md,
     :discovery,
-    :cvss_v4,
     :date_public,
     :timeline,
     :internal_notes,
@@ -1254,12 +1254,6 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
-    attribute :cvss_v4, Varsel.Types.CVSS do
-      description "CVSS v4.0 vector. Score/severity/full metric object are derived at render time. Required to publish."
-      constraints version: [:v4]
-      public? true
-    end
-
     attribute :date_public, :utc_datetime do
       description "When the vulnerability was publicly disclosed (datePublic); omitted when nil."
       public? true
@@ -1363,6 +1357,17 @@ defmodule Varsel.Cases.Case do
     has_many :impacts, Varsel.Cases.CaseImpact do
       public? true
       sort position: :asc
+    end
+
+    has_many :metrics, CaseMetric do
+      public? true
+      sort general: :desc, scenario_order: :asc, scenario: :asc
+    end
+
+    has_one :general_metric, CaseMetric do
+      description "The score for the GENERAL scenario, which sets the case's severity."
+      public? true
+      filter expr(scenario == "GENERAL")
     end
 
     has_many :proposals, Varsel.Cases.Proposal do
@@ -1503,14 +1508,14 @@ defmodule Varsel.Cases.Case do
     end
 
     calculate :cvss_score, :float, Varsel.Cases.Case.Calculations.CvssScore do
-      description "The CVSS v4.0 base score, or nil when the case has no CVSS vector yet."
+      description "The CVSS v4.0 base score of the GENERAL scenario, or nil when the case has none yet."
       public? true
     end
 
     calculate :severity_bucket, :atom, Varsel.Cases.Case.Calculations.SeverityBucket do
       description """
       The severity rating (none/low/medium/high/critical) `:cvss` derived from
-      the vector, or nil when the case has no CVSS vector yet.
+      the GENERAL scenario's vector, or nil when the case has none yet.
       """
 
       public? true

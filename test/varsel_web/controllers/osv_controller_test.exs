@@ -85,7 +85,7 @@ defmodule VarselWeb.OsvControllerTest do
       body = json_response(conn, 200)
 
       assert body["id"] == @osv_id
-      assert body["schema_version"] == "1.7.3"
+      assert body["schema_version"] == "1.8.0"
       assert body["aliases"] == [@cve_id]
       assert body["modified"]
       assert [%{"package" => %{"ecosystem" => "Hex", "name" => "test_lib"}}] = body["affected"]

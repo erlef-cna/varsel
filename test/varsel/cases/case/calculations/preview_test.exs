@@ -54,9 +54,10 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
         title: "Missing Session Revocation on Logout in ash_authentication_phoenix",
         description_md:
           "Insufficient Session Expiration vulnerability in ash-project " <>
-            "ash_authentication_phoenix allows Session Hijacking.",
-        cvss_v4: @vector
+            "ash_authentication_phoenix allows Session Hijacking."
       })
+
+    Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: @vector}, actor: poc)
 
     package =
       Fixtures.add_affected_package(poc, case_record, %{
@@ -389,6 +390,47 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
     assert cvss["Automatable"] == "NOT_DEFINED"
     assert cvss["providerUrgency"] == "NOT_DEFINED"
     refute Map.has_key?(cvss, "exploitMaturity")
+  end
+
+  test "renders the GENERAL metric first, then the scenarios alphabetically", %{
+    poc: poc,
+    case: case_record
+  } do
+    rce = "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+    local = "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+
+    # Case-insensitive: byte order would put the capital R first.
+    for {scenario, vector} <- [
+          {"Remote, built without stack protection", rce},
+          {"local attacker", local}
+        ] do
+      Cases.add_case_metric!(%{case_id: case_record.id, scenario: scenario, cvss_v4: vector},
+        actor: poc
+      )
+    end
+
+    assert [
+             %{
+               "scenarios" => [%{"lang" => "en", "value" => "GENERAL"}],
+               "cvssV4_0" => %{"vectorString" => @vector}
+             },
+             %{
+               "scenarios" => [%{"lang" => "en", "value" => "local attacker"}],
+               "cvssV4_0" => %{"vectorString" => ^local}
+             },
+             %{
+               "scenarios" => [
+                 %{"lang" => "en", "value" => "Remote, built without stack protection"}
+               ],
+               "cvssV4_0" => %{"vectorString" => ^rce}
+             }
+           ] = cna(render!(case_record, poc))["metrics"]
+
+    assert ["GENERAL", "local attacker", "Remote, built without stack protection"] ==
+             case_record
+             |> Ash.load!([:metrics], actor: poc)
+             |> Map.fetch!(:metrics)
+             |> Enum.map(& &1.scenario)
   end
 
   test "orders references: advisory, self-links, stored patches, commits", %{

@@ -28,8 +28,8 @@ Every change to an opened case is a **proposal**. There is one typed `mcp__varse
 per thing you can change; pick the tool that names it:
 
 `propose_title`, `propose_description`, `propose_discovery`, `propose_configurations`,
-`propose_workarounds`, `propose_technical_analysis`, `propose_proof_of_concept`, `propose_cvss`,
-`propose_weakness`, `propose_impact`, `propose_impact_description`, `propose_reference`,
+`propose_workarounds`, `propose_technical_analysis`, `propose_proof_of_concept`, `propose_metric`,
+`propose_metric_cvss`, `propose_metric_scenario`, `propose_weakness`, `propose_impact`, `propose_impact_description`, `propose_reference`,
 `propose_credit`, `propose_affected_package` / `propose_otp_affected_package` /
 `propose_elixir_affected_package` / `propose_gleam_affected_package`, `propose_package_channel`,
 `propose_version_event`, `propose_delete`.
@@ -262,14 +262,19 @@ skill.
 The score lands as its own proposal in Step 6, not as an `open_case` field:
 
 ```
-mcp__varsel__propose_cvss(input: {
-  case_id: <id>, value: "CVSS:4.0/AV:.../...",
+mcp__varsel__propose_metric(input: {
+  case_id: <id>, cvss_v4: "CVSS:4.0/AV:.../...",
   reasoning: "..."
 })
 ```
 
-`cvss_v4` drives the derived score and severity bucket, and both are computed at render time, so
-you pass the vector string only.
+The vector drives the derived score and severity bucket, and both are computed at render time, so
+you pass the vector string only. `scenario` defaults to `GENERAL`, the score that sets the case's
+severity and that a case needs to publish. In almost all cases, GENERAL is sufficient. Only when
+the report demonstrates a very uncommon use that gives a very different result, propose a further
+`propose_metric` with a plain-text `scenario` that names the condition (the `cvss` skill has the
+rules). To change a score already on the case, use
+`propose_metric_cvss` with its id as `target_id`.
 
 ## Step 4 - CWE and CAPEC
 
@@ -302,15 +307,14 @@ missing or wrong.
 Otherwise call `open_case` but only use the `propose_*` fields, never the fields directly. Every change
 to the case needs to be a proposal, never a direct update.
 
-`open_case` also accepts `cvss_v4`, but **do not seed the score here.** Scoring is a judgement a
-reviewer weighs on its own, so it lands as its own `propose_cvss` in Step 6 where the reasoning
-travels with it.
+Scoring is a judgement a reviewer weighs on its own, so it lands as its own `propose_metric` in
+Step 6 where the reasoning travels with it.
 
 ### From a GitHub advisory
 
 When the input is an advisory, call `open_case_from_github_advisory` with its URL or GHSA id
 instead of `open_case`. It opens the case, links it to the advisory, and fills in what the
-advisory states: title, description, CVSS v4 vector, publication date, CWEs, credits by GitHub
+advisory states: title, description, CVSS v4 vector as the GENERAL score, publication date, CWEs, credits by GitHub
 login, and each affected package with its channels. All of that is written directly, with no
 proposal, so say in the summary that the case was opened from the advisory and what it took
 over. The linked advisory renders its own reference (Step 6).
@@ -324,7 +328,8 @@ not a proposal, so pull only what the diff shows and say what you pulled in the 
 Both take **no version boundary** from the advisory. The introducing and fix commits stay yours
 to establish in Step 2, and an affected package that arrived this way is already on the case, so
 its boundaries go in as `propose_version_event` on it (Step 6), never as a second package. The
-advisory's CVSS vector arrives as it is: still run Step 3 and propose your own when it differs.
+advisory's CVSS vector arrives as it is, as the GENERAL score: still run Step 3 and propose your
+own with `propose_metric_cvss` when it differs.
 
 Everything is markdown. Varsel renders the plain-text and HTML variants itself, so never
 hand-write `supportingMedia` blocks.
@@ -352,7 +357,7 @@ you chose, and the one fact that decided it.
 
 - The affected package, in one call with its channels and version events. Choose the tool by
   repository, not by language. See below.
-- `propose_cvss` with the vector from Step 3.
+- `propose_metric` with the GENERAL vector from Step 3. A further scenario is rare (Step 3).
 - `propose_weakness` (CWE), `propose_impact` (CAPEC), the latter with a `description_md` when
   the report says what the attacker gains; see the impact section below.
 - `propose_technical_analysis` and `propose_proof_of_concept` when the report carries them; see
@@ -656,7 +661,7 @@ Cut in this order:
 Prefer short sentences. One clause where two would do.
 
 Keep the CVSS score, the severity, and any explanation of metric choices out entirely. Those live
-in structured fields, and metric reasoning belongs in the `propose_cvss` `reasoning`.
+in structured fields, and metric reasoning belongs in the `propose_metric` `reasoning`.
 
 ### Technical analysis, proof of concept, impact
 
@@ -802,7 +807,8 @@ changelog and version bumps.
 driver), list both sides: the implementing function and the Erlang or Elixir function callers
 reach it through.
 
-**`propose_cvss` takes the vector string.** Score and severity are derived at render time.
+**`propose_metric` and `propose_metric_cvss` take the vector string.** Score and severity are
+derived at render time.
 
 **Every list tool is capped, and says nothing about it.** A call with no `limit` returns the first
 **25** rows, and an explicit `limit` is silently capped at 250. A short result is therefore not

@@ -32,6 +32,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseCredit.CreditType
   alias Varsel.Cases.CaseImpact
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.DerivationFreshness
@@ -61,6 +62,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
         credits: all_fields(CaseCredit),
         weaknesses: all_fields(CaseWeakness) ++ [weakness: [:name]],
         impacts: all_fields(CaseImpact) ++ [attack_pattern: [:name]],
+        metrics: all_fields(CaseMetric),
         affected_packages:
           all_fields(AffectedPackage) ++
             [
@@ -101,7 +103,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
       |> put_present("dateAssigned", date_assigned(case_record))
       |> put_present("datePublic", format_time(case_record.date_public))
       |> put_timeline(case_record.timeline)
-      |> put_metrics(case_record.cvss_v4)
+      |> put_metrics(case_record.metrics)
       |> put_problem_types(case_record.weaknesses)
       |> put_impacts(case_record.impacts)
       |> put_credits(case_record.credits)
@@ -283,16 +285,21 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
 
   ## ------------------------------------------------------- classifications
 
-  defp put_metrics(cna, nil), do: cna
+  defp put_metrics(cna, []), do: cna
 
-  defp put_metrics(cna, cvss) do
-    Map.put(cna, "metrics", [
-      %{
-        "format" => "CVSS",
-        "scenarios" => [%{"lang" => "en", "value" => "GENERAL"}],
-        "cvssV4_0" => CvssV4.expand(cvss)
-      }
-    ])
+  defp put_metrics(cna, metrics) do
+    rendered =
+      metrics
+      |> CaseMetric.sort()
+      |> Enum.map(fn metric ->
+        %{
+          "format" => "CVSS",
+          "scenarios" => [%{"lang" => "en", "value" => metric.scenario}],
+          "cvssV4_0" => CvssV4.expand(metric.cvss_v4)
+        }
+      end)
+
+    Map.put(cna, "metrics", rendered)
   end
 
   defp put_problem_types(cna, []), do: cna

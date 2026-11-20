@@ -96,7 +96,7 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisoryTest do
     assert case_record.state == :draft
     assert case_record.title == "Header injection in acme_lib"
     assert case_record.description_md == "acme_lib passes user input into response headers."
-    assert case_record.cvss_v4 == nil
+    assert Ash.load!(case_record, [:metrics], actor: poc).metrics == []
     assert case_record.date_public == nil
     assert Enum.map(case_record.assignments, & &1.user_id) == [poc.id]
   end
@@ -149,8 +149,10 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisoryTest do
 
     {:ok, case_record} = open(poc, @otp_url)
 
-    assert case_record.cvss_v4.vector ==
-             "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+    assert [%{scenario: "GENERAL", cvss_v4: %{vector: vector}}] =
+             Ash.load!(case_record, [:metrics], actor: poc).metrics
+
+    assert vector == "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
 
     assert case_record.date_public == ~U[2026-08-20 09:00:00Z]
 

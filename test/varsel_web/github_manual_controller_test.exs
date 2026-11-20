@@ -357,12 +357,15 @@ defmodule VarselWeb.GitHubManualControllerTest do
                Cases.list_cases!(
                  actor: poc,
                  query: [filter: [title: advisory["summary"]]],
-                 load: [:github_advisory_link]
+                 load: [:github_advisory_link, :general_metric]
                )
 
       assert opened.description_md == "The inets HTTP server allocates without limit.\n\nUpgrade."
       assert opened.date_public == ~U[2026-08-20 09:00:00Z]
-      assert opened.cvss_v4.vector == advisory["cvss_severities"]["cvss_v4"]["vector_string"]
+
+      assert opened.general_metric.cvss_v4.vector ==
+               advisory["cvss_severities"]["cvss_v4"]["vector_string"]
+
       assert opened.github_advisory_link.ghsa_id == advisory["ghsa_id"]
     end
 

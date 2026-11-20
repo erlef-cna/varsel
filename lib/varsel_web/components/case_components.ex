@@ -21,12 +21,14 @@ defmodule VarselWeb.CaseComponents do
       mono_chip: 1,
       page_header: 1,
       scope_tab: 1,
+      severity_chip: 1,
       state: 1
     ]
 
   import VarselWeb.UserComponents, only: [avatar_disc: 1, user_badge: 1, user_name: 1]
 
   alias Phoenix.LiveView.JS
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.CommentReaction.Emoji
   alias Varsel.Cases.Markdown
   alias Varsel.Cases.WordDiff
@@ -1276,6 +1278,46 @@ defmodule VarselWeb.CaseComponents do
   end
 
   @doc """
+  Renders one CVSS score of a case: the severity chip, the scenario it
+  applies to, and the vector. The GENERAL scenario reads as "General". A
+  long scenario is clamped to two lines, with the full text on hover.
+  """
+  attr :scenario, :string, required: true
+  attr :vector, :string, default: nil, doc: "nil for a proposed vector that does not parse"
+  attr :score, :float, default: nil
+
+  def metric_summary(assigns) do
+    assigns =
+      assign(assigns, :general?, assigns.scenario == CaseMetric.general_scenario())
+
+    ~H"""
+    <div class="flex w-full min-w-0 items-start gap-3 text-left">
+      <div class="w-28 shrink-0 pt-0.5">
+        <.severity_chip score={@score} variant={:full} />
+      </div>
+      <div class="min-w-0 flex-1">
+        <p
+          class={[
+            "text-sm leading-snug",
+            if(@general?, do: "font-semibold", else: "line-clamp-2 break-words")
+          ]}
+          title={if not @general?, do: @scenario}
+        >
+          {if @general?, do: "General", else: @scenario}
+        </p>
+        <p
+          :if={@vector}
+          class="mt-0.5 truncate font-mono text-xs text-base-content/60"
+          title={@vector}
+        >
+          {@vector}
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
   Renders the switch between editing the case directly and routing edits
   through suggestions, with a line saying what an edit does. On a frozen case
   suggesting is all there is, so the switch is locked on.
@@ -1373,6 +1415,15 @@ defmodule VarselWeb.CaseComponents do
     """
   end
 
+  def proposal_payload(%{proposal: %{operation: :insert, target: :metric}} = assigns) do
+    assigns = assign(assigns, :payload, assigns.proposal.proposed_value["value"] || %{})
+
+    ~H"""
+    <p class="mt-1 text-sm whitespace-pre-line">{@payload["scenario"]}</p>
+    <p class="mt-1 font-mono text-xs break-all text-base-content/70">{@payload["cvss_v4"]}</p>
+    """
+  end
+
   def proposal_payload(%{proposal: %{operation: :delete}} = assigns) do
     assigns = assign(assigns, :entry, removed_entry(assigns.removing))
 
@@ -1431,6 +1482,8 @@ defmodule VarselWeb.CaseComponents do
   defp removed_entry(%Varsel.Cases.CaseReference{} = reference), do: %{id: nil, name: reference.url, url: nil}
 
   defp removed_entry(%Varsel.Cases.CaseCredit{} = credit), do: %{id: nil, name: credit.name, url: nil}
+
+  defp removed_entry(%CaseMetric{} = metric), do: %{id: nil, name: metric.scenario, url: nil}
 
   defp removed_entry(%Varsel.Cases.AffectedPackage{} = package) do
     %{id: nil, name: "#{package.vendor} / #{package.product}", url: nil}

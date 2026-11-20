@@ -49,6 +49,7 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecord do
   # policies that apply to a POC adding the row by hand apply here too.
   defp manage_children(changeset, children) do
     changeset
+    |> manage(:metrics, children.metrics)
     |> manage(:weaknesses, known(children.weaknesses, :cwe_id, Weakness))
     |> manage(:impacts, known(children.impacts, :capec_id, AttackPattern))
     |> manage(:references, children.references)

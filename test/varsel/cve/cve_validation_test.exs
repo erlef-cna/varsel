@@ -98,10 +98,31 @@ defmodule Varsel.CVE.CveValidationTest do
     assert %{valid: false, errors: errors} = CVE.validate_cve_record_eef!(stripped)
     by_code = Map.new(errors, &{&1.code, &1.message})
     assert by_code["EEF001"] == "title is missing"
-    assert by_code["EEF002"] == "CVSS v4 vector is missing"
+    assert by_code["EEF002"] == "CVSS v4 vector for the GENERAL scenario is missing"
     assert by_code["EEF003"] == "no CVE ID assigned"
     assert by_code["EEF004"] == "no CWE weakness recorded"
     assert by_code["EEF005"] == "no CAPEC attack pattern recorded"
+  end
+
+  test "the EEF policy validator reads a metric without scenarios as GENERAL" do
+    assert %{valid: true} = CVE.validate_cve_record_eef!(@valid_cve_json)
+
+    general =
+      update_in(@valid_cve_json, ["containers", "cna", "metrics"], fn [metric] ->
+        [Map.put(metric, "scenarios", [%{"lang" => "en", "value" => "GENERAL"}])]
+      end)
+
+    assert %{valid: true} = CVE.validate_cve_record_eef!(general)
+  end
+
+  test "the EEF policy validator flags a record whose only CVSS v4 metric has another scenario" do
+    scenario_only =
+      update_in(@valid_cve_json, ["containers", "cna", "metrics"], fn [metric] ->
+        [Map.put(metric, "scenarios", [%{"lang" => "en", "value" => "Local attacker"}])]
+      end)
+
+    assert %{valid: false, errors: [%{code: "EEF002"}]} =
+             CVE.validate_cve_record_eef!(scenario_only)
   end
 
   test "the EEF policy validator accepts a real CVE ID" do

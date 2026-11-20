@@ -40,9 +40,10 @@ defmodule Varsel.Cases.Case.Changes.CheckDriftTest do
     case_record =
       Fixtures.open_case(poc, %{
         title: "Information disclosure in acme_lib",
-        description_md: "acme_lib leaks secrets to anyone who asks nicely.",
-        cvss_v4: @vector
+        description_md: "acme_lib leaks secrets to anyone who asks nicely."
       })
+
+    Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: @vector}, actor: poc)
 
     package =
       Fixtures.add_affected_package(poc, case_record, %{
@@ -119,6 +120,13 @@ defmodule Varsel.Cases.Case.Changes.CheckDriftTest do
     Ash.Seed.update!(case_record, %{state: :published, published_at: DateTime.utc_now()})
   end
 
+  # A published case is frozen to its policies, so only a write past them removes its score.
+  defp remove_metrics(case_record) do
+    [query: [filter: [case_id: case_record.id]], authorize?: false]
+    |> Cases.list_case_metrics!()
+    |> Enum.each(&Cases.remove_case_metric!(&1, authorize?: false))
+  end
+
   defp run_check do
     AshOban.Test.schedule_and_run_triggers({Case, :check_drift}, scheduled_actions?: false)
   end
@@ -168,7 +176,7 @@ defmodule Varsel.Cases.Case.Changes.CheckDriftTest do
   end
 
   test "a render with publish blockers is blocked", %{case_record: case_record} do
-    Ash.Seed.update!(case_record, %{cvss_v4: nil})
+    remove_metrics(case_record)
 
     assert checked?(case_record)
     assert reload(case_record).record_drift == :blocked
@@ -342,10 +350,11 @@ defmodule Varsel.Cases.Case.Changes.CheckDriftTest do
     end
 
     test "a render with publish blockers is refused", %{poc: poc, case_record: case_record} do
-      case_record = case_record |> stale_title() |> Ash.Seed.update!(%{cvss_v4: nil})
+      case_record = stale_title(case_record)
+      remove_metrics(case_record)
 
       assert {:error, error} = Cases.republish_case(case_record, actor: poc)
-      assert Exception.message(error) =~ "CVSS v4 vector is missing"
+      assert Exception.message(error) =~ "CVSS v4 vector for the GENERAL scenario is missing"
     end
 
     test "only a POC may republish, and only a published case", %{

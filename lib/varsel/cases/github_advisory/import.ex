@@ -10,8 +10,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
   ## What transfers
 
   `summary` becomes the title. `description` becomes the description
-  markdown. The CVSS **v4** vector becomes the case vector, since the case is
-  v4-only. `published_at` becomes the public date. CWEs come from `cwe_ids`.
+  markdown. The CVSS **v4** vector becomes the case's GENERAL score, since a
+  case is v4-only. `published_at` becomes the public date. CWEs come from `cwe_ids`.
   Credits come from `credits_detailed`, or from `credits` on a global entry,
   with their GitHub login and role. Declined credits are dropped.
 
@@ -34,6 +34,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
 
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.CaseCredit.CreditType
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.GitHubAdvisory
   alias Varsel.Cases.GitHubAdvisory.Ranges
 
@@ -81,21 +82,28 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
     %{}
     |> put_present(:title, blank_to_nil(advisory["summary"]))
     |> put_present(:description_md, prose(advisory["description"]))
-    |> put_present(:cvss_v4, cvss_v4(advisory))
     |> put_present(:date_public, GitHubAdvisory.time(advisory["published_at"]))
   end
 
   @doc """
-  The child rows read from the advisory: `weaknesses` as CaseWeakness params,
-  `credits` as GitHub states them, and `affected` as packages to create.
+  The child rows read from the advisory: `metrics` as CaseMetric params (the
+  advisory's CVSS v4 vector as the GENERAL scenario), `weaknesses` as
+  CaseWeakness params, `credits` as GitHub states them, and `affected` as
+  packages to create.
   """
   @spec child_params(GitHubAdvisory.t()) :: %{
+          metrics: [map()],
           weaknesses: [map()],
           credits: [credit()],
           affected: [affected_package()]
         }
   def child_params(advisory) when is_map(advisory) do
-    %{weaknesses: weaknesses(advisory), credits: credits(advisory), affected: affected(advisory)}
+    %{
+      metrics: metrics(advisory),
+      weaknesses: weaknesses(advisory),
+      credits: credits(advisory),
+      affected: affected(advisory)
+    }
   end
 
   @doc "The `vulnerabilities[]` entries, ranges parsed, in advisory order."
@@ -130,8 +138,11 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
     end
   end
 
-  defp cvss_v4(advisory) do
-    advisory |> get_in(["cvss_severities", "cvss_v4", "vector_string"]) |> blank_to_nil()
+  defp metrics(advisory) do
+    case advisory |> get_in(["cvss_severities", "cvss_v4", "vector_string"]) |> blank_to_nil() do
+      nil -> []
+      vector -> [%{scenario: CaseMetric.general_scenario(), cvss_v4: vector}]
+    end
   end
 
   defp weaknesses(advisory) do

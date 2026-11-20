@@ -559,6 +559,37 @@ defmodule VarselWeb.CaseFormComponents do
   end
 
   @doc """
+  Renders the form for a CVSS v4.0 score and the scenario it applies to.
+  """
+  attr :form, :any, required: true, doc: "an AshPhoenix.Form over the resource"
+  attr :propose?, :boolean, default: false, doc: "commit as a suggestion rather than a change"
+  attr :rest, :global, include: ~w(id), doc: "the form element's id and phx- bindings"
+  slot :actions, doc: "the row that submits or abandons the form"
+
+  def metric_form(assigns) do
+    ~H"""
+    <.form for={@form} {@rest}>
+      <.input field={@form[:scenario]} type="textarea" rows="2" maxlength="4096">
+        <:label>Scenario</:label>
+        <:description>
+          Plain text naming the conditions this score applies to. GENERAL is
+          the score that applies when no more specific scenario matches. It
+          sets the severity, and a case needs one to publish.
+        </:description>
+      </.input>
+      <.live_component
+        module={VarselWeb.CvssInput}
+        id="metric-cvss-v4"
+        field={@form[:cvss_v4]}
+        label="CVSS v4.0"
+      />
+      <.propose_form_fields propose?={@propose?} />
+      {render_slot(@actions)}
+    </.form>
+    """
+  end
+
+  @doc """
   Renders the form for a CAPEC classification, picked from the catalog.
   """
   attr :form, :any, required: true, doc: "an AshPhoenix.Form over the resource"

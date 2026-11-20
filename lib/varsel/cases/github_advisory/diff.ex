@@ -9,7 +9,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
 
   The title and the description compare after whitespace normalization. The
   description is `Varsel.Cases.GitHubAdvisory.Export.description/1` against
-  the advisory's. The CVE ID and the CVSS vector compare as they are. CWEs
+  the advisory's. The CVE ID and the CVSS vector compare as they are. The
+  case's vector is its GENERAL score. CWEs
   compare as a set. Credits compare per person
   (`Varsel.Cases.GitHubAdvisory.People`), by GitHub login where the credit
   carries one. GitHub gives a person one role, so the advisory's role only
@@ -27,6 +28,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
 
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Case
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.GitHubAdvisory
   alias Varsel.Cases.GitHubAdvisory.Channels
   alias Varsel.Cases.GitHubAdvisory.Export
@@ -63,7 +65,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
       prose(:title, case_record.title, params[:title]),
       prose(:description, Export.description(case_record), params[:description_md]),
       scalar(:cve_id, case_record.cve_id, Import.blank_to_nil(advisory["cve_id"])),
-      scalar(:cvss_v4, Export.vector(case_record.cvss_v4), params[:cvss_v4]),
+      scalar(:cvss_v4, Export.general_vector(case_record), general_vector(children.metrics)),
       set(
         :weaknesses,
         Enum.map(case_record.weaknesses, & &1.cwe_id),
@@ -128,6 +130,10 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
   end
 
   defp scalar(field, ours, theirs), do: row(field, ours, theirs, ours == theirs)
+
+  defp general_vector(metrics) do
+    Enum.find_value(metrics, &(&1.scenario == CaseMetric.general_scenario() and &1.cvss_v4))
+  end
 
   defp row(field, nil, nil, _same?), do: %{field: field, ours: nil, theirs: nil, status: :same}
 

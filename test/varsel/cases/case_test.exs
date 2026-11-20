@@ -48,10 +48,33 @@ defmodule Varsel.Cases.CaseTest do
     end
 
     test "an invalid CVSS vector is rejected", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+
       assert {:error, error} =
-               Cases.open_case(%{title: "x", cvss_v4: "CVSS:4.0/bogus"}, actor: poc)
+               Cases.add_case_metric(%{case_id: case_record.id, cvss_v4: "CVSS:4.0/bogus"},
+                 actor: poc
+               )
 
       assert Exception.message(error) =~ "cvss"
+    end
+
+    test "a case scores each scenario once", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+
+      assert %{scenario: "GENERAL"} =
+               Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: vector}, actor: poc)
+
+      assert {:error, %Invalid{}} =
+               Cases.add_case_metric(%{case_id: case_record.id, cvss_v4: vector}, actor: poc)
+    end
+
+    test "a scenario is at most 4096 characters", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+      params = %{case_id: case_record.id, cvss_v4: vector, scenario: String.duplicate("a", 4097)}
+
+      assert {:error, %Invalid{}} = Cases.add_case_metric(params, actor: poc)
     end
   end
 
@@ -503,16 +526,54 @@ defmodule Varsel.Cases.CaseTest do
   describe "cvss_score / severity_bucket calculations" do
     @vector "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
 
-    test "reads the score and bucket off the already-scored CVSS struct", %{poc: poc} do
-      case_record = Fixtures.open_case(poc, %{cvss_v4: @vector})
+    test "reads the score and bucket off the GENERAL scenario", %{poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: @vector}, actor: poc)
+
+      Cases.add_case_metric!(
+        %{
+          case_id: case_record.id,
+          scenario: "Built without stack protection",
+          cvss_v4: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H"
+        },
+        actor: poc
+      )
+
       case_record = Ash.load!(case_record, [:cvss_score, :severity_bucket], authorize?: false)
 
       assert case_record.cvss_score == 8.7
       assert case_record.severity_bucket == :high
     end
 
-    test "both calculations are nil when the case has no CVSS vector yet", %{poc: poc} do
+    test "sorts by the GENERAL score in the database", %{poc: poc} do
+      low = Fixtures.open_case(poc)
+      high = Fixtures.open_case(poc)
+      Cases.add_case_metric!(%{case_id: high.id, cvss_v4: @vector}, actor: poc)
+
+      Cases.add_case_metric!(
+        %{
+          case_id: low.id,
+          cvss_v4: "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N"
+        },
+        actor: poc
+      )
+
+      ids = [low.id, high.id]
+
+      assert [high.id, low.id] ==
+               [query: [filter: [id: [in: ids]], sort: [cvss_score: :desc]], actor: poc]
+               |> Cases.list_cases!()
+               |> Enum.map(& &1.id)
+    end
+
+    test "both calculations are nil when the case has no GENERAL scenario", %{poc: poc} do
       case_record = Fixtures.open_case(poc)
+
+      Cases.add_case_metric!(
+        %{case_id: case_record.id, scenario: "Local attacker", cvss_v4: @vector},
+        actor: poc
+      )
+
       case_record = Ash.load!(case_record, [:cvss_score, :severity_bucket], authorize?: false)
 
       assert case_record.cvss_score == nil

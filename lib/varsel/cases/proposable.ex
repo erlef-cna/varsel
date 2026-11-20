@@ -20,6 +20,7 @@ defmodule Varsel.Cases.Proposable do
 
   alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.CaseImpact
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.VersionEvent
@@ -33,7 +34,6 @@ defmodule Varsel.Cases.Proposable do
     :technical_analysis_md,
     :proof_of_concept_md,
     :discovery,
-    :cvss_v4,
     :date_public,
     :timeline,
     :internal_notes,
@@ -81,6 +81,8 @@ defmodule Varsel.Cases.Proposable do
 
   @impact_fields [:capec_id, :description_md, :position]
 
+  @metric_fields [:scenario, :cvss_v4]
+
   @doc "Proposable payload fields of a resource (insert payload / edit accept-list)."
   @spec fields(module()) :: [atom()]
   def fields(Varsel.Cases.Case), do: @case_fields
@@ -91,6 +93,7 @@ defmodule Varsel.Cases.Proposable do
   def fields(Varsel.Cases.CaseCredit), do: @credit_fields
   def fields(CaseWeakness), do: @weakness_fields
   def fields(CaseImpact), do: @impact_fields
+  def fields(CaseMetric), do: @metric_fields
 
   @doc "Fields a :set proposal may target. Join rows are insert/delete-only."
   @spec set_fields(module()) :: [atom()]

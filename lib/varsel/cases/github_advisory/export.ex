@@ -9,8 +9,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
 
   ## What travels
 
-    * `title` as `summary`, the assigned CVE ID as `cve_id`, `cvss_v4` as
-      `cvss_vector_string`, CWEs as `cwe_ids`, and `description/1` as
+    * `title` as `summary`, the assigned CVE ID as `cve_id`, `cvss_v4` (the
+      GENERAL score) as `cvss_vector_string`, CWEs as `cwe_ids`, and `description/1` as
       `description`.
     * Credits as `login` and `type`, one per person. GitHub knows people by
       login and gives each person one role. The advisory's own role stands
@@ -46,6 +46,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
     [
       :cve_id,
       :preview,
+      general_metric: [:cvss_v4],
       weaknesses: [:cwe_id],
       credits: [:name, :credit_types, :handles],
       affected_packages: [
@@ -84,10 +85,11 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
 
   def description(_case_record), do: nil
 
-  @doc "The vector string of a case CVSS value, or nil."
-  @spec vector(term()) :: String.t() | nil
-  def vector(%{vector: vector}) when is_binary(vector), do: vector
-  def vector(_absent), do: nil
+  @doc "The vector string of the case's GENERAL score, or nil."
+  @spec general_vector(Case.t()) :: String.t() | nil
+  def general_vector(%{general_metric: %{cvss_v4: %{vector: vector}}}) when is_binary(vector), do: vector
+
+  def general_vector(_case_record), do: nil
 
   defp put_field(export, :title, %{title: title}, _advisory), do: put_present(export, "summary", title)
 
@@ -97,8 +99,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
     put_present(export, "description", description(case_record))
   end
 
-  defp put_field(export, :cvss_v4, %{cvss_v4: cvss}, _advisory) do
-    put_present(export, "cvss_vector_string", vector(cvss))
+  defp put_field(export, :cvss_v4, case_record, _advisory) do
+    put_present(export, "cvss_vector_string", general_vector(case_record))
   end
 
   defp put_field(export, :weaknesses, %{weaknesses: weaknesses}, _advisory) do

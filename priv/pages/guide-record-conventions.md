@@ -49,10 +49,21 @@ tab.
 
 ## CVSS
 
-The case carries a CVSS v4.0 **vector**; the numeric score and severity
-bucket are derived from it at render time. Score the Base metrics only, with
-a one-sentence rationale per metric in the proposal reasoning, and keep both
-the score and the reasoning out of the description.
+The case carries a CVSS v4.0 **vector** per scenario; the numeric score and
+severity bucket are derived from it at render time. Score the Base metrics
+only, with a one-sentence rationale per metric in the proposal reasoning, and
+keep both the score and the reasoning out of the description.
+
+Every case has one score for the **GENERAL** scenario. It is the score for a
+standard build in a standard configuration, it sets the case's severity, and
+a case cannot publish without it.
+
+In almost all cases, the GENERAL score is sufficient. Add a further scenario
+only when a very uncommon use, demonstrated in the report, gives a very
+different result. Name the condition in the scenario text, in plain text: for
+example, remote code execution when the VM is built without stack protection,
+next to a GENERAL score for the crash. Each further scenario keeps its own
+vector and its own rationale.
 
 The metric that most often goes wrong is Attack Vector:
 

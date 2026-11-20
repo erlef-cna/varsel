@@ -752,6 +752,39 @@ defmodule VarselWeb.CveHtmlTest do
       assert body =~ "no score"
     end
 
+    test "the CVSS card leads with the GENERAL score and lists each further scenario", %{
+      conn: conn
+    } do
+      rce = %{
+        "scenarios" => [%{"lang" => "en", "value" => "The VM is built without stack protection."}],
+        "cvssV4_0" => %{
+          "baseScore" => 9.3,
+          "baseSeverity" => "CRITICAL",
+          "vectorString" => "CVSS:4.0/AV:N/AC:H",
+          "version" => "4.0"
+        }
+      }
+
+      cve_json = update_in(@cve_json, ["containers", "cna", "metrics"], &[rce | &1])
+      publish(cve_json)
+
+      card =
+        conn
+        |> get(~p"/cves/#{@cve_id <> ".html"}")
+        |> html_response(200)
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("#cvss-breakdown")
+
+      assert card |> LazyHTML.query("p.whitespace-pre-line") |> LazyHTML.text() =~
+               "without stack protection"
+
+      vectors =
+        card |> LazyHTML.query("code, .font-mono") |> Enum.map_join(" ", &LazyHTML.text/1)
+
+      assert String.replace(vectors, ~r/\s/, "") =~ "CVSS:4.0/AV:N/AC:L"
+      assert String.replace(vectors, ~r/\s/, "") =~ "CVSS:4.0/AV:N/AC:H"
+    end
+
     test "the CVSS vector renders as its own wrapped block line with <wbr> after every slash, never break-all",
          %{conn: conn} do
       publish()

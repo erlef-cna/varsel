@@ -338,7 +338,7 @@ defmodule VarselWeb.CoreComponents do
   def modal(assigns) do
     ~H"""
     <div class="modal modal-open" id={@id} phx-window-keydown={@on_cancel} phx-key="escape">
-      <div class={["modal-box" | List.wrap(@class || "max-w-lg")]}>
+      <div class={["modal-box" | List.wrap(@class || "max-w-[44rem]")]}>
         <h3 class="font-semibold text-lg mb-3">{@title}</h3>
         {render_slot(@inner_block)}
         <div :if={@actions != []} class="modal-action">{render_slot(@actions)}</div>

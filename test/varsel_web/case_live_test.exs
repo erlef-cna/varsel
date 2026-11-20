@@ -1585,8 +1585,13 @@ defmodule VarselWeb.CaseLiveTest do
       assert html =~ ~s(href="#severity")
 
       # The severity card's empty state: no chip, just the invitation.
-      assert html =~ "No CVSS score yet."
-      assert html =~ "Open calculator"
+      assert has_element?(lv, "#severity p", "None yet.")
+
+      assert has_element?(
+               lv,
+               ~s{#severity button[phx-click=new_child][phx-value-type=metric]},
+               "Add scenario"
+             )
 
       lv
       |> form("#case-content-form", %{"form" => %{"title" => "Renamed case"}})
@@ -1697,10 +1702,12 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
-      # The calculator is the Severity card's own editor.
+      # The calculator is the scenario modal's editor; the first scenario is GENERAL.
       lv
-      |> element(~s{button[phx-click=edit_section][phx-value-section=severity]})
+      |> element(~s{#severity button[phx-click=new_child][phx-value-type=metric]})
       |> render_click()
+
+      assert has_element?(lv, ~s{#child-form textarea[name="child[scenario]"]}, "GENERAL")
 
       # First toggle starts from the all-benign baseline (0.0 NONE), then
       # raising vulnerable-system confidentiality to High yields a real score.
@@ -1709,7 +1716,7 @@ defmodule VarselWeb.CaseLiveTest do
       # clobber the selection).
       html =
         lv
-        |> element(~s{#case-cvss-v4 button[phx-value-code="VC"][phx-value-selection="H"]})
+        |> element(~s{#metric-cvss-v4 button[phx-value-code="VC"][phx-value-selection="H"]})
         |> render_click(%{"value" => ""})
 
       assert html =~ "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
@@ -1718,47 +1725,108 @@ defmodule VarselWeb.CaseLiveTest do
 
       # Submitting the form persists the built vector through the CVSS type.
       lv
-      |> form("#case-severity-form")
+      |> form("#child-form")
       |> render_submit()
 
-      case_record = Ash.get!(Case, case_record.id, authorize?: false)
+      assert [metric] =
+               Cases.list_case_metrics!(
+                 query: [filter: [case_id: case_record.id]],
+                 authorize?: false
+               )
 
-      assert case_record.cvss_v4.vector ==
+      assert metric.scenario == "GENERAL"
+
+      assert metric.cvss_v4.vector ==
                "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
 
-      assert case_record.cvss_v4.score == 8.7
-      assert case_record.cvss_v4.severity == :high
+      assert metric.cvss_v4.score == 8.7
+      assert metric.cvss_v4.severity == :high
 
-      # At rest the card shows one tinted chip (rating + score) beside the
+      # At rest the row shows one tinted chip (rating + score) beside the
       # truncated mono vector.
-      html = render(lv)
+      html = lv |> element("#severity-row-#{metric.id}") |> render()
       assert html =~ "sev-high"
       assert html =~ "HIGH 8.7"
       assert html =~ "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
 
-      # Saving closes the editor; reopen to keep working with the calculator.
+      # Saving closes the modal; Edit reopens the calculator on the row.
       lv
-      |> element(~s{button[phx-click=edit_section][phx-value-section=severity]})
+      |> element(~s{#severity-row-#{metric.id} button[phx-click=edit_child]})
       |> render_click()
 
       # A pasted vector updates the toggles: physical attack vector selected.
       lv
-      |> element(~s{#case-cvss-v4 input[name="form[cvss_v4]"]})
+      |> element(~s{#metric-cvss-v4 input[name="child[cvss_v4]"]})
       |> render_keyup(%{
         "value" => "CVSS:4.0/AV:P/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
       })
 
       assert lv
-             |> element(~s{#case-cvss-v4 button[phx-value-code="AV"][phx-value-selection="P"]})
+             |> element(~s{#metric-cvss-v4 button[phx-value-code="AV"][phx-value-selection="P"]})
              |> render() =~ "btn-primary"
 
       # Garbage flags an invalid vector instead of scoring.
       html =
         lv
-        |> element(~s{#case-cvss-v4 input[name="form[cvss_v4]"]})
+        |> element(~s{#metric-cvss-v4 input[name="child[cvss_v4]"]})
         |> render_keyup(%{"value" => "CVSS:4.0/bogus"})
 
       assert html =~ "invalid vector"
+    end
+
+    test "a further scenario starts blank and shows its text under the score", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc, %{title: "CVSS case"})
+      vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+      Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: vector}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      lv
+      |> element(~s{#severity button[phx-click=new_child][phx-value-type=metric]})
+      |> render_click()
+
+      refute has_element?(lv, ~s{#child-form textarea[name="child[scenario]"]}, "GENERAL")
+
+      rce = "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+
+      lv
+      |> form("#child-form", %{
+        "child" => %{"scenario" => "Built without stack protection", "cvss_v4" => rce}
+      })
+      |> render_submit()
+
+      assert [
+               %{scenario: "GENERAL"},
+               %{scenario: "Built without stack protection"} = scenario
+             ] = Ash.load!(case_record, [:metrics], authorize?: false).metrics
+
+      assert lv |> element("#severity-row-#{scenario.id}") |> render() =~
+               "Built without stack protection"
+    end
+
+    test "suggest mode proposes a scenario from the modal", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc, %{title: "CVSS case"})
+      vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+      lv |> element("#suggest-toggle input") |> render_click()
+
+      lv
+      |> element(~s{#severity button[phx-click=new_child][phx-value-type=metric]})
+      |> render_click()
+
+      lv
+      |> form("#child-form", %{"child" => %{"cvss_v4" => vector}})
+      |> render_submit()
+
+      assert [%{target: :metric, operation: :insert, proposed_value: %{"value" => payload}}] =
+               Cases.list_open_case_proposals!(case_record.id, actor: poc)
+
+      assert %{"scenario" => "GENERAL", "cvss_v4" => ^vector} = payload
+      assert render(lv) =~ "Created 1 proposal(s)."
     end
 
     test "walks the review lifecycle", %{conn: conn, poc: poc} do
@@ -2843,13 +2911,15 @@ defmodule VarselWeb.CaseLiveTest do
       old_vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N"
       new_vector = String.replace(old_vector, "AV:N", "AV:L")
 
-      case_record = Fixtures.open_case(poc, %{cvss_v4: old_vector})
+      case_record = Fixtures.open_case(poc)
+      metric = Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: old_vector}, actor: poc)
       Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
 
       Cases.create_case_proposal!(
         %{
           case_id: case_record.id,
-          target: :case,
+          target: :metric,
+          target_id: metric.id,
           operation: :set,
           field_name: "cvss_v4",
           proposed_value: %{"value" => new_vector}

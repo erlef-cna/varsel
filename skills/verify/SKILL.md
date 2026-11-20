@@ -147,7 +147,9 @@ gh api /repos/<owner>/<repo>/security-advisories/<ghsa-id>
 - [ ] Each stored reference carries a `name` that is the page title, or none at all; the derived ones come named.
 
 ### CVSS
-- [ ] `baseScore` is not `0.0` — i.e. `cvss_v4` is set on the case and derived through.
+- [ ] A `metrics[]` entry has the `GENERAL` scenario, and its `baseScore` is not `0.0` — i.e. the case has a GENERAL metric and it derived through.
+- [ ] Any other scenario earns its place: a very uncommon use, demonstrated in the report, that gives a very different result. In almost all cases GENERAL alone is sufficient, so flag a scenario that only shifts a metric or two.
+- [ ] Every other scenario names, in plain text, the configuration under which its score applies.
 
 ## Output
 

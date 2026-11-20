@@ -279,6 +279,27 @@ SPDX-License-Identifier: Apache-2.0
           </.link>
         </div>
         <.cvss_vector vector={cvss["vectorString"]} class="mt-2" />
+        <div
+          :for={%{scenario: scenario, cvss: scenario_cvss} <- scenario_cvss(@container)}
+          :if={scenario_cvss != cvss}
+          class="mt-4 border-t border-base-300 pt-3"
+        >
+          <p class="eef-eyebrow">Scenario</p>
+          <p class="mt-1 text-sm whitespace-pre-line">{scenario}</p>
+          <div class="mt-2 flex flex-wrap items-center gap-3">
+            <.severity_chip score={scenario_cvss["baseScore"] / 1} variant={:full} />
+            <.link
+              :if={cvss_calculator_url(scenario_cvss)}
+              href={cvss_calculator_url(scenario_cvss)}
+              target="_blank"
+              rel="noopener"
+              class="ml-auto text-xs text-primary hover:underline"
+            >
+              open in calculator →
+            </.link>
+          </div>
+          <.cvss_vector vector={scenario_cvss["vectorString"]} class="mt-2" />
+        </div>
       </.panel>
 
       <.link navigate={~p"/cves"} class="text-sm text-primary hover:underline">

@@ -80,8 +80,9 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecordTest do
       assert case_record.discovery == :external
       assert case_record.cve_assigned_at == ~U[2026-01-10 08:00:00Z]
       assert case_record.date_public == ~U[2026-01-15 09:30:00Z]
-      assert case_record.cvss_v4.vector == @vector
-      assert case_record.cvss_v4.version == :v4
+
+      assert [%{scenario: "GENERAL", cvss_v4: %{vector: @vector, version: :v4}}] =
+               Ash.load!(case_record, [:metrics], actor: poc).metrics
     end
 
     test "creates the CWE, CAPEC, credit and reference rows", %{poc: poc} do
@@ -136,8 +137,9 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecordTest do
 
       # Prose does come over — as the plain text, for a human to tidy up.
       assert case_record.description_md == "Plain text only."
-      assert case_record.cvss_v4 == nil
-      assert Ash.load!(case_record, [:affected_packages], actor: poc).affected_packages == []
+
+      assert %{affected_packages: [], metrics: []} =
+               Ash.load!(case_record, [:affected_packages, :metrics], actor: poc)
     end
 
     test "a CWE the local catalog has never synced is skipped, not fatal", %{poc: poc} do

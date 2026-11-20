@@ -32,6 +32,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseInvite.EmailStatus
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.ChildParams
@@ -61,6 +62,7 @@ defmodule VarselWeb.CaseDetailLive do
     credits: [user: [:avatar_url, :display_name]],
     weaknesses: [weakness: [:cwe_id, :name]],
     impacts: [attack_pattern: [:capec_id, :name]],
+    metrics: [],
     proposals: [author: [:avatar_url, :display_name], resolved_by: [:display_name]],
     affected_packages: [:derivation_state, channels: [:purl], version_events: []],
     comments: [author: [:avatar_url, :display_name], reactions: [user: [:display_name]]]
@@ -125,7 +127,8 @@ defmodule VarselWeb.CaseDetailLive do
       title: "CAPEC classification",
       edit?: true,
       target: :impact
-    }
+    },
+    "metric" => %{resource: CaseMetric, title: "CVSS scenario", edit?: true, target: :metric}
   }
 
   @impl Phoenix.LiveView
@@ -167,7 +170,7 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, assign_case(socket, socket.assigns.case_record)}
   end
 
-  def handle_event("edit_section", %{"section" => section}, socket) when section in ["summary", "severity"] do
+  def handle_event("edit_section", %{"section" => "summary" = section}, socket) do
     socket = assign(socket, editing_section: section)
     {:noreply, assign_case(socket, socket.assigns.case_record)}
   end
@@ -236,7 +239,8 @@ defmodule VarselWeb.CaseDetailLive do
       resource
       |> AshPhoenix.Form.for_create(Map.get(config, :create_action, :add),
         as: "child",
-        actor: socket.assigns.current_user
+        actor: socket.assigns.current_user,
+        params: initial_params(type, socket.assigns.display_case)
       )
       |> to_form()
 
@@ -559,8 +563,8 @@ defmodule VarselWeb.CaseDetailLive do
 
   ## ----------------------------------------------------------------- helpers
 
-  # Only the summary editor carries the CNA-override textarea; the severity
-  # editor's partial save must not touch (and thereby clear) the override.
+  # A save without the CNA-override textarea must not touch (and thereby
+  # clear) the override.
   defp put_override(params, %{"cna_override_json" => json}) do
     case decode_override(json) do
       {:ok, override} -> {:ok, Map.put(params, "cna_override", override)}
@@ -626,7 +630,7 @@ defmodule VarselWeb.CaseDetailLive do
     display_case = if projection, do: projection.case, else: case_record
 
     content_form =
-      if mode in [:edit, :propose] and socket.assigns.editing_section in ["summary", "severity"] do
+      if mode in [:edit, :propose] and socket.assigns.editing_section == "summary" do
         display_case
         |> AshPhoenix.Form.for_update(:edit, as: "form", actor: actor)
         |> to_form()
@@ -820,6 +824,7 @@ defmodule VarselWeb.CaseDetailLive do
         :credit -> case_record.credits
         :weakness -> case_record.weaknesses
         :impact -> case_record.impacts
+        :metric -> case_record.metrics
       end
 
     Enum.find(rows, &(&1.id == proposal.target_id))
@@ -903,16 +908,27 @@ defmodule VarselWeb.CaseDetailLive do
               can_resolve={can_edit?(@case_record, @current_user)}
             />
           </div>
-          <div id="severity">
-            <.severity_section
-              case_record={@display_case}
-              raw_case_record={@case_record}
-              form={@editing_section == "severity" && @content_form}
-              mode={@mode}
-              current_user={@current_user}
-              can_resolve={can_edit?(@case_record, @current_user)}
-            />
-          </div>
+          <.rows_section
+            id="severity"
+            heading="Severity"
+            type="metric"
+            add_label="Add scenario"
+            rows={@display_case.metrics}
+            mode={@mode}
+            marks={marks(@projection)}
+            bullet?={false}
+            raw_case_record={@case_record}
+            current_user={@current_user}
+            can_resolve={can_edit?(@case_record, @current_user)}
+          >
+            <:row :let={metric}>
+              <.metric_summary
+                scenario={metric.scenario}
+                vector={metric.cvss_v4 && metric.cvss_v4.vector}
+                score={metric.cvss_v4 && metric.cvss_v4.score}
+              />
+            </:row>
+          </.rows_section>
           <div id="affected">
             <.affected_section
               case_record={@display_case}
@@ -1156,7 +1172,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp section_for_proposal(%{target: target}) when target in [:affected_package, :package_channel, :version_event],
     do: "affected"
 
-  defp section_for_proposal(%{target: :case, field_name: "cvss_v4"}), do: "severity"
+  defp section_for_proposal(%{target: :metric}), do: "severity"
   defp section_for_proposal(%{target: :reference}), do: "references"
   defp section_for_proposal(%{target: :credit}), do: "credits"
   defp section_for_proposal(%{target: :weakness}), do: "weaknesses"
@@ -1468,61 +1484,6 @@ defmodule VarselWeb.CaseDetailLive do
       <.inline_suggestions
         case_record={@raw_case_record}
         section_id="summary"
-        current_user={@current_user}
-        can_resolve={@can_resolve}
-      />
-    </.panel>
-    """
-  end
-
-  # The editor footer's save button: primary for a direct save, info-colored
-  # (with dark text, per the mock) when the same click files a proposal
-  # instead — the ONE control the suggest toggle changes about the form.
-  # The Severity card: at rest one severity chip (rating + score) beside the
-  # truncated CVSS vector; "Open calculator" swaps the body for the CVSS
-  # calculator as this card's own editor, with the same save-vs-suggest
-  # semantics as the summary editor.
-  defp severity_section(assigns) do
-    ~H"""
-    <.edit_mode_notice :if={@form} mode={@mode} />
-    <.panel editing?={!!@form}>
-      <:title>{if @form, do: "Severity — editing", else: "Severity"}</:title>
-      <:actions>
-        <button
-          :if={@mode != :view and !@form}
-          class="link link-hover text-primary"
-          phx-click="edit_section"
-          phx-value-section="severity"
-        >
-          Open calculator
-        </button>
-      </:actions>
-
-      <.form :if={@form} for={@form} id="case-severity-form" phx-change="validate" phx-submit="save">
-        <.live_component
-          module={VarselWeb.CvssInput}
-          id="case-cvss-v4"
-          field={@form[:cvss_v4]}
-          label="CVSS v4.0"
-        />
-        <.edit_actions mode={@mode} cancel="cancel_edit" />
-      </.form>
-
-      <div :if={!@form}>
-        <div :if={@case_record.cvss_v4} class="flex min-w-0 items-center gap-3">
-          <.severity_chip score={@case_record.cvss_v4.score} variant={:full} />
-          <span class="min-w-0 truncate font-mono text-xs text-base-content/60">
-            {@case_record.cvss_v4.vector}
-          </span>
-        </div>
-        <p :if={is_nil(@case_record.cvss_v4)} class="text-sm text-base-content/60">
-          No CVSS score yet.
-        </p>
-      </div>
-
-      <.inline_suggestions
-        case_record={@raw_case_record}
-        section_id="severity"
         current_user={@current_user}
         can_resolve={@can_resolve}
       />
@@ -2455,6 +2416,14 @@ defmodule VarselWeb.CaseDetailLive do
     """
   end
 
+  defp child_form(%{child_form: %{type: "metric"}} = assigns) do
+    ~H"""
+    <.metric_form form={@child_form.form} propose?={@mode == :propose} {@rest}>
+      <:actions>{render_slot(@actions)}</:actions>
+    </.metric_form>
+    """
+  end
+
   defp child_form(%{child_form: %{type: "impact"}} = assigns) do
     ~H"""
     <.impact_form
@@ -2579,6 +2548,15 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp put_append_position(parent, _type, _case_record), do: parent
 
+  # A case scores the GENERAL scenario once, so a further scenario starts blank.
+  defp initial_params("metric", case_record) do
+    if Enum.any?(case_record.metrics, &(&1.scenario == CaseMetric.general_scenario())),
+      do: %{"scenario" => ""},
+      else: %{}
+  end
+
+  defp initial_params(_type, _case_record), do: %{}
+
   defp modal_title(verb, title, socket) do
     case socket.assigns.mode do
       :propose -> "#{verb} #{title} (as a proposal)"
@@ -2606,6 +2584,9 @@ defmodule VarselWeb.CaseDetailLive do
 
         "credit" ->
           display_case.credits
+
+        "metric" ->
+          display_case.metrics
       end
 
     Enum.find(rows, &(&1.id == id)) || raise "row #{id} not found in projection"

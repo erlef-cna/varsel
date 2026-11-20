@@ -96,7 +96,7 @@ defmodule Varsel.Cases.Case.SubmitFromGitHubAdvisoryTest do
     assert {:ok, case_record} = submit(maintainer)
 
     assert case_record.description_md == nil
-    assert case_record.cvss_v4 == nil
+    assert Ash.load!(case_record, [:metrics], authorize?: false).metrics == []
     assert case_record.date_public == nil
     assert case_record.weaknesses == []
     assert case_record.credits == []

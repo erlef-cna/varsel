@@ -81,9 +81,16 @@ defmodule Varsel.CVE.CveValidation.Validators do
         else: []
 
     cvss_error =
-      if has_cvss_v4?(cna["metrics"]),
+      if general_cvss_v4?(cna["metrics"]),
         do: [],
-        else: [error(:eef, "EEF002", "CVSS v4 vector is missing", "containers.cna.metrics")]
+        else: [
+          error(
+            :eef,
+            "EEF002",
+            "CVSS v4 vector for the GENERAL scenario is missing",
+            "containers.cna.metrics"
+          )
+        ]
 
     cve_id = get_in(cve_json, ["cveMetadata", "cveId"])
 
@@ -164,9 +171,23 @@ defmodule Varsel.CVE.CveValidation.Validators do
   defp blank?(value) when is_binary(value), do: String.trim(value) == ""
   defp blank?(_value), do: false
 
-  defp has_cvss_v4?(metrics) when is_list(metrics), do: Enum.any?(metrics, &Map.has_key?(&1, "cvssV4_0"))
+  defp general_cvss_v4?(metrics) when is_list(metrics) do
+    Enum.any?(
+      metrics,
+      &(is_map(&1) and Map.has_key?(&1, "cvssV4_0") and general_scenario?(&1["scenarios"]))
+    )
+  end
 
-  defp has_cvss_v4?(_metrics), do: false
+  defp general_cvss_v4?(_metrics), do: false
+
+  # The CVE schema reads a metric without scenarios as GENERAL.
+  defp general_scenario?(nil), do: true
+
+  defp general_scenario?(scenarios) when is_list(scenarios) do
+    Enum.any?(scenarios, &match?(%{"value" => "GENERAL"}, &1))
+  end
+
+  defp general_scenario?(_scenarios), do: false
 
   defp error(source, code, message, path \\ nil) do
     struct(Error, %{source: source, code: code, message: message, path: path})

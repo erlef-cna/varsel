@@ -13,7 +13,13 @@ description: Score a CVE using CVSS v4.0 metrics. Use when determining severity 
 
 Reference: https://www.first.org/cvss/v4.0/specification-document
 
-Analyze the vulnerability and produce a CVSS v4.0 **vector string** with a one-line rationale per metric. Varsel derives the numeric base score and severity bucket from the vector once it lands on the case (via a `set` proposal on `cvss_v4`), so your job is to get the vector right — you do not compute the number yourself.
+Analyze the vulnerability and produce a CVSS v4.0 **vector string** with a one-line rationale per metric. Varsel derives the numeric base score and severity bucket from the vector once it lands on the case as a scenario score (a metric), so your job is to get the vector right — you do not compute the number yourself.
+
+## Scenarios
+
+Every case has one score for the **GENERAL** scenario. It is the score for a standard build in a standard configuration, it sets the case's severity, and a case cannot publish without it. Score GENERAL first.
+
+In almost all cases, the GENERAL score is sufficient. Add a further scenario only when a very uncommon use, demonstrated in the report, gives a very different result. Do not add one for a small difference in a metric or two. Example: a buffer overrun crashes the VM in a standard build (GENERAL: `VA:H`, `VI:N`), but the reporter shows remote code execution when the VM is built without stack protection (scenario: `AC:H`, `AT:P`, `VC:H/VI:H/VA:H`). The scenario text is plain text, no markdown, at most 4096 characters. It names the condition, not the impact. Give each scenario its own rationale table.
 
 ## Metric Reference
 
@@ -95,10 +101,11 @@ Present:
 Then, in the `/new-case` flow, land it on the case as a proposal (Varsel computes the score/severity from the vector):
 
 ```
-create_case_proposal(input: {
-  case_id: <id>, target: "case", operation: "set",
-  field_name: "cvss_v4",
-  proposed_value: {"value": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"},
+propose_metric(input: {
+  case_id: <id>,
+  cvss_v4: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
   reasoning: "<per-metric rationale>"
 })
 ```
+
+`scenario` defaults to `GENERAL`. Pass `scenario: "<condition>"` for a further scenario. To change a score that is already on the case, use `propose_metric_cvss` with the metric's id as `target_id`. `propose_metric_scenario` changes its scenario text, and `propose_delete` with `target: "metric"` removes it.

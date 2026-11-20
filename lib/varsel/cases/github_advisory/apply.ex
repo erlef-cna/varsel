@@ -16,6 +16,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Apply do
 
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage.Preset
+  alias Varsel.Cases.Case
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.GitHubAdvisory.Import
   alias Varsel.CWE.Weakness
 
@@ -43,6 +45,28 @@ defmodule Varsel.Cases.GitHubAdvisory.Apply do
       |> MapSet.new(& &1.cwe_id)
 
     Enum.filter(rows, &MapSet.member?(present, &1.cwe_id))
+  end
+
+  @doc "Adds one of the advisory's `Import.child_params/1` metrics to the case."
+  @spec add_metric(map(), Ash.UUID.t(), opts()) :: written()
+  def add_metric(row, case_id, opts) do
+    Cases.add_case_metric(Map.put(row, :case_id, case_id), opts)
+  end
+
+  @doc """
+  Sets the case's GENERAL score to `vector`: edits the GENERAL metric the
+  case has, or adds one.
+  """
+  @spec put_general_metric(String.t(), Case.t(), opts()) :: written()
+  def put_general_metric(vector, %Case{general_metric: %CaseMetric{} = metric}, opts) do
+    Cases.edit_case_metric(metric, %{cvss_v4: vector}, opts)
+  end
+
+  def put_general_metric(vector, %Case{id: case_id}, opts) do
+    Cases.add_case_metric(
+      %{case_id: case_id, scenario: CaseMetric.general_scenario(), cvss_v4: vector},
+      opts
+    )
   end
 
   @doc "Adds one of `known_weaknesses/1` to the case."
