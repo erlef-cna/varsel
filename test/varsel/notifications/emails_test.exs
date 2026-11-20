@@ -39,14 +39,16 @@ defmodule Varsel.Notifications.EmailsTest do
     |> Ash.read!(authorize?: false)
   end
 
+  defp address(user), do: to_string(user.notification_email)
+
   defp send_digests do
     perform_job(Varsel.Notifications.Notification.SendDigestsWorker, %{})
   end
 
   describe ":report_submitted" do
     test "submitting a report emails every POC with a link to its case, not the reporter" do
-      Fixtures.register_user("emails_report_poc_one", :poc)
-      Fixtures.register_user("emails_report_poc_two", :poc)
+      poc_one = Fixtures.register_user("emails_report_poc_one", :poc)
+      poc_two = Fixtures.register_user("emails_report_poc_two", :poc)
       reporter = Fixtures.register_user("emails_report_reporter", :supporter)
 
       {:ok, case_record} =
@@ -67,18 +69,18 @@ defmodule Varsel.Notifications.EmailsTest do
       recipients =
         for {_name, addr} <- Enum.flat_map(emails, & &1.to), into: MapSet.new(), do: addr
 
-      assert "emails_report_poc_one@example.com" in recipients
-      assert "emails_report_poc_two@example.com" in recipients
-      refute "emails_report_reporter@example.com" in recipients
+      assert address(poc_one) in recipients
+      assert address(poc_two) in recipients
+      refute address(reporter) in recipients
 
       body = hd(emails).text_body
       assert body =~ "/cases/#{case_record.id}"
       refute body =~ "pkg"
-      refute body =~ "emails_report_reporter@example.com"
+      refute body =~ address(reporter)
     end
 
     test "hex.pm intake emails every POC too, with no payload or reporter text" do
-      Fixtures.register_user("emails_hex_report_poc", :poc)
+      poc = Fixtures.register_user("emails_hex_report_poc", :poc)
 
       # No address, so the reporter's invite sends no email of its own.
       Req.Test.stub(Varsel.HexPm, fn conn ->
@@ -98,7 +100,8 @@ defmodule Varsel.Notifications.EmailsTest do
 
       drain()
 
-      assert [%{to: [{_name, "emails_hex_report_poc@example.com"}]} = email] = sent_emails()
+      to = address(poc)
+      assert [%{to: [{_name, ^to}]} = email] = sent_emails()
       assert email.text_body =~ "/cases/"
       refute email.text_body =~ "secret_pkg"
       refute email.text_body =~ "somebody"
@@ -122,7 +125,8 @@ defmodule Varsel.Notifications.EmailsTest do
 
       drain()
 
-      assert [%{to: [{_name, "emails_comment_poc@example.com"}]} = email] = sent_emails()
+      to = address(poc)
+      assert [%{to: [{_name, ^to}]} = email] = sent_emails()
       assert email.subject =~ "New comment"
       assert email.text_body =~ "/cases/#{case_record.id}"
       refute email.text_body =~ "a very specific comment body"
@@ -248,7 +252,8 @@ defmodule Varsel.Notifications.EmailsTest do
 
       send_digests()
 
-      assert [%{to: [{_name, "emails_send_digest_poc@example.com"}]} = email] = sent_emails()
+      to = address(poc)
+      assert [%{to: [{_name, ^to}]} = email] = sent_emails()
       assert email.subject =~ "daily notification digest"
       assert email.text_body =~ "1 × New comment"
       assert email.text_body =~ "1 × Review requested"
@@ -281,7 +286,8 @@ defmodule Varsel.Notifications.EmailsTest do
 
       send_digests()
 
-      assert [%{to: [{_name, "emails_digest_read_poc@example.com"}]} = email] = sent_emails()
+      to = address(poc)
+      assert [%{to: [{_name, ^to}]} = email] = sent_emails()
       assert email.text_body =~ "1 × Added to a case"
       refute email.text_body =~ "Review requested"
     end
@@ -333,7 +339,8 @@ defmodule Varsel.Notifications.EmailsTest do
 
       send_digests()
 
-      assert [%{to: [{_name, "emails_switch_to_digest_poc@example.com"}]}] = sent_emails()
+      to = address(poc)
+      assert [%{to: [{_name, ^to}]}] = sent_emails()
       assert [%Notification{emailed_at: %DateTime{}}] = notifications_for(poc)
     end
   end
@@ -359,8 +366,8 @@ defmodule Varsel.Notifications.EmailsTest do
       recipients =
         for {_name, addr} <- Enum.flat_map(emails, & &1.to), into: MapSet.new(), do: addr
 
-      assert "emails_scheduler_immediate_poc@example.com" in recipients
-      refute "emails_scheduler_digest_poc@example.com" in recipients
+      assert address(immediate_poc) in recipients
+      refute address(digest_poc) in recipients
 
       assert [%Notification{emailed_at: %DateTime{}}] = notifications_for(immediate_poc)
       assert [%Notification{emailed_at: nil}] = notifications_for(digest_poc)

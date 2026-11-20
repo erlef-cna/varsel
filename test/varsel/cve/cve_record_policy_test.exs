@@ -17,14 +17,16 @@ defmodule Varsel.CVE.CveRecordPolicyTest do
   end
 
   defp register_user(handle) do
+    sub = System.unique_integer([:positive])
+
     Ash.create!(
       User,
       %{
         user_info: %{
-          "sub" => System.unique_integer([:positive]),
+          "sub" => sub,
           "preferred_username" => handle,
           "name" => handle,
-          "email" => "#{handle}@example.com"
+          "email" => Varsel.Fixtures.email(handle, sub)
         },
         oauth_tokens: %{"access_token" => "gho_token"}
       },

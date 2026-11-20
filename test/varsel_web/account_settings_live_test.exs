@@ -43,17 +43,17 @@ defmodule VarselWeb.AccountSettingsLiveTest do
 
   test "lists every address a linked provider reported", %{conn: conn} do
     user = register_user("alice")
-    link_hex_identity(user, "alice_hex", "alice@hex.example")
+    link_hex_identity(user, "settings_alice_hex", "alice@hex.example")
 
     {:ok, _lv, html} = conn |> log_in(user) |> live(~p"/settings/account")
 
-    assert html =~ "alice@example.com"
+    assert html =~ to_string(user.notification_email)
     assert html =~ "alice@hex.example"
   end
 
   test "choosing an address sets it as the notification email", %{conn: conn} do
     user = register_user("alice")
-    link_hex_identity(user, "alice_hex", "alice@hex.example")
+    link_hex_identity(user, "settings_alice_hex", "alice@hex.example")
 
     {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
 
@@ -78,14 +78,14 @@ defmodule VarselWeb.AccountSettingsLiveTest do
                actor: user
              )
 
-    assert to_string(Ash.get!(User, user.id, authorize?: false).notification_email) ==
-             "alice@example.com"
+    assert Ash.get!(User, user.id, authorize?: false).notification_email ==
+             user.notification_email
   end
 
   test "nobody sets someone else's notification email" do
     alice = register_user("alice")
     poc = register_user("poc", :poc)
-    link_hex_identity(alice, "alice_hex", "alice@hex.example")
+    link_hex_identity(alice, "settings_alice_hex", "alice@hex.example")
 
     assert {:error, %Forbidden{}} =
              Accounts.set_user_notification_email(
@@ -132,7 +132,7 @@ defmodule VarselWeb.AccountSettingsLiveTest do
 
     test "drops the identity", %{conn: conn} do
       user = register_user("alice")
-      link_hex_identity(user, "alice_hex", "alice@hex.example")
+      link_hex_identity(user, "settings_alice_hex", "alice@hex.example")
 
       {:ok, lv, _html} = conn |> log_in(user) |> live(~p"/settings/account")
 
@@ -168,7 +168,7 @@ defmodule VarselWeb.AccountSettingsLiveTest do
     test "nobody unlinks someone else's provider" do
       alice = register_user("alice")
       poc = register_user("poc", :poc)
-      link_hex_identity(alice, "alice_hex", "alice@hex.example")
+      link_hex_identity(alice, "settings_alice_hex", "alice@hex.example")
 
       hex = Enum.find(identities(alice), &(to_string(&1.strategy) == "hex"))
 

@@ -21,6 +21,14 @@ defmodule Varsel.Fixtures do
     end
   end
 
+  @doc """
+  The address a provider reports for `handle` signing in as `sub`. The
+  notification email is unique, and async tests write users in concurrent
+  sandbox transactions: two tests sharing an address wait on each other's
+  insert, and deadlock when they take two addresses in opposite orders.
+  """
+  def email(handle, sub), do: "#{handle}-#{sub}@example.com"
+
   def sign_in_with_hex(handle, sub) do
     Ash.create!(
       User,
@@ -29,7 +37,7 @@ defmodule Varsel.Fixtures do
           "sub" => sub,
           "preferred_username" => handle,
           "name" => "#{handle} name",
-          "email" => "#{handle}@example.com"
+          "email" => email(handle, sub)
         },
         oauth_tokens: %{"access_token" => "hex_token"}
       },
@@ -46,7 +54,7 @@ defmodule Varsel.Fixtures do
           "sub" => sub,
           "preferred_username" => handle,
           "name" => "#{handle} name",
-          "email" => "#{handle}@example.com"
+          "email" => email(handle, sub)
         },
         oauth_tokens: oauth_tokens
       },

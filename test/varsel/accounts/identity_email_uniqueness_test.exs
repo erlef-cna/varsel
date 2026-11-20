@@ -32,7 +32,7 @@ defmodule Varsel.Accounts.IdentityEmailUniquenessTest do
   test "one user may hold the same address on several providers" do
     user = register_user("alice")
 
-    link_identity(user, "hex", "alice_hex", "alice@example.com")
+    link_identity(user, "hex", "uniqueness_alice_hex", to_string(user.notification_email))
 
     strategies =
       user
@@ -45,20 +45,21 @@ defmodule Varsel.Accounts.IdentityEmailUniquenessTest do
   end
 
   test "a second account cannot claim an address another already reported" do
-    register_user("alice")
+    alice = register_user("alice")
     intruder = register_user("intruder")
 
     assert_raise Unknown, ~r/one_account_per_email/, fn ->
-      link_identity(intruder, "hex", "intruder_hex", "alice@example.com")
+      link_identity(intruder, "hex", "intruder_hex", to_string(alice.notification_email))
     end
   end
 
   test "capitalising the address differently does not evade that" do
-    register_user("alice")
+    alice = register_user("alice")
     intruder = register_user("intruder")
+    shouted = alice.notification_email |> to_string() |> String.upcase()
 
     assert_raise Unknown, ~r/one_account_per_email/, fn ->
-      link_identity(intruder, "hex", "intruder_hex", "ALICE@example.com")
+      link_identity(intruder, "hex", "intruder_hex", shouted)
     end
   end
 
@@ -79,15 +80,17 @@ defmodule Varsel.Accounts.IdentityEmailUniquenessTest do
 
   test "an address is matched case-insensitively when read back" do
     user = register_user("alice")
+    address = to_string(user.notification_email)
 
-    link_identity(user, "hex", "alice_hex", "ALICE@EXAMPLE.COM")
+    link_identity(user, "hex", "uniqueness_alice_hex", String.upcase(address))
 
     emails =
       user
       |> Ash.load!([:identities], authorize?: false)
       |> Map.fetch!(:identities)
+      |> Enum.filter(&(to_string(&1.strategy) == "hex"))
       |> Enum.map(& &1.email)
 
-    assert Enum.any?(emails, &(Ash.CiString.compare(&1, "alice@example.com") == :eq))
+    assert Enum.any?(emails, &(Ash.CiString.compare(&1, address) == :eq))
   end
 end
