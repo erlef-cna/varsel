@@ -27,22 +27,34 @@ defmodule VarselWeb.CvssInput do
 
   @prefix "CVSS:4.0"
 
-  # The eleven v4.0 base metrics, in specification order.
-  @metrics [
-    {"AV", "Attack Vector", [{"N", "Network"}, {"A", "Adjacent"}, {"L", "Local"}, {"P", "Physical"}]},
-    {"AC", "Attack Complexity", [{"L", "Low"}, {"H", "High"}]},
-    {"AT", "Attack Requirements", [{"N", "None"}, {"P", "Present"}]},
-    {"PR", "Privileges Required", [{"N", "None"}, {"L", "Low"}, {"H", "High"}]},
-    {"UI", "User Interaction", [{"N", "None"}, {"P", "Passive"}, {"A", "Active"}]},
-    {"VC", "Confidentiality (Vulnerable System)", [{"H", "High"}, {"L", "Low"}, {"N", "None"}]},
-    {"VI", "Integrity (Vulnerable System)", [{"H", "High"}, {"L", "Low"}, {"N", "None"}]},
-    {"VA", "Availability (Vulnerable System)", [{"H", "High"}, {"L", "Low"}, {"N", "None"}]},
-    {"SC", "Confidentiality (Subsequent System)", [{"H", "High"}, {"L", "Low"}, {"N", "None"}]},
-    {"SI", "Integrity (Subsequent System)", [{"H", "High"}, {"L", "Low"}, {"N", "None"}]},
-    {"SA", "Availability (Subsequent System)", [{"H", "High"}, {"L", "Low"}, {"N", "None"}]}
+  @impact [{"H", "High"}, {"L", "Low"}, {"N", "None"}]
+
+  # The eleven v4.0 base metrics, in specification order, grouped as the
+  # specification groups them.
+  @groups [
+    {"Exploitability Metrics",
+     [
+       {"AV", "Attack Vector", [{"N", "Network"}, {"A", "Adjacent"}, {"L", "Local"}, {"P", "Physical"}]},
+       {"AC", "Attack Complexity", [{"L", "Low"}, {"H", "High"}]},
+       {"AT", "Attack Requirements", [{"N", "None"}, {"P", "Present"}]},
+       {"PR", "Privileges Required", [{"N", "None"}, {"L", "Low"}, {"H", "High"}]},
+       {"UI", "User Interaction", [{"N", "None"}, {"P", "Passive"}, {"A", "Active"}]}
+     ]},
+    {"Vulnerable System Impact Metrics",
+     [
+       {"VC", "Confidentiality", @impact},
+       {"VI", "Integrity", @impact},
+       {"VA", "Availability", @impact}
+     ]},
+    {"Subsequent System Impact Metrics",
+     [
+       {"SC", "Confidentiality", @impact},
+       {"SI", "Integrity", @impact},
+       {"SA", "Availability", @impact}
+     ]}
   ]
 
-  @base_codes Enum.map(@metrics, &elem(&1, 0))
+  @base_codes for {_group, metrics} <- @groups, {code, _name, _options} <- metrics, do: code
 
   # All-benign baseline a first toggle starts from (base score 0.0).
   @baseline Enum.map(@base_codes, fn
@@ -125,38 +137,41 @@ defmodule VarselWeb.CvssInput do
         {error}
       </p>
 
-      <div class="grid sm:grid-cols-2 gap-x-6 gap-y-3 mt-2">
-        <div :for={{code, name, options} <- metrics()} class="flex flex-col items-start gap-1 min-w-0">
-          <span class="text-xs text-base-content/70">{name}</span>
-          <div class="join">
-            <button
-              :for={{value, value_label} <- options}
-              type="button"
-              class={[
-                "join-item btn btn-xs",
-                if(selected(@vector, code) == value,
-                  do: "btn-primary",
-                  else: "bg-base-200 text-base-content/80 border-base-300 hover:bg-base-300"
-                )
-              ]}
-              title={"#{code}:#{value} — #{value_label}"}
-              phx-click="metric"
-              phx-value-code={code}
-              phx-value-selection={value}
-              phx-target={@myself}
-            >
-              {value_label}
-            </button>
+      <section :for={{group, metrics} <- groups()} class="mt-4">
+        <h4 class="mb-2 text-sm font-semibold">{group}</h4>
+        <div class="grid sm:grid-cols-2 gap-x-6 gap-y-3">
+          <div :for={{code, name, options} <- metrics} class="flex flex-col items-start gap-1 min-w-0">
+            <span class="text-xs text-base-content/70">{name}</span>
+            <div class="join">
+              <button
+                :for={{value, value_label} <- options}
+                type="button"
+                class={[
+                  "join-item btn btn-xs",
+                  if(selected(@vector, code) == value,
+                    do: "btn-primary",
+                    else: "bg-base-200 text-base-content/80 border-base-300 hover:bg-base-300"
+                  )
+                ]}
+                title={"#{code}:#{value} — #{value_label}"}
+                phx-click="metric"
+                phx-value-code={code}
+                phx-value-selection={value}
+                phx-target={@myself}
+              >
+                {value_label}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
     """
   end
 
   ## ------------------------------------------------------------- vector math
 
-  defp metrics, do: @metrics
+  defp groups, do: @groups
 
   defp form_value(field) do
     case field.value do
