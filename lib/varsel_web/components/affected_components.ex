@@ -144,7 +144,7 @@ defmodule VarselWeb.AffectedComponents do
   into a cell.
   """
   attr :event, :atom, required: true, values: [:introduced, :fixed]
-  attr :reference, :string, required: true, doc: "the commit SHA or version, already shortened"
+  attr :reference, :string, required: true, doc: "the commit SHA or version"
   attr :title, :string, default: nil, doc: "the full value, for the hover"
   attr :scope, :string, default: nil, doc: "the channel this fact is limited to"
   attr :note, :string, default: nil
@@ -155,24 +155,36 @@ defmodule VarselWeb.AffectedComponents do
 
   def boundary_fact(assigns) do
     ~H"""
-    <div class={["flex flex-wrap items-baseline gap-2 py-1", @muted && "opacity-50"]}>
-      <span class={["badge badge-sm shrink-0", boundary_tone(@event)]}>{@event}</span>
-      <span class="font-mono text-xs text-base-content/80" title={@title}>{@reference}</span>
-      <span
-        :if={@scope}
-        class="badge badge-ghost badge-sm font-mono"
-        title="Applies to this channel only"
-      >
-        {@scope}
-      </span>
-      {render_slot(@badges)}
-      <span
-        :if={@actions != []}
-        class="ml-auto flex shrink-0 items-center gap-3 text-xs font-semibold"
-      >
-        {render_slot(@actions)}
-      </span>
-      <p :if={@note} class="w-full text-xs text-base-content/60">{@note}</p>
+    <div class={["w-full py-1", @muted && "opacity-50"]}>
+      <div class="flex min-w-0 items-baseline gap-2">
+        <span class={["badge badge-sm shrink-0", boundary_tone(@event)]}>{@event}</span>
+        <span
+          class={[
+            "truncate font-mono text-xs text-base-content/80",
+            if(String.length(@reference) > 8, do: "min-w-[8ch]", else: "shrink-0")
+          ]}
+          title={@title}
+        >
+          {@reference}
+        </span>
+        <span
+          :if={@scope}
+          class="badge badge-ghost badge-sm shrink-0 font-mono"
+          title="Applies to this channel only"
+        >
+          {@scope}
+        </span>
+        <span :if={@badges != []} class="flex shrink-0 items-baseline gap-2">
+          {render_slot(@badges)}
+        </span>
+        <span
+          :if={@actions != []}
+          class="ml-auto flex shrink-0 items-center gap-3 text-xs font-semibold"
+        >
+          {render_slot(@actions)}
+        </span>
+      </div>
+      <p :if={@note} class="mt-1 text-xs text-base-content/60">{@note}</p>
     </div>
     """
   end
