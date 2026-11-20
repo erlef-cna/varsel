@@ -146,7 +146,7 @@ defmodule VarselWeb.CaseManagementLive do
         assignments: [user: [:avatar_url, :display_name]],
         affected_packages:
           AffectedPackage
-          |> Ash.Query.select([:product, :vendor, :position, :repo_url])
+          |> Ash.Query.select([:product, :vendor, :repo_url])
           |> Ash.Query.load(channels: [:purl])
       ],
       query:
@@ -347,7 +347,7 @@ defmodule VarselWeb.CaseManagementLive do
         :severity_bucket,
         affected_packages:
           AffectedPackage
-          |> Ash.Query.select([:product, :vendor, :position])
+          |> Ash.Query.select([:product, :vendor])
           |> Ash.Query.load(channels: [:purl])
       ],
       query: archive_query(socket.assigns.scope, socket.assigns.query),

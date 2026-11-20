@@ -1336,7 +1336,12 @@ defmodule Varsel.Cases.Case do
 
     has_many :affected_packages, Varsel.Cases.AffectedPackage do
       public? true
-      sort position: :asc
+
+      sort vendor_order: :asc,
+           product_order: :asc,
+           repo_url_order: :asc,
+           inserted_at: :asc,
+           id: :asc
     end
 
     has_many :references, Varsel.Cases.CaseReference do

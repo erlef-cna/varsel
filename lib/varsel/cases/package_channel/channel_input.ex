@@ -9,11 +9,11 @@ defmodule Varsel.Cases.PackageChannel.ChannelInput do
   rather than a package proposal followed by channel proposals that must wait
   for it to be accepted before they have a parent to reference.
 
-  The fields mirror `Varsel.Cases.PackageChannel`'s proposable payload minus
-  `position` (ordering follows the array). Typing it as an embedded resource
-  (rather than a bare map) validates each nested channel at propose time. The
-  override escape hatches are intentionally not authorable inline — add them
-  with `propose_package_channel` once the package is accepted.
+  The fields mirror `Varsel.Cases.PackageChannel`'s proposable payload. Typing
+  it as an embedded resource (rather than a bare map) validates each nested
+  channel at propose time. The override escape hatches are intentionally not
+  authorable inline — add them with `propose_package_channel` once the package
+  is accepted.
   """
 
   use Ash.Resource,

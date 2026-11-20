@@ -35,6 +35,7 @@ defmodule Varsel.Cases.VersionEvent do
 
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Proposable
+  alias Varsel.Cases.RowOrder
   alias Varsel.Cases.Signals
   alias Varsel.Cases.VersionEvent.Event
   alias Varsel.Cases.VersionEvent.Validations.ConsistentBoundary
@@ -220,4 +221,32 @@ defmodule Varsel.Cases.VersionEvent do
       attribute_writable? true
     end
   end
+
+  calculations do
+    calculate :fixed, :boolean, expr(event == :fixed) do
+      description "Whether this fact is a fix rather than an introduction."
+    end
+
+    # An explicit collation, so the database orders facts the way `sort/1`
+    # does whatever the server's locale.
+    calculate :reference_order,
+              :string,
+              expr(fragment("coalesce(?, ?) COLLATE \"C\"", commit_sha, version))
+  end
+
+  @doc """
+  Orders a package's boundary facts: introductions before fixes, then by
+  commit or version, then the facts for every channel before the ones scoped
+  to a channel, then creation.
+  """
+  @spec sort([t]) :: [t] when t: map()
+  def sort(events) do
+    Enum.sort_by(events, fn event ->
+      {event.event == :fixed, RowOrder.text(event.commit_sha || event.version), scope(event.package_channel_id),
+       RowOrder.time(event.inserted_at), event.id}
+    end)
+  end
+
+  defp scope(nil), do: {false, ""}
+  defp scope(channel_id), do: {true, channel_id}
 end

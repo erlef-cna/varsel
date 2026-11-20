@@ -278,9 +278,6 @@ defmodule VarselWeb.CaseFormComponents do
           version, e.g. -, special for 1.2.3 and 1.2.3-special.
         </:description>
       </.input>
-      <.input field={@form[:position]} type="number">
-        <:label>Position</:label>
-      </.input>
       <.disclosure id="channel-overrides-disclosure" title="Advanced: version and entry overrides">
         <.input
           field={@form[:versions_override]}

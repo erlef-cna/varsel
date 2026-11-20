@@ -99,10 +99,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
   defp pull_set(:affected, children, case_record, opts) do
     children.affected
     |> Enum.reject(&Diff.package_present?(case_record, &1))
-    |> Enum.with_index(length(case_record.affected_packages))
-    |> Apply.each(fn {package, position} ->
-      Apply.add_package(package, case_record.id, position, opts)
-    end)
+    |> Apply.each(&Apply.add_package(&1, case_record.id, opts))
   end
 
   defp add_roles(credit, roles, opts) do

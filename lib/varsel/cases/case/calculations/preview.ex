@@ -474,19 +474,17 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   # links nothing. A forge RepoUrl does not know how to link into (no
   # `commit_url/2` clause) gets no reference rather than a guessed-at one.
   defp commit_links(case_record) do
-    for package <- case_record.affected_packages,
+    for package <- AffectedPackage.sort(case_record.affected_packages),
         package.repo_url,
         repo <- [RepoUrl.parse(package.repo_url)],
-        event_kind <- [:introduced, :fixed],
-        event <- package.version_events,
-        event.event == event_kind,
+        event <- VersionEvent.sort(package.version_events),
         event.commit_sha,
         not Preset.otp_root_commit?(event.commit_sha),
         url <- List.wrap(RepoUrl.commit_url(repo, event.commit_sha)) do
       render_reference(
         url,
-        commit_tags(event_kind, package.repo_unreachable),
-        "#{commit_label(event_kind)} #{String.slice(event.commit_sha, 0, 7)} in #{RepoUrl.label(repo)}"
+        commit_tags(event.event, package.repo_unreachable),
+        "#{commit_label(event.event)} #{String.slice(event.commit_sha, 0, 7)} in #{RepoUrl.label(repo)}"
       )
     end
   end
@@ -503,14 +501,14 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
   defp affected(case_record, derivations) do
     {entries, overrides, blockers} =
       case_record.affected_packages
-      |> Enum.sort_by(& &1.position)
+      |> AffectedPackage.sort()
       |> Enum.reduce({[], [], []}, fn package, {entries, overrides, blockers} ->
         derivation = derivations[package.id] || %{}
         channel_results = derivation["channels"] || %{}
 
         {package_entries, package_overrides} =
           package.channels
-          |> Enum.sort_by(& &1.position)
+          |> PackageChannel.sort()
           |> Enum.map(fn channel ->
             {entry, applied} =
               Channel.render(package, channel, channel_results[channel.id] || %{})
@@ -607,7 +605,7 @@ defmodule Varsel.Cases.Case.Calculations.Preview do
 
   defp put_cpe_applicability(cna, case_record, derivations) do
     matches =
-      for package <- Enum.sort_by(case_record.affected_packages, & &1.position),
+      for package <- AffectedPackage.sort(case_record.affected_packages),
           match <- (derivations[package.id] || %{})["cpe_matches"] || [] do
         %{"criteria" => Channel.cpe(package), "vulnerable" => true}
         |> put_present("versionStartIncluding", match["versionStartIncluding"])

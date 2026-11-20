@@ -108,12 +108,7 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory do
            children.credits
            |> Apply.credit_rows()
            |> Apply.each(&Apply.add_credit(&1, case_id, opts)),
-         :ok <-
-           children.affected
-           |> Enum.with_index()
-           |> Apply.each(fn {package, position} ->
-             Apply.add_package(package, case_id, position, opts)
-           end) do
+         :ok <- Apply.each(children.affected, &Apply.add_package(&1, case_id, opts)) do
       {:ok, case_record}
     end
   end

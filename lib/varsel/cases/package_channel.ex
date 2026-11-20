@@ -48,6 +48,7 @@ defmodule Varsel.Cases.PackageChannel do
   alias Varsel.Cases.PackageChannel.Validations.ConsistentWithPackage
   alias Varsel.Cases.PackageChannel.VersionType
   alias Varsel.Cases.Proposable
+  alias Varsel.Cases.RowOrder
   alias Varsel.Cases.Signals
 
   graphql do
@@ -310,13 +311,6 @@ defmodule Varsel.Cases.PackageChannel do
       public? true
     end
 
-    attribute :position, :integer do
-      description "Order of this channel among the product's rendered entries."
-      allow_nil? false
-      default 0
-      public? true
-    end
-
     timestamps()
   end
 
@@ -350,9 +344,62 @@ defmodule Varsel.Cases.PackageChannel do
 
       public? true
     end
+
+    calculate :repository,
+              :boolean,
+              expr(
+                if is_nil(version_type) do
+                  not is_nil(purl_type) and purl_type in ^PurlType.git_types()
+                else
+                  version_type == :git
+                end
+              ) do
+      description "Whether this channel is a source repository, versioned by its commits."
+    end
+
+    # Explicit collations, so the database orders channels the way `sort/1`
+    # does whatever the server's locale.
+    calculate :purl_order,
+              :string,
+              expr(
+                fragment(
+                  "NULLIF(concat_ws('/', ?, ?, ?), '') COLLATE \"C\"",
+                  purl_type,
+                  namespace,
+                  name
+                )
+              )
+
+    calculate :domain_order, :string, expr(fragment("(?) COLLATE \"C\"", domain))
   end
 
   identities do
     identity :unique_channel, [:affected_package_id, :purl_type, :namespace, :name, :domain], nils_distinct?: false
+  end
+
+  @doc """
+  Orders a package's channels as its entries publish: registries and services
+  by purl (services, which have none, by domain after them), the source
+  repository last, then creation.
+  """
+  @spec sort([t]) :: [t] when t: map()
+  def sort(channels) do
+    Enum.sort_by(channels, fn channel ->
+      {repository?(channel), purl_order(channel), RowOrder.text(channel.domain), RowOrder.time(channel.inserted_at),
+       channel.id}
+    end)
+  end
+
+  defp repository?(%{version_type: :git}), do: true
+
+  defp repository?(%{version_type: nil, purl_type: purl_type}), do: purl_type in PurlType.git_types()
+
+  defp repository?(_channel), do: false
+
+  defp purl_order(channel) do
+    case Enum.reject([channel.purl_type, channel.namespace, channel.name], &(&1 in [nil, ""])) do
+      [] -> RowOrder.text(nil)
+      parts -> RowOrder.text(Enum.join(parts, "/"))
+    end
   end
 end

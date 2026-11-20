@@ -58,9 +58,9 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
              ] = package.program_files
 
       assert [
-               %{purl_type: "software-id", namespace: "erlang.org", name: "otp", position: 0},
-               %{purl_type: "otp", name: "ssh", subpath: "lib/ssh", position: 1} = ssh,
-               %{purl_type: "otp", name: "ssl", subpath: "lib/ssl", position: 2},
+               %{purl_type: "otp", name: "ssh", subpath: "lib/ssh"} = ssh,
+               %{purl_type: "otp", name: "ssl", subpath: "lib/ssl"},
+               %{purl_type: "software-id", namespace: "erlang.org", name: "otp"},
                %{purl_type: "github", namespace: "erlang", name: "otp"}
              ] = package.channels
 
@@ -114,7 +114,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
           load: [:channels, :version_events]
         )
 
-      assert [%{name: "otp"}, %{name: "stdlib", subpath: "lib/stdlib"}, %{purl_type: "github"}] =
+      assert [%{name: "stdlib", subpath: "lib/stdlib"}, %{name: "otp"}, %{purl_type: "github"}] =
                package.channels
 
       assert package.version_events == []
@@ -175,7 +175,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
           load: [:channels]
         )
 
-      assert [%{name: "otp"}, %{name: "erts", subpath: "erts"}, %{purl_type: "github"}] =
+      assert [%{name: "erts", subpath: "erts"}, %{name: "otp"}, %{purl_type: "github"}] =
                package.channels
     end
 
@@ -257,7 +257,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
       assert package.repo_url == "https://github.com/gleam-lang/gleam"
       assert package.cpe == "cpe:2.3:a:gleam-lang:gleam:*:*:*:*:*:*:*:*"
 
-      assert [software_id, oci, repository] = package.channels
+      assert [oci, software_id, repository] = package.channels
       assert %{purl_type: "software-id", namespace: "gleam.run", name: "gleam"} = software_id
       assert %{purl_type: "oci", name: "gleam"} = oci
       assert oci.qualifiers == %{"repository_url" => "ghcr.io/gleam-lang/gleam"}
@@ -310,8 +310,8 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
                package.program_files
 
       assert [
-               %{purl_type: "software-id", name: "otp"},
                %{purl_type: "otp", name: "ssh"},
+               %{purl_type: "software-id", name: "otp"},
                %{purl_type: "github", name: "otp"}
              ] = package.channels
 
@@ -341,7 +341,7 @@ defmodule Varsel.Cases.AffectedPackagePresetTest do
 
       assert package.vendor == "Gleam"
 
-      assert [%{purl_type: "software-id"}, %{purl_type: "oci"}, %{purl_type: "github"}] =
+      assert [%{purl_type: "oci"}, %{purl_type: "software-id"}, %{purl_type: "github"}] =
                package.channels
     end
 

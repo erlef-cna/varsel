@@ -60,8 +60,7 @@ defmodule Varsel.Cases.GitHubAdvisory.ReportTargetsTest do
       Fixtures.add_affected_package(poc, case_record, %{
         vendor: "erlang",
         product: "otp",
-        repo_url: "https://github.com/erlang/otp",
-        position: 1
+        repo_url: "https://github.com/erlang/otp"
       })
 
       install(7, "acme", "acme_lib")

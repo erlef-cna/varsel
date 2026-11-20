@@ -102,31 +102,27 @@ defmodule Varsel.Cases.GitHubAdvisory.Apply do
   A preset that takes applications and is given none stands as the preset's
   product with the repository channel alone, for a person to complete.
   """
-  @spec add_package(Import.affected_package(), Ash.UUID.t(), non_neg_integer(), opts()) ::
-          written()
-  def add_package(package, case_id, position, opts)
+  @spec add_package(Import.affected_package(), Ash.UUID.t(), opts()) :: written()
+  def add_package(package, case_id, opts)
 
-  def add_package(%{preset: preset, applications: []}, case_id, position, opts) when not is_nil(preset) do
+  def add_package(%{preset: preset, applications: []}, case_id, opts) when not is_nil(preset) do
     if Preset.applications?(preset) do
       preset
       |> Preset.attributes()
-      |> Map.merge(%{case_id: case_id, position: position})
+      |> Map.put(:case_id, case_id)
       |> Cases.add_affected_package(opts)
     else
       add_preset(preset, %{case_id: case_id}, opts)
     end
   end
 
-  def add_package(%{preset: preset, applications: applications}, case_id, _position, opts) when not is_nil(preset) do
+  def add_package(%{preset: preset, applications: applications}, case_id, opts) when not is_nil(preset) do
     add_preset(preset, %{case_id: case_id, applications: applications}, opts)
   end
 
-  def add_package(%{attributes: attributes, channels: channels}, case_id, position, opts) do
+  def add_package(%{attributes: attributes, channels: channels}, case_id, opts) do
     with {:ok, package} <-
-           Cases.add_affected_package(
-             Map.merge(attributes, %{case_id: case_id, position: position}),
-             opts
-           ),
+           Cases.add_affected_package(Map.put(attributes, :case_id, case_id), opts),
          :ok <- add_channels(channels, package, opts) do
       {:ok, package}
     end
@@ -144,15 +140,9 @@ defmodule Varsel.Cases.GitHubAdvisory.Apply do
   end
 
   defp add_channels(channels, package, opts) do
-    channels
-    |> Enum.with_index()
-    |> each(fn {channel, position} ->
+    each(channels, fn channel ->
       channel
-      |> Map.merge(%{
-        case_id: package.case_id,
-        affected_package_id: package.id,
-        position: position
-      })
+      |> Map.merge(%{case_id: package.case_id, affected_package_id: package.id})
       |> Cases.add_package_channel(opts)
     end)
   end
