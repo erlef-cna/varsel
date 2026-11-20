@@ -20,6 +20,8 @@ defmodule VarselWeb.CaseComponents do
       icon: 1,
       mono_chip: 1,
       page_header: 1,
+      cvss_breakdown: 1,
+      cvss_changes: 1,
       scope_tab: 1,
       severity_chip: 1,
       state: 1
@@ -784,7 +786,8 @@ defmodule VarselWeb.CaseComponents do
   non-prose values all take this path). Either side may be absent (pure
   additions/removals always stack). Stacked slash-delimited single tokens
   (CVSS vectors) additionally emphasize their changed `/`-segments inside
-  the rows (`WordDiff.stacked_highlight/2`).
+  the rows (`WordDiff.stacked_highlight/2`). Two CVSS vectors also list the
+  base metrics they change, in words (`cvss_changes/1`).
   """
   attr :old, :string, default: nil
   attr :new, :string, default: nil
@@ -816,6 +819,7 @@ defmodule VarselWeb.CaseComponents do
         ><%= if @highlight == :plain do %>{@new}<% else %><.stacked_segments segments={elem(@highlight, 2)} /><% end %></div>
       <% end %>
     </div>
+    <.cvss_changes old={@old} new={@new} class="mt-1.5" />
     """
   end
 
@@ -1280,8 +1284,13 @@ defmodule VarselWeb.CaseComponents do
   @doc """
   Renders one CVSS score of a case: the severity chip, the scenario it
   applies to, and the vector. The GENERAL scenario reads as "General". A
-  long scenario is clamped to two lines, with the full text on hover.
+  long scenario is clamped to two lines, with the full text on hover. The
+  vector toggles the metrics it encodes, in words (`cvss_breakdown/1`).
   """
+  attr :row_id, :string,
+    required: true,
+    doc: "unique on the page; the breakdown's DOM id derives from it"
+
   attr :scenario, :string, required: true
   attr :vector, :string, default: nil, doc: "nil for a proposed vector that does not parse"
   attr :score, :float, default: nil
@@ -1305,13 +1314,25 @@ defmodule VarselWeb.CaseComponents do
         >
           {if @general?, do: "General", else: @scenario}
         </p>
-        <p
+        <button
           :if={@vector}
-          class="mt-0.5 truncate font-mono text-xs text-base-content/60"
-          title={@vector}
+          type="button"
+          class="mt-0.5 flex w-full min-w-0 cursor-pointer items-center gap-1 text-left font-mono text-xs text-base-content/60 hover:text-base-content"
+          title="Show the metrics in words"
+          aria-controls={"#{@row_id}-breakdown"}
+          phx-click={
+            JS.toggle(to: "##{@row_id}-breakdown")
+            |> JS.toggle_class("rotate-90", to: "##{@row_id}-caret")
+          }
         >
-          {@vector}
-        </p>
+          <span id={"#{@row_id}-caret"} class="shrink-0 transition-transform" aria-hidden="true">
+            ▸
+          </span>
+          <span class="truncate">{@vector}</span>
+        </button>
+        <div :if={@vector} id={"#{@row_id}-breakdown"} class="hidden">
+          <.cvss_breakdown vector={@vector} class="mt-2 mb-1" />
+        </div>
       </div>
     </div>
     """
@@ -1421,6 +1442,7 @@ defmodule VarselWeb.CaseComponents do
     ~H"""
     <p class="mt-1 text-sm whitespace-pre-line">{@payload["scenario"]}</p>
     <p class="mt-1 font-mono text-xs break-all text-base-content/70">{@payload["cvss_v4"]}</p>
+    <.cvss_breakdown vector={@payload["cvss_v4"]} class="mt-2" />
     """
   end
 

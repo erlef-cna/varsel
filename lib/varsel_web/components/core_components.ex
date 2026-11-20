@@ -982,6 +982,77 @@ defmodule VarselWeb.CoreComponents do
   end
 
   @doc """
+  Renders the base metrics of a CVSS v3.0, v3.1 or v4.0 vector as named
+  values, grouped as the specification groups them. Each value carries its
+  plain-language meaning on hover. Renders nothing for a vector that does
+  not read (`VarselWeb.CvssMetrics.breakdown/1`).
+  """
+  attr :vector, :string, default: nil
+  attr :class, :any, default: nil
+
+  def cvss_breakdown(assigns) do
+    assigns = assign(assigns, :breakdown, read_cvss(assigns.vector))
+
+    ~H"""
+    <div
+      :if={@breakdown}
+      class={[
+        "grid w-full gap-x-6 gap-y-3 text-left text-xs sm:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]",
+        @class
+      ]}
+    >
+      <section :for={group <- @breakdown.groups} class="min-w-0">
+        <h4 class="mb-1 text-[0.68rem] font-bold uppercase tracking-wider text-base-content/50">
+          {group.title}
+        </h4>
+        <dl class="space-y-0.5">
+          <div
+            :for={metric <- group.metrics}
+            class="flex justify-between gap-3"
+            title={metric.meaning}
+          >
+            <dt class="text-base-content/70">{metric.name}</dt>
+            <dd class="font-semibold text-right">{metric.value}</dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+    """
+  end
+
+  defp read_cvss(vector) do
+    case VarselWeb.CvssMetrics.breakdown(vector) do
+      {:ok, breakdown} -> breakdown
+      :error -> nil
+    end
+  end
+
+  @doc """
+  Renders the base metrics that differ between two CVSS vectors of the same
+  version, each as its old and new value. Renders nothing when no base
+  metric differs or either vector does not read.
+  """
+  attr :old, :string, default: nil
+  attr :new, :string, default: nil
+  attr :class, :any, default: nil
+
+  def cvss_changes(assigns) do
+    assigns = assign(assigns, :changes, VarselWeb.CvssMetrics.changes(assigns.old, assigns.new))
+
+    ~H"""
+    <ul :if={@changes != []} class={["space-y-0.5 text-xs", @class]}>
+      <li :for={change <- @changes} class="flex flex-wrap items-baseline gap-x-1.5">
+        <span class="text-base-content/50">{change.group} ·</span>
+        <span class="text-base-content/80">{change.name}</span>
+        <span class="text-[color:var(--error-ink)] line-through decoration-error/40">{change.old}</span>
+        <span aria-hidden="true" class="text-base-content/40">→</span>
+        <span class="font-semibold text-[color:var(--success-ink)]">{change.new}</span>
+      </li>
+    </ul>
+    """
+  end
+
+  @doc """
   Buckets a CVSS score into a severity rating atom. `nil` is not a valid
   input here — callers rendering an unscored case use `severity_chip`'s
   `score: nil` path instead, which is a distinct "no score" state, not NONE.

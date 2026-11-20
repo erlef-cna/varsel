@@ -923,6 +923,7 @@ defmodule VarselWeb.CaseDetailLive do
           >
             <:row :let={metric}>
               <.metric_summary
+                row_id={"metric-#{metric.id}"}
                 scenario={metric.scenario}
                 vector={metric.cvss_v4 && metric.cvss_v4.vector}
                 score={metric.cvss_v4 && metric.cvss_v4.score}

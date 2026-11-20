@@ -752,6 +752,33 @@ defmodule VarselWeb.CveHtmlTest do
       assert body =~ "no score"
     end
 
+    test "the CVSS card spells out the metrics of a v3.1 score", %{conn: conn} do
+      v3 = %{
+        "cvssV3_1" => %{
+          "baseScore" => 6.1,
+          "baseSeverity" => "MEDIUM",
+          "vectorString" => "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+          "version" => "3.1"
+        }
+      }
+
+      publish(put_in(@cve_json, ["containers", "cna", "metrics"], [v3]))
+
+      rows =
+        conn
+        |> get(~p"/cves/#{@cve_id <> ".html"}")
+        |> html_response(200)
+        |> LazyHTML.from_document()
+        |> LazyHTML.query("#cvss-breakdown dl > div")
+        |> Enum.map(fn row ->
+          {row |> LazyHTML.query("dt") |> LazyHTML.text(), row |> LazyHTML.query("dd") |> LazyHTML.text()}
+        end)
+
+      assert {"User Interaction", "Required"} in rows
+      assert {"Scope", "Changed"} in rows
+      assert length(rows) == 8
+    end
+
     test "the CVSS card leads with the GENERAL score and lists each further scenario", %{
       conn: conn
     } do

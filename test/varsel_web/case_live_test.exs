@@ -2935,6 +2935,32 @@ defmodule VarselWeb.CaseLiveTest do
       # ...with the one changed metric emphasized inside each row.
       assert html =~ ~s(bg-error/25">AV:N</span>)
       assert html =~ ~s(bg-success/25">AV:L</span>)
+
+      # The change is also spelled out in words.
+      assert [change] =
+               html
+               |> LazyHTML.from_document()
+               |> LazyHTML.query(~s{[id^="suggestion-"] li})
+               |> Enum.map(fn li ->
+                 li |> LazyHTML.query("span") |> Enum.map(&LazyHTML.text/1)
+               end)
+
+      assert change == ["Exploitability ·", "Attack Vector", "Network", "→", "Local"]
+    end
+
+    test "a score's metrics read in words under its vector", %{conn: conn, poc: poc} do
+      case_record = Fixtures.open_case(poc)
+      vector = "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+      metric = Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: vector}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert has_element?(lv, "#metric-#{metric.id}-breakdown dd", "Present")
+
+      assert has_element?(
+               lv,
+               ~s{#severity-row-#{metric.id} button[aria-controls="metric-#{metric.id}-breakdown"]}
+             )
     end
 
     test "a suggestion's reply thread is collapsed behind its reply count", %{

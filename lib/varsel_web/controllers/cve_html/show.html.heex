@@ -279,6 +279,7 @@ SPDX-License-Identifier: Apache-2.0
           </.link>
         </div>
         <.cvss_vector vector={cvss["vectorString"]} class="mt-2" />
+        <.cvss_breakdown vector={cvss["vectorString"]} class="mt-3" />
         <div
           :for={%{scenario: scenario, cvss: scenario_cvss} <- scenario_cvss(@container)}
           :if={scenario_cvss != cvss}
@@ -299,6 +300,7 @@ SPDX-License-Identifier: Apache-2.0
             </.link>
           </div>
           <.cvss_vector vector={scenario_cvss["vectorString"]} class="mt-2" />
+          <.cvss_breakdown vector={scenario_cvss["vectorString"]} class="mt-3" />
         </div>
       </.panel>
 
