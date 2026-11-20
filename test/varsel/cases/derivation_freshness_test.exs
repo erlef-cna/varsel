@@ -124,8 +124,8 @@ defmodule Varsel.Cases.DerivationFreshnessTest do
       |> Map.fetch!(:case)
       |> Map.fetch!(:affected_packages)
 
-    assert [%{updated_at: %DateTime{}}, %{updated_at: %DateTime{}}, %{updated_at: nil}] =
-             projected.version_events
+    assert projected.version_events |> Enum.map(&is_nil(&1.updated_at)) |> Enum.sort() ==
+             [false, false, true]
 
     refute DerivationFreshness.stale?(projected)
   end

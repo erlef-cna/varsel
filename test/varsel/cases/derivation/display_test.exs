@@ -24,7 +24,7 @@ defmodule Varsel.Cases.Derivation.DisplayTest do
         }
       },
       channels: [
-        %PackageChannel{id: "c1", kind: :package, purl_type: "hex", name: "acme", position: 0}
+        %PackageChannel{id: "c1", kind: :package, purl_type: "hex", name: "acme"}
       ]
     }
   end
@@ -147,7 +147,7 @@ defmodule Varsel.Cases.Derivation.DisplayTest do
     end
 
     test "a channel with no cached derivation has no default status to state" do
-      pkg = %{derivation_cache: nil, channels: [%PackageChannel{id: "c1", position: 0}]}
+      pkg = %{derivation_cache: nil, channels: [%PackageChannel{id: "c1"}]}
 
       assert [{_channel, derived}] = Display.channel_derivations(pkg)
       assert derived.default_status == nil

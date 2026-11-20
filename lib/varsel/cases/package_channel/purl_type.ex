@@ -136,6 +136,10 @@ defmodule Varsel.Cases.PackageChannel.PurlType do
   def default_version_type(nil), do: :semver
   def default_version_type(purl_type), do: Map.get(@version_types, purl_type, :semver)
 
+  @doc "The purl types whose versions default to git commits: a source repository's."
+  @spec git_types() :: [String.t()]
+  def git_types, do: for({purl_type, :git} <- @version_types, do: purl_type)
+
   @doc """
   Whether this type's namespace is part of the package's published name, so
   `packageName` joins it as `<namespace>/<name>`.

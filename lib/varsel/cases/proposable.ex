@@ -51,8 +51,7 @@ defmodule Varsel.Cases.Proposable do
     :allow_unreleased_intro,
     :repo_unreachable,
     :include_prereleases,
-    :default_status,
-    :position
+    :default_status
   ]
 
   @package_channel_fields [
@@ -67,8 +66,7 @@ defmodule Varsel.Cases.Proposable do
     :tag_prefix,
     :tag_suffixes,
     :versions_override,
-    :entry_override,
-    :position
+    :entry_override
   ]
 
   @version_event_fields [:event, :commit_sha, :version, :note]

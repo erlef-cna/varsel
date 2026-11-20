@@ -40,6 +40,7 @@ defmodule Varsel.Cases.AffectedPackage do
   alias Varsel.Cases.AffectedPackage.ProgramFile
   alias Varsel.Cases.Changes.ApplyProposedField
   alias Varsel.Cases.Proposable
+  alias Varsel.Cases.RowOrder
   alias Varsel.Cases.Signals
 
   # Long enough to fold a run of edits, such as an accepted proposal batch,
@@ -525,13 +526,6 @@ defmodule Varsel.Cases.AffectedPackage do
       public? true
     end
 
-    attribute :position, :integer do
-      description "Order of this product's entries within affected[]."
-      allow_nil? false
-      default 0
-      public? true
-    end
-
     attribute :derivation_cache, :map do
       description "Latest derivation result (per-channel version ranges). Never authoritative."
     end
@@ -552,11 +546,17 @@ defmodule Varsel.Cases.AffectedPackage do
 
     has_many :channels, Varsel.Cases.PackageChannel do
       public? true
-      sort position: :asc
+      sort repository: :asc, purl_order: :asc, domain_order: :asc, inserted_at: :asc, id: :asc
     end
 
     has_many :version_events, Varsel.Cases.VersionEvent do
       public? true
+
+      sort fixed: :asc,
+           reference_order: :asc,
+           package_channel_id: :asc_nils_first,
+           inserted_at: :asc,
+           id: :asc
     end
   end
 
@@ -567,6 +567,12 @@ defmodule Varsel.Cases.AffectedPackage do
   end
 
   calculations do
+    # Explicit collations, so the database orders packages the way `sort/1`
+    # does whatever the server's locale.
+    calculate :vendor_order, :string, expr(fragment("lower(?) COLLATE \"C\"", vendor))
+    calculate :product_order, :string, expr(fragment("lower(?) COLLATE \"C\"", product))
+    calculate :repo_url_order, :string, expr(fragment("(?)::text COLLATE \"C\"", repo_url))
+
     calculate :matches_query,
               :boolean,
               expr(
@@ -648,5 +654,17 @@ defmodule Varsel.Cases.AffectedPackage do
     max :version_events_changed_at, :version_events, :updated_at do
       description "When any of this product's boundary facts last changed."
     end
+  end
+
+  @doc """
+  Orders packages as a case lists them: by vendor and product (without case),
+  then repository URL, then creation.
+  """
+  @spec sort([t]) :: [t] when t: map()
+  def sort(packages) do
+    Enum.sort_by(packages, fn package ->
+      {RowOrder.ci(package.vendor), RowOrder.ci(package.product), RowOrder.text(package.repo_url),
+       RowOrder.time(package.inserted_at), package.id}
+    end)
   end
 end

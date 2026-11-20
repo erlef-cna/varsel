@@ -1958,7 +1958,7 @@ defmodule VarselWeb.CaseLiveTest do
       assert package.vendor == "Erlang"
       assert package.product == "OTP"
 
-      assert [%{name: "otp"}, %{name: "ssh"}, %{name: "ssl"}, %{purl_type: "github"}] =
+      assert [%{name: "ssh"}, %{name: "ssl"}, %{name: "otp"}, %{purl_type: "github"}] =
                package.channels
 
       assert MapSet.new(package.version_events, &{&1.event, &1.commit_sha}) ==

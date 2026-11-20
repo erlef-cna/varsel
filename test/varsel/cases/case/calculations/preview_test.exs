@@ -74,8 +74,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
         case_id: case_record.id,
         affected_package_id: package.id,
         purl_type: "hex",
-        name: "ash_authentication_phoenix",
-        position: 0
+        name: "ash_authentication_phoenix"
       },
       actor: poc
     )
@@ -874,8 +873,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
           case_id: case_record.id,
           affected_package_id: package.id,
           purl_type: "hex",
-          name: "esaml",
-          position: 0
+          name: "esaml"
         },
         actor: poc
       )
@@ -973,8 +971,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
           case_id: case_record.id,
           affected_package_id: package.id,
           purl_type: "hex",
-          name: "esaml",
-          position: 0
+          name: "esaml"
         },
         actor: poc
       )
@@ -1172,7 +1169,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
           program_files: program_files
         })
 
-      for {{application, subpath}, position} <- Enum.with_index(applications) do
+      for {application, subpath} <- applications do
         Cases.add_package_channel!(
           %{
             case_id: case_record.id,
@@ -1180,8 +1177,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
             purl_type: "otp",
             name: application,
             subpath: subpath,
-            version_type: :otp,
-            position: position
+            version_type: :otp
           },
           actor: poc
         )
@@ -1197,7 +1193,7 @@ defmodule Varsel.Cases.Case.Calculations.PreviewTest do
       scoping_case: case_record
     } do
       # Modelled after CVE-2026-48858: ftp code moved out of inets.
-      [inets, ftp, git] =
+      [ftp, inets, git] =
         otp_package(poc, case_record, [{"inets", "lib/inets"}, {"ftp", "lib/ftp"}], [
           %{
             path: "lib/inets/src/ftp/ftp_internal.erl",

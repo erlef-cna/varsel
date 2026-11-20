@@ -21,8 +21,10 @@ defmodule Varsel.Cases.Projection do
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Case
   alias Varsel.Cases.CaseMetric
+  alias Varsel.Cases.PackageChannel
   alias Varsel.Cases.Proposal
   alias Varsel.Cases.Proposal.Target
+  alias Varsel.Cases.VersionEvent
 
   @enforce_keys [:case, :phantom_ids, :deleted_ids, :set_proposals]
   defstruct [:case, :phantom_ids, :deleted_ids, :set_proposals]
@@ -51,6 +53,7 @@ defmodule Varsel.Cases.Projection do
       |> apply_inserts(inserts)
       |> Map.update!(:credits, &sort_credits/1)
       |> Map.update!(:metrics, &sort_metrics/1)
+      |> Map.update!(:affected_packages, &sort_packages/1)
 
     %__MODULE__{
       case: projected,
@@ -72,6 +75,20 @@ defmodule Varsel.Cases.Projection do
   end
 
   defp sort_credits(credits), do: credits
+
+  defp sort_packages(packages) when is_list(packages) do
+    packages
+    |> AffectedPackage.sort()
+    |> Enum.map(fn package ->
+      %{
+        package
+        | channels: PackageChannel.sort(package.channels),
+          version_events: VersionEvent.sort(package.version_events)
+      }
+    end)
+  end
+
+  defp sort_packages(packages), do: packages
 
   defp sort_metrics(metrics) when is_list(metrics), do: CaseMetric.sort(metrics)
   defp sort_metrics(metrics), do: metrics
@@ -99,8 +116,8 @@ defmodule Varsel.Cases.Projection do
   defp apply_set(%{target: target} = proposal, case_record) when target in [:package_channel, :version_event] do
     {resource, key} =
       case target do
-        :package_channel -> {Varsel.Cases.PackageChannel, :channels}
-        :version_event -> {Varsel.Cases.VersionEvent, :version_events}
+        :package_channel -> {PackageChannel, :channels}
+        :version_event -> {VersionEvent, :version_events}
       end
 
     update_packages(case_record, fn package ->

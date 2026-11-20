@@ -32,10 +32,6 @@ defmodule Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel do
   alias Varsel.Cases.AffectedPackage.Changes.ManageChildren
   alias Varsel.Cases.PackageChannel.PurlType
 
-  # Far past any hand-authored channel's position, so the repository sorts last
-  # without having to renumber the ones added after it.
-  @repository_position 1_000
-
   @impl Change
   def change(changeset, _opts, _context) do
     ManageChildren.manage_deferred(changeset, fn changeset ->
@@ -48,17 +44,11 @@ defmodule Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel do
   @doc """
   The `:add` params of a package's repository channel, or nil without a
   `repo_url`.
-
-  `position` defaults high so the repository closes the package's entries
-  (registries first, source last, as the published records read) even though it
-  is created before the registry channels that will precede it.
   """
-  @spec params(String.t() | nil, non_neg_integer()) :: map() | nil
-  def params(repo_url, position \\ @repository_position)
+  @spec params(String.t() | nil) :: map() | nil
+  def params(nil), do: nil
 
-  def params(nil, _position), do: nil
-
-  def params(repo_url, position) do
+  def params(repo_url) do
     {purl_type, namespace, name, qualifiers} = PurlType.for_repository(repo_url)
 
     %{
@@ -67,8 +57,7 @@ defmodule Varsel.Cases.AffectedPackage.Changes.AddRepositoryChannel do
       namespace: namespace,
       name: name,
       qualifiers: qualifiers,
-      version_type: :git,
-      position: position
+      version_type: :git
     }
   end
 end

@@ -224,10 +224,11 @@ defmodule Varsel.Cases.PackageChannelTest do
                Ash.load!(package, :channels, authorize?: false).channels
     end
 
-    test "sorts after channels added later", %{poc: poc, package: package} do
-      add_channel(poc, package, %{purl_type: "hex", name: "acme_lib", position: 0})
+    test "sorts after channels added later, which sort by purl", %{poc: poc, package: package} do
+      add_channel(poc, package, %{purl_type: "npm", name: "acme_lib"})
+      add_channel(poc, package, %{purl_type: "hex", name: "acme_lib"})
 
-      assert [%{purl_type: "hex"}, %{purl_type: "github"}] =
+      assert [%{purl_type: "hex"}, %{purl_type: "npm"}, %{purl_type: "github"}] =
                Ash.load!(package, :channels, authorize?: false).channels
     end
 
