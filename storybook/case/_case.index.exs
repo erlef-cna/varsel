@@ -53,6 +53,8 @@ defmodule VarselWeb.Storybook.Case do
   def entry("impact_form"), do: [name: "Impact form", icon: {:local, "hero-tag"}]
   def entry("lifecycle_stepper"), do: [name: "Lifecycle stepper", icon: {:local, "hero-flag"}]
   def entry("markdown"), do: [name: "Markdown", icon: {:local, "hero-document-text"}]
+  def entry("metric_form"), do: [name: "Metric form", icon: {:local, "hero-chart-bar"}]
+  def entry("metric_summary"), do: [name: "Metric summary", icon: {:local, "hero-chart-bar"}]
   def entry("mode_pill"), do: [name: "Mode pill", icon: {:local, "hero-pencil"}]
 
   def entry("suggest_toggle"), do: [name: "Suggest toggle", icon: {:local, "hero-pencil-square"}]

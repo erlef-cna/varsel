@@ -13,15 +13,16 @@ defmodule Varsel.Accounts.UserTest do
 
   defp register_user(handle \\ nil) do
     handle = handle || "user#{System.unique_integer([:positive])}"
+    sub = System.unique_integer([:positive])
 
     Ash.create!(
       User,
       %{
         user_info: %{
-          "sub" => System.unique_integer([:positive]),
+          "sub" => sub,
           "preferred_username" => handle,
           "name" => "Test User",
-          "email" => "#{handle}@example.com"
+          "email" => Varsel.Fixtures.email(handle, sub)
         },
         oauth_tokens: %{"access_token" => "gho_secret_token"}
       },

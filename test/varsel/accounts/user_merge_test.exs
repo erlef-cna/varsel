@@ -36,13 +36,14 @@ defmodule Varsel.Accounts.UserMergeTest do
 
   describe "what moves" do
     test "the linked providers, so either one signs in to the surviving account" do
-      from = sign_in_with_hex("alice_hex", "alice_hex")
+      sub = System.unique_integer([:positive])
+      from = sign_in_with_hex("alice_hex", sub)
       into = register_user("alice")
 
       Accounts.merge_user_into!(from, into.id, actor: console())
 
       assert count("user_identities", "user_id", into.id) == 2
-      assert sign_in_with_hex("alice_hex", "alice_hex").id == into.id
+      assert sign_in_with_hex("alice_hex", sub).id == into.id
     end
 
     test "API keys" do

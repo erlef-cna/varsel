@@ -75,7 +75,7 @@ defmodule VarselWeb.Storybook.Case.SuggestionCard do
         attributes: %{
           id: "suggestion-thread",
           can_resolve: true,
-          proposal: proposal(%{field_name: :cvss_v4}),
+          proposal: proposal(%{target: :metric, field_name: :cvss_v4}),
           old: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
           new: "CVSS:4.0/AV:N/AC:H/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
           comments: [

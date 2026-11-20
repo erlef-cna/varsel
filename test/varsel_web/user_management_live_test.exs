@@ -11,15 +11,17 @@ defmodule VarselWeb.UserManagementLiveTest do
   alias Varsel.Accounts.User
 
   defp register(handle, role \\ nil) do
+    sub = System.unique_integer([:positive])
+
     user =
       Ash.create!(
         User,
         %{
           user_info: %{
-            "sub" => System.unique_integer([:positive]),
+            "sub" => sub,
             "preferred_username" => handle,
             "name" => "#{handle} name",
-            "email" => "#{handle}@example.com"
+            "email" => Varsel.Fixtures.email(handle, sub)
           },
           oauth_tokens: %{"access_token" => "gho_token"}
         },
@@ -42,14 +44,14 @@ defmodule VarselWeb.UserManagementLiveTest do
 
   test "a POC sees all users listed", %{conn: conn} do
     poc = register("poc", :poc)
-    register("alice")
-    register("bob")
+    alice = register("alice")
+    bob = register("bob")
 
     {:ok, _lv, html} = conn |> log_in(poc) |> live(~p"/users")
 
     assert html =~ "User Management"
-    assert html =~ "alice@example.com"
-    assert html =~ "bob@example.com"
+    assert html =~ to_string(alice.notification_email)
+    assert html =~ to_string(bob.notification_email)
     assert html =~ "@alice"
   end
 

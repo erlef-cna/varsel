@@ -15,7 +15,8 @@ defmodule Varsel.CVE.CveValidation do
   - `:hex` — every `pkg:hex/...` package URL in the affected entries must
     reference an existing package on hex.pm (see `Varsel.HexPm`)
   - `:eef` — EEF/CNA policy requirements the schema and cvelint leave
-    unchecked: a title, a CVSS v4 metric, a CWE, a CAPEC, and every
+    unchecked: a title, a CVSS v4 metric for the GENERAL scenario, a CWE, a
+    CAPEC, and every
     "semver"-typed version boundary parsing as SemVer
   """
 
@@ -71,7 +72,7 @@ defmodule Varsel.CVE.CveValidation do
     end
 
     action :validate_eef, Result do
-      description "Checks EEF/CNA policy requirements beyond the CVE schema (a title and a CVSS v4 metric)."
+      description "Checks EEF/CNA policy requirements beyond the CVE schema (a title and a CVSS v4 metric for the GENERAL scenario)."
       argument :cve_json, :map, allow_nil?: false
 
       run {Validate, validator: :eef}

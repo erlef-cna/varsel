@@ -221,7 +221,37 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
 
       reloaded = reload(case_record, poc)
       assert reloaded.title == "Header injection in acme_lib"
-      assert reloaded.cvss_v4.vector == @vector
+
+      assert [%{scenario: "GENERAL", cvss_v4: %{vector: @vector}}] =
+               Ash.load!(reloaded, [:metrics], actor: poc).metrics
+    end
+
+    test "the CVSS vector replaces the GENERAL score and keeps other scenarios", %{
+      poc: poc,
+      case: case_record,
+      link: link
+    } do
+      GitHubApi.stub_advisory(put_in(hex_advisory(), ["cvss_severities", "cvss_v4", "vector_string"], @vector))
+
+      link = Cases.refresh_github_advisory_link!(link, actor: poc)
+      old = "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N"
+      general = Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: old}, actor: poc)
+
+      scenario =
+        Cases.add_case_metric!(
+          %{case_id: case_record.id, scenario: "Local attacker", cvss_v4: old},
+          actor: poc
+        )
+
+      assert {:ok, _link} = Cases.pull_github_advisory(link, [:cvss_v4], actor: poc)
+
+      assert [
+               %{id: general_id, cvss_v4: %{vector: @vector}},
+               %{id: scenario_id, cvss_v4: %{vector: ^old}}
+             ] =
+               Ash.load!(reload(case_record, poc), [:metrics], actor: poc).metrics
+
+      assert {general_id, scenario_id} == {general.id, scenario.id}
     end
 
     test "sets gain what the case lacks and lose nothing", %{

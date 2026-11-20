@@ -26,6 +26,7 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
   alias Varsel.Cases.Proposal.Changes.PackProposal
   alias Varsel.Cases.Signals
   alias Varsel.Cases.VersionEvent.EventInput
+  alias Varsel.Types.CVSS
 
   actions do
     create :propose_credit do
@@ -175,26 +176,69 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
-    create :propose_cvss do
+    create :propose_metric do
       description """
-      Proposes setting the CVSS v4.0 vector (a CVSS:4.0/... string). Pass an
-      explicit null value to propose removing the score.
+      Proposes adding a CVSS v4.0 score (a CVSS:4.0/... vector) for one
+      scenario. The GENERAL scenario is the score that applies when no more
+      specific scenario matches. It sets the case's severity, and a case needs
+      one to publish. Give any other scenario as plain text that names the
+      conditions under which its score applies. A case has at most one score
+      per scenario: use propose_metric_cvss to change an existing one.
       """
 
       accept [:case_id, :reasoning]
-      # Typed as CVSS so the vector is fully validated at the argument layer.
-      argument :value, Varsel.Types.CVSS, allow_nil?: true
-      change {PackProposal, target: :case, operation: :set, field: :cvss_v4}
 
-      # PackProposal packs the dumped {vector, score, severity, version} map;
-      # store just the vector string so the proposal envelope stays the plain
-      # CVSS text (score/severity/version are derived on re-cast anyway).
-      change fn changeset, _context ->
-        Ash.Changeset.update_change(changeset, :proposed_value, fn
-          %{"value" => nil} -> %{"value" => nil}
-          %{"value" => dumped} -> %{"value" => dumped["vector"]}
-        end)
+      argument :scenario, :string do
+        description "Plain text, no markdown, at most 4096 characters. Defaults to GENERAL."
+        default "GENERAL"
+        constraints max_length: 4096
       end
+
+      argument :cvss_v4, CVSS do
+        allow_nil? false
+        constraints version: [:v4]
+      end
+
+      change {PackProposal, target: :metric, operation: :insert}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
+    end
+
+    create :propose_metric_cvss do
+      description """
+      Proposes setting the CVSS v4.0 vector (a CVSS:4.0/... string) of a
+      scenario score that is already on the case (target_id). Use
+      propose_delete with target metric to propose removing the score.
+      """
+
+      accept [:case_id, :target_id, :reasoning]
+
+      argument :value, CVSS do
+        allow_nil? false
+        constraints version: [:v4]
+      end
+
+      change {PackProposal, target: :metric, operation: :set, field: :cvss_v4}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
+    end
+
+    create :propose_metric_scenario do
+      description """
+      Proposes setting the scenario text of a score that is already on the
+      case (target_id): plain text, no markdown, at most 4096 characters.
+      GENERAL makes it the score that applies when no more specific scenario
+      matches.
+      """
+
+      accept [:case_id, :target_id, :reasoning]
+
+      argument :value, :string do
+        allow_nil? false
+        constraints max_length: 4096
+      end
+
+      change {PackProposal, target: :metric, operation: :set, field: :scenario}
 
       emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end

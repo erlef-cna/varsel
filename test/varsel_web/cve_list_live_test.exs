@@ -10,6 +10,8 @@ defmodule VarselWeb.CveListLiveTest do
   alias Varsel.CVE.CveRecord
   alias Varsel.CVE.OwnContainer
 
+  require Ash.Query
+
   defp published(cve_id, title, metrics \\ [], date_published \\ "2025-06-16T11:00:00.000Z") do
     cve_json = %{
       "dataType" => "CVE_RECORD",
@@ -270,5 +272,31 @@ defmodule VarselWeb.CveListLiveTest do
 
     assert html =~ "L 2.6"
     assert html =~ "no score"
+  end
+
+  test "scores a record by its GENERAL v4 metric", %{conn: conn} do
+    published("CVE-2025-0003", "Charlie", [
+      %{
+        "scenarios" => [%{"lang" => "en", "value" => "Built without stack protection"}],
+        "cvssV4_0" => %{
+          "vectorString" => "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+        }
+      },
+      %{
+        "scenarios" => [%{"lang" => "en", "value" => "GENERAL"}],
+        "cvssV4_0" => %{
+          "vectorString" => "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N"
+        }
+      }
+    ])
+
+    assert [%{cvss: %{vector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N"}}] =
+             CveRecord
+             |> Ash.Query.filter(cve_id == "CVE-2025-0003")
+             |> Ash.Query.load(:cvss)
+             |> Ash.read!(authorize?: false)
+
+    {:ok, lv, _html} = live(conn, ~p"/cves")
+    assert render(lv) =~ "M 6.9"
   end
 end

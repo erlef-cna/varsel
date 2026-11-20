@@ -99,7 +99,8 @@ defmodule Varsel.Cases.Case.Changes.OpenFromGitHubAdvisory do
     children = Import.child_params(changeset.context[@advisory_key])
     case_id = case_record.id
 
-    with :ok <-
+    with :ok <- Apply.each(children.metrics, &Apply.add_metric(&1, case_id, opts)),
+         :ok <-
            children.weaknesses
            |> Apply.known_weaknesses()
            |> Apply.each(&Apply.add_weakness(&1, case_id, opts)),

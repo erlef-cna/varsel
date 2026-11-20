@@ -10,16 +10,17 @@ defmodule Varsel.Accounts.PaperTrailTest do
 
   defp register_user(handle \\ nil) do
     handle = handle || "user#{System.unique_integer([:positive])}"
+    sub = System.unique_integer([:positive])
 
     User
     |> Ash.Changeset.for_create(
       :register_with_github,
       %{
         user_info: %{
-          "sub" => System.unique_integer([:positive]),
+          "sub" => sub,
           "preferred_username" => handle,
           "name" => "Test User",
-          "email" => "#{handle}@example.com"
+          "email" => Varsel.Fixtures.email(handle, sub)
         },
         oauth_tokens: %{"access_token" => "gho_secret_token", "refresh_token" => "ghr_secret"}
       },

@@ -18,7 +18,7 @@ defmodule VarselWeb.Storybook.Case.BoundaryFact do
         id: :introduced,
         attributes: %{
           event: :introduced,
-          reference: "84adefa331c4…",
+          reference: "84adefa331c4159d432d22840663c38f155cd4c1",
           title: "84adefa331c4159d432d22840663c38f155cd4c1"
         },
         slots: [
@@ -29,9 +29,23 @@ defmodule VarselWeb.Storybook.Case.BoundaryFact do
         id: :fixed,
         attributes: %{
           event: :fixed,
-          reference: "c5210b42a9d3…",
+          reference: "c5210b42a9d3d96f3d25601942ce8122be0f3761",
           title: "c5210b42a9d3d96f3d25601942ce8122be0f3761"
         }
+      },
+      %Variation{
+        id: :narrow,
+        description: "In a narrow row only the commit gives way, and it ends in an ellipsis.",
+        template: ~s(<div class="w-72"><.psb-variation/></div>),
+        attributes: %{
+          event: :introduced,
+          reference: "84adefa331c4159d432d22840663c38f155cd4c1",
+          title: "84adefa331c4159d432d22840663c38f155cd4c1",
+          scope: "pkg:otp/ssh"
+        },
+        slots: [
+          ~s(<:actions><span class="link link-hover text-primary">Edit</span><span class="link link-hover text-base-content/50">Remove</span></:actions>)
+        ]
       },
       %Variation{
         id: :scoped,
@@ -51,7 +65,7 @@ defmodule VarselWeb.Storybook.Case.BoundaryFact do
             "where an author explains a boundary a reviewer would otherwise reconstruct.",
         attributes: %{
           event: :introduced,
-          reference: "84adefa331c4…",
+          reference: "84adefa331c4159d432d22840663c38f155cd4c1",
           title: "84adefa331c4159d432d22840663c38f155cd4c1",
           note:
             "The path-handling rewrite landed across two commits; this is the earlier one, " <>
@@ -62,7 +76,11 @@ defmodule VarselWeb.Storybook.Case.BoundaryFact do
       %Variation{
         id: :muted,
         description: "A fact a pending suggestion would remove.",
-        attributes: %{event: :fixed, reference: "c5210b42a9d3…", muted: true},
+        attributes: %{
+          event: :fixed,
+          reference: "c5210b42a9d3d96f3d25601942ce8122be0f3761",
+          muted: true
+        },
         slots: [
           ~s(<:badges><span class="badge badge-info badge-xs">removal proposed</span></:badges>)
         ]

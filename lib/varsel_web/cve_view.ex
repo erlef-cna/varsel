@@ -28,17 +28,38 @@ defmodule VarselWeb.CveView do
 
   @doc """
   Picks the most relevant CVSS metric from a CNA container's `metrics`,
-  preferring v4.0 > v3.1 > v3.0. Returns the inner cvss map (with an added
-  `"version"`) or nil.
+  preferring v4.0 > v3.1 > v3.0, and within a version the GENERAL scenario.
+  Returns the inner cvss map (with an added `"version"`) or nil.
   """
   @spec best_cvss(map()) :: map() | nil
   def best_cvss(cna) when is_map(cna) do
-    metrics = cna["metrics"] || []
+    metrics = Enum.sort_by(cna["metrics"] || [], &(not general?(&1)))
 
     Enum.find_value(["cvssV4_0", "cvssV3_1", "cvssV3_0"], fn key ->
       Enum.find_value(metrics, &cvss_of(&1, key))
     end)
   end
+
+  @doc """
+  The CVSS metrics of a CNA container's `metrics` for scenarios other than
+  GENERAL, in record order, as `%{scenario: text, cvss: map}` with the same
+  cvss map `best_cvss/1` returns.
+  """
+  @spec scenario_cvss(map()) :: [%{scenario: String.t(), cvss: map()}]
+  def scenario_cvss(cna) when is_map(cna) do
+    for metric <- cna["metrics"] || [],
+        is_map(metric),
+        not general?(metric),
+        cvss = Enum.find_value(["cvssV4_0", "cvssV3_1", "cvssV3_0"], &cvss_of(metric, &1)) do
+      %{scenario: Enum.map_join(metric["scenarios"], "\n", & &1["value"]), cvss: cvss}
+    end
+  end
+
+  # The CVE schema reads a metric without scenarios as GENERAL.
+  defp general?(%{"scenarios" => [_scenario | _rest] = scenarios}),
+    do: Enum.any?(scenarios, &match?(%{"value" => "GENERAL"}, &1))
+
+  defp general?(_metric), do: true
 
   defp cvss_of(%{} = metric, key) do
     case metric do
@@ -54,7 +75,7 @@ defmodule VarselWeb.CveView do
   @doc "Link to the appropriate CVSS calculator for a vector string, or nil."
   @spec cvss_calculator_url(map()) :: String.t() | nil
   def cvss_calculator_url(%{"version" => "4.0", "vectorString" => vector}),
-    do: "https://nvd.nist.gov/site-scripts/cvss-v4-calculator-main/index.html##{vector}"
+    do: "https://www.first.org/cvss/calculator/4.0##{vector}"
 
   def cvss_calculator_url(%{"version" => "3.1", "vectorString" => vector}),
     do: "https://chandanbn.github.io/cvss/##{vector}"

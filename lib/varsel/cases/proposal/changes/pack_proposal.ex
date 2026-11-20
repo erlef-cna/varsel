@@ -40,6 +40,7 @@ defmodule Varsel.Cases.Proposal.Changes.PackProposal do
   use Ash.Resource.Change
 
   alias Ash.Resource.Change
+  alias Varsel.Types.CVSS
 
   @operations [:set, :insert, :delete]
   @presets [:otp, :elixir, :gleam]
@@ -126,10 +127,18 @@ defmodule Varsel.Cases.Proposal.Changes.PackProposal do
   # envelope as plain JSON that `ValidTarget` and the apply actions re-cast.
   # Dump each value back through its argument type so the stored shape matches
   # what those consumers expect — never a struct the JSONB column can't encode.
+  # A CVSS value is stored as its vector string: score, severity and version
+  # are derived from it again on every cast.
   defp jsonify(changeset, name) do
     argument = Enum.find(changeset.action.arguments, &(&1.name == name))
     value = Ash.Changeset.get_argument(changeset, name)
 
+    dump(argument, value)
+  end
+
+  defp dump(_argument, %CVSS{vector: vector}), do: vector
+
+  defp dump(argument, value) do
     case Ash.Type.dump_to_embedded(argument.type, value, argument.constraints || []) do
       {:ok, dumped} -> dumped
       _error -> value

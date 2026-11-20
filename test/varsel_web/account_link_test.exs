@@ -134,7 +134,9 @@ defmodule VarselWeb.AccountLinkTest do
     test "is refused when another identity reports that address" do
       alice = register_user("alice")
 
-      assert {:error, error} = register_via("hex", "alice_hex", "alice@example.com")
+      assert {:error, error} =
+               register_via("hex", "alice_hex", to_string(alice.notification_email))
+
       assert caused_by_message(error) =~ "already uses that email address"
 
       # No second account, and the first gained nothing.
@@ -159,7 +161,8 @@ defmodule VarselWeb.AccountLinkTest do
     test "attaches the provider to the account instead of registering a second" do
       alice = register_user("alice")
 
-      assert {:ok, user} = register_via("hex", "alice_hex", "alice@example.com", alice)
+      assert {:ok, user} =
+               register_via("hex", "alice_hex", to_string(alice.notification_email), alice)
 
       assert user.id == alice.id
       assert strategies_of(alice) == ["github", "hex"]
@@ -237,9 +240,10 @@ defmodule VarselWeb.AccountLinkTest do
 
     test "is a no-op when the provider is already this account's" do
       alice = register_user("alice")
-      {:ok, _} = register_via("hex", "alice_hex", "alice@example.com", alice)
+      address = to_string(alice.notification_email)
+      {:ok, _} = register_via("hex", "alice_hex", address, alice)
 
-      assert {:ok, user} = register_via("hex", "alice_hex", "alice@example.com", alice)
+      assert {:ok, user} = register_via("hex", "alice_hex", address, alice)
 
       assert user.id == alice.id
       assert strategies_of(alice) == ["github", "hex"]

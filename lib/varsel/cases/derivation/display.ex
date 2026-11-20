@@ -238,7 +238,7 @@ defmodule Varsel.Cases.Derivation.Display do
     Enum.uniq((cache["issues"] || []) ++ channel_issues)
   end
 
-  def boundary_label(%{commit_sha: sha}) when is_binary(sha), do: shorten(sha)
+  def boundary_label(%{commit_sha: sha}) when is_binary(sha), do: sha
   def boundary_label(%{version: version}), do: version
 
   # Full commit SHAs drown the tables; 12 characters identify them fine.

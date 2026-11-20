@@ -15,15 +15,17 @@ defmodule VarselWeb.VarselLiveTest do
   @year Date.utc_today().year
 
   defp register(handle, role) do
+    sub = System.unique_integer([:positive])
+
     user =
       Ash.create!(
         User,
         %{
           user_info: %{
-            "sub" => System.unique_integer([:positive]),
+            "sub" => sub,
             "preferred_username" => handle,
             "name" => "#{handle} name",
-            "email" => "#{handle}@example.com"
+            "email" => Varsel.Fixtures.email(handle, sub)
           },
           oauth_tokens: %{"access_token" => "gho_token"}
         },

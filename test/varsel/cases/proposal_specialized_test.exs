@@ -90,27 +90,115 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
       refute preview.cve_record |> Jason.encode!() |> String.contains?("not for publication")
     end
 
-    test "propose_cvss casts the vector through the real type", %{poc: poc, case: case_record} do
+    test "propose_metric_cvss casts the vector through the real type", %{
+      poc: poc,
+      case: case_record
+    } do
+      old = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
       vector = "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
+      metric = Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: old}, actor: poc)
 
-      proposal = Cases.propose_cvss!(%{case_id: case_record.id, value: vector}, actor: poc)
+      proposal =
+        Cases.propose_metric_cvss!(
+          %{case_id: case_record.id, target_id: metric.id, value: vector},
+          actor: poc
+        )
 
       assert proposal.field_name == "cvss_v4"
       # The envelope stores the plain vector string (not the dumped CVSS map);
       # score/severity/version are derived when it re-casts on accept.
       assert proposal.proposed_value["value"] == vector
 
-      accepted = Cases.accept_case_proposal!(proposal, %{}, actor: poc)
-      case_record = Ash.get!(Cases.Case, accepted.case_id, authorize?: false)
-      assert case_record.cvss_v4.vector == vector
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+      assert Ash.get!(Cases.CaseMetric, metric.id, authorize?: false).cvss_v4.vector == vector
     end
 
-    test "propose_cvss rejects a malformed vector at the argument layer", %{
+    test "propose_metric_cvss rejects a malformed vector at the argument layer", %{
       poc: poc,
       case: case_record
     } do
+      metric =
+        Cases.add_case_metric!(
+          %{
+            case_id: case_record.id,
+            cvss_v4: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+          },
+          actor: poc
+        )
+
       assert {:error, _error} =
-               Cases.propose_cvss(%{case_id: case_record.id, value: "not-a-vector"}, actor: poc)
+               Cases.propose_metric_cvss(
+                 %{case_id: case_record.id, target_id: metric.id, value: "not-a-vector"},
+                 actor: poc
+               )
+    end
+
+    test "propose_metric adds a scenario score on accept", %{poc: poc, case: case_record} do
+      vector = "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+      scenario = "Built without stack protection"
+
+      proposal =
+        Cases.propose_metric!(
+          %{case_id: case_record.id, scenario: scenario, cvss_v4: vector},
+          actor: poc
+        )
+
+      assert proposal.proposed_value == %{
+               "value" => %{"scenario" => scenario, "cvss_v4" => vector}
+             }
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      assert [%{scenario: ^scenario, cvss_v4: %{vector: ^vector}}] =
+               Cases.list_case_metrics!(query: [filter: [case_id: case_record.id]], actor: poc)
+    end
+
+    test "propose_metric defaults to the GENERAL scenario", %{poc: poc, case: case_record} do
+      vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+      proposal = Cases.propose_metric!(%{case_id: case_record.id, cvss_v4: vector}, actor: poc)
+
+      assert proposal.proposed_value == %{
+               "value" => %{"scenario" => "GENERAL", "cvss_v4" => vector}
+             }
+    end
+
+    test "propose_metric_scenario renames a scenario on accept", %{poc: poc, case: case_record} do
+      metric =
+        Cases.add_case_metric!(
+          %{
+            case_id: case_record.id,
+            cvss_v4: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+          },
+          actor: poc
+        )
+
+      proposal =
+        Cases.propose_metric_scenario!(
+          %{case_id: case_record.id, target_id: metric.id, value: "Local attacker"},
+          actor: poc
+        )
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+      assert Ash.get!(Cases.CaseMetric, metric.id, authorize?: false).scenario == "Local attacker"
+    end
+
+    test "propose_delete removes a scenario score on accept", %{poc: poc, case: case_record} do
+      metric =
+        Cases.add_case_metric!(
+          %{
+            case_id: case_record.id,
+            cvss_v4: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+          },
+          actor: poc
+        )
+
+      proposal =
+        Cases.propose_delete!(%{case_id: case_record.id, target: :metric, target_id: metric.id},
+          actor: poc
+        )
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+      assert [] = Cases.list_case_metrics!(query: [filter: [case_id: case_record.id]], actor: poc)
     end
 
     test "propose_discovery rejects a bad enum at the argument layer", %{

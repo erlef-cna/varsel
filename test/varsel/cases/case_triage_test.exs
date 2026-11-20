@@ -285,8 +285,10 @@ defmodule Varsel.Cases.CaseTriageTest do
 
   describe "the people on a reported case" do
     setup %{poc: poc} do
-      maintainer = Fixtures.sign_in_with_hex("triage_known", 7101)
-      reporter = Fixtures.sign_in_with_hex("triage_hex_reporter", 7102)
+      maintainer = Fixtures.sign_in_with_hex("triage_known", System.unique_integer([:positive]))
+
+      reporter =
+        Fixtures.sign_in_with_hex("triage_hex_reporter", System.unique_integer([:positive]))
 
       report =
         submit_from_hex([

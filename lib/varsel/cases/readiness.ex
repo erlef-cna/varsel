@@ -15,6 +15,7 @@ defmodule Varsel.Cases.Readiness do
   """
 
   alias Varsel.Cases.Case
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.DerivationFreshness
 
   @type status :: :ok | :attention | nil
@@ -28,7 +29,7 @@ defmodule Varsel.Cases.Readiness do
   def sections(case_record) do
     [
       %{id: "summary", label: "Summary", status: summary_status(case_record)},
-      %{id: "severity", label: "Severity", status: required(not is_nil(case_record.cvss_v4))},
+      %{id: "severity", label: "Severity", status: required(general_metric?(case_record))},
       %{id: "affected", label: "Affected", status: affected_status(case_record)},
       %{id: "references", label: "References", status: references_status(case_record)},
       %{id: "credits", label: "Credits", status: optional(case_record.credits != [])},
@@ -39,6 +40,10 @@ defmodule Varsel.Cases.Readiness do
 
   defp summary_status(case_record) do
     required(present?(case_record.description_md))
+  end
+
+  defp general_metric?(case_record) do
+    Enum.any?(case_record.metrics, &(&1.scenario == CaseMetric.general_scenario()))
   end
 
   defp references_status(%{references: references, derived_references: derived}) when is_list(derived),

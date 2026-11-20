@@ -41,9 +41,10 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
     case_record =
       Fixtures.open_case(poc, %{
         title: "Information disclosure in acme_lib",
-        description_md: "acme_lib leaks secrets to anyone who asks nicely.",
-        cvss_v4: @vector
+        description_md: "acme_lib leaks secrets to anyone who asks nicely."
       })
+
+    Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: @vector}, actor: poc)
 
     package =
       Fixtures.add_affected_package(poc, case_record, %{
@@ -191,12 +192,13 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
   end
 
   test "publish blocks on render blockers", %{poc: poc, case: case_record} do
-    case_record = Cases.edit_case!(case_record, %{cvss_v4: nil}, actor: poc)
+    [general] = Cases.list_case_metrics!(query: [filter: [case_id: case_record.id]], actor: poc)
+    Cases.edit_case_metric!(general, %{scenario: "Built without stack protection"}, actor: poc)
     case_record = Cases.request_case_review!(case_record, actor: poc)
     case_record = Cases.approve_case!(case_record, actor: poc)
 
     assert {:error, error} = Cases.publish_case(case_record, actor: poc)
-    assert Exception.message(error) =~ "CVSS v4 vector is missing"
+    assert Exception.message(error) =~ "CVSS v4 vector for the GENERAL scenario is missing"
 
     # The case stayed approved; nothing was handed to the CVE record.
     assert Ash.get!(Cases.Case, case_record.id, authorize?: false).state == :approved

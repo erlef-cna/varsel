@@ -1301,11 +1301,15 @@ defmodule Varsel.CVE.CveRecord do
                 fragment(
                   """
                   coalesce(
+                    jsonb_path_query_first(?, (?::text)::jsonpath),
                     jsonb_path_query_first(?, '$.metrics[*].cvssV4_0.vectorString'),
                     jsonb_path_query_first(?, '$.metrics[*].cvssV3_1.vectorString'),
                     jsonb_path_query_first(?, '$.metrics[*].cvssV3_0.vectorString')
                   )
                   """,
+                  content_container,
+                  # A metric without scenarios is GENERAL in the CVE schema.
+                  ~S'$.metrics[*] ? (!(exists(@.scenarios)) || @.scenarios[*].value == "GENERAL").cvssV4_0.vectorString',
                   content_container,
                   content_container,
                   content_container

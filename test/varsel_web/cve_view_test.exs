@@ -80,11 +80,35 @@ defmodule VarselWeb.CveViewTest do
       cvss = CveView.best_cvss(cna)
       assert cvss["version"] == "4.0"
       assert cvss["baseScore"] == 7.1
-      assert CveView.cvss_calculator_url(cvss) =~ "cvss-v4-calculator"
+
+      assert CveView.cvss_calculator_url(cvss) ==
+               "https://www.first.org/cvss/calculator/4.0#CVSS:4.0/AV:N"
     end
 
     test "returns nil when there are no metrics" do
       assert CveView.best_cvss(%{}) == nil
+    end
+
+    test "prefers the GENERAL scenario, and a metric without scenarios is GENERAL" do
+      rce = %{
+        "scenarios" => [%{"lang" => "en", "value" => "RCE"}],
+        "cvssV4_0" => %{"baseScore" => 9.3, "vectorString" => "CVSS:4.0/AV:N/rce"}
+      }
+
+      general = %{
+        "scenarios" => [%{"lang" => "en", "value" => "GENERAL"}],
+        "cvssV4_0" => %{"baseScore" => 8.7, "vectorString" => "CVSS:4.0/AV:N/dos"}
+      }
+
+      bare = Map.delete(general, "scenarios")
+
+      assert %{"baseScore" => 8.7} = CveView.best_cvss(%{"metrics" => [rce, general]})
+      assert %{"baseScore" => 8.7} = CveView.best_cvss(%{"metrics" => [rce, bare]})
+
+      assert [%{scenario: "RCE", cvss: %{"baseScore" => 9.3, "version" => "4.0"}}] =
+               CveView.scenario_cvss(%{"metrics" => [rce, general]})
+
+      assert CveView.scenario_cvss(%{"metrics" => [bare]}) == []
     end
   end
 

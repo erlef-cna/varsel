@@ -7,7 +7,8 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
   Takes the chosen fields of the stored advisory over onto the case, through
   the case's own actions as the actor, inside the link's `:pull` update.
 
-  A scalar (title, CVSS) replaces the case's value. A set (CWEs, credits,
+  A scalar (title, CVSS) replaces the case's value. The CVSS vector is the
+  case's GENERAL score. A set (CWEs, credits,
   affected packages) gains what the advisory has and the case lacks, and
   loses nothing. Taking something away is a person's call on the workspace.
   An affected package is matched the way the diff matches it and arrives
@@ -25,7 +26,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
   alias Varsel.Cases.GitHubAdvisory.Import
   alias Varsel.Cases.GitHubAdvisory.People
 
-  @scalars [:title, :cvss_v4]
+  @scalars [:title]
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
@@ -61,6 +62,13 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
     Apply.each(fields -- @scalars, fn field ->
       with :ok <- pull_set(field, children, case_record, opts), do: {:ok, field}
     end)
+  end
+
+  defp pull_set(:cvss_v4, children, case_record, opts) do
+    case children.metrics do
+      [] -> :ok
+      [%{cvss_v4: vector}] -> vector |> Apply.put_general_metric(case_record, opts) |> ok()
+    end
   end
 
   defp pull_set(:weaknesses, children, case_record, opts) do
@@ -106,6 +114,9 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
         Cases.edit_case_credit(credit, %{credit_types: credit.credit_types ++ roles}, opts)
     end
   end
+
+  defp ok({:ok, _metric}), do: :ok
+  defp ok({:error, error}), do: {:error, error}
 
   defp after_existing(rows, existing) do
     rows

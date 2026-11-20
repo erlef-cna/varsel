@@ -14,6 +14,7 @@ defmodule Varsel.Cases do
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseInvite
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.CaseReport
   alias Varsel.Cases.CaseWeakness
@@ -54,7 +55,7 @@ defmodule Varsel.Cases do
       Opens a draft case from a GitHub security advisory, given its URL or GHSA
       id, and links the case to it. Use it when a new case starts from an
       advisory. The case takes the advisory's title, description, CVSS v4
-      vector, publication date, CWEs, credits and affected packages with
+      vector as its GENERAL score, publication date, CWEs, credits and affected packages with
       their channels. It takes no version boundaries: the introducing and fix
       commits stay yours to establish. Use link_github_advisory for a case
       that already exists.
@@ -119,7 +120,8 @@ defmodule Varsel.Cases do
       description """
       Takes the given `fields` of the linked advisory over onto the case:
       title, cvss_v4, weaknesses, credits, affected. A scalar replaces the
-      case's value. A set gains what the case lacks and never loses an entry.
+      case's value. cvss_v4 is the case's GENERAL score. A set gains what the
+      case lacks and never loses an entry.
       Affected packages arrive with their channels and no version boundaries.
       This is a direct edit, not a proposal, and a content edit: the case has
       to be in draft or review. It writes nothing to GitHub.
@@ -144,6 +146,7 @@ defmodule Varsel.Cases do
         :credits,
         :weaknesses,
         :impacts,
+        :metrics,
         affected_packages: [:channels, :version_events]
       ]
     end
@@ -191,7 +194,9 @@ defmodule Varsel.Cases do
     tool :propose_proof_of_concept, Proposal, :propose_proof_of_concept
     tool :propose_internal_notes, Proposal, :propose_internal_notes
     tool :propose_discovery, Proposal, :propose_discovery
-    tool :propose_cvss, Proposal, :propose_cvss
+    tool :propose_metric, Proposal, :propose_metric
+    tool :propose_metric_cvss, Proposal, :propose_metric_cvss
+    tool :propose_metric_scenario, Proposal, :propose_metric_scenario
     tool :propose_date_public, Proposal, :propose_date_public
     tool :propose_timeline, Proposal, :propose_timeline
     tool :propose_cna_override, Proposal, :propose_cna_override
@@ -319,6 +324,10 @@ defmodule Varsel.Cases do
       update CaseImpact, :edit_case_impact, :edit
       destroy CaseImpact, :remove_case_impact, :remove
 
+      create CaseMetric, :add_case_metric, :add
+      update CaseMetric, :edit_case_metric, :edit
+      destroy CaseMetric, :remove_case_metric, :remove
+
       create Proposal, :propose_case_title, :propose_title
       create Proposal, :propose_case_description, :propose_description
       create Proposal, :propose_case_workarounds, :propose_workarounds
@@ -328,7 +337,9 @@ defmodule Varsel.Cases do
       create Proposal, :propose_case_proof_of_concept, :propose_proof_of_concept
       create Proposal, :propose_case_internal_notes, :propose_internal_notes
       create Proposal, :propose_case_discovery, :propose_discovery
-      create Proposal, :propose_case_cvss, :propose_cvss
+      create Proposal, :propose_case_metric, :propose_metric
+      create Proposal, :propose_case_metric_cvss, :propose_metric_cvss
+      create Proposal, :propose_case_metric_scenario, :propose_metric_scenario
       create Proposal, :propose_case_date_public, :propose_date_public
       create Proposal, :propose_case_timeline, :propose_timeline
       create Proposal, :propose_case_cna_override, :propose_cna_override
@@ -524,6 +535,16 @@ defmodule Varsel.Cases do
       define :apply_case_impact_proposal_delete, action: :apply_proposal_delete
     end
 
+    resource CaseMetric do
+      define :list_case_metrics, action: :read
+      define :add_case_metric, action: :add
+      define :edit_case_metric, action: :edit
+      define :remove_case_metric, action: :remove
+      define :apply_case_metric_proposal, action: :apply_proposal
+      define :apply_case_metric_proposal_insert, action: :apply_proposal_insert
+      define :apply_case_metric_proposal_delete, action: :apply_proposal_delete
+    end
+
     resource Proposal do
       # Internal generic entry point (private action) for the LiveView's
       # projection-diff engine and tests; not exposed on MCP/GraphQL.
@@ -538,7 +559,9 @@ defmodule Varsel.Cases do
       define :propose_proof_of_concept, action: :propose_proof_of_concept
       define :propose_internal_notes, action: :propose_internal_notes
       define :propose_discovery, action: :propose_discovery
-      define :propose_cvss, action: :propose_cvss
+      define :propose_metric, action: :propose_metric
+      define :propose_metric_cvss, action: :propose_metric_cvss
+      define :propose_metric_scenario, action: :propose_metric_scenario
       define :propose_date_public, action: :propose_date_public
       define :propose_timeline, action: :propose_timeline
       define :propose_cna_override, action: :propose_cna_override

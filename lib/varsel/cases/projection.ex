@@ -20,6 +20,7 @@ defmodule Varsel.Cases.Projection do
   alias Varsel.Cases.AffectedPackage
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Case
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.Proposal
   alias Varsel.Cases.Proposal.Target
 
@@ -49,6 +50,7 @@ defmodule Varsel.Cases.Projection do
       |> apply_sets(sets)
       |> apply_inserts(inserts)
       |> Map.update!(:credits, &sort_credits/1)
+      |> Map.update!(:metrics, &sort_metrics/1)
 
     %__MODULE__{
       case: projected,
@@ -70,6 +72,9 @@ defmodule Varsel.Cases.Projection do
   end
 
   defp sort_credits(credits), do: credits
+
+  defp sort_metrics(metrics) when is_list(metrics), do: CaseMetric.sort(metrics)
+  defp sort_metrics(metrics), do: metrics
 
   ## ------------------------------------------------------------------- sets
 
@@ -103,8 +108,8 @@ defmodule Varsel.Cases.Projection do
     end)
   end
 
-  defp apply_set(%{target: target} = proposal, case_record) when target in [:reference, :credit] do
-    key = if target == :reference, do: :references, else: :credits
+  defp apply_set(%{target: target} = proposal, case_record) when target in [:reference, :credit, :metric] do
+    key = row_key(target)
     rows = set_row(Map.get(case_record, key), Target.resource(target), proposal)
 
     Map.put(case_record, key, rows)
@@ -179,8 +184,8 @@ defmodule Varsel.Cases.Projection do
     Map.update!(case_record, :impacts, &(&1 ++ [phantom]))
   end
 
-  defp apply_insert(%{target: target} = proposal, case_record) when target in [:reference, :credit] do
-    key = if target == :reference, do: :references, else: :credits
+  defp apply_insert(%{target: target} = proposal, case_record) when target in [:reference, :credit, :metric] do
+    key = row_key(target)
     phantom = phantom_row(proposal, Target.resource(target), case_record.id)
 
     Map.update!(case_record, key, &(&1 ++ [phantom]))
@@ -229,6 +234,10 @@ defmodule Varsel.Cases.Projection do
   end
 
   ## ---------------------------------------------------------------- helpers
+
+  defp row_key(:reference), do: :references
+  defp row_key(:credit), do: :credits
+  defp row_key(:metric), do: :metrics
 
   defp update_packages(case_record, fun) do
     Map.update!(case_record, :affected_packages, fn packages -> Enum.map(packages, fun) end)

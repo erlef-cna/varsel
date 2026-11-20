@@ -10,6 +10,7 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
   alias Varsel.Cases.Case.Calculations.Preview
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseCredit.Handle
+  alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.CaseWeakness
   alias Varsel.Cases.GitHubAdvisory.Export
   alias Varsel.Cases.PackageChannel
@@ -25,7 +26,7 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
       Map.merge(
         %{
           title: "Header injection in acme_lib",
-          cvss_v4: vector,
+          general_metric: %CaseMetric{scenario: "GENERAL", cvss_v4: vector},
           weaknesses: [%CaseWeakness{cwe_id: 113}, %CaseWeakness{cwe_id: 79}],
           credits: [
             %CaseCredit{
@@ -96,9 +97,9 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
            }
   end
 
-  test "vector/1 reads a case CVSS value" do
-    assert Export.vector(%{vector: @vector}) == @vector
-    assert Export.vector(nil) == nil
+  test "general_vector/1 reads the GENERAL score's vector" do
+    assert Export.general_vector(case_record(%{})) == @vector
+    assert Export.general_vector(case_record(%{general_metric: nil})) == nil
   end
 
   test "scalars and CWEs travel as GitHub names them" do
@@ -123,7 +124,7 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
   end
 
   test "a value the case lacks is left out" do
-    assert Export.body(case_record(%{title: nil, cvss_v4: nil}), [:title, :cvss_v4]) == %{
+    assert Export.body(case_record(%{title: nil, general_metric: nil}), [:title, :cvss_v4]) == %{
              body: %{},
              skipped_credits: []
            }

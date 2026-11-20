@@ -87,12 +87,38 @@ defmodule Varsel.Cases.Case.ImportTest do
     end
   end
 
-  describe "case_params/1 — CVSS" do
-    test "takes a v4 vector" do
-      params =
-        Import.case_params(record(%{"metrics" => [%{"cvssV4_0" => %{"vectorString" => @vector}}]}))
+  describe "child_params/1 — CVSS" do
+    test "takes a v4 vector without scenarios as GENERAL" do
+      children =
+        Import.child_params(record(%{"metrics" => [%{"cvssV4_0" => %{"vectorString" => @vector}}]}))
 
-      assert params.cvss_v4 == @vector
+      assert children.metrics == [%{scenario: "GENERAL", cvss_v4: @vector}]
+    end
+
+    test "takes each scenario's v4 vector, the first per scenario" do
+      rce = "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+
+      cna = %{
+        "metrics" => [
+          %{
+            "scenarios" => [%{"lang" => "en", "value" => "GENERAL"}],
+            "cvssV4_0" => %{"vectorString" => @vector}
+          },
+          %{
+            "scenarios" => [%{"lang" => "en", "value" => "RCE"}],
+            "cvssV4_0" => %{"vectorString" => rce}
+          },
+          %{
+            "scenarios" => [%{"lang" => "en", "value" => "RCE"}],
+            "cvssV4_0" => %{"vectorString" => @vector}
+          }
+        ]
+      }
+
+      assert Import.child_params(record(cna)).metrics == [
+               %{scenario: "GENERAL", cvss_v4: @vector},
+               %{scenario: "RCE", cvss_v4: rce}
+             ]
     end
 
     test "leaves a v3-only record unscored — there is no faithful v3 to v4 path" do
@@ -102,7 +128,7 @@ defmodule Varsel.Cases.Case.ImportTest do
         ]
       }
 
-      refute Map.has_key?(Import.case_params(record(cna)), :cvss_v4)
+      assert Import.child_params(record(cna)).metrics == []
     end
   end
 

@@ -8,7 +8,7 @@ defmodule Varsel.CVE.CveValidation.Source do
   @behaviour AshGraphql.Type
 
   # :eef covers EEF/CNA policy requirements beyond the CVE schema and cvelint
-  # (a title and a CVSS v4 metric are always required for our records).
+  # (a title and a GENERAL CVSS v4 metric are always required for our records).
   use Ash.Type.Enum, values: [:schema, :cvelint, :hex, :eef]
 
   @impl AshGraphql.Type

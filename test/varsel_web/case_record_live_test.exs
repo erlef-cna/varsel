@@ -143,7 +143,7 @@ defmodule VarselWeb.CaseRecordLiveTest do
       assert html =~ "✗"
 
       # EEF policy findings get per-section deep links into the workspace.
-      assert html =~ "CVSS v4 vector is missing"
+      assert html =~ "CVSS v4 vector for the GENERAL scenario is missing"
       assert has_element?(lv, ~s(a[href="/cases/#{case_record.id}#severity"]), "Go to severity")
 
       # Known validator findings link to the section that fixes them: the
@@ -247,7 +247,8 @@ defmodule VarselWeb.CaseRecordLiveTest do
       lv |> element("#republish") |> render_click()
 
       # The bare case cannot pass validation, so the refusal comes back as a flash.
-      assert render_async(lv, @render_timeout) =~ "CVSS v4 vector is missing"
+      assert render_async(lv, @render_timeout) =~
+               "CVSS v4 vector for the GENERAL scenario is missing"
     end
 
     test "never-published cases show no diff button", %{conn: conn, poc: poc} do

@@ -64,9 +64,10 @@ defmodule Varsel.Cases.CaseUpstreamTest do
     case_record =
       Fixtures.open_case(poc, %{
         title: "brotli heap overflow reaches acme_lib",
-        description_md: "acme_lib vendors the affected brotli decoder.",
-        cvss_v4: @vector
+        description_md: "acme_lib vendors the affected brotli decoder."
       })
+
+    Cases.add_case_metric!(%{case_id: case_record.id, cvss_v4: @vector}, actor: poc)
 
     package =
       Fixtures.add_affected_package(poc, case_record, %{

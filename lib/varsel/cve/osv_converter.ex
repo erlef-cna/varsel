@@ -27,7 +27,7 @@ defmodule Varsel.CVE.OsvConverter do
   alias Varsel.CVE.Advisory
   alias Varsel.CVE.OwnContainer
 
-  @schema_version "1.7.3"
+  @schema_version "1.8.0"
 
   # Package registries mirrored to OSV. Only hex packages get their concrete
   # affected versions enumerated (see enumerate_affected_versions/2).
@@ -99,8 +99,10 @@ defmodule Varsel.CVE.OsvConverter do
     cna = OwnContainer.get(cve_json) || %{}
     references = convert_references(cna)
 
-    {aliases, upstream} =
-      if OwnContainer.upstream?(cve_json), do: {[], [cve_id]}, else: {[cve_id], []}
+    {aliases, upstream, severity_source} =
+      if OwnContainer.upstream?(cve_json),
+        do: {[], [cve_id], "SELF"},
+        else: {[cve_id], [], "CNA"}
 
     %{
       "schema_version" => @schema_version,
@@ -111,7 +113,7 @@ defmodule Varsel.CVE.OsvConverter do
       "related" => [],
       "summary" => extract_summary(cna),
       "details" => extract_details(cna),
-      "severity" => convert_severity(cna),
+      "severity" => convert_severity(cna, severity_source),
       "affected" => convert_affected(cna),
       "references" => references,
       "credits" => convert_credits(cna),
@@ -432,12 +434,31 @@ defmodule Varsel.CVE.OsvConverter do
 
   ## Severity / credits / database_specific
 
-  defp convert_severity(cna) do
+  # OSV has no scenarios, so it carries one v4 score: the GENERAL one where
+  # the CVE has it. The CVE schema reads a metric without scenarios as GENERAL.
+  #
+  # `source` names who scored it. For our own CVE that is the CNA that
+  # assigned it. For an upstream CVE the score is our ADP container's, which
+  # makes this database (`SELF`) its author.
+  defp convert_severity(cna, source) do
     cna
     |> Map.get("metrics", [])
     |> Enum.filter(&Map.has_key?(&1, "cvssV4_0"))
-    |> Enum.map(&%{"type" => "CVSS_V4", "score" => get_in(&1, ["cvssV4_0", "vectorString"])})
+    |> Enum.sort_by(&(not general_metric?(&1)))
+    |> Enum.take(1)
+    |> Enum.map(
+      &%{
+        "type" => "CVSS_V4",
+        "score" => get_in(&1, ["cvssV4_0", "vectorString"]),
+        "source" => source
+      }
+    )
   end
+
+  defp general_metric?(%{"scenarios" => [_scenario | _rest] = scenarios}),
+    do: Enum.any?(scenarios, &match?(%{"value" => "GENERAL"}, &1))
+
+  defp general_metric?(_metric), do: true
 
   defp convert_credits(cna) do
     cna

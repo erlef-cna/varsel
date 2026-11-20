@@ -13,6 +13,8 @@ defmodule VarselWeb.Storybook.Core do
 
   def entry("button"), do: [name: "Button", icon: {:local, "hero-cursor-arrow-rays"}]
   def entry("code_block"), do: [name: "Code block", icon: {:local, "hero-code-bracket"}]
+  def entry("cvss_breakdown"), do: [name: "CVSS breakdown", icon: {:local, "hero-list-bullet"}]
+  def entry("cvss_changes"), do: [name: "CVSS changes", icon: {:local, "hero-arrows-right-left"}]
 
   def entry("copy_button"), do: [name: "Copy button", icon: {:local, "hero-clipboard-document"}]
   def entry("modal"), do: [name: "Modal", icon: {:local, "hero-window"}]

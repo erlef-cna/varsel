@@ -5,7 +5,7 @@
 defmodule Varsel.Cases.Case.Calculations.SeverityBucket do
   @moduledoc """
   The case's severity rating (`:none`/`:low`/`:medium`/`:high`/`:critical`),
-  or `nil` when it has no CVSS vector yet.
+  or `nil` when it has no GENERAL metric yet.
   """
 
   use Ash.Resource.Calculation
@@ -15,17 +15,17 @@ defmodule Varsel.Cases.Case.Calculations.SeverityBucket do
   require Ash.Expr
 
   @impl Calculation
-  def load(_query, _opts, _context), do: [:cvss_v4]
+  def load(_query, _opts, _context), do: [general_metric: [:cvss_v4]]
 
   @impl Calculation
   def expression(_opts, _context) do
-    Ash.Expr.expr(fragment("?->>'severity'", cvss_v4))
+    Ash.Expr.expr(fragment("?->>'severity'", general_metric.cvss_v4))
   end
 
   @impl Calculation
   def calculate(records, _opts, _context) do
     Enum.map(records, fn
-      %{cvss_v4: %Varsel.Types.CVSS{severity: severity}} -> severity
+      %{general_metric: %{cvss_v4: %Varsel.Types.CVSS{severity: severity}}} -> severity
       _unscored -> nil
     end)
   end

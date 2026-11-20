@@ -15,8 +15,8 @@ defmodule Varsel.Cases.Case.Import do
   case reproduces it from the facts instead of restating a stale copy.
 
   Imported: `title`, `dateAssigned`, `datePublic`, `source.discovery`,
-  `timeline[]`, a CVSS
-  **v4** vector, `problemTypes[]` (CWE), `impacts[]` (CAPEC), `credits[]`, the
+  `timeline[]`, each CVSS
+  **v4** metric with its scenario, `problemTypes[]` (CWE), `impacts[]` (CAPEC), `credits[]`, the
   non-derived `references[]` with their names, and the prose fields.
 
   Prose takes the markdown `supportingMedia` when the record has one, else the
@@ -32,7 +32,7 @@ defmodule Varsel.Cases.Case.Import do
       backwards to the facts, and inventing packages from it would publish
       derived ranges as if they were authored. Affected packages are re-entered
       by hand.
-    * **A non-v4 CVSS vector** — `cvss_v4` is v4-only and there is no faithful
+    * **A non-v4 CVSS vector** — a metric is v4-only and there is no faithful
       mechanical v3→v4 conversion. Legacy v3 records are re-scored by hand.
     * **Self-links and patch links in `references[]`** — the renderer appends
       the `cna.erlef.org`/`osv.dev` pair and one link per fixed commit on every
@@ -45,6 +45,7 @@ defmodule Varsel.Cases.Case.Import do
 
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.CaseCredit.CreditType
+  alias Varsel.Cases.CaseMetric
 
   @doc """
   Case params extracted from a full CVE record (`cve_json`).
@@ -65,7 +66,6 @@ defmodule Varsel.Cases.Case.Import do
     |> put_present(:technical_analysis_md, prose_markdown(cna["x_technicalAnalysis"]))
     |> put_present(:proof_of_concept_md, prose_markdown(cna["x_proofOfConcept"]))
     |> put_present(:discovery, discovery(cna))
-    |> put_present(:cvss_v4, cvss_v4(cna))
     |> put_present(:cve_assigned_at, parse_time(cna["dateAssigned"]))
     |> put_present(:date_public, date_public(cna))
     |> put_present(:timeline, timeline(cna))
@@ -73,10 +73,11 @@ defmodule Varsel.Cases.Case.Import do
 
   @doc """
   The child rows to create alongside the case, as
-  `%{weaknesses: [...], impacts: [...], references: [...], credits: [...]}` —
-  each a list of param maps in `position` order, without `case_id`.
+  `%{metrics: [...], weaknesses: [...], impacts: [...], references: [...], credits: [...]}`
+  — each a list of param maps in `position` order, without `case_id`.
   """
   @spec child_params(map() | nil) :: %{
+          metrics: [map()],
           weaknesses: [map()],
           impacts: [map()],
           references: [map()],
@@ -86,6 +87,7 @@ defmodule Varsel.Cases.Case.Import do
     cna = cna(cve_json)
 
     %{
+      metrics: metrics(cna),
       weaknesses: weaknesses(cna),
       impacts: impacts(cna),
       references: references(cna),
@@ -166,16 +168,24 @@ defmodule Varsel.Cases.Case.Import do
     end
   end
 
-  # v4 only: the case's cvss_v4 is v4-constrained and no faithful mechanical
+  # v4 only: a metric's cvss_v4 is v4-constrained and no faithful mechanical
   # downgrade path exists, so a v3-scored legacy record simply arrives unscored.
-  defp cvss_v4(cna) do
-    Enum.find_value(cna["metrics"] || [], fn metric ->
-      case metric do
-        %{"cvssV4_0" => %{"vectorString" => vector}} when is_binary(vector) -> vector
-        _no_v4_vector -> nil
-      end
+  # A case holds one score per scenario, so a repeated scenario keeps its first.
+  defp metrics(cna) do
+    (cna["metrics"] || [])
+    |> Enum.flat_map(fn
+      %{"cvssV4_0" => %{"vectorString" => vector}} = metric when is_binary(vector) ->
+        [%{scenario: scenario(metric["scenarios"]), cvss_v4: vector}]
+
+      _no_v4_vector ->
+        []
     end)
+    |> Enum.uniq_by(& &1.scenario)
   end
+
+  # The CVE schema reads a metric without scenarios as GENERAL.
+  defp scenario([%{"value" => value} | _rest]) when is_binary(value), do: value
+  defp scenario(_absent), do: CaseMetric.general_scenario()
 
   defp date_public(cna), do: parse_time(cna["datePublic"])
 
