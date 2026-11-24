@@ -12,6 +12,7 @@ defmodule VarselWeb.AdvisoryComponents do
   import VarselWeb.CaseComponents, only: [markdown: 1, suggestion_diff: 1]
 
   alias Varsel.Cases.GitHubAdvisory.Diff
+  alias Varsel.Cases.GitHubAdvisory.Sections
 
   @doc """
   Renders the linked advisory: its id, standing, repository and title, when
@@ -137,6 +138,7 @@ defmodule VarselWeb.AdvisoryComponents do
         rows_with_ids: row_ids(assigns.rows),
         pullable_fields: fields_where(assigns.rows, &Diff.pullable?/1),
         pushable_fields: fields_where(assigns.rows, &Diff.pushable?/1),
+        section_fields: Sections.fields(),
         gh_push: assigns.gh_push and not assigns.can_push
       )
 
@@ -201,13 +203,16 @@ defmodule VarselWeb.AdvisoryComponents do
           <tbody>
             <tr :for={{row_id, row} <- @rows_with_ids} id={row_id}>
               <td class="font-medium align-top">{row_label(row)}</td>
-              <td :if={row.field == :description} colspan="2" class="align-top">
+              <td :if={row.field in @section_fields} colspan="2" class="align-top">
                 <.description_diff row={row} />
               </td>
-              <td :if={row.field != :description} class="align-top">
+              <td :if={row.field == :unmapped} colspan="2" class="align-top">
+                <.unmapped_content blocks={row.theirs} />
+              </td>
+              <td :if={row.field not in [:unmapped | @section_fields]} class="align-top">
                 <.diff_value row={row} side={:ours} />
               </td>
-              <td :if={row.field != :description} class="align-top">
+              <td :if={row.field not in [:unmapped | @section_fields]} class="align-top">
                 <.diff_value row={row} side={:theirs} />
               </td>
               <td class="align-top whitespace-nowrap"><.diff_status status={row.status} /></td>
@@ -371,6 +376,26 @@ defmodule VarselWeb.AdvisoryComponents do
     """
   end
 
+  attr :blocks, :list, required: true
+
+  defp unmapped_content(assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-xs text-[var(--warning-ink)]">
+        The advisory's description has content outside the supported sections. A pull leaves it
+        out, and a push keeps it on GitHub.
+      </p>
+      <div :for={block <- @blocks} class="border-l-2 border-warning/40 pl-3">
+        <p class="font-mono text-xs text-base-content/60">
+          {block.heading || "before the first heading"}
+        </p>
+        <span :if={block.body == ""} class="text-base-content/40">—</span>
+        <.markdown :if={block.body != ""} content={block.body} />
+      </div>
+    </div>
+    """
+  end
+
   attr :status, :atom, required: true
 
   defp diff_status(assigns) do
@@ -380,7 +405,7 @@ defmodule VarselWeb.AdvisoryComponents do
   end
 
   defp status_dot(:same), do: "bg-success"
-  defp status_dot(:differs), do: "bg-warning"
+  defp status_dot(status) when status in [:differs, :unmapped], do: "bg-warning"
   defp status_dot(status) when status in [:ours_only, :theirs_only], do: "bg-info"
   defp status_dot(:not_derived), do: "bg-base-content/40"
 
@@ -389,6 +414,7 @@ defmodule VarselWeb.AdvisoryComponents do
   defp status_label(:ours_only), do: "case only"
   defp status_label(:theirs_only), do: "GitHub only"
   defp status_label(:not_derived), do: "not derived"
+  defp status_label(:unmapped), do: "not mapped"
 
   attr :row, :map, required: true
   attr :side, :atom, required: true, values: [:ours, :theirs]
@@ -542,7 +568,15 @@ defmodule VarselWeb.AdvisoryComponents do
   @spec field_label(atom() | String.t()) :: String.t()
   def field_label(field) when is_atom(field), do: field |> Atom.to_string() |> field_label()
   def field_label("title"), do: "Title"
-  def field_label("description"), do: "Description"
+  def field_label("description"), do: "Description · Summary"
+  def field_label("details"), do: "Description · Details"
+  def field_label("proof_of_concept"), do: "Description · Proof of concept"
+  def field_label("impact"), do: "Description · Impact"
+  def field_label("workarounds"), do: "Description · Workarounds"
+  def field_label("configurations"), do: "Description · Configurations"
+  def field_label("solutions"), do: "Description · Solutions"
+  def field_label("references"), do: "Description · References"
+  def field_label("unmapped"), do: "Description · other content"
   def field_label("cve_id"), do: "CVE ID"
   def field_label("cvss_v4"), do: "CVSS v4"
   def field_label("weaknesses"), do: "CWEs"

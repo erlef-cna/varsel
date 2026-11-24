@@ -7,9 +7,11 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
   Compares a case with the GitHub advisory it is linked to, field by field,
   so a reviewer sees what each side says and where they differ.
 
-  The title and the description compare after whitespace normalization. The
-  description is `Varsel.Cases.GitHubAdvisory.Export.description/1` against
-  the advisory's. The CVE ID and the CVSS vector compare as they are. The
+  The title and the description sections compare after whitespace
+  normalization. Each section of the advisory's description
+  (`Varsel.Cases.GitHubAdvisory.Sections`) is a row against the same section
+  rendered off the case. Content outside every section makes one `:unmapped`
+  row. The CVE ID and the CVSS vector compare as they are. The
   case's vector is its GENERAL score. CWEs
   compare as a set. Credits compare per person
   (`Varsel.Cases.GitHubAdvisory.People`), by GitHub login where the credit
@@ -34,26 +36,45 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
   alias Varsel.Cases.GitHubAdvisory.Export
   alias Varsel.Cases.GitHubAdvisory.Import
   alias Varsel.Cases.GitHubAdvisory.People
+  alias Varsel.Cases.GitHubAdvisory.Sections
 
   @typedoc """
-  How the two sides relate: `:same`, `:differs`, one side alone, or
-  `:not_derived` for a channel the case has but derived no ranges for.
+  How the two sides relate: `:same`, `:differs`, one side alone,
+  `:not_derived` for a channel the case has but derived no ranges for, or
+  `:unmapped` for advisory content outside every section.
   """
-  @type status :: :same | :differs | :ours_only | :theirs_only | :not_derived
+  @type status :: :same | :differs | :ours_only | :theirs_only | :not_derived | :unmapped
 
   @typedoc """
   One field compared. `ours` and `theirs` hold each side's value in display
-  form: a string for prose and the vector, lists for CWEs and credits, and
+  form: a string for prose and the vector, lists for CWEs and credits,
   `%{ranges: [...], patched: [...]}` for an affected package, whose row also
-  names the `package`.
+  names the `package`, and the `Sections.parse/1` unmapped list for
+  `:unmapped`.
   """
   @type row :: %{
-          required(:field) => :title | :description | :cve_id | :cvss_v4 | :weaknesses | :credits | :affected,
+          required(:field) =>
+            :title
+            | Sections.field()
+            | :unmapped
+            | :cve_id
+            | :cvss_v4
+            | :weaknesses
+            | :credits
+            | :affected,
           required(:ours) => term(),
           required(:theirs) => term(),
           required(:status) => status(),
           optional(:package) => String.t()
         }
+
+  @doc "The fields a pull can take over onto the case."
+  @spec pullable_fields() :: [atom()]
+  def pullable_fields, do: [:title | Sections.pullable_fields()] ++ [:cvss_v4, :weaknesses, :credits, :affected]
+
+  @doc "The fields a push can write to the advisory."
+  @spec pushable_fields() :: [atom()]
+  def pushable_fields, do: [:title | Sections.fields()] ++ [:cve_id, :cvss_v4, :weaknesses, :credits, :affected]
 
   @doc "Every compared field of the case against the advisory, affected packages last."
   @spec rows(Case.t(), GitHubAdvisory.t()) :: [row()]
@@ -61,33 +82,34 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
     params = Import.case_params(advisory)
     children = Import.child_params(advisory)
 
-    [
-      prose(:title, case_record.title, params[:title]),
-      prose(:description, Export.description(case_record), params[:description_md]),
-      scalar(:cve_id, case_record.cve_id, Import.blank_to_nil(advisory["cve_id"])),
-      scalar(:cvss_v4, Export.general_vector(case_record), general_vector(children.metrics)),
-      set(
-        :weaknesses,
-        Enum.map(case_record.weaknesses, & &1.cwe_id),
-        Enum.map(children.weaknesses, & &1.cwe_id)
-      ),
-      credits(People.people(case_record.credits), People.people(children.credits))
-    ] ++ affected_rows(case_record, advisory)
+    [prose(:title, case_record.title, params[:title])] ++
+      section_rows(case_record, advisory["description"]) ++
+      [
+        scalar(:cve_id, case_record.cve_id, Import.blank_to_nil(advisory["cve_id"])),
+        scalar(:cvss_v4, Export.general_vector(case_record), general_vector(children.metrics)),
+        set(
+          :weaknesses,
+          Enum.map(case_record.weaknesses, & &1.cwe_id),
+          Enum.map(children.weaknesses, & &1.cwe_id)
+        ),
+        credits(People.people(case_record.credits), People.people(children.credits))
+      ] ++ affected_rows(case_record, advisory)
   end
 
   @doc """
   Whether the advisory can add to a row: a value the case lacks or has
   differently, a person or role it lacks, a package it has no channel for.
 
-  Three rows are never pulled. Derived ranges come from the case's own
-  boundaries. The description is rendered from the case's own sections, and
-  one document cannot be split back into them. A CVE ID is assigned from the
-  pool here, never taken from GitHub.
+  Some rows are never pulled. Derived ranges come from the case's own
+  boundaries. The Impact and References sections are rendered from rows of
+  the case, which their prose cannot rebuild. A CVE ID is assigned from the
+  pool here, never taken from GitHub. Unmapped content has no field to go to.
   """
   @spec pullable?(row()) :: boolean()
   def pullable?(%{field: :affected, status: status}), do: status == :theirs_only
-  def pullable?(%{field: field}) when field in [:description, :cve_id], do: false
-  def pullable?(%{status: status}) when status in [:same, :ours_only, :not_derived], do: false
+  def pullable?(%{field: field}) when field in [:impact, :references, :cve_id], do: false
+
+  def pullable?(%{status: status}) when status in [:same, :ours_only, :not_derived, :unmapped], do: false
 
   def pullable?(%{field: :credits, ours: ours, theirs: theirs}) do
     Enum.any?(theirs, fn person ->
@@ -110,7 +132,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
   nothing to write, and a push keeps the advisory's entry for it.
   """
   @spec pushable?(row()) :: boolean()
-  def pushable?(%{status: status}) when status in [:same, :theirs_only, :not_derived], do: false
+  def pushable?(%{status: status}) when status in [:same, :theirs_only, :not_derived, :unmapped], do: false
 
   def pushable?(%{field: :credits, ours: ours, theirs: theirs}) do
     theirs_logins = MapSet.new(theirs || [], & &1.login)
@@ -130,6 +152,21 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
   end
 
   defp scalar(field, ours, theirs), do: row(field, ours, theirs, ours == theirs)
+
+  defp section_rows(case_record, description) do
+    %{sections: theirs, unmapped: unmapped} = Sections.parse(description)
+
+    rows =
+      for field <- Sections.fields() do
+        section = Sections.section(field)
+        prose(field, Export.section(case_record, section), theirs[section])
+      end
+
+    case unmapped do
+      [] -> rows
+      unmapped -> rows ++ [%{field: :unmapped, ours: nil, theirs: unmapped, status: :unmapped}]
+    end
+  end
 
   defp general_vector(metrics) do
     Enum.find_value(metrics, &(&1.scenario == CaseMetric.general_scenario() and &1.cvss_v4))

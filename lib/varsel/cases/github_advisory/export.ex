@@ -10,8 +10,10 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
   ## What travels
 
     * `title` as `summary`, the assigned CVE ID as `cve_id`, `cvss_v4` (the
-      GENERAL score) as `cvss_vector_string`, CWEs as `cwe_ids`, and `description/1` as
-      `description`.
+      GENERAL score) as `cvss_vector_string`, and CWEs as `cwe_ids`.
+    * Each section field (`Varsel.Cases.GitHubAdvisory.Sections`) as its
+      section of `description`. The section replaces its own body in the
+      advisory's description, and all other content there stays.
     * Credits as `login` and `type`, one per person. GitHub knows people by
       login and gives each person one role. The advisory's own role stands
       for a person it already credits. A person new to it gets the
@@ -33,10 +35,14 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
   alias Varsel.Cases.GitHubAdvisory.Channels
   alias Varsel.Cases.GitHubAdvisory.Import
   alias Varsel.Cases.GitHubAdvisory.People
+  alias Varsel.Cases.GitHubAdvisory.Sections
   alias Varsel.CVE.Advisory
   alias Varsel.CVE.OwnContainer
 
-  @type field :: :title | :description | :cve_id | :cvss_v4 | :weaknesses | :credits | :affected
+  @section_fields Sections.fields()
+
+  @type field ::
+          :title | Sections.field() | :cve_id | :cvss_v4 | :weaknesses | :credits | :affected
 
   @type t :: %{body: %{String.t() => term()}, skipped_credits: [String.t()]}
 
@@ -85,6 +91,17 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
 
   def description(_case_record), do: nil
 
+  @doc "The markdown body of one advisory section of the case, rendered off the preview, or nil."
+  @spec section(Case.t(), Advisory.section()) :: String.t() | nil
+  def section(%{preview: %{cve_record: %{} = cve_record}}, section) do
+    case Advisory.text(OwnContainer.get(cve_record) || %{}, section) do
+      "" -> nil
+      text -> text
+    end
+  end
+
+  def section(_case_record, _section), do: nil
+
   @doc "The vector string of the case's GENERAL score, or nil."
   @spec general_vector(Case.t()) :: String.t() | nil
   def general_vector(%{general_metric: %{cvss_v4: %{vector: vector}}}) when is_binary(vector), do: vector
@@ -95,8 +112,17 @@ defmodule Varsel.Cases.GitHubAdvisory.Export do
 
   defp put_field(export, :cve_id, %{cve_id: cve_id}, _advisory), do: put_present(export, "cve_id", cve_id)
 
-  defp put_field(export, :description, case_record, _advisory) do
-    put_present(export, "description", description(case_record))
+  defp put_field(export, field, case_record, advisory) when field in @section_fields do
+    section = Sections.section(field)
+
+    case section(case_record, section) do
+      nil ->
+        export
+
+      body ->
+        base = export.body["description"] || (advisory && advisory["description"])
+        put_body(export, "description", Sections.splice(base, section, body))
+    end
   end
 
   defp put_field(export, :cvss_v4, case_record, _advisory) do

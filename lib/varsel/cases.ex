@@ -119,9 +119,13 @@ defmodule Varsel.Cases do
     tool :pull_github_advisory, GitHubAdvisoryLink, :pull do
       description """
       Takes the given `fields` of the linked advisory over onto the case:
-      title, cvss_v4, weaknesses, credits, affected. A scalar replaces the
-      case's value. cvss_v4 is the case's GENERAL score. A set gains what the
-      case lacks and never loses an entry.
+      title, the description sections description (the Summary), details,
+      proof_of_concept, workarounds, configurations and solutions, then
+      cvss_v4, weaknesses, credits, affected. A scalar or a section replaces
+      the case's value. A pulled Summary does not keep the "This issue
+      affects" sentence. The impact and references sections cannot be pulled.
+      cvss_v4 is the case's GENERAL score. A set gains what the case lacks
+      and never loses an entry.
       Affected packages arrive with their channels and no version boundaries.
       This is a direct edit, not a proposal, and a content edit: the case has
       to be in draft or review. It writes nothing to GitHub.

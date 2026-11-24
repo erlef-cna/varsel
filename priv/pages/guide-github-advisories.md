@@ -48,9 +48,10 @@ repository without the app needs its owner to install it.
 ## Linking and Comparing
 
 Link an advisory by its URL or GHSA id. The tab then compares the case with
-the advisory, field by field: title, description, CVE ID, CVSS vector, CWEs,
-credits, and the derived ranges of each channel, spelled the way GitHub
-spells them.
+the advisory, field by field: title, each `###` section of the description,
+CVE ID, CVSS vector, CWEs, credits, and the derived ranges of each channel,
+spelled the way GitHub spells them. Description content outside these
+sections shows as a warning and is never pulled.
 
 - **Pull** a field when the advisory is right. A pull adds and replaces
   values on the case and never removes one.

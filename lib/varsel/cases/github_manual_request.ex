@@ -27,6 +27,7 @@ defmodule Varsel.Cases.GitHubManualRequest do
     authorizers: [Ash.Policy.Authorizer],
     data_layer: AshPostgres.DataLayer
 
+  alias Varsel.Cases.GitHubAdvisory.Diff
   alias Varsel.Cases.GitHubManualRequest.Changes.BuildRequest
   alias Varsel.Cases.GitHubManualRequest.Changes.MintToken
   alias Varsel.Cases.GitHubManualRequest.Changes.RecordAnswer
@@ -36,8 +37,8 @@ defmodule Varsel.Cases.GitHubManualRequest do
   alias Varsel.Cases.GitHubManualRequest.Validations.AnswerNamesRequest
   alias Varsel.Cases.Validations.AdvisoryIsFree
 
-  @pullable [:title, :cvss_v4, :weaknesses, :credits, :affected]
-  @pushable [:title, :description, :cve_id, :cvss_v4, :weaknesses, :credits, :affected]
+  @pullable Diff.pullable_fields()
+  @pushable Diff.pushable_fields()
 
   postgres do
     table "github_manual_requests"

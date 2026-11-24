@@ -81,6 +81,13 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
     assert Enum.map(rows, &{&1.field, &1.status}) == [
              {:title, :same},
              {:description, :theirs_only},
+             {:details, :same},
+             {:proof_of_concept, :same},
+             {:impact, :same},
+             {:workarounds, :same},
+             {:configurations, :same},
+             {:solutions, :same},
+             {:references, :same},
              {:cve_id, :same},
              {:cvss_v4, :same},
              {:weaknesses, :same},
@@ -97,41 +104,96 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
            }
   end
 
-  test "the description compares the case's advisory text with the advisory's" do
-    cna = %{
-      "descriptions" => [
-        %{
-          "lang" => "en",
-          "value" => "plain",
-          "supportingMedia" => [
-            %{
-              "base64" => false,
-              "type" => "text/markdown",
-              "value" => "acme_lib passes user input\ninto response headers."
-            }
-          ]
-        }
-      ]
-    }
+  defp markdown_entry(text) do
+    [
+      %{
+        "lang" => "en",
+        "value" => "plain",
+        "supportingMedia" => [%{"base64" => false, "type" => "text/markdown", "value" => text}]
+      }
+    ]
+  end
 
-    preview = %Preview.Result{cve_record: %{"containers" => %{"cna" => cna}}}
+  defp with_cna(cna), do: %{preview: %Preview.Result{cve_record: %{"containers" => %{"cna" => cna}}}}
+
+  test "each description section compares as its own row" do
+    cna = %{
+      "descriptions" => markdown_entry("acme_lib passes user input\ninto response headers."),
+      "solutions" => markdown_entry("Upgrade to 1.2.3."),
+      "references" => [%{"url" => "https://example.com/fix"}]
+    }
 
     advisory =
       Map.put(
         hex_advisory(),
         "description",
-        "### Summary\r\n\r\nacme_lib passes user input into response headers."
+        "### Summary\r\n\r\nacme_lib passes user input into response headers.\r\n\r\n" <>
+          "### Details\r\n\r\nThe header value is not escaped.\r\n\r\n" <>
+          "### Solutions\r\n\r\nUpgrade to 1.2.4."
       )
 
-    rows = Diff.rows(case_record(%{preview: preview}), advisory)
-    assert %{status: :same, ours: "### Summary\n\nacme_lib" <> _} = one(rows, :description)
-    refute Diff.pullable?(one(rows, :description))
-    refute Diff.pushable?(one(rows, :description))
+    rows = Diff.rows(case_record(with_cna(cna)), advisory)
 
-    rows = Diff.rows(case_record(%{preview: preview}), hex_advisory())
-    assert one(rows, :description).status == :differs
-    refute Diff.pullable?(one(rows, :description))
-    assert Diff.pushable?(one(rows, :description))
+    assert %{status: :same, ours: "acme_lib passes user input\ninto response headers."} =
+             one(rows, :description)
+
+    assert %{status: :theirs_only, theirs: "The header value is not escaped."} =
+             one(rows, :details)
+
+    assert Diff.pullable?(one(rows, :details))
+    refute Diff.pushable?(one(rows, :details))
+
+    assert %{status: :differs, ours: "Upgrade to 1.2.3.", theirs: "Upgrade to 1.2.4."} =
+             one(rows, :solutions)
+
+    assert Diff.pullable?(one(rows, :solutions))
+    assert Diff.pushable?(one(rows, :solutions))
+
+    assert %{status: :ours_only} = one(rows, :references)
+    assert Diff.pushable?(one(rows, :references))
+
+    assert one(rows, :proof_of_concept).status == :same
+    refute one(rows, :unmapped)
+  end
+
+  test "impact and references are never pulled" do
+    advisory =
+      Map.put(
+        hex_advisory(),
+        "description",
+        "### Impact\n\nAn attacker splits responses.\n\n### References\n\n* https://example.com"
+      )
+
+    rows = Diff.rows(case_record(with_cna(%{})), advisory)
+
+    assert %{status: :theirs_only} = one(rows, :impact)
+    refute Diff.pullable?(one(rows, :impact))
+    assert %{status: :theirs_only} = one(rows, :references)
+    refute Diff.pullable?(one(rows, :references))
+  end
+
+  test "content outside every section is one unmapped row" do
+    advisory =
+      Map.put(
+        hex_advisory(),
+        "description",
+        "Reported by a scanner.\n\n### Summary\n\nacme_lib passes user input.\n\n## Timeline\n\nMarch."
+      )
+
+    rows = Diff.rows(case_record(with_cna(%{})), advisory)
+
+    assert one(rows, :unmapped) == %{
+             field: :unmapped,
+             ours: nil,
+             theirs: [
+               %{heading: nil, body: "Reported by a scanner."},
+               %{heading: "## Timeline", body: "March."}
+             ],
+             status: :unmapped
+           }
+
+    refute Diff.pullable?(one(rows, :unmapped))
+    refute Diff.pushable?(one(rows, :unmapped))
   end
 
   test "the title differs only when the words do" do

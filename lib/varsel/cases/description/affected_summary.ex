@@ -67,6 +67,34 @@ defmodule Varsel.Cases.Description.AffectedSummary do
     end
   end
 
+  @doc """
+  `prose` without the paragraphs `summarize/1` emits, for a description read
+  back from a published record or advisory. The renderer appends the sentence
+  again on every publish, so keeping it would print it twice.
+
+  The sentence is its own trailing block: a blank-line-separated paragraph in
+  markdown and plain text, a `<p>` on its own line in HTML. A match goes
+  through any wrapping tag and leaves the non-breaking spaces as they are.
+  """
+  @spec strip(String.t()) :: String.t()
+  def strip(prose) when is_binary(prose) do
+    {separator, joiner} =
+      if String.contains?(prose, "</p>"), do: {~r/\n/, "\n"}, else: {~r/\n\s*\n/, "\n\n"}
+
+    prose
+    |> String.split(separator)
+    |> Enum.reject(&summary_paragraph?/1)
+    |> Enum.join(joiner)
+    |> String.trim()
+  end
+
+  defp summary_paragraph?(paragraph) do
+    paragraph
+    |> String.trim()
+    |> String.replace(~r/^<[^>]+>/, "")
+    |> String.starts_with?(["This issue affects ", "It is unknown whether "])
+  end
+
   defp affected_sentence(affected) do
     case affected |> entries("affected") |> clauses() do
       [] -> nil

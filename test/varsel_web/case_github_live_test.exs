@@ -189,10 +189,11 @@ defmodule VarselWeb.CaseGitHubLiveTest do
     assert has_element?(
              lv,
              "#flash-info",
-             "Pulled Title, CWEs, Credits, Affected packages from the advisory."
+             "Pulled Title, Description · Summary, CWEs, Credits, Affected packages from the advisory."
            )
 
     assert has_element?(lv, "#diff-title", "same")
+    assert has_element?(lv, "#diff-description", "same")
     assert has_element?(lv, "#diff-weaknesses", "same")
     assert has_element?(lv, "#diff-credits", "same")
     assert has_element?(lv, "#diff-affected-0", "not derived")

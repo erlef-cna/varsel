@@ -27,6 +27,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
 
   alias AshOban.Checks.AshObanInteraction
   alias Varsel.Cases.Case
+  alias Varsel.Cases.GitHubAdvisory.Diff
   alias Varsel.Cases.GitHubAdvisory.State
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.AddCollaborator
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.FetchAdvisory
@@ -34,6 +35,9 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.Push
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.StoreAdvisory
   alias Varsel.Cases.GitHubAdvisoryLink.Changes.SyncComments
+
+  @pullable Diff.pullable_fields()
+  @pushable Diff.pushable_fields()
 
   postgres do
     table "case_github_advisory_links"
@@ -173,8 +177,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
       argument :fields, {:array, :atom} do
         allow_nil? false
 
-        constraints min_length: 1,
-                    items: [one_of: [:title, :cvss_v4, :weaknesses, :credits, :affected]]
+        constraints min_length: 1, items: [one_of: @pullable]
       end
 
       change Pull
@@ -194,18 +197,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
       argument :fields, {:array, :atom} do
         allow_nil? false
 
-        constraints min_length: 1,
-                    items: [
-                      one_of: [
-                        :title,
-                        :description,
-                        :cve_id,
-                        :cvss_v4,
-                        :weaknesses,
-                        :credits,
-                        :affected
-                      ]
-                    ]
+        constraints min_length: 1, items: [one_of: @pushable]
       end
 
       metadata :skipped_credits, {:array, :string} do

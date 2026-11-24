@@ -46,6 +46,7 @@ defmodule Varsel.Cases.Case.Import do
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.CaseCredit.CreditType
   alias Varsel.Cases.CaseMetric
+  alias Varsel.Cases.Description.AffectedSummary
 
   @doc """
   Case params extracted from a full CVE record (`cve_json`).
@@ -121,40 +122,13 @@ defmodule Varsel.Cases.Case.Import do
     end)
   end
 
-  # The published description carries the derived "This issue affects …" tail
-  # (see Varsel.Cases.Description.AffectedSummary), which the renderer appends
-  # again on every publish. Taking it along would publish it twice — and this
-  # case has no affected packages yet, so the sentence describes versions it
-  # can no longer justify.
+  # This case has no affected packages yet, so the derived sentence would
+  # describe versions it can no longer justify.
   defp description_markdown(cna) do
     case prose_markdown(cna["descriptions"]) do
       nil -> nil
-      markdown -> markdown |> strip_affected_summary() |> blank_to_nil()
+      markdown -> markdown |> AffectedSummary.strip() |> blank_to_nil()
     end
-  end
-
-  # The summary is appended as its own trailing block. In markdown and plain
-  # text that is a blank-line-separated paragraph; in the HTML fallback it is a
-  # <p> on its own line, so both split points are honoured.
-  defp strip_affected_summary(prose) do
-    {separator, joiner} =
-      if String.contains?(prose, "</p>"), do: {~r/\n/, "\n"}, else: {~r/\n\s*\n/, "\n\n"}
-
-    prose
-    |> String.split(separator)
-    |> Enum.reject(&affected_summary_paragraph?/1)
-    |> Enum.join(joiner)
-    |> String.trim()
-  end
-
-  # Matches both sentences AffectedSummary can emit, through any wrapping tag
-  # the HTML fallback carries, and with the non-breaking spaces it binds
-  # versions with left as-is.
-  defp affected_summary_paragraph?(paragraph) do
-    paragraph
-    |> String.trim()
-    |> String.replace(~r/^<[^>]+>/, "")
-    |> String.starts_with?(["This issue affects ", "It is unknown whether "])
   end
 
   ## ------------------------------------------------------------ scalar fields

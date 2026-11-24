@@ -82,9 +82,30 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
              "### Summary\n\nacme_lib passes user input into response headers.\n\n" <>
                "### Solutions\n\nUpgrade to 1.2.3.\n\n" <>
                "### References\n\n* The fix: https://example.com/fix"
+  end
 
-    assert %{body: %{"description" => "### Summary" <> _}} =
-             Export.body(case_record(%{preview: preview(cna)}), [:description])
+  test "a section field writes its section into the advisory's description and keeps the rest" do
+    cna = %{
+      "descriptions" => markdown("acme_lib passes user input into response headers."),
+      "solutions" => markdown("Upgrade to 1.2.3.")
+    }
+
+    advisory = %{
+      "description" => "Intro.\r\n\r\n### Summary\r\n\r\nOld.\r\n\r\n## Timeline\r\n\r\nMarch."
+    }
+
+    assert Export.body(
+             case_record(%{preview: preview(cna)}),
+             [:description, :solutions],
+             advisory
+           ).body ==
+             %{
+               "description" =>
+                 "Intro.\n\n### Summary\n\nacme_lib passes user input into response headers.\n\n" <>
+                   "## Timeline\n\nMarch.\n\n### Solutions\n\nUpgrade to 1.2.3."
+             }
+
+    assert Export.body(case_record(%{preview: preview(cna)}), [:details], advisory).body == %{}
   end
 
   test "a case without prose has no description" do

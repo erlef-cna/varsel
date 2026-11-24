@@ -63,17 +63,21 @@ defmodule Varsel.CVE.Advisory do
     Enum.join(for_result, "\n\n")
   end
 
-  defp text(cna, :summary), do: cna["descriptions"] |> english_entry() |> markdown()
-  defp text(cna, :details), do: cna["x_technicalAnalysis"] |> english_entry() |> markdown()
-  defp text(cna, :proof_of_concept), do: cna["x_proofOfConcept"] |> english_entry() |> markdown()
-  defp text(cna, :workarounds), do: cna["workarounds"] |> english_entry() |> markdown()
-  defp text(cna, :configurations), do: cna["configurations"] |> english_entry() |> markdown()
-  defp text(cna, :solutions), do: cna["solutions"] |> english_entry() |> markdown()
+  @doc "The markdown body of one section of a CNA container, empty when the container has none."
+  @spec text(map(), section()) :: String.t()
+  def text(cna, section)
+
+  def text(cna, :summary), do: cna["descriptions"] |> english_entry() |> markdown()
+  def text(cna, :details), do: cna["x_technicalAnalysis"] |> english_entry() |> markdown()
+  def text(cna, :proof_of_concept), do: cna["x_proofOfConcept"] |> english_entry() |> markdown()
+  def text(cna, :workarounds), do: cna["workarounds"] |> english_entry() |> markdown()
+  def text(cna, :configurations), do: cna["configurations"] |> english_entry() |> markdown()
+  def text(cna, :solutions), do: cna["solutions"] |> english_entry() |> markdown()
 
   # One paragraph per impact entry that carries authored prose. A description
   # that only restates the entry's CAPEC id is the label the render emits for
   # an entry without any (see `Varsel.Cases.Case.Calculations.Preview`).
-  defp text(cna, :impact) do
+  def text(cna, :impact) do
     for_result =
       for impact <- List.wrap(cna["impacts"]),
           entry = english_entry(impact["descriptions"]),
@@ -86,7 +90,7 @@ defmodule Varsel.CVE.Advisory do
     Enum.join(for_result, "\n\n")
   end
 
-  defp text(cna, :references) do
+  def text(cna, :references) do
     for_result =
       for reference <- List.wrap(cna["references"]), url = reference["url"], is_binary(url) do
         case reference["name"] do
