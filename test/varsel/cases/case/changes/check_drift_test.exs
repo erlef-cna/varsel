@@ -162,6 +162,50 @@ defmodule Varsel.Cases.Case.Changes.CheckDriftTest do
     assert reload(case_record).record_drift == :drifted
   end
 
+  defp stale_record(case_record) do
+    cve_record = Ash.get!(CveRecord, case_record.cve_record_id, authorize?: false)
+    container = %{OwnContainer.get(cve_record.cve_json) | "title" => "An older rendering"}
+    Ash.Seed.update!(cve_record, %{cve_json: OwnContainer.put(cve_record.cve_json, container)})
+  end
+
+  test "a drift the previous check did not find emits :record_drifted", %{
+    case_record: case_record
+  } do
+    stale_record(case_record)
+    case_id = case_record.id
+
+    assert_emits_signal(Cases.Signals, :record_drifted, %{case_id: ^case_id}, fn ->
+      run_check()
+    end)
+  end
+
+  test "a blocked render after an in-sync check emits :record_drifted", %{
+    case_record: case_record
+  } do
+    Ash.Seed.update!(case_record, %{record_drift: :in_sync})
+    remove_metrics(case_record)
+    case_id = case_record.id
+
+    assert_emits_signal(Cases.Signals, :record_drifted, %{case_id: ^case_id}, fn ->
+      run_check()
+    end)
+
+    assert reload(case_record).record_drift == :blocked
+  end
+
+  test "a case already out of sync emits nothing", %{case_record: case_record} do
+    stale_record(case_record)
+    Ash.Seed.update!(case_record, %{record_drift: :failed})
+
+    refute_emits_signal(Cases.Signals, :record_drifted, fn -> run_check() end)
+    assert reload(case_record).record_drift == :drifted
+  end
+
+  test "a case in sync emits nothing", %{case_record: case_record} do
+    refute_emits_signal(Cases.Signals, :record_drifted, fn -> run_check() end)
+    assert reload(case_record).record_drift == :in_sync
+  end
+
   test "a date_public before MITRE's publication is not drift", %{case_record: case_record} do
     case_record = Ash.Seed.update!(case_record, %{date_public: ~U[2026-01-15 09:30:00Z]})
     cve_record = Ash.get!(CveRecord, case_record.cve_record_id, authorize?: false)

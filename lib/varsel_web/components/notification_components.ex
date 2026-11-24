@@ -56,6 +56,7 @@ defmodule VarselWeb.NotificationComponents do
       tone: :review
     ],
     report_submitted: [label: "New reports", icon: "hero-inbox-arrow-down", tone: :act],
+    record_drifted: [label: "Drifted records", icon: "hero-arrows-right-left", tone: :act],
     mentioned: [label: "Mentions", icon: "hero-at-symbol", tone: :mention],
     case_assigned: [label: "Added to a case", icon: "hero-user-plus", tone: :addressed],
     proposal_opened: [label: "Proposals", icon: "hero-pencil-square", tone: :suggestion],
@@ -85,7 +86,7 @@ defmodule VarselWeb.NotificationComponents do
   How much a kind asks of the viewer, which sets the colour of its icon:
 
     * `:review`: a case waits on their review, or on any POC's
-    * `:act`: a new report waits to be triaged
+    * `:act`: a new report waits to be triaged, or a published record drifted
     * `:mention`: someone asked them something in a comment
     * `:addressed`: it adds them to a case
     * `:suggestion`: a proposal awaiting a decision
@@ -336,10 +337,11 @@ defmodule VarselWeb.NotificationComponents do
   defp toggle_icon(false), do: "hero-envelope"
 
   @doc """
-  Where a notification row leads: its case, and a mention to the
-  comments it was made in.
+  Where a notification row leads: its case, a mention to the comments it
+  was made in, and a drift to the case's diff against its CVE record.
   """
   @spec subject_path(%{kind: Kind.t(), case_id: Ash.UUID.t()}) :: String.t()
   def subject_path(%{kind: :mentioned, case_id: case_id}), do: ~p"/cases/#{case_id}/comments"
+  def subject_path(%{kind: :record_drifted, case_id: case_id}), do: ~p"/cases/#{case_id}/cve/diff"
   def subject_path(%{case_id: case_id}), do: ~p"/cases/#{case_id}"
 end
