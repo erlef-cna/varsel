@@ -304,6 +304,30 @@ defmodule Varsel.Cases.GitHubAdvisory.DiffTest do
            ]
   end
 
+  for ecosystem <- ["", "other"] do
+    test "an entry with ecosystem #{inspect(ecosystem)} matches a service channel by its domain" do
+      service = %PackageChannel{kind: :service, domain: "hex.pm", version_type: :date}
+
+      packages = [
+        package_with("hexpm", [
+          {service, [github_range(">= 2016-02-23, < 2026-11-23", ["2026-11-23"])]}
+        ])
+      ]
+
+      entry = %{
+        "package" => %{"ecosystem" => unquote(ecosystem), "name" => "hex.pm"},
+        "patched_versions" => "2026-11-23",
+        "vulnerable_functions" => [],
+        "vulnerable_version_range" => ">= 2016-02-23, < 2026-11-23"
+      }
+
+      advisory = Map.put(hex_advisory(), "vulnerabilities", [entry])
+      rows = Diff.rows(case_record(%{affected_packages: packages}), advisory)
+
+      assert Enum.map(by_field(rows, :affected), &{&1.package, &1.status}) == [{"hex.pm", :same}]
+    end
+  end
+
   test "the entries that name one channel compare as one row" do
     packages = [
       package_with("acme_lib", [

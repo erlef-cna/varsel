@@ -225,6 +225,20 @@ defmodule Varsel.Cases.GitHubAdvisory.ExportTest do
     assert package == %{"ecosystem" => "other", "name" => "ghcr.io/acme/acme_lib"}
   end
 
+  test "a service is named by its domain" do
+    packages = [
+      package("hexpm", [
+        {%PackageChannel{kind: :service, domain: "hex.pm", version_type: :date},
+         [github_range(">= 2016-02-23, < 2026-11-23", ["2026-11-23"])]}
+      ])
+    ]
+
+    assert %{body: %{"vulnerabilities" => [%{"package" => package}]}} =
+             Export.body(case_record(%{affected_packages: packages}), [:affected])
+
+    assert package == %{"ecosystem" => "other", "name" => "hex.pm"}
+  end
+
   test "a channel with a purl namespace is named namespace/name" do
     packages = [
       package("gleam", [

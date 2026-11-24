@@ -18,6 +18,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Channels do
   matches a channel or a product that carries the name. Names compare
   case-insensitively.
 
+  A service is named by its domain (`hex.pm`).
   An OCI image is named by its `repository_url` (`ghcr.io/gleam-lang/gleam`),
   since its bare name does not tell registries apart. Any other channel with a
   purl namespace is named `namespace/name` (`gleam.run/gleam`).
@@ -91,6 +92,8 @@ defmodule Varsel.Cases.GitHubAdvisory.Channels do
   end
 
   def same_name?(_name, _theirs), do: false
+
+  defp github_name(%{kind: :service, domain: domain}), do: domain
 
   defp github_name(%{purl_type: "oci", qualifiers: %{"repository_url" => repository_url}}) when is_binary(repository_url),
     do: repository_url
