@@ -163,7 +163,12 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecordTest do
     case_record = Ash.get!(Cases.Case, case_record.id, authorize?: false)
     assert case_record.state == :published
     assert %DateTime{} = case_record.published_at
-    assert case_record.date_public == case_record.published_at
+    assert %DateTime{} = case_record.date_public
+
+    {:ok, sent, 0} =
+      DateTime.from_iso8601(get_in(cve_record.cve_json, ["containers", "cna", "datePublic"]))
+
+    assert DateTime.compare(sent, case_record.date_public) == :eq
   end
 
   test "a date_public set by hand survives the publish", %{

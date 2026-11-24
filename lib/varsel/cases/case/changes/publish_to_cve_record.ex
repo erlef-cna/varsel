@@ -38,7 +38,12 @@ defmodule Varsel.Cases.Case.Changes.PublishToCveRecord do
 
     with :ok <- require_cve_record(case_record),
          {:ok, refreshed} <- Varsel.Cases.refresh_case_derivation(case_record, actor: actor),
-         {:ok, %{preview: preview} = loaded} <- Ash.load(refreshed, loads, actor: actor),
+         refreshed = %{
+           refreshed
+           | date_public: Ash.Changeset.get_attribute(changeset, :date_public)
+         },
+         {:ok, %{preview: preview} = loaded} <-
+           Ash.load(refreshed, loads, actor: actor, reuse_values?: true),
          :ok <- check_blockers(preview.blockers),
          :ok <- check_validation(loaded.validation),
          :ok <- check_change(require_change?, loaded) do
