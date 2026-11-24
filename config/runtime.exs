@@ -190,6 +190,10 @@ if config_env() == :prod do
     customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
   ]
 
+  # Derived so that Ash never signs keysets with the key Phoenix signs with.
+  config :ash,
+    keyset_signing_secret: :crypto.mac(:hmac, :sha256, secret_key_base, "ash keyset signing")
+
   # Deliver mail over SMTP in production (adapter needs :gen_smtp).
   config :varsel, Varsel.Mailer,
     adapter: Swoosh.Adapters.SMTP,

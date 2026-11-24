@@ -4,7 +4,10 @@
 
 import Config
 
-config :ash, policies: [show_policy_breakdowns?: true], disable_async?: true
+config :ash,
+  policies: [show_policy_breakdowns?: true],
+  disable_async?: true,
+  keyset_signing_secret: "BHf09/0Ew74BZkVVjzKLXXHTbHXlBy5a2Rr+aUpJHK8"
 
 config :ash_authentication,
        :http_adapter,

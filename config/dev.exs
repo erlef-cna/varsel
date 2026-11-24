@@ -4,7 +4,9 @@
 
 import Config
 
-config :ash, policies: [show_policy_breakdowns?: true]
+config :ash,
+  policies: [show_policy_breakdowns?: true],
+  keyset_signing_secret: "0ChVUVNpbUGNCHEgB5yC7+V9Rk6z1Cur/rNnUZaIi7E"
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
