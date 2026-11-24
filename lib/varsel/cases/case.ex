@@ -672,6 +672,7 @@ defmodule Varsel.Cases.Case do
       require_atomic? false
 
       change transition_state(:publishing)
+      change Varsel.Cases.Case.Changes.DefaultDatePublic
       change PublishToCveRecord
     end
 

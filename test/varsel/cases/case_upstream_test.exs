@@ -283,9 +283,7 @@ defmodule Varsel.Cases.CaseUpstreamTest do
       assert OwnContainer.get(cve_record.cve_json)["title"] ==
                "brotli heap overflow reaches acme_lib"
 
-      # mark_published stamps date_public, so only a fresh render carries datePublic.
-      assert case_record.published_container ==
-               Map.delete(OwnContainer.get(case_record.preview.cve_record), "datePublic")
+      assert case_record.published_container == OwnContainer.get(case_record.preview.cve_record)
     end
 
     test "derives the OSV document from the enrichment", %{poc: poc, case: case_record} do
