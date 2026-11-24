@@ -44,7 +44,11 @@ defmodule VarselWeb.CaseRecordLive do
         advisory_sections: Advisory.keys()
       )
       |> assign_tab()
-      |> CaseLifecycle.mount(id, load: [:cve_id, :cve_record], after_fetch: &after_fetch/2)
+      |> CaseLifecycle.mount(id,
+        load: [:cve_id, :cve_record],
+        after_fetch: &after_fetch/2,
+        marks_read: [:record_drifted]
+      )
       |> render_preview()
 
     {:ok, socket}

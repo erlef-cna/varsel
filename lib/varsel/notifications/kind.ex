@@ -42,6 +42,11 @@ defmodule Varsel.Notifications.Kind do
         label: "Case published",
         description: "A case was published as a CVE record."
       ],
+      record_drifted: [
+        label: "Record drifted",
+        description:
+          "A published case no longer matches its published CVE or OSV record, or cannot be checked against them."
+      ],
       case_assigned: [
         label: "Added to a case",
         description: "A user was granted access to a case."
@@ -60,6 +65,7 @@ defmodule Varsel.Notifications.Kind do
   def audience(:mentioned), do: :mentioned
   def audience(:proposal_opened), do: :assigned
   def audience(:case_published), do: :assigned
+  def audience(:record_drifted), do: :reviewers
   def audience(:case_assigned), do: :recipient
 
   @doc """

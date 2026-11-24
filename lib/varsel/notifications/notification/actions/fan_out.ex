@@ -61,6 +61,9 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   defp event(%Cases.Signals.CasePublished{} = signal),
     do: %{kind: :case_published, case_id: signal.case_id, actor_id: signal.actor_id}
 
+  defp event(%Cases.Signals.RecordDrifted{} = signal),
+    do: %{kind: :record_drifted, case_id: signal.case_id, actor_id: nil}
+
   defp event(%Cases.Signals.CommentPosted{} = signal),
     do: %{kind: :comment_posted, case_id: signal.case_id, actor_id: signal.actor_id}
 

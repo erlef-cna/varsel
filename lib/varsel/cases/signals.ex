@@ -63,6 +63,11 @@ defmodule Varsel.Cases.Signals do
       argument :actor_id, :uuid, description: "The user who marked it published, when a user did."
     end
 
+    signal :record_drifted do
+      description "A drift check found a published case drifted, blocked or uncheckable, and the previous check found it in sync or had not run."
+      argument :case_id, :uuid, allow_nil?: false
+    end
+
     signal :comment_posted do
       description "A comment was written on a case, here or on its linked GitHub advisory."
       argument :case_id, :uuid, allow_nil?: false

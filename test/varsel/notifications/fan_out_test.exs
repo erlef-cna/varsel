@@ -377,6 +377,28 @@ defmodule Varsel.Notifications.FanOutTest do
     end
   end
 
+  describe ":record_drifted" do
+    test "notifies the POCs assigned to the case" do
+      poc = Fixtures.register_user("fanout_drift_poc", :poc)
+      other_poc = Fixtures.register_user("fanout_drift_other_poc", :poc)
+      supporter = Fixtures.register_user("fanout_drift_supporter", :supporter)
+
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+      drain()
+
+      :ok =
+        react_to_signal(Cases.Signals, :record_drifted, %{case_id: case_record.id}, only: Notification)
+
+      drain()
+
+      assert [%Notification{case_id: case_id}] = notifications_for(poc, :record_drifted)
+      assert case_id == case_record.id
+      assert [] = notifications_for(other_poc, :record_drifted)
+      assert [] = notifications_for(supporter, :record_drifted)
+    end
+  end
+
   describe "preferences" do
     test "in_app: false suppresses the notification" do
       poc = Fixtures.register_user("fanout_pref_inapp_poc", :poc)

@@ -484,6 +484,10 @@ defmodule Varsel.Cases.Case do
       accept []
       require_atomic? false
       change Varsel.Cases.Case.Changes.CheckDrift
+
+      emit Signals, :record_drifted,
+        dynamic?: true,
+        description: "When the check finds the case out of sync and the previous check found it in sync or had not run."
     end
 
     update :recheck_drift do
