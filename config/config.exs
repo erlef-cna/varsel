@@ -12,7 +12,7 @@
 import Config
 
 config :ash,
-  allow_forbidden_field_for_relationships_by_default?: true,
+  allow_forbidden_field_for_relationships_by_default: true,
   include_embedded_source_by_default?: false,
   show_keysets_for_all_actions?: false,
   default_page_type: :keyset,
@@ -25,7 +25,9 @@ config :ash,
   redact_sensitive_values_in_errors?: true,
   known_types: [AshPostgres.Timestamptz, AshPostgres.TimestamptzUsec, Varsel.Types.CVSS],
   custom_expressions: [Varsel.Expr.Coalesce, Varsel.Expr.Md5],
-  default_string_length_count: :codepoints
+  default_string_length_count: :codepoints,
+  infer_generic_action_reactors?: false,
+  many_to_many_destroy_destination_on_match?: true
 
 # The OAuth sign-in and the GitHub token refresh
 # (`Varsel.Accounts.UserIdentity.Changes.RefreshAccessToken`) both reach the
@@ -65,6 +67,8 @@ config :logger, :default_formatter,
 # (`Varsel.Cases.Markdown`, `VarselWeb.CoreComponents.code_block/1`), so the
 # variant with a second Lumis engine inside the NIF stays out.
 config :mdex_native, syntax_highlighter: nil
+
+config :phoenix, :filter_parameters, ["password", "token"]
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
