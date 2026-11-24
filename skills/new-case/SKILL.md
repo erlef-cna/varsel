@@ -314,7 +314,7 @@ Step 6 where the reasoning travels with it.
 
 When the input is an advisory, call `open_case_from_github_advisory` with its URL or GHSA id
 instead of `open_case`. It opens the case, links it to the advisory, and fills in what the
-advisory states: title, description, CVSS v4 vector as the GENERAL score, publication date, CWEs, credits by GitHub
+advisory states: title, the description sections (Summary, Details, PoC, Workarounds, Configurations, Solutions, each into its own field), CVSS v4 vector as the GENERAL score, publication date, CWEs, credits by GitHub
 login, and each affected package with its channels. All of that is written directly, with no
 proposal, so say in the summary that the case was opened from the advisory and what it took
 over. The linked advisory renders its own reference (Step 6).
@@ -322,7 +322,7 @@ over. The linked advisory renders its own reference (Step 6).
 For a case that already exists and is not yet linked, `link_github_advisory` links it, then
 `get_case_github_advisory` shows the diff of the case against the advisory, one row per field
 with a `status`, and `pull_github_advisory` with `fields` takes over what the diff shows the
-case lacks (`title`, `cvss_v4`, `weaknesses`, `credits`, `affected`). A pull is a direct edit,
+case lacks (`title`, the description sections `description` (the Summary), `details`, `proof_of_concept`, `workarounds`, `configurations` and `solutions`, then `cvss_v4`, `weaknesses`, `credits`, `affected`). The `impact` and `references` sections cannot be pulled. An `unmapped` row lists advisory content outside every section, which no pull takes; report it to the user. A pull is a direct edit,
 not a proposal, so pull only what the diff shows and say what you pulled in the summary.
 
 Both take **no version boundary** from the advisory. The introducing and fix commits stay yours

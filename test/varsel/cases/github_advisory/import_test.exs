@@ -18,6 +18,40 @@ defmodule Varsel.Cases.GitHubAdvisory.ImportTest do
              }
     end
 
+    test "takes each section into its field and drops the affects sentence from the summary" do
+      description = """
+      ### Summary
+
+      acme_lib passes user input into response headers.
+
+      This issue affects acme_lib: from 1.0.0 before 1.2.3.
+
+      ### Details
+
+      The header value is not escaped.
+
+      ### PoC
+
+      curl example
+
+      ### Impact
+
+      Response splitting.
+
+      ### Solutions
+
+      Upgrade to 1.2.3.
+      """
+
+      assert Import.case_params(Map.put(hex_advisory(), "description", description)) == %{
+               title: "Header injection in acme_lib",
+               description_md: "acme_lib passes user input into response headers.",
+               technical_analysis_md: "The header value is not escaped.",
+               proof_of_concept_md: "curl example",
+               solutions_md: "Upgrade to 1.2.3."
+             }
+    end
+
     test "leaves out what the advisory lacks: an unpublished date" do
       assert Import.case_params(hex_advisory()) == %{
                title: "Header injection in acme_lib",

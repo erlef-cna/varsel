@@ -42,10 +42,11 @@ defmodule VarselWeb.Storybook.Case.AdvisoryDiff do
             },
             %{
               field: :description,
-              ours: "### Summary\n\nThe inets HTTP server allocates without limit.\n\n### Solutions\n\nUpgrade.",
+              ours: "The inets HTTP server allocates memory without limit.",
               theirs: "The inets HTTP server allocates without limit.",
               status: :differs
             },
+            %{field: :solutions, ours: "Upgrade to 29.0.6.", theirs: nil, status: :ours_only},
             %{field: :cve_id, ours: "CVE-2026-48858", theirs: nil, status: :ours_only},
             %{field: :cvss_v4, ours: nil, theirs: @vector, status: :theirs_only},
             %{field: :weaknesses, ours: [770, 400], theirs: [770], status: :differs},
@@ -111,6 +112,45 @@ defmodule VarselWeb.Storybook.Case.AdvisoryDiff do
               ours: nil,
               theirs: %{ranges: [">= 1.0.0, < 1.2.3"], patched: ["1.2.3"]},
               status: :theirs_only
+            }
+          ]
+        }
+      },
+      %Variation{
+        id: :sections,
+        description:
+          "Each description section is its own row. Content outside every section shows as a " <>
+            "warning with its heading. Impact pushes but never pulls.",
+        attributes: %{
+          can_pull: true,
+          can_push: true,
+          rows: [
+            %{
+              field: :description,
+              ours: "acme_lib passes user input into response headers.",
+              theirs: "acme_lib passes user input into response headers.",
+              status: :same
+            },
+            %{
+              field: :details,
+              ours: nil,
+              theirs: "The header value is not escaped before it is written.",
+              status: :theirs_only
+            },
+            %{
+              field: :impact,
+              ours: "An attacker can split HTTP responses.",
+              theirs: "Response splitting.",
+              status: :differs
+            },
+            %{
+              field: :unmapped,
+              ours: nil,
+              theirs: [
+                %{heading: nil, body: "Reported through the bug bounty."},
+                %{heading: "## Timeline", body: "* 2026-11-01 reported\n* 2026-11-20 fixed"}
+              ],
+              status: :unmapped
             }
           ]
         }

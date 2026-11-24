@@ -9,8 +9,10 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
 
   ## What transfers
 
-  `summary` becomes the title. `description` becomes the description
-  markdown. The CVSS **v4** vector becomes the case's GENERAL score, since a
+  `summary` becomes the title. Each section of `description`
+  (`Varsel.Cases.GitHubAdvisory.Sections`) with a case attribute becomes
+  that attribute. The summary loses the "This issue affects …" sentence a
+  publish appends again. The CVSS **v4** vector becomes the case's GENERAL score, since a
   case is v4-only. `published_at` becomes the public date. CWEs come from `cwe_ids`.
   Credits come from `credits_detailed`, or from `credits` on a global entry,
   with their GitHub login and role. Declined credits are dropped.
@@ -35,8 +37,10 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.CaseCredit.CreditType
   alias Varsel.Cases.CaseMetric
+  alias Varsel.Cases.Description.AffectedSummary
   alias Varsel.Cases.GitHubAdvisory
   alias Varsel.Cases.GitHubAdvisory.Ranges
+  alias Varsel.Cases.GitHubAdvisory.Sections
 
   @typedoc "A person GitHub credits: a login and every role GitHub gives it."
   @type credit :: %{login: String.t(), credit_types: [CreditType.t(), ...]}
@@ -81,9 +85,22 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
   def case_params(advisory) when is_map(advisory) do
     %{}
     |> put_present(:title, blank_to_nil(advisory["summary"]))
-    |> put_present(:description_md, prose(advisory["description"]))
+    |> Map.merge(section_params(advisory["description"]))
     |> put_present(:date_public, GitHubAdvisory.time(advisory["published_at"]))
   end
+
+  defp section_params(description) do
+    %{sections: sections} = Sections.parse(description)
+
+    for field <- Sections.pullable_fields(),
+        body = section_body(field, sections[Sections.section(field)]),
+        into: %{},
+        do: {Sections.attribute(field), body}
+  end
+
+  defp section_body(_field, nil), do: nil
+  defp section_body(:description, body), do: body |> AffectedSummary.strip() |> blank_to_nil()
+  defp section_body(_field, body), do: body
 
   @doc """
   The child rows read from the advisory: `metrics` as CaseMetric params (the
@@ -128,15 +145,6 @@ defmodule Varsel.Cases.GitHubAdvisory.Import do
   end
 
   def blank_to_nil(_value), do: nil
-
-  # GitHub's editor saves prose with CRLF line endings. The case, its diff and
-  # its rendered record speak LF.
-  defp prose(text) do
-    case blank_to_nil(text) do
-      nil -> nil
-      text -> String.replace(text, "\r\n", "\n")
-    end
-  end
 
   defp metrics(advisory) do
     case advisory |> get_in(["cvss_severities", "cvss_v4", "vector_string"]) |> blank_to_nil() do

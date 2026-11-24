@@ -7,8 +7,10 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
   Takes the chosen fields of the stored advisory over onto the case, through
   the case's own actions as the actor, inside the link's `:pull` update.
 
-  A scalar (title, CVSS) replaces the case's value. The CVSS vector is the
-  case's GENERAL score. A set (CWEs, credits,
+  A scalar (title, a description section, CVSS) replaces the case's value.
+  A description section writes its case attribute
+  (`Varsel.Cases.GitHubAdvisory.Sections`). The CVSS vector is the case's
+  GENERAL score. A set (CWEs, credits,
   affected packages) gains what the advisory has and the case lacks, and
   loses nothing. Taking something away is a person's call on the workspace.
   An affected package is matched the way the diff matches it and arrives
@@ -25,8 +27,9 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
   alias Varsel.Cases.GitHubAdvisory.Export
   alias Varsel.Cases.GitHubAdvisory.Import
   alias Varsel.Cases.GitHubAdvisory.People
+  alias Varsel.Cases.GitHubAdvisory.Sections
 
-  @scalars [:title]
+  @scalars [:title | Sections.pullable_fields()]
 
   @impl Ash.Resource.Change
   def change(changeset, _opts, context) do
@@ -49,12 +52,16 @@ defmodule Varsel.Cases.GitHubAdvisoryLink.Changes.Pull do
   end
 
   defp pull_scalars(fields, case_record, advisory, opts) do
-    params = advisory |> Import.case_params() |> Map.take(Enum.filter(fields, &(&1 in @scalars)))
+    attributes = for field <- fields, field in @scalars, do: attribute(field)
+    params = advisory |> Import.case_params() |> Map.take(attributes)
 
     if map_size(params) == 0,
       do: {:ok, case_record},
       else: Cases.edit_case(case_record, params, opts)
   end
+
+  defp attribute(:title), do: :title
+  defp attribute(field), do: Sections.attribute(field)
 
   defp pull_sets(fields, case_record, advisory, opts) do
     children = Import.child_params(advisory)

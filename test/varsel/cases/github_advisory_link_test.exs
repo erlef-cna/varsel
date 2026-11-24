@@ -211,6 +211,40 @@ defmodule Varsel.Cases.GitHubAdvisoryLinkTest do
       assert reload(case_record, poc).title == "Header injection in acme_lib"
     end
 
+    test "a description section replaces its field and leaves the others", %{
+      poc: poc,
+      case: case_record,
+      link: link
+    } do
+      description =
+        "### Summary\r\n\r\nacme_lib passes user input into response headers.\r\n\r\n" <>
+          "This issue affects acme_lib: before 1.2.3.\r\n\r\n### Details\r\n\r\nNot escaped."
+
+      GitHubApi.stub_advisory(Map.put(hex_advisory(), "description", description))
+      link = Cases.refresh_github_advisory_link!(link, actor: poc)
+
+      Cases.edit_case!(
+        case_record,
+        %{description_md: "Working summary.", workarounds_md: "Strip CRLF."},
+        actor: poc
+      )
+
+      assert {:ok, _link} = Cases.pull_github_advisory(link, [:description, :details], actor: poc)
+
+      reloaded = reload(case_record, poc)
+      assert reloaded.description_md == "acme_lib passes user input into response headers."
+      assert reloaded.technical_analysis_md == "Not escaped."
+      assert reloaded.workarounds_md == "Strip CRLF."
+    end
+
+    test "impact and references cannot be pulled", %{poc: poc, link: link} do
+      assert {:error, %Invalid{}} =
+               Cases.pull_github_advisory(link, [:impact], actor: poc)
+
+      assert {:error, %Invalid{}} =
+               Cases.pull_github_advisory(link, [:references], actor: poc)
+    end
+
     test "the scalars arrive together", %{poc: poc, case: case_record, link: link} do
       GitHubApi.stub_advisory(put_in(hex_advisory(), ["cvss_severities", "cvss_v4", "vector_string"], @vector))
 
