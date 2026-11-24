@@ -301,6 +301,7 @@ defmodule Varsel.Cases.GitHubAdvisory.Diff do
     }
   end
 
-  defp package_label(%{ecosystem: nil, name: name}), do: name
+  defp package_label(%{ecosystem: ecosystem, name: name}) when ecosystem in [nil, "other"], do: name
+
   defp package_label(%{ecosystem: ecosystem, name: name}), do: "#{ecosystem}/#{name}"
 end
