@@ -152,6 +152,7 @@ defmodule Varsel.CVE.OsvConverterTest do
              ]
 
       assert osv["database_specific"] == %{
+               "$schema" => "https://cna.erlef.org/schemas/osv/extensions-0.1.0.json",
                "cwe_ids" => ["CWE-863"],
                "capec_ids" => ["CAPEC-180"],
                "cpe_ids" => ["cpe:2.3:a:ash-project:ash:*:*:*:*:*:*:*:*"]
@@ -594,6 +595,91 @@ defmodule Varsel.CVE.OsvConverterTest do
                %{"fixed" => "d9454dbccbaaad4b8796095c8e653b71b066dfaf"},
                %{"fixed" => "9b7b5431260e05a16eec3ecd530a232d0995d932"}
              ]
+    end
+  end
+
+  describe "convert/1 OSV extensions" do
+    @extensions_schema_url "https://cna.erlef.org/schemas/osv/extensions-0.1.0.json"
+
+    @extensions_schema "priv/static/schemas/osv/extensions-0.1.0.json"
+                       |> File.read!()
+                       |> JSON.decode!()
+                       |> ExJsonSchema.Schema.resolve()
+
+    @components %{
+      "programFiles" => ["lib/ash/actions/read.ex"],
+      "modules" => ["'Elixir.Ash.Actions.Read'"],
+      "programRoutines" => [%{"name" => "'Elixir.Ash.Actions.Read':run/3"}]
+    }
+
+    @expected_specific %{
+      "$schema" => @extensions_schema_url,
+      "affected" => %{
+        "program_files" => ["lib/ash/actions/read.ex"],
+        "modules" => ["'Elixir.Ash.Actions.Read'"],
+        "program_routines" => ["'Elixir.Ash.Actions.Read':run/3"]
+      }
+    }
+
+    test "the top-level database_specific conforms to the schema" do
+      assert {:ok, osv} = OsvConverter.convert(@cve_json)
+
+      assert osv["database_specific"]["$schema"] == @extensions_schema_url
+      assert :ok = ExJsonSchema.Validator.validate(@extensions_schema, osv["database_specific"])
+    end
+
+    test "puts hex components in database_specific and ecosystem_specific" do
+      cve_json = put_cna(@cve_json, "affected", [Map.merge(@hex_affected, @components)])
+
+      assert {:ok, %{"affected" => [entry]}} = OsvConverter.convert(cve_json)
+
+      assert entry["database_specific"] == @expected_specific
+      assert entry["ecosystem_specific"] == @expected_specific
+      assert :ok = ExJsonSchema.Validator.validate(@extensions_schema, entry["database_specific"])
+    end
+
+    test "puts git and npm components in database_specific only" do
+      npm_affected = %{
+        "collectionURL" => "https://registry.npmjs.org",
+        "packageName" => "phoenix",
+        "defaultStatus" => "affected"
+      }
+
+      cve_json =
+        put_cna(@cve_json, "affected", [
+          Map.merge(npm_affected, @components),
+          Map.merge(@git_affected, @components)
+        ])
+
+      assert {:ok, %{"affected" => [npm_entry, git_entry]}} = OsvConverter.convert(cve_json)
+
+      for entry <- [npm_entry, git_entry] do
+        assert entry["database_specific"] == @expected_specific
+        refute Map.has_key?(entry, "ecosystem_specific")
+      end
+    end
+
+    test "omits empty component lists" do
+      affected = Map.merge(@hex_affected, %{"modules" => ["ash"], "programFiles" => []})
+      cve_json = put_cna(@cve_json, "affected", [affected])
+
+      assert {:ok, %{"affected" => [entry]}} = OsvConverter.convert(cve_json)
+
+      assert entry["database_specific"] == %{
+               "$schema" => @extensions_schema_url,
+               "affected" => %{"modules" => ["ash"]}
+             }
+
+      assert :ok = ExJsonSchema.Validator.validate(@extensions_schema, entry["database_specific"])
+    end
+
+    test "omits both affected fields without components" do
+      assert {:ok, %{"affected" => entries}} = OsvConverter.convert(@cve_json)
+
+      for entry <- entries do
+        refute Map.has_key?(entry, "database_specific")
+        refute Map.has_key?(entry, "ecosystem_specific")
+      end
     end
   end
 
