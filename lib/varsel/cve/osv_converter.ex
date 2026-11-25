@@ -28,6 +28,10 @@ defmodule Varsel.CVE.OsvConverter do
   alias Varsel.CVE.OwnContainer
 
   @schema_version "1.8.0"
+  # Every database_specific and ecosystem_specific object conforms to this
+  # schema, served from priv/static/schemas/osv/. A change to their shape
+  # needs a new schema file and URL.
+  @extensions_schema "https://cna.erlef.org/schemas/osv/extensions-0.1.0.json"
 
   # Package registries mirrored to OSV. Only hex packages get their concrete
   # affected versions enumerated (see enumerate_affected_versions/2).
@@ -222,15 +226,48 @@ defmodule Varsel.CVE.OsvConverter do
   defp affected_entry(item, registry) do
     package_name = registry_package_name(item, registry)
 
-    %{
-      "package" => %{
-        "ecosystem" => registry.ecosystem,
-        "name" => package_name,
-        "purl" => package_purl(item, registry, package_name)
+    put_components(
+      %{
+        "package" => %{
+          "ecosystem" => registry.ecosystem,
+          "name" => package_name,
+          "purl" => package_purl(item, registry, package_name)
+        },
+        "ranges" => semver_ranges(item)
       },
-      "ranges" => semver_ranges(item)
-    }
+      item,
+      registry.ecosystem
+    )
   end
+
+  # OSV reserves ecosystem_specific for the canonical database of an
+  # ecosystem, which this CNA is for Hex only.
+  defp put_components(entry, item, ecosystem) do
+    components =
+      %{
+        "program_files" => item["programFiles"] || [],
+        "modules" => item["modules"] || [],
+        "program_routines" => Enum.map(item["programRoutines"] || [], & &1["name"])
+      }
+      |> Map.new(fn {key, values} ->
+        {key, values |> Enum.filter(&is_binary/1) |> Enum.uniq()}
+      end)
+      |> Map.reject(fn {_key, values} -> values == [] end)
+
+    if components == %{} do
+      entry
+    else
+      specific = %{"$schema" => @extensions_schema, "affected" => components}
+
+      entry
+      |> Map.put("database_specific", specific)
+      |> put_ecosystem_specific(ecosystem, specific)
+    end
+  end
+
+  defp put_ecosystem_specific(entry, "Hex", specific), do: Map.put(entry, "ecosystem_specific", specific)
+
+  defp put_ecosystem_specific(entry, _ecosystem, _specific), do: entry
 
   defp semver_ranges(item) do
     if item["defaultStatus"] == "affected" do
@@ -291,9 +328,17 @@ defmodule Varsel.CVE.OsvConverter do
     affected
     |> Enum.filter(&git_affected?/1)
     |> Enum.map(fn item ->
-      %{
-        "ranges" => Enum.map(git_events(item), &%{"type" => "GIT", "repo" => item["repo"], "events" => &1})
-      }
+      put_components(
+        %{
+          "ranges" =>
+            Enum.map(
+              git_events(item),
+              &%{"type" => "GIT", "repo" => item["repo"], "events" => &1}
+            )
+        },
+        item,
+        nil
+      )
     end)
   end
 
@@ -491,7 +536,12 @@ defmodule Varsel.CVE.OsvConverter do
       |> Enum.flat_map(&Map.get(&1, "cpes", []))
       |> Enum.uniq()
 
-    %{"cwe_ids" => cwe_ids, "capec_ids" => capec_ids, "cpe_ids" => cpe_ids}
+    %{
+      "$schema" => @extensions_schema,
+      "cwe_ids" => cwe_ids,
+      "capec_ids" => capec_ids,
+      "cpe_ids" => cpe_ids
+    }
   end
 
   defp format_timestamp(timestamp) when is_binary(timestamp) do

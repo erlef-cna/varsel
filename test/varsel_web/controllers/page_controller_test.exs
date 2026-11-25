@@ -75,6 +75,16 @@ defmodule VarselWeb.PageControllerTest do
     end
   end
 
+  test "the OSV extensions schema is served at its $id path", %{conn: conn} do
+    %{"$id" => id} =
+      conn
+      |> get("/schemas/osv/extensions-0.1.0.json")
+      |> response(200)
+      |> Jason.decode!()
+
+    assert URI.parse(id).path == "/schemas/osv/extensions-0.1.0.json"
+  end
+
   test "the retired report triage page redirects to the case board", %{conn: conn} do
     conn = get(conn, "/reports")
 
