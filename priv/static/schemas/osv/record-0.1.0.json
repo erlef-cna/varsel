@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cna.erlef.org/schemas/osv/record-0.1.0.json",
+  "title": "EEF CNA OSV record database_specific",
+  "description": "The top-level database_specific object of an EEF CNA OSV record. The OSV schema (https://ossf.github.io/osv-schema/) defines the field and leaves its contents to the database.",
+  "type": "object",
+  "required": ["$schema", "cwe_ids", "capec_ids", "cpe_ids"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "URL of the schema version that the object conforms to.",
+      "const": "https://cna.erlef.org/schemas/osv/record-0.1.0.json"
+    },
+    "cwe_ids": {
+      "description": "CWE IDs from the problemTypes of the CVE record.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^CWE-[0-9]+$" },
+      "examples": [["CWE-863"]]
+    },
+    "capec_ids": {
+      "description": "CAPEC IDs from the impacts of the CVE record.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^CAPEC-[0-9]+$" },
+      "examples": [["CAPEC-180"]]
+    },
+    "cpe_ids": {
+      "description": "CPE 2.3 names from all affected entries of the CVE record.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^cpe:2\\.3:" },
+      "examples": [["cpe:2.3:a:ash-project:ash:*:*:*:*:*:*:*:*"]]
+    }
+  }
+}

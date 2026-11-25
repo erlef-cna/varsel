@@ -28,10 +28,11 @@ defmodule Varsel.CVE.OsvConverter do
   alias Varsel.CVE.OwnContainer
 
   @schema_version "1.8.0"
-  # Every database_specific and ecosystem_specific object conforms to this
-  # schema, served from priv/static/schemas/osv/. A change to their shape
+  # The database_specific and ecosystem_specific objects conform to these
+  # schemas, served from priv/static/schemas/osv/. A change to their shape
   # needs a new schema file and URL.
-  @extensions_schema "https://cna.erlef.org/schemas/osv/extensions-0.1.0.json"
+  @record_schema "https://cna.erlef.org/schemas/osv/record-0.1.0.json"
+  @affected_schema "https://cna.erlef.org/schemas/osv/affected-0.1.0.json"
 
   # Package registries mirrored to OSV. Only hex packages get their concrete
   # affected versions enumerated (see enumerate_affected_versions/2).
@@ -257,7 +258,7 @@ defmodule Varsel.CVE.OsvConverter do
     if components == %{} do
       entry
     else
-      specific = %{"$schema" => @extensions_schema, "affected" => components}
+      specific = Map.put(components, "$schema", @affected_schema)
 
       entry
       |> Map.put("database_specific", specific)
@@ -537,7 +538,7 @@ defmodule Varsel.CVE.OsvConverter do
       |> Enum.uniq()
 
     %{
-      "$schema" => @extensions_schema,
+      "$schema" => @record_schema,
       "cwe_ids" => cwe_ids,
       "capec_ids" => capec_ids,
       "cpe_ids" => cpe_ids

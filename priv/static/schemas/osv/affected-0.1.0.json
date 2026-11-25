@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cna.erlef.org/schemas/osv/affected-0.1.0.json",
+  "title": "EEF CNA OSV affected database_specific and ecosystem_specific",
+  "description": "The affected source files, modules and routines of one affected[] entry of an EEF CNA OSV record. EEF CNA records put this object in affected[].database_specific, and for Hex packages also in affected[].ecosystem_specific. The values come from the programFiles, modules and programRoutines fields of the matching CVE affected[] entry. The OSV schema (https://ossf.github.io/osv-schema/) defines these fields and leaves their contents to the database and the ecosystem.",
+  "type": "object",
+  "required": ["$schema"],
+  "minProperties": 2,
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "URL of the schema version that the object conforms to.",
+      "const": "https://cna.erlef.org/schemas/osv/affected-0.1.0.json"
+    },
+    "program_files": {
+      "description": "Affected source files. Paths are relative to the root of the package or repository that the affected[] entry describes.",
+      "$ref": "#/definitions/names",
+      "examples": [["src/ssh_sftpd.erl"]]
+    },
+    "modules": {
+      "description": "Affected modules, by the name the language uses for them.",
+      "$ref": "#/definitions/names",
+      "examples": [["ssh_sftpd"], ["'Elixir.Decimal'"]]
+    },
+    "program_routines": {
+      "description": "Affected functions. Erlang and Elixir functions use Erlang notation module:function/arity.",
+      "$ref": "#/definitions/names",
+      "examples": [["ssh_sftpd:handle_op/4", "'Elixir.Decimal':add/2"]]
+    }
+  },
+  "definitions": {
+    "names": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}
