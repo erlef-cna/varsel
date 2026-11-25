@@ -4,11 +4,21 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["config:recommended"],
-  enabledManagers: ["nix"],
+  enabledManagers: ["nix", "custom.regex"],
   dependencyDashboard: false,
   nix: {
     enabled: true,
   },
+  customManagers: [
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^nix/.+\\.nix$/"],
+      matchStrings: [
+        "mix escript\\.install hex (?<depName>[a-z0-9_]+) (?<currentValue>\\d+\\.\\d+\\.\\d+\\S*)",
+      ],
+      datasourceTemplate: "hex",
+    },
+  ],
   schedule: ["* * * * 1"],
   lockFileMaintenance: {
     enabled: true,

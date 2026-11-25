@@ -196,9 +196,9 @@ let
       cp -r ${depsFetch}/deps .
       chmod -R u+w "$HOME/.mix" deps
 
-      mix escript.install hex sbom 0.10.0 --force
+      mix escript.install hex sbom 0.12.1 --force
       "$HOME/.mix/escripts/mix_sbom" cyclonedx \
-        --output=mix.cdx.json --format=json --only prod .
+        --output=mix.cdx.json --format=json --only prod --no-vulnerabilities .
 
       cp -r ${nodeModules} assets/node_modules
       (cd assets && npm sbom --sbom-format cyclonedx --omit dev) > npm.cdx.json
