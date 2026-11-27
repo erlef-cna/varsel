@@ -199,6 +199,7 @@ defmodule Varsel.Cases do
     tool :propose_internal_notes, Proposal, :propose_internal_notes
     tool :propose_discovery, Proposal, :propose_discovery
     tool :propose_tlp, Proposal, :propose_tlp
+    tool :propose_planned_disclosure, Proposal, :propose_planned_disclosure
     tool :propose_metric, Proposal, :propose_metric
     tool :propose_metric_cvss, Proposal, :propose_metric_cvss
     tool :propose_metric_scenario, Proposal, :propose_metric_scenario
@@ -343,6 +344,7 @@ defmodule Varsel.Cases do
       create Proposal, :propose_case_internal_notes, :propose_internal_notes
       create Proposal, :propose_case_discovery, :propose_discovery
       create Proposal, :propose_case_tlp, :propose_tlp
+      create Proposal, :propose_case_planned_disclosure, :propose_planned_disclosure
       create Proposal, :propose_case_metric, :propose_metric
       create Proposal, :propose_case_metric_cvss, :propose_metric_cvss
       create Proposal, :propose_case_metric_scenario, :propose_metric_scenario
@@ -566,6 +568,7 @@ defmodule Varsel.Cases do
       define :propose_internal_notes, action: :propose_internal_notes
       define :propose_discovery, action: :propose_discovery
       define :propose_tlp, action: :propose_tlp
+      define :propose_planned_disclosure, action: :propose_planned_disclosure
       define :propose_metric, action: :propose_metric
       define :propose_metric_cvss, action: :propose_metric_cvss
       define :propose_metric_scenario, action: :propose_metric_scenario

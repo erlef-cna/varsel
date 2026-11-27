@@ -257,6 +257,19 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
+    create :propose_planned_disclosure do
+      description """
+      Proposes setting when the case is planned to go public. Pass an explicit
+      null value to propose removing the date.
+      """
+
+      accept [:case_id, :reasoning]
+      argument :value, :utc_datetime, allow_nil?: true
+      change {PackProposal, target: :case, operation: :set, field: :planned_disclosure_at}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
+    end
+
     create :propose_date_public do
       description """
       Proposes setting the public disclosure date. Pass an explicit null value

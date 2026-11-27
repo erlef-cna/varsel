@@ -10,9 +10,9 @@ defmodule Varsel.Notifications.Notification do
   subject's unread row: `:record` upserts on `unread_per_subject` and bumps
   `count`. Once the row is read, the next matching event starts a new row.
 
-  `:fan_out`, `:record`, `:mark_emailed`, `:send_email` and `:send_digests`
-  are reachable only through the AshOban bypass (the fan-out signal jobs and
-  the email and digest workers).
+  `:fan_out`, `:record`, `:resolve`, `:mark_emailed`, `:send_email` and
+  `:send_digests` are reachable only through the AshOban bypass (the signal
+  jobs and the email and digest workers).
   """
 
   use Ash.Resource,
@@ -108,6 +108,12 @@ defmodule Varsel.Notifications.Notification do
                  required?: false
     end
 
+    read :unread_disclosure_overdue do
+      description "The unread overdue-disclosure reminders of one case, for every user."
+      argument :case_id, :uuid, allow_nil?: false
+      filter expr(case_id == ^arg(:case_id) and kind == :disclosure_overdue and is_nil(read_at))
+    end
+
     read :unread_mine do
       description "The acting user's unread notifications."
       filter expr(is_nil(read_at))
@@ -151,6 +157,12 @@ defmodule Varsel.Notifications.Notification do
              )
 
       change set_attribute(:read_at, &DateTime.utc_now/0)
+    end
+
+    update :resolve do
+      description "Marks a notification read because someone did what it asked for."
+      accept []
+      change atomic_update(:read_at, expr(coalesce([read_at, now()])))
     end
 
     update :mark_emailed do
@@ -213,7 +225,7 @@ defmodule Varsel.Notifications.Notification do
       authorize_if expr(user_id == ^actor(:id))
     end
 
-    policy action([:record, :fan_out, :mark_emailed, :send_email, :send_digests]) do
+    policy action([:record, :fan_out, :resolve, :mark_emailed, :send_email, :send_digests]) do
       access_type :strict
       authorize_if AshObanInteraction
     end
@@ -291,6 +303,14 @@ defmodule Varsel.Notifications.Notification do
       on :review_requested, :notify_review_requested, action: :fan_out, delivery: @delivery
       on :case_published, :notify_case_published, action: :fan_out, delivery: @delivery
       on :record_drifted, :notify_record_drifted, action: :fan_out, delivery: @delivery
+      on :disclosure_overdue, :notify_disclosure_overdue, action: :fan_out, delivery: @delivery
+
+      on :planned_disclosure_changed, :resolve_disclosure_overdue,
+        action: :resolve,
+        read_action: :unread_disclosure_overdue,
+        args: [case_id: :case_id],
+        delivery: @delivery
+
       on :comment_posted, :notify_comment_posted, action: :fan_out, delivery: @delivery
       on :users_mentioned, :notify_users_mentioned, action: :fan_out, delivery: @delivery
       on :proposal_opened, :notify_proposal_opened, action: :fan_out, delivery: @delivery

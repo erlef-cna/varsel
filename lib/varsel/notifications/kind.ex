@@ -50,6 +50,10 @@ defmodule Varsel.Notifications.Kind do
       case_assigned: [
         label: "Added to a case",
         description: "A user was granted access to a case."
+      ],
+      disclosure_overdue: [
+        label: "Disclosure date passed",
+        description: "The planned disclosure date of an unpublished case passed more than 8 hours ago."
       ]
     ]
 
@@ -67,6 +71,7 @@ defmodule Varsel.Notifications.Kind do
   def audience(:case_published), do: :assigned
   def audience(:record_drifted), do: :reviewers
   def audience(:case_assigned), do: :recipient
+  def audience(:disclosure_overdue), do: :assigned
 
   @doc """
   Whether a kind reaches a user who has not chosen for it. A review on a case

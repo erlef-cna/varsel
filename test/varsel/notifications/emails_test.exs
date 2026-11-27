@@ -397,7 +397,7 @@ defmodule Varsel.Notifications.EmailsTest do
         )
 
       links = hrefs(email)
-      assert Enum.any?(links, &String.ends_with?(&1, "/cases/#{@case_id}"))
+      assert Enum.any?(links, &String.ends_with?(&1, "/cases/#{@case_id}/comments"))
       assert Enum.any?(links, &String.ends_with?(&1, "/settings/notifications"))
       assert email |> html() |> LazyHTML.query("title") |> LazyHTML.text() == email.subject
     end

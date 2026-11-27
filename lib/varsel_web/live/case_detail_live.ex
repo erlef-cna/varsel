@@ -867,6 +867,13 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp datetime_local_value(value), do: value
 
+  # The stored date stays valid even once it has passed, so the browser's
+  # range check does not block saving the rest of the form.
+  defp planned_disclosure_min(nil), do: datetime_local_value(DateTime.utc_now())
+
+  defp planned_disclosure_min(%DateTime{} = stored),
+    do: [stored, DateTime.utc_now()] |> Enum.min(DateTime) |> datetime_local_value()
+
   ## ------------------------------------------------------------------ render
 
   @impl Phoenix.LiveView
@@ -1202,8 +1209,16 @@ defmodule VarselWeb.CaseDetailLive do
   defp section_for_proposal(%{target: :credit}), do: "credits"
   defp section_for_proposal(%{target: :weakness}), do: "weaknesses"
   defp section_for_proposal(%{target: :impact}), do: "impacts"
-  defp section_for_proposal(%{target: :case, field_name: "tlp"}), do: "disclosure"
+
+  defp section_for_proposal(%{target: :case, field_name: field}) when field in ~w(tlp planned_disclosure_at),
+    do: "disclosure"
+
   defp section_for_proposal(_case_field), do: "summary"
+
+  defp disclosure_passed?(%{planned_disclosure_at: %DateTime{} = at, published_at: nil, state: state})
+       when state not in [:closed, :merged], do: DateTime.before?(at, DateTime.utc_now())
+
+  defp disclosure_passed?(_case_record), do: false
 
   defp open_proposals(case_record) do
     Enum.filter(case_record.proposals, &(&1.state == :open))
@@ -1541,6 +1556,15 @@ defmodule VarselWeb.CaseDetailLive do
         phx-submit="save"
       >
         <.tlp_input field={@content_form[:tlp]} />
+        <.input
+          field={@content_form[:planned_disclosure_at]}
+          type="datetime-local"
+          step="1"
+          min={planned_disclosure_min(@case_record.planned_disclosure_at)}
+          value={datetime_local_value(@content_form[:planned_disclosure_at].value)}
+        >
+          <:label>Planned disclosure (UTC, optional)</:label>
+        </.input>
         <.edit_actions mode={@mode} cancel="cancel_edit" />
       </.form>
 
@@ -1552,6 +1576,19 @@ defmodule VarselWeb.CaseDetailLive do
         <div :if={@case_record.tlp.caveat} id="case-tlp-caveat" class="mt-2 text-sm">
           <span class="font-semibold text-base-content/70">Caveat:</span>
           <span class="whitespace-pre-wrap break-words">{@case_record.tlp.caveat}</span>
+        </div>
+        <div id="case-planned-disclosure" class="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span class="font-semibold text-base-content/70">Planned disclosure:</span>
+          <%= if @case_record.planned_disclosure_at do %>
+            <time datetime={DateTime.to_iso8601(@case_record.planned_disclosure_at)}>
+              {Calendar.strftime(@case_record.planned_disclosure_at, "%Y-%m-%d %H:%M UTC")}
+            </time>
+            <span :if={disclosure_passed?(@case_record)} class="badge badge-warning badge-sm">
+              passed
+            </span>
+          <% else %>
+            <span class="text-base-content/60">not set</span>
+          <% end %>
         </div>
       </div>
 

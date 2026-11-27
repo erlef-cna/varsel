@@ -180,7 +180,8 @@ config :varsel, Oban,
     github_sync: 1,
     github_comments: 1,
     derivation: 2,
-    record_drift: 1
+    record_drift: 1,
+    case_reminders: 1
   ],
   repo: Varsel.Repo,
   plugins: [
