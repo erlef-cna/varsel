@@ -44,6 +44,7 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Cases.Proposal.Build
   alias Varsel.Cases.Readiness
   alias Varsel.Cases.VersionEvent
+  alias Varsel.Predisclosure
   alias Varsel.Types.CVSS
   alias VarselWeb.AffectedComponents
   alias VarselWeb.CaseLifecycle
@@ -148,7 +149,8 @@ defmodule VarselWeb.CaseDetailLive do
         credit_picker: nil,
         people_picker: nil,
         grant_form: nil,
-        catalog_options: nil
+        catalog_options: nil,
+        lists_editing: false
       )
       |> CaseLifecycle.mount(id,
         load: @case_loads,
@@ -508,6 +510,24 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, socket}
   end
 
+  ## ------------------------------------------------------ pre-disclosure lists
+
+  def handle_event("edit_lists", _params, socket), do: {:noreply, assign(socket, lists_editing: true)}
+
+  def handle_event("cancel_lists", _params, socket), do: {:noreply, assign(socket, lists_editing: false)}
+
+  def handle_event("save_lists", params, socket) do
+    list_ids = params |> Map.get("list_ids", []) |> Enum.reject(&(&1 == ""))
+
+    socket =
+      case Cases.set_case_predisclosure_lists(socket.assigns.case_record, list_ids, actor: socket.assigns.current_user) do
+        {:ok, _case} -> assign(socket, lists_editing: false)
+        {:error, error} -> put_flash(socket, :error, errors_to_string(error))
+      end
+
+    {:noreply, socket}
+  end
+
   ## --------------------------------------------------------------- proposals
 
   # One form per proposal with two submit buttons; the clicked button's
@@ -645,8 +665,28 @@ defmodule VarselWeb.CaseDetailLive do
       mode: mode,
       content_form: content_form,
       can_refresh: Cases.can_refresh_case_derivation?(actor, case_record, validate?: true),
+      case_lists: case_lists(case_record, actor),
+      list_options: list_options(case_record, actor),
       page_title: case_record.title || "Case"
     )
+  end
+
+  # The lists the case is on, for whoever may see them; nil for anyone else.
+  defp case_lists(case_record, actor) do
+    if Ash.can?({case_record, :set_predisclosure_lists}, actor) do
+      case_record
+      |> Ash.load!(:predisclosure_lists, actor: actor)
+      |> Map.fetch!(:predisclosure_lists)
+    end
+  end
+
+  # Every list a POC may put the case on; nil for anyone who may not.
+  defp list_options(case_record, actor) do
+    if Ash.can?({case_record, :set_predisclosure_lists}, actor) do
+      [actor: actor]
+      |> Predisclosure.list_predisclosure_lists!()
+      |> Enum.map(&{&1.name, &1.id})
+    end
   end
 
   # Intent is a property of the save, not the page: who you are and the case
@@ -920,6 +960,9 @@ defmodule VarselWeb.CaseDetailLive do
             <.disclosure_section
               case_record={@display_case}
               raw_case_record={@case_record}
+              case_lists={@case_lists}
+              list_options={@list_options}
+              lists_editing={@lists_editing}
               content_form={@editing_section == "disclosure" && @content_form}
               mode={@mode}
               current_user={@current_user}
@@ -1590,6 +1633,55 @@ defmodule VarselWeb.CaseDetailLive do
             <span class="text-base-content/60">not set</span>
           <% end %>
         </div>
+      </div>
+
+      <div :if={@case_lists} id="case-lists" class="mt-3 border-t border-base-300 pt-3 text-sm">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-semibold text-base-content/70">Pre-disclosure lists:</span>
+          <span
+            :for={list <- @case_lists}
+            id={"case-list-#{list.id}"}
+            class="badge badge-outline badge-sm"
+          >
+            {list.name}
+          </span>
+          <span :if={@case_lists == []} class="text-base-content/60">none</span>
+          <button
+            :if={@list_options && !@lists_editing}
+            id="edit-lists"
+            class="link link-hover text-primary ml-auto"
+            phx-click="edit_lists"
+          >
+            Change lists
+          </button>
+        </div>
+
+        <form
+          :if={@list_options && @lists_editing}
+          id="case-lists-form"
+          phx-submit="save_lists"
+          class="mt-2 space-y-2 rounded-lg border border-base-300 bg-base-200 p-3"
+        >
+          <%!-- Sentinel so unchecking every box still submits the field. --%>
+          <input type="hidden" name="list_ids[]" value="" />
+          <p :if={@list_options == []} class="text-base-content/60">
+            No lists exist yet. A POC creates them on the Lists page.
+          </p>
+          <label :for={{name, id} <- @list_options} class="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              name="list_ids[]"
+              value={id}
+              checked={Enum.any?(@case_lists, &(&1.id == id))}
+              class="checkbox checkbox-xs"
+            />
+            {name}
+          </label>
+          <div class="flex gap-2">
+            <button type="submit" class="btn btn-sm btn-eef">Save lists</button>
+            <button type="button" class="btn btn-sm btn-ghost" phx-click="cancel_lists">Cancel</button>
+          </div>
+        </form>
       </div>
 
       <.inline_suggestions

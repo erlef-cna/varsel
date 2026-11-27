@@ -6,8 +6,9 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
   @moduledoc """
   Hands every row that references the account being merged away to the
   account it merges into, before the destroy deletes it: its linked providers,
-  API keys, assignments, credits, comments, comment reactions, proposals,
-  reports, notifications, GitHub installations and manual requests.
+  API keys, assignments, pre-disclosure list subscriptions, credits, comments,
+  comment reactions, proposals, reports, notifications, GitHub installations
+  and manual requests.
 
   Paper-trail versions are not foreign keys
   (`Varsel.Accounts.VersionActorReference`) and keep the id of the account
@@ -30,12 +31,14 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
   alias Varsel.Cases.VulnerabilityReport
   alias Varsel.GitHub.UserInstallation
   alias Varsel.Notifications.Notification
+  alias Varsel.Predisclosure.ListSubscriber
   alias Varsel.Repo
 
   @references [
     {UserIdentity, :user_id},
     {ApiKey, :user_id},
     {CaseAssignment, :user_id},
+    {ListSubscriber, :user_id},
     {CaseCredit, :user_id},
     {Comment, :author_id},
     {CommentReaction, :user_id},
@@ -91,6 +94,19 @@ defmodule Varsel.Accounts.User.Changes.RepointToMergeTarget do
           exists(
             from(kept in CaseAssignment,
               where: kept.user_id == ^into_id and kept.case_id == parent_as(:merged).case_id
+            )
+          )
+      )
+    )
+
+    Repo.delete_all(
+      from(merged in ListSubscriber,
+        as: :merged,
+        where: merged.user_id == ^from_id,
+        where:
+          exists(
+            from(kept in ListSubscriber,
+              where: kept.user_id == ^into_id and kept.list_id == parent_as(:merged).list_id
             )
           )
       )

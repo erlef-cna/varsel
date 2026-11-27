@@ -99,6 +99,7 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Validations.AdvisoryUrl
   alias Varsel.Cases.Validations.CveIdAssignable
   alias Varsel.Cases.VulnerabilityReport
+  alias Varsel.Predisclosure.ListMember
   alias Varsel.Types.TSVector
 
   @content_fields [
@@ -519,6 +520,24 @@ defmodule Varsel.Cases.Case do
       emit Signals, :record_drifted,
         dynamic?: true,
         description: "When the check finds the case out of sync and the previous check found it in sync or had not run."
+    end
+
+    update :set_predisclosure_lists do
+      description """
+      POC chooses the pre-disclosure lists the case is on. The subscribers of
+      those lists may read the case, comment on it and propose changes. A list
+      left out loses its access to the case.
+      """
+
+      accept []
+      require_atomic? false
+
+      argument :list_ids, {:array, :uuid} do
+        description "Every list the case is to be on. An empty list takes the case off all of them."
+        allow_nil? false
+      end
+
+      change manage_relationship(:list_ids, :predisclosure_lists, type: :append_and_remove)
     end
 
     update :remind_disclosure_overdue do
@@ -1074,6 +1093,7 @@ defmodule Varsel.Cases.Case do
     # CNA's own responsibility and stays with POCs.
     policy action([
              :adopt_cve_record,
+             :set_predisclosure_lists,
              :link_upstream_cve,
              :request_changes,
              :approve,
@@ -1174,7 +1194,8 @@ defmodule Varsel.Cases.Case do
     # version bump would trip the outer changeset's own lock. :grant_access and
     # :report_to_github are exempt for the same reason: each writes a child row
     # and nothing on the case, so locking them would make two people adding two
-    # different collaborators collide. :remind_disclosure_overdue is exempt
+    # different collaborators collide. :set_predisclosure_lists writes only the
+    # lists' join rows, the same way. :remind_disclosure_overdue is exempt
     # because it runs on a schedule and writes only its own bookkeeping, so
     # locking it would fail an edit that happens to land in the same moment.
     change optimistic_lock(:version),
@@ -1185,6 +1206,7 @@ defmodule Varsel.Cases.Case do
             :refresh_derivation,
             :grant_access,
             :report_to_github,
+            :set_predisclosure_lists,
             :remind_disclosure_overdue
           ])
         )
@@ -1382,6 +1404,19 @@ defmodule Varsel.Cases.Case do
       public? true
     end
 
+    has_many :predisclosure_list_members, ListMember do
+      description "The pre-disclosure lists the case is on, as join rows."
+      public? true
+    end
+
+    many_to_many :predisclosure_lists, Varsel.Predisclosure.PredisclosureList do
+      description "The pre-disclosure lists the case is on. Their subscribers may read, comment and propose."
+      through ListMember
+      source_attribute_on_join_resource :case_id
+      destination_attribute_on_join_resource :list_id
+      public? true
+    end
+
     has_many :assignments, Varsel.Cases.CaseAssignment do
       public? true
     end
@@ -1484,9 +1519,10 @@ defmodule Varsel.Cases.Case do
               :boolean,
               expr(
                 (not is_nil(^arg(:actor_role)) and ^arg(:actor_role) == :poc) or
-                  exists(assignments, user_id == ^arg(:actor_id))
+                  exists(assignments, user_id == ^arg(:actor_id)) or
+                  exists(predisclosure_lists.subscribers, user_id == ^arg(:actor_id))
               ) do
-      description "Whether the user may read the case: a POC, or assigned to it."
+      description "Whether the user may read the case: a POC, assigned to it, or on a pre-disclosure list that holds it."
       public? true
       argument :actor_id, :uuid, allow_nil?: true
       argument :actor_role, :atom, allow_nil?: true

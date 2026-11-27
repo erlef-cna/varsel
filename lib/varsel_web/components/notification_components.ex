@@ -60,6 +60,7 @@ defmodule VarselWeb.NotificationComponents do
     disclosure_overdue: [label: "Disclosure dates passed", icon: "hero-calendar", tone: :act],
     mentioned: [label: "Mentions", icon: "hero-at-symbol", tone: :mention],
     case_assigned: [label: "Added to a case", icon: "hero-user-plus", tone: :addressed],
+    case_shared: [label: "Shared with you", icon: "hero-share", tone: :addressed],
     proposal_opened: [label: "Proposals", icon: "hero-pencil-square", tone: :suggestion],
     comment_posted: [label: "Comments", icon: "hero-chat-bubble-left-right", tone: :activity],
     case_published: [label: "Published", icon: "hero-megaphone", tone: :done]

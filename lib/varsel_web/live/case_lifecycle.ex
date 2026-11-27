@@ -36,7 +36,8 @@ defmodule VarselWeb.CaseLifecycle do
     :review_requested,
     :unassigned_review_requested,
     :case_published,
-    :case_assigned
+    :case_assigned,
+    :case_shared
   ]
 
   @form_modals %{"split" => :split, "reject" => :reject, "close" => :close}

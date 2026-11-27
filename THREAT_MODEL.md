@@ -95,21 +95,26 @@ the platform edge, not in the app.
   own reports, and withdraw that case until a POC accepts it; manage their own
   API keys and sessions, set a notification address one of their own linked
   providers reported, and run the CVE **validation** actions (§6). On `Case`
-  they see nothing until a POC assigns them to one; assignment then grants read,
-  propose, comment and react to comments on **that case only** — never a
-  direct write, never resolving a proposal, never a lifecycle action.
+  they see nothing until a POC assigns them to one, or puts it on a
+  pre-disclosure list they subscribe to. Either grants read, propose, comment
+  and react to comments on **that case only** — never a direct write, never
+  resolving a proposal, never a lifecycle action.
 - **Supporter** — a CNA collaborator. Opens cases, and on the cases they are
   assigned to edits content, resolves proposals, reopens, and takes the next
   free CVE ID. On an assigned case not accepted yet, takes the triage
   decisions: accept, reject, split, and merge into another case they
   are assigned to. Cannot approve or publish, cannot name which CVE ID they take,
-  and cannot assign anyone (themselves included) to a case.
+  and cannot assign anyone (themselves included) to a case. A case they see
+  only through a pre-disclosure list gives them a role-less user's access.
 - **POC (point of contact)** — privileged CNA operator. Full lifecycle
   authority, including publishing to MITRE, assigning roles, and granting
   case access.
 
 Below POC the role says *what kind* of act someone may perform and the
-assignment says *which case* — only a POC creates an assignment.
+assignment says *which case* — only a POC creates an assignment. A
+pre-disclosure list also says which case, for reading, commenting and
+proposing only. Only a POC creates a list, subscribes users to it, puts a case
+on it, and sees any of these. A subscriber sees the cases, not the list.
 
 Roles live in `Varsel.Accounts.User.Role` (`:poc | :supporter`, plus `nil`)
 — see `user/role.ex`.
@@ -285,8 +290,9 @@ check a report against, not the framework's default.
 
 `Case`'s strict policy asks only that someone is signed in; *which* cases they
 may see is decided by the filter policy after it, so a role-less caller is
-**filtered to the cases they are assigned to** — an empty list when they are
-assigned to none — rather than refused. `GitHubAdvisoryLink` and
+**filtered to the cases they are assigned to or that a pre-disclosure list
+they subscribe to holds** — an empty list when there are none — rather than
+refused. `GitHubAdvisoryLink` and
 `CommentReaction` carry the same strict gate. Every other private resource (case children, proposals,
 comments) is filter-scoped the same way. Reading each
 resource as an anonymous actor and as a role-less one bears this out: the
@@ -734,8 +740,9 @@ prioritization of a dependency bump; it does not change the disposition.
   named or withheld CVE ID rather than the next free one, and abusing
   `repo_url` for SSRF-style egress. **In scope** as a distinct actor.
 - **Malicious / compromised assigned collaborator.** An authenticated user
-  with **no role** whom a POC has assigned to a case — the intended shape for
-  an outside reporter or vendor contact. Can read that case, propose changes
+  with **no role** whom a POC has assigned to a case, or subscribed to a
+  pre-disclosure list that holds it — the intended shape for an outside
+  reporter or vendor contact. Can read that case, propose changes
   to it, comment and react. Assumed to try: writing to the case directly rather than
   proposing, resolving their own proposal, and reaching any other case.
   **In scope** as a distinct actor.
@@ -874,18 +881,21 @@ none of the authorization properties, by construction rather than by defect.
    - *Severity:* `high`.
    - (`user.ex`)
 
-5. **Case content is confined to assigned collaborators, and writing it
+5. **Case content is confined to the people on the case, and writing it
    additionally needs a role.**
-   Reading a case and all its child rows requires POC or a `CaseAssignment`
-   for that case. *Editing* it requires POC or a supporter who is assigned —
-   an assigned user with no role may propose, comment and react but never
-   write directly, and never resolve a proposal. Nobody below POC can create an
-   assignment, so no one grants themselves either right.
-   - *Violation symptom:* a supporter reads or edits a case they are not
-     assigned to; an assigned role-less user edits a case, accepts a proposal,
-     or gains access to a second case.
+   Reading a case and all its child rows requires POC, a `CaseAssignment` for
+   that case, or a subscription to a pre-disclosure list that holds it.
+   *Editing* it requires POC or a supporter who is assigned — a user with no
+   role, and anyone who sees the case only through a list, may propose,
+   comment and react but never write directly, and never resolve a proposal.
+   Nobody below POC can create an assignment, a list or a subscription, or
+   put a case on a list, so no one grants themselves any of these rights.
+   - *Violation symptom:* a supporter reads or edits a case they are neither
+     assigned to nor subscribed to through a list; a role-less user or a list
+     subscriber edits a case, accepts a proposal, or gains access to a case
+     no assignment or list of theirs covers.
    - *Severity:* `high` (unpublished advisory content is embargoed).
-   - (`case.ex`, `case_assignment.ex`, `proposal.ex`)
+   - (`case.ex`, `case_assignment.ex`, `proposal.ex`, `predisclosure/`)
 
 6. **OAuth separation between surfaces.**
    MCP and GraphQL are two protected resources (RFC 8707), `<host>/mcp` and

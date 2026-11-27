@@ -294,6 +294,7 @@ defmodule Varsel.Cases do
       update Case, :reject_case, :reject
       update Case, :withdraw_case, :withdraw
       update Case, :merge_case, :merge
+      update Case, :set_case_predisclosure_lists, :set_predisclosure_lists
       create Case, :split_case, :split
       create Case, :submit_vulnerability_report, :submit_report
 
@@ -408,6 +409,8 @@ defmodule Varsel.Cases do
       define :recheck_case_drift, action: :recheck_drift
       define :recheck_published_case_drift, action: :recheck_published_drift
       define :grant_case_access, action: :grant_access, args: [:strategy, :username]
+      define :set_case_predisclosure_lists, action: :set_predisclosure_lists, args: [:list_ids]
+
       define :apply_case_proposal, action: :apply_proposal
       define :triage_case, action: :triage
       define :accept_case, action: :accept

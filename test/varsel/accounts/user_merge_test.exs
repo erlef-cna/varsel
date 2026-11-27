@@ -91,6 +91,22 @@ defmodule Varsel.Accounts.UserMergeTest do
       assert count("case_assignments", "user_id", into.id) == 1
     end
 
+    test "a list subscription moves over, once where both accounts hold it" do
+      poc = register_user("poc", :poc)
+      from = register_user("from")
+      into = register_user("into")
+      shared = Varsel.Predisclosure.create_predisclosure_list!("Both", actor: poc)
+      only_from = Varsel.Predisclosure.create_predisclosure_list!("From only", actor: poc)
+
+      Varsel.Predisclosure.subscribe_to_predisclosure_list!(shared.id, from.id, actor: poc)
+      Varsel.Predisclosure.subscribe_to_predisclosure_list!(shared.id, into.id, actor: poc)
+      Varsel.Predisclosure.subscribe_to_predisclosure_list!(only_from.id, from.id, actor: poc)
+
+      Accounts.merge_user_into!(from, into.id, actor: console())
+
+      assert count("predisclosure_list_subscribers", "user_id", into.id) == 2
+    end
+
     test "comment reactions, once where both accounts gave the same one" do
       poc = register_user("poc", :poc)
       from = register_user("from", :poc)
@@ -267,6 +283,7 @@ defmodule Varsel.Accounts.UserMergeTest do
              {"github_manual_requests", "user_id"},
              {"github_user_installations", "user_id"},
              {"notifications", "user_id"},
+             {"predisclosure_list_subscribers", "user_id"},
              {"user_identities", "user_id"},
              {"vulnerability_reports", "reporter_id"}
            ]

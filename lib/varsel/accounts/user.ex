@@ -593,6 +593,10 @@ defmodule Varsel.Accounts.User do
       public? false
       destination_attribute :user_id
     end
+
+    has_many :predisclosure_list_subscriptions, Varsel.Predisclosure.ListSubscriber do
+      public? false
+    end
   end
 
   signals_in do

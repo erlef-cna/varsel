@@ -9,8 +9,9 @@ defmodule VarselWeb.CaseManagementLive do
   **Pipeline** (default) is a never-paginated matrix of the active cases: a
   column per state, submitted through publishing, and a row per affected
   package, so the cases for one package line up across the workflow. It is
-  policy-scoped: POCs see every case, everyone else only their assignments,
-  which for a reporter is the case their report opened. **Archive** is a paginated, searchable table
+  policy-scoped: POCs see every case, everyone else only the cases they are
+  assigned to or that a pre-disclosure list of theirs holds, which for a
+  reporter is the case their report opened. **Archive** is a paginated, searchable table
   scoped to published, closed and merged, collated by archived-at
   (published_at, or `updated_at` for the others — see `archive_query/2`)
   descending.

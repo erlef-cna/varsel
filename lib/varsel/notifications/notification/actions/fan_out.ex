@@ -7,7 +7,8 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   Records a `Varsel.Notifications.Notification` for every user in a signal's
   audience, honouring each recipient's per-kind preferences and excluding the
   user who acted. A mention reaches only the mentioned who may read the case,
-  and a review a POC requested reaches nobody. A review on a case with no POC
+  a shared case only the subscribers whose list still holds it, and a review a
+  POC requested reaches nobody. A review on a case with no POC
   assigned is an `:unassigned_review_requested` for the POCs who want one,
   or a plain `:review_requested` for every POC while none does.
 
@@ -76,6 +77,9 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
   defp event(%Cases.Signals.ProposalOpened{} = signal),
     do: %{kind: :proposal_opened, case_id: signal.case_id, actor_id: signal.actor_id}
 
+  defp event(%Cases.Signals.CaseShared{} = signal),
+    do: %{kind: :case_shared, case_id: signal.case_id, recipient_ids: signal.user_ids, actor_id: signal.actor_id}
+
   defp event(%Cases.Signals.CaseAssigned{} = signal),
     do: %{kind: :case_assigned, case_id: signal.case_id, recipient_id: signal.user_id, actor_id: signal.actor_id}
 
@@ -126,19 +130,36 @@ defmodule Varsel.Notifications.Notification.Actions.FanOut do
       :recipient ->
         [Ash.get!(User, event.recipient_id, opts)]
 
-      # A comment names whoever its writer typed, so only the mentioned who
-      # can read the case hear about it.
-      :mentioned ->
-        assigned =
-          CaseAssignment
-          |> Ash.Query.filter(case_id == ^event.case_id and user_id in ^event.recipient_ids)
-          |> Ash.read!(opts)
-          |> Enum.map(& &1.user_id)
+      :subscribers ->
+        subscribed_recipients(event, opts)
 
-        User
-        |> Ash.Query.filter(id in ^event.recipient_ids and (role == :poc or id in ^assigned))
-        |> Ash.read!(opts)
+      :mentioned ->
+        mentioned_on_case(event, opts)
     end
+  end
+
+  # The list may have lost the case or the user since the signal.
+  defp subscribed_recipients(event, opts) do
+    User
+    |> Ash.Query.filter(
+      id in ^event.recipient_ids and
+        exists(predisclosure_list_subscriptions, exists(list.members, case_id == ^event.case_id))
+    )
+    |> Ash.read!(opts)
+  end
+
+  # A comment names whoever its writer typed, so only the mentioned who can
+  # read the case hear about it.
+  defp mentioned_on_case(event, opts) do
+    assigned =
+      CaseAssignment
+      |> Ash.Query.filter(case_id == ^event.case_id and user_id in ^event.recipient_ids)
+      |> Ash.read!(opts)
+      |> Enum.map(& &1.user_id)
+
+    User
+    |> Ash.Query.filter(id in ^event.recipient_ids and (role == :poc or id in ^assigned))
+    |> Ash.read!(opts)
   end
 
   defp assigned_users(event, opts) do

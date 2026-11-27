@@ -195,6 +195,8 @@ defmodule VarselWeb.Router do
       live "/cases/:id/publication", CaseRecordLive, :publication
 
       live "/users", UserManagementLive, :index
+      live "/predisclosure-lists", PredisclosureListsLive, :index
+      live "/predisclosure-lists/:id", PredisclosureListsLive, :show
       live "/settings/account", AccountSettingsLive, :index
       live "/settings/tokens", ApiKeySettingsLive, :index
       live "/settings/notifications", NotificationSettingsLive, :index

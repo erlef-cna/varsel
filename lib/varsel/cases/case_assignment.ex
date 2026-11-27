@@ -6,10 +6,10 @@ defmodule Varsel.Cases.CaseAssignment do
   @moduledoc """
   Grants a user access to one specific case.
 
-  Assignments are the only path by which non-POC users see and work on cases;
-  every policy in the Cases domain checks them. What that access amounts to
-  depends on the user's role — a supporter edits, an unroled collaborator
-  reads and proposes. POCs have full access regardless.
+  What that access amounts to depends on the user's role: a supporter edits,
+  a user without a role reads, comments and proposes. POCs have full access
+  regardless. A pre-disclosure list is the other way to see a case, and gives
+  only the access of a user without a role (`Varsel.Predisclosure`).
   """
 
   use Ash.Resource,
