@@ -24,12 +24,15 @@ defmodule VarselWeb.CaseComponents do
       cvss_changes: 1,
       scope_tab: 1,
       severity_chip: 1,
-      state: 1
+      state: 1,
+      tlp_chip: 1
     ]
 
   import VarselWeb.UserComponents, only: [avatar_disc: 1, user_badge: 1, user_name: 1]
 
   alias Phoenix.LiveView.JS
+  alias Varsel.Cases.Case.Tlp
+  alias Varsel.Cases.Case.Tlp.Label
   alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.CommentReaction.Emoji
   alias Varsel.Cases.Markdown
@@ -38,9 +41,9 @@ defmodule VarselWeb.CaseComponents do
   @lifecycle [draft: "Draft", review: "Review", approved: "Approved", published: "Published"]
 
   @doc """
-  Renders the band every case tab shares: the CVE ID, the title, the
-  lifecycle stepper, the actions, and the tabs that lead to the other pages
-  of the case.
+  Renders the band every case tab shares: the CVE ID, the TLP label, the
+  title, the lifecycle stepper, the actions, and the tabs that lead to the
+  other pages of the case.
 
   The tabs are a priority+ nav: `assets/js/priority_nav.js` measures them and
   moves whatever does not fit into the `…` menu, which lists every tab in the
@@ -48,7 +51,7 @@ defmodule VarselWeb.CaseComponents do
   """
   attr :case_record, :map,
     required: true,
-    doc: "needs `:cve_id`, `:title`, `:inserted_at` and `:state`, and `:upstream_cve` for the upstream badge"
+    doc: "needs `:cve_id`, `:title`, `:inserted_at`, `:state` and `:tlp`, and `:upstream_cve` for the upstream badge"
 
   attr :public_href, :string,
     default: nil,
@@ -91,6 +94,12 @@ defmodule VarselWeb.CaseComponents do
           class="align-text-bottom"
         />
         <span :if={is_nil(@case_record.cve_id)} class="opacity-60">· no CVE ID assigned</span>
+        <.tlp_chip
+          id="case-tlp"
+          label={@case_record.tlp.label}
+          caveat={@case_record.tlp.caveat}
+          class="align-middle"
+        />
         <span class="text-base-content/50">
           · draft opened {Calendar.strftime(@case_record.inserted_at, "%b %-d, %Y")}
         </span>
@@ -935,6 +944,11 @@ defmodule VarselWeb.CaseComponents do
   attr :proposal, :any, required: true
   attr :old, :string, default: nil
   attr :new, :string, default: nil
+
+  attr :tlp, :any,
+    default: nil,
+    doc: "`{old, new}` TLP markings, for a TLP suggestion; `old` is nil once it is resolved"
+
   attr :can_resolve, :boolean, default: false
   attr :own, :boolean, default: false
   attr :comments, :list, default: []
@@ -956,7 +970,8 @@ defmodule VarselWeb.CaseComponents do
         />
       </div>
 
-      <.suggestion_diff :if={@proposal.operation == :set} old={@old} new={@new} />
+      <.tlp_diff :if={@tlp} old={elem(@tlp, 0)} new={elem(@tlp, 1)} />
+      <.suggestion_diff :if={!@tlp and @proposal.operation == :set} old={@old} new={@new} />
       {render_slot(@inner_block)}
 
       <div :if={@proposal.reasoning} class="mt-2 text-base-content/80">
@@ -1006,6 +1021,44 @@ defmodule VarselWeb.CaseComponents do
           end)
         } />
       </div>
+    </div>
+    """
+  end
+
+  attr :old, Tlp, default: nil
+  attr :new, Tlp, required: true
+
+  defp tlp_diff(assigns) do
+    ~H"""
+    <div class="rounded-md border border-base-300 px-2.5 py-1.5 text-sm">
+      <div class="flex flex-wrap items-center gap-2">
+        <.tlp_chip
+          :if={@old}
+          label={@old.label}
+          caveat={@old.caveat}
+          info={false}
+          class="line-through"
+        />
+        <.icon :if={@old} name="hero-arrow-right-mini" class="size-4 text-base-content/50" />
+        <.tlp_chip label={@new.label} caveat={@new.caveat} info={false} />
+      </div>
+      <p class="mt-1 text-xs text-base-content/70">{Label.description(@new.label)}</p>
+      <div
+        :if={@old && @old.caveat && @old.caveat != @new.caveat}
+        class="mt-1.5 rounded px-2 py-1 bg-error/10 text-error/80 line-through decoration-error/40 whitespace-pre-wrap break-words"
+        phx-no-format
+      >{@old.caveat}</div>
+      <div
+        :if={@new.caveat}
+        class={[
+          "mt-1.5 rounded px-2 py-1 whitespace-pre-wrap break-words",
+          if(@old && @old.caveat == @new.caveat,
+            do: "bg-base-200",
+            else: "bg-success/10 text-success"
+          )
+        ]}
+        phx-no-format
+      >{@new.caveat}</div>
     </div>
     """
   end

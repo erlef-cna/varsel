@@ -115,6 +115,14 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecordTest do
       assert user_id == poc.id
     end
 
+    test "a case adopted from a published record starts at TLP:CLEAR", %{poc: poc} do
+      record = legacy_record()
+
+      case_record = Cases.adopt_cve_record!(%{cve_record_id: record.id}, actor: poc)
+
+      assert case_record.tlp.label == :clear
+    end
+
     test "leaves the CVE record in the state it was in", %{poc: poc} do
       record = legacy_record()
 

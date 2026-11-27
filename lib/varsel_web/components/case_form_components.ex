@@ -17,7 +17,10 @@ defmodule VarselWeb.CaseFormComponents do
   import VarselWeb.CoreComponents
   import VarselWeb.DisclosureComponents
 
+  alias Phoenix.HTML.FormField
   alias Varsel.Cases.AffectedPackage.Preset
+  alias Varsel.Cases.Case.Tlp
+  alias Varsel.Cases.Case.Tlp.Label
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseReference
   alias Varsel.Cases.PackageChannel
@@ -470,7 +473,7 @@ defmodule VarselWeb.CaseFormComponents do
   @doc """
   Renders one checkbox per credit type, for every role a person had.
   """
-  attr :field, Phoenix.HTML.FormField,
+  attr :field, FormField,
     required: true,
     doc: "the credit_types field of a credit form"
 
@@ -506,6 +509,67 @@ defmodule VarselWeb.CaseFormComponents do
     </fieldset>
     """
   end
+
+  @doc """
+  Renders the TLP marking of a case: one card per TLP 2.0 label, from the
+  most to the least restricted, each with what it permits, and the optional
+  caveat below.
+  """
+  attr :field, FormField, required: true, doc: "the tlp field of a case form"
+
+  def tlp_input(assigns) do
+    {label, caveat} = tlp_value(assigns.field.value)
+    errors = if used_input?(assigns.field), do: assigns.field.errors, else: []
+
+    assigns =
+      assign(assigns,
+        label: label,
+        caveat: caveat,
+        errors: Enum.map(errors, &translate_error/1)
+      )
+
+    ~H"""
+    <fieldset class="fieldset mb-2">
+      <legend class="label">TLP</legend>
+      <div class="grid gap-1.5">
+        <label
+          :for={label <- Label.values()}
+          class={[
+            "flex cursor-pointer items-start gap-3 rounded-box border border-base-300 px-3 py-2",
+            "hover:bg-base-200 has-checked:border-primary has-checked:bg-primary/5"
+          ]}
+        >
+          <input
+            type="radio"
+            id={"#{@field.id}_label_#{label}"}
+            name={"#{@field.name}[label]"}
+            value={label}
+            checked={to_string(label) == @label}
+            class="radio radio-xs radio-primary mt-0.5"
+          />
+          <.tlp_chip label={label} info={false} class="w-36 shrink-0 justify-center" />
+          <span class="text-sm">
+            <span class="block text-base-content/90">{Label.description(label)}</span>
+            <span class="mt-0.5 block text-xs text-base-content/60">{Label.guidance(label)}</span>
+          </span>
+        </label>
+      </div>
+      <label for={"#{@field.id}_caveat"} class="label mt-2">Caveat (optional)</label>
+      <textarea
+        id={"#{@field.id}_caveat"}
+        name={"#{@field.name}[caveat]"}
+        rows="2"
+        class="textarea w-full"
+        placeholder="Extra sharing limits on top of the label, e.g. who counts as the community."
+      >{@caveat}</textarea>
+      <p :for={message <- @errors} class="text-error text-sm">{message}</p>
+    </fieldset>
+    """
+  end
+
+  defp tlp_value(%Tlp{label: label, caveat: caveat}), do: {to_string(label), caveat}
+  defp tlp_value(%{} = params), do: {to_string(params["label"]), params["caveat"]}
+  defp tlp_value(nil), do: {"red", nil}
 
   # The typed value once the form has been validated, the stored handle before.
   defp handle_username(form, strategy) do

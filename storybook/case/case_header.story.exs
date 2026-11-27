@@ -6,6 +6,8 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
   @moduledoc false
   use PhoenixStorybook.Story, :component
 
+  alias Varsel.Cases.Case.Tlp
+
   def function, do: &VarselWeb.CaseComponents.case_header/1
 
   def layout, do: :one_column
@@ -27,7 +29,8 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
             cve_id: nil,
             title: "Bandit reads a chunked body twice",
             inserted_at: ~U[2026-08-12 09:30:00Z],
-            state: :draft
+            state: :draft,
+            tlp: %Tlp{label: :red}
           },
           tabs: @tabs,
           active: :workspace
@@ -49,7 +52,8 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
             cve_id: "CVE-2026-12345",
             title: "Bandit reads a chunked body twice",
             inserted_at: ~U[2026-08-12 09:30:00Z],
-            state: :published
+            state: :published,
+            tlp: %Tlp{label: :clear}
           },
           public_href: "#public",
           tabs: @tabs,
@@ -72,6 +76,7 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
             title: "brotli heap overflow reaches the brotli hex package",
             inserted_at: ~U[2026-08-12 09:30:00Z],
             state: :review,
+            tlp: %Tlp{label: :amber, caveat: "Not the brotli upstream."},
             upstream_cve: true
           },
           tabs: @tabs,
@@ -97,7 +102,8 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
             cve_id: "CVE-2026-12345",
             title: "Bandit reads a chunked body twice",
             inserted_at: ~U[2026-08-12 09:30:00Z],
-            state: :review
+            state: :review,
+            tlp: %Tlp{label: :red}
           },
           tabs: [
             %{id: :workspace, label: "Workspace", navigate: "#workspace"},
@@ -134,7 +140,8 @@ defmodule VarselWeb.Storybook.Case.CaseHeader do
             cve_id: "CVE-2026-12346",
             title: "Withdrawn report",
             inserted_at: ~U[2026-08-12 09:30:00Z],
-            state: :closed
+            state: :closed,
+            tlp: %Tlp{label: :red}
           },
           tabs: @tabs,
           active: :publication

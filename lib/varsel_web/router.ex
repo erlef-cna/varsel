@@ -328,6 +328,7 @@ defmodule VarselWeb.Router do
         :propose_proof_of_concept,
         :propose_internal_notes,
         :propose_discovery,
+        :propose_tlp,
         :propose_metric,
         :propose_metric_cvss,
         :propose_metric_scenario,

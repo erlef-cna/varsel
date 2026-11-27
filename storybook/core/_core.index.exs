@@ -46,6 +46,8 @@ defmodule VarselWeb.Storybook.Core do
 
   def entry("severity_chip"), do: [name: "Severity chip", icon: {:local, "hero-shield-exclamation"}]
 
+  def entry("tlp_chip"), do: [name: "TLP chip", icon: {:local, "hero-eye-slash"}]
+
   def entry("stat_tiles"), do: [name: "Stat tiles", icon: {:local, "hero-chart-bar-square"}]
   def entry("state"), do: [name: "State", icon: {:local, "hero-signal"}]
   def entry("tab_bar"), do: [name: "Tab bar", icon: {:local, "hero-rectangle-stack"}]

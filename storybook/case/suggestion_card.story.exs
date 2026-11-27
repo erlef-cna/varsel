@@ -6,6 +6,8 @@ defmodule VarselWeb.Storybook.Case.SuggestionCard do
   @moduledoc false
   use PhoenixStorybook.Story, :component
 
+  alias Varsel.Cases.Case.Tlp
+
   def function, do: &VarselWeb.CaseComponents.suggestion_card/1
 
   def layout, do: :one_column
@@ -26,7 +28,7 @@ defmodule VarselWeb.Storybook.Case.SuggestionCard do
         state: :open,
         reasoning: nil,
         inserted_at: ago(1800),
-        author: %{name: "Sam Chen"}
+        author: %{name: "Sam Chen", avatar_url: nil}
       },
       overrides
     )
@@ -64,7 +66,10 @@ defmodule VarselWeb.Storybook.Case.SuggestionCard do
         attributes: %{
           id: "suggestion-own",
           own: true,
-          proposal: proposal(%{author: %{name: "Alex Rivera", github_handle: "maennchen"}}),
+          proposal:
+            proposal(%{
+              author: %{name: "Alex Rivera", github_handle: "maennchen", avatar_url: nil}
+            }),
           old: "3.12.13",
           new: "3.12.14"
         }
@@ -83,13 +88,13 @@ defmodule VarselWeb.Storybook.Case.SuggestionCard do
               id: "c1",
               body: "Attack complexity is High — you need to win a race first.",
               inserted_at: ago(900),
-              author: %{name: "Sam Chen"}
+              author: %{name: "Sam Chen", avatar_url: nil}
             },
             %{
               id: "c2",
               body: "Agreed, and privileges required should be Low.",
               inserted_at: ago(600),
-              author: %{name: "Alex Rivera"}
+              author: %{name: "Alex Rivera", avatar_url: nil}
             }
           ]
         }
@@ -122,6 +127,16 @@ defmodule VarselWeb.Storybook.Case.SuggestionCard do
           proposal: proposal(%{state: :accepted, inserted_at: ago(4 * 86_400)}),
           old: "Crash on malformed input.",
           new: "A remote attacker can crash the node with a malformed AMQP frame."
+        }
+      },
+      %Variation{
+        id: :tlp,
+        description: "A TLP suggestion shows the two labels and what the new one permits.",
+        attributes: %{
+          id: "suggestion-tlp",
+          can_resolve: true,
+          proposal: proposal(%{field_name: "tlp"}),
+          tlp: {%Tlp{label: :red}, %Tlp{label: :green, caveat: "The community is the EEF security working group."}}
         }
       }
     ]
