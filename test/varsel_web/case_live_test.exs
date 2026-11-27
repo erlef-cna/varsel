@@ -1721,6 +1721,62 @@ defmodule VarselWeb.CaseLiveTest do
              )
     end
 
+    test "the disclosure panel sets the planned disclosure date and flags a passed one", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert lv |> element("#case-planned-disclosure") |> render() =~ "not set"
+
+      lv
+      |> element(~s{button[phx-click=edit_section][phx-value-section=disclosure]})
+      |> render_click()
+
+      assert has_element?(lv, "#form_planned_disclosure_at[min]")
+
+      lv
+      |> form("#case-disclosure-form", %{
+        "form" => %{"planned_disclosure_at" => "2026-01-15T09:30:00"}
+      })
+      |> render_submit()
+
+      assert Ash.get!(Case, case_record.id, authorize?: false).planned_disclosure_at ==
+               ~U[2026-01-15 09:30:00Z]
+
+      planned = lv |> element("#case-planned-disclosure") |> render()
+      assert planned =~ "2026-01-15 09:30 UTC"
+      assert planned =~ "passed"
+
+      lv
+      |> element(~s{button[phx-click=edit_section][phx-value-section=disclosure]})
+      |> render_click()
+
+      assert has_element?(lv, "#form_planned_disclosure_at[min='2026-01-15T09:30:00']")
+    end
+
+    test "a planned disclosure suggestion renders in the disclosure panel", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      proposal =
+        Cases.propose_planned_disclosure!(
+          %{case_id: case_record.id, value: ~U[2030-03-01 12:00:00Z]},
+          actor: supporter
+        )
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert lv |> element("#disclosure #suggestion-#{proposal.id}") |> render() =~
+               "2030-03-01T12:00:00Z"
+    end
+
     test "a TLP suggestion renders in the disclosure panel", %{
       conn: conn,
       poc: poc,

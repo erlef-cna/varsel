@@ -56,8 +56,18 @@ defmodule VarselWeb.NotificationsLiveTest do
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
 
-    assert has_element?(lv, "a[href='/cases/#{case_record.id}']", "Notified about this")
+    assert has_element?(lv, "a[href='/cases/#{case_record.id}/comments']", "Notified about this")
     assert has_element?(lv, "*", "2×")
+  end
+
+  test "a row links to the tab that shows its event", %{conn: conn, poc: poc, case: case_record} do
+    record!(poc, case_record, :comment_posted)
+    record!(poc, case_record, :proposal_opened)
+
+    {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
+
+    assert has_element?(lv, "a[href='/cases/#{case_record.id}/comments']")
+    assert has_element?(lv, "a[href='/cases/#{case_record.id}']")
   end
 
   test "a case with an assigned CVE ID shows it as a chip beside the title", %{
@@ -72,7 +82,7 @@ defmodule VarselWeb.NotificationsLiveTest do
 
     {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/notifications")
 
-    assert has_element?(lv, "a[href='/cases/#{case_record.id}']", "Has a CVE ID")
+    assert has_element?(lv, "a[href='/cases/#{case_record.id}/comments']", "Has a CVE ID")
     assert has_element?(lv, "*", "CVE-#{year}-31900")
   end
 
@@ -94,7 +104,7 @@ defmodule VarselWeb.NotificationsLiveTest do
 
     assert has_element?(
              lv,
-             "a[href='/cases/#{case_record.id}']",
+             "a[href='/cases/#{case_record.id}/comments']",
              Kind.description(:comment_posted)
            )
   end

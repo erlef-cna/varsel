@@ -216,6 +216,24 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
                Ash.get!(Cases.Case, case_record.id, authorize?: false).tlp
     end
 
+    test "propose_planned_disclosure applies to the case on accept", %{
+      poc: poc,
+      case: case_record
+    } do
+      proposal =
+        Cases.propose_planned_disclosure!(
+          %{case_id: case_record.id, value: ~U[2030-03-01 12:00:00Z]},
+          actor: poc
+        )
+
+      assert proposal.field_name == "planned_disclosure_at"
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      assert Ash.get!(Cases.Case, case_record.id, authorize?: false).planned_disclosure_at ==
+               ~U[2030-03-01 12:00:00Z]
+    end
+
     test "propose_discovery rejects a bad enum at the argument layer", %{
       poc: poc,
       case: case_record

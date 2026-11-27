@@ -57,6 +57,7 @@ defmodule VarselWeb.NotificationComponents do
     ],
     report_submitted: [label: "New reports", icon: "hero-inbox-arrow-down", tone: :act],
     record_drifted: [label: "Drifted records", icon: "hero-arrows-right-left", tone: :act],
+    disclosure_overdue: [label: "Disclosure dates passed", icon: "hero-calendar", tone: :act],
     mentioned: [label: "Mentions", icon: "hero-at-symbol", tone: :mention],
     case_assigned: [label: "Added to a case", icon: "hero-user-plus", tone: :addressed],
     proposal_opened: [label: "Proposals", icon: "hero-pencil-square", tone: :suggestion],
@@ -341,7 +342,9 @@ defmodule VarselWeb.NotificationComponents do
   was made in, and a drift to the case's diff against its CVE record.
   """
   @spec subject_path(%{kind: Kind.t(), case_id: Ash.UUID.t()}) :: String.t()
-  def subject_path(%{kind: :mentioned, case_id: case_id}), do: ~p"/cases/#{case_id}/comments"
+  def subject_path(%{kind: kind, case_id: case_id}) when kind in [:mentioned, :comment_posted],
+    do: ~p"/cases/#{case_id}/comments"
+
   def subject_path(%{kind: :record_drifted, case_id: case_id}), do: ~p"/cases/#{case_id}/cve/diff"
   def subject_path(%{case_id: case_id}), do: ~p"/cases/#{case_id}"
 end

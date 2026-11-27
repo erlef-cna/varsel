@@ -68,6 +68,16 @@ defmodule Varsel.Cases.Signals do
       argument :case_id, :uuid, allow_nil?: false
     end
 
+    signal :disclosure_overdue do
+      description "The planned disclosure date of an unpublished case passed more than 8 hours ago."
+      argument :case_id, :uuid, allow_nil?: false
+    end
+
+    signal :planned_disclosure_changed do
+      description "Someone changed or cleared the planned disclosure date of a case."
+      argument :case_id, :uuid, allow_nil?: false
+    end
+
     signal :comment_posted do
       description "A comment was written on a case, here or on its linked GitHub advisory."
       argument :case_id, :uuid, allow_nil?: false

@@ -50,6 +50,11 @@ defmodule Varsel.Notifications do
       define :send_notification_email, action: :send_email
       define :send_notification_digests, action: :send_digests
       define :fan_out_notifications, action: :fan_out, args: [:signal]
+      define :resolve_notification, action: :resolve
+
+      define :list_unread_disclosure_overdue_notifications,
+        action: :unread_disclosure_overdue,
+        args: [:case_id]
     end
   end
 

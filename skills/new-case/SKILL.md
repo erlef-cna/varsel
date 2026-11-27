@@ -27,7 +27,7 @@ server compute the record.
 Every change to an opened case is a **proposal**. There is one typed `mcp__varsel__propose_*` tool
 per thing you can change; pick the tool that names it:
 
-`propose_title`, `propose_description`, `propose_discovery`, `propose_tlp`, `propose_configurations`,
+`propose_title`, `propose_description`, `propose_discovery`, `propose_tlp`, `propose_planned_disclosure`, `propose_configurations`,
 `propose_workarounds`, `propose_technical_analysis`, `propose_proof_of_concept`, `propose_metric`,
 `propose_metric_cvss`, `propose_metric_scenario`, `propose_weakness`, `propose_impact`, `propose_impact_description`, `propose_reference`,
 `propose_credit`, `propose_affected_package` / `propose_otp_affected_package` /

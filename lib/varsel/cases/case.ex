@@ -111,6 +111,7 @@ defmodule Varsel.Cases.Case do
     :proof_of_concept_md,
     :discovery,
     :tlp,
+    :planned_disclosure_at,
     :date_public,
     :timeline,
     :internal_notes,
@@ -251,6 +252,25 @@ defmodule Varsel.Cases.Case do
         # related query, and the render reads the case's children.
         shared_context [:ash_oban?]
       end
+
+      trigger :remind_disclosure_overdue do
+        action :remind_disclosure_overdue
+
+        where expr(
+                state in [:submitted, :triage, :draft, :review, :approved] and
+                  is_nil(published_at) and
+                  planned_disclosure_at < ago(8, :hour) and
+                  (is_nil(disclosure_reminded_for) or
+                     disclosure_reminded_for != planned_disclosure_at)
+              )
+
+        worker_module_name Varsel.Cases.Case.RemindDisclosureOverdueWorker
+        scheduler_module_name Varsel.Cases.Case.RemindDisclosureOverdueScheduler
+        queue :case_reminders
+        max_attempts 3
+        scheduler_cron "*/15 * * * *"
+        worker_opts unique: [period: :infinity, states: :incomplete, keys: [:primary_key]]
+      end
     end
   end
 
@@ -267,7 +287,8 @@ defmodule Varsel.Cases.Case do
       :updated_at,
       :version,
       :record_drift,
-      :drift_checked_at
+      :drift_checked_at,
+      :disclosure_reminded_for
     ]
 
     only_when_changed? true
@@ -447,6 +468,10 @@ defmodule Varsel.Cases.Case do
       primary? true
       accept @content_fields
       require_atomic? false
+
+      emit Signals, :planned_disclosure_changed,
+        fields: [case_id: :id],
+        where: [changing(:planned_disclosure_at)]
     end
 
     update :apply_proposal do
@@ -464,6 +489,10 @@ defmodule Varsel.Cases.Case do
       argument :proposal_id, :uuid, allow_nil?: false
 
       change Varsel.Cases.Changes.ApplyProposedField
+
+      emit Signals, :planned_disclosure_changed,
+        fields: [case_id: :id],
+        where: [changing(:planned_disclosure_at)]
     end
 
     update :refresh_derivation do
@@ -490,6 +519,15 @@ defmodule Varsel.Cases.Case do
       emit Signals, :record_drifted,
         dynamic?: true,
         description: "When the check finds the case out of sync and the previous check found it in sync or had not run."
+    end
+
+    update :remind_disclosure_overdue do
+      description "Oban worker action: reminds the people on a case that its planned disclosure date passed more than 8 hours ago."
+      accept []
+      require_atomic? false
+      change atomic_update(:disclosure_reminded_for, expr(planned_disclosure_at))
+
+      emit Signals, :disclosure_overdue, fields: [case_id: :id]
     end
 
     update :recheck_drift do
@@ -1128,8 +1166,9 @@ defmodule Varsel.Cases.Case do
       authorize_if expr(state != :merged)
     end
 
-    # :mark_published and :check_drift run only through the AshOban bypass above.
-    policy action([:mark_published, :check_drift]) do
+    # :mark_published, :check_drift and :remind_disclosure_overdue run only
+    # through the AshOban bypass above.
+    policy action([:mark_published, :check_drift, :remind_disclosure_overdue]) do
       forbid_if always()
     end
 
@@ -1162,10 +1201,21 @@ defmodule Varsel.Cases.Case do
     # version bump would trip the outer changeset's own lock. :grant_access and
     # :report_to_github are exempt for the same reason: each writes a child row
     # and nothing on the case, so locking them would make two people adding two
-    # different collaborators collide.
+    # different collaborators collide. :remind_disclosure_overdue is exempt
+    # because it runs on a schedule and writes only its own bookkeeping, so
+    # locking it would fail an edit that happens to land in the same moment.
     change optimistic_lock(:version),
       on: [:update],
-      where: [negate(action_is([:refresh_derivation, :grant_access, :report_to_github]))]
+      where: [
+        negate(
+          action_is([
+            :refresh_derivation,
+            :grant_access,
+            :report_to_github,
+            :remind_disclosure_overdue
+          ])
+        )
+      ]
 
     change set_attribute(:accepted_at, &DateTime.utc_now/0),
       on: [:create],
@@ -1271,6 +1321,20 @@ defmodule Varsel.Cases.Case do
       allow_nil? false
       default %Tlp{label: :red}
       public? true
+    end
+
+    attribute :planned_disclosure_at, :utc_datetime do
+      description """
+      When the case is planned to go public. Once it is more than 8 hours past
+      and the case is not published, the people on the case get a reminder to
+      set a new date.
+      """
+
+      public? true
+    end
+
+    attribute :disclosure_reminded_for, :utc_datetime do
+      description "The planned disclosure date the last overdue reminder was sent for."
     end
 
     attribute :date_public, :utc_datetime do
