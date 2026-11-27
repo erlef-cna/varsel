@@ -1019,32 +1019,18 @@ defmodule Varsel.Cases.Case do
       authorize_if always()
     end
 
-    # POCs see every case; everyone else only the cases they are assigned to,
-    # which is the whole of an unroled collaborator's access.
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:assignments, :user])
+      authorize_if expr(can_read(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
-    # Content edits and review handoff: POC or assigned supporter. An assigned
-    # user with no role may propose and comment, but never write directly.
     policy action([:edit, :apply_proposal, :request_review, :refresh_derivation]) do
       authorize_if actor_attribute_equals(:role, :poc)
-
-      authorize_if expr(
-                     ^actor(:role) == :supporter and
-                       exists(assignments, user_id == ^actor(:id))
-                   )
+      forbid_unless actor_attribute_equals(:role, :supporter)
+      authorize_if expr(can_edit(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
-    # Content freeze: case content may change while the case is triaged and
-    # while it is in :draft or :review, or in :approved by a POC, so late
-    # detail lands without a reopen. From :publishing on the record is MITRE's
-    # and an amendment reopens.
     policy action([:edit, :apply_proposal, :report_to_github]) do
-      authorize_if expr(state in [:submitted, :triage, :draft, :review])
-
-      authorize_if expr(state == :approved and ^actor(:role) == :poc)
+      authorize_if expr(content_editable(actor_role: ^actor(:role)))
     end
 
     # A case holds one advisory.
@@ -1072,22 +1058,16 @@ defmodule Varsel.Cases.Case do
     policy action(:assign_cve_id) do
       authorize_if actor_attribute_equals(:role, :poc)
       forbid_if expr(not is_nil(^arg(:cve_record_id)))
-
-      authorize_if expr(
-                     ^actor(:role) == :supporter and
-                       exists(assignments, user_id == ^actor(:id))
-                   )
+      forbid_unless actor_attribute_equals(:role, :supporter)
+      authorize_if expr(can_edit(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
     # Reopening puts a case back into drafting, which is work rather than a
     # CNA decision, so an assigned supporter may do it.
     policy action(:reopen) do
       authorize_if actor_attribute_equals(:role, :poc)
-
-      authorize_if expr(
-                     ^actor(:role) == :supporter and
-                       exists(assignments, user_id == ^actor(:id))
-                   )
+      forbid_unless actor_attribute_equals(:role, :supporter)
+      authorize_if expr(can_edit(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
     # The rest of the lifecycle — approving and publishing above all — is the
@@ -1106,22 +1086,15 @@ defmodule Varsel.Cases.Case do
 
     policy action([:grant_access, :report_to_github]) do
       authorize_if actor_attribute_equals(:role, :poc)
-
-      authorize_if expr(
-                     ^actor(:role) == :supporter and
-                       exists(assignments, user_id == ^actor(:id))
-                   )
+      forbid_unless actor_attribute_equals(:role, :supporter)
+      authorize_if expr(can_edit(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
-    # Whether the CNA takes a reported case on is a CNA decision: a POC's, or
-    # a supporter's on a case they work.
+    # Whether the CNA takes a reported case on is a CNA decision.
     policy action([:triage, :accept, :reject, :merge]) do
       authorize_if actor_attribute_equals(:role, :poc)
-
-      authorize_if expr(
-                     ^actor(:role) == :supporter and
-                       exists(assignments, user_id == ^actor(:id))
-                   )
+      forbid_unless actor_attribute_equals(:role, :supporter)
+      authorize_if expr(can_triage(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
     # The new case has no assignments to ask about yet. `InheritFromSource` reads
@@ -1502,6 +1475,103 @@ defmodule Varsel.Cases.Case do
   end
 
   calculations do
+    # What a user may do on the case, for policies and pages alike. Policies
+    # pass `actor_id: ^actor(:id), actor_role: ^actor(:role)`. A create has no
+    # row yet, so its policy asks through `exists(case, ...)`. Ash cannot
+    # decide a calculation before the query, so a policy puts its role check
+    # first to refuse up front.
+    calculate :can_read,
+              :boolean,
+              expr(
+                (not is_nil(^arg(:actor_role)) and ^arg(:actor_role) == :poc) or
+                  exists(assignments, user_id == ^arg(:actor_id))
+              ) do
+      description "Whether the user may read the case: a POC, or assigned to it."
+      public? true
+      argument :actor_id, :uuid, allow_nil?: true
+      argument :actor_role, :atom, allow_nil?: true
+    end
+
+    calculate :can_comment,
+              :boolean,
+              expr(can_read(actor_id: ^arg(:actor_id), actor_role: ^arg(:actor_role))) do
+      description "Whether the user may comment on the case."
+      public? true
+      argument :actor_id, :uuid, allow_nil?: true
+      argument :actor_role, :atom, allow_nil?: true
+    end
+
+    calculate :can_propose,
+              :boolean,
+              expr(can_read(actor_id: ^arg(:actor_id), actor_role: ^arg(:actor_role))) do
+      description "Whether the user may propose changes to the case."
+      public? true
+      argument :actor_id, :uuid, allow_nil?: true
+      argument :actor_role, :atom, allow_nil?: true
+    end
+
+    # Writing needs a role as well as an assignment: an assigned user without
+    # one proposes instead.
+    calculate :can_edit,
+              :boolean,
+              expr(
+                not is_nil(^arg(:actor_role)) and
+                  (^arg(:actor_role) == :poc or
+                     (^arg(:actor_role) == :supporter and
+                        exists(assignments, user_id == ^arg(:actor_id))))
+              ) do
+      description "Whether the user may change the case and its facts directly: a POC, or a supporter assigned to it."
+      public? true
+      argument :actor_id, :uuid, allow_nil?: true
+      argument :actor_role, :atom, allow_nil?: true
+    end
+
+    calculate :can_triage,
+              :boolean,
+              expr(can_edit(actor_id: ^arg(:actor_id), actor_role: ^arg(:actor_role))) do
+      description "Whether the user may decide if the CNA takes the case on: a POC, or a supporter assigned to it."
+      public? true
+      argument :actor_id, :uuid, allow_nil?: true
+      argument :actor_role, :atom, allow_nil?: true
+    end
+
+    calculate :can_invite,
+              :boolean,
+              expr(can_edit(actor_id: ^arg(:actor_id), actor_role: ^arg(:actor_role))) do
+      description "Whether the user may invite people to the case and withdraw its invites: a POC, or a supporter assigned to it."
+      public? true
+      argument :actor_id, :uuid, allow_nil?: true
+      argument :actor_role, :atom, allow_nil?: true
+    end
+
+    calculate :can_refresh_advisory,
+              :boolean,
+              expr(
+                (not is_nil(^arg(:actor_role)) and ^arg(:actor_role) == :poc) or
+                  exists(assignments, user_id == ^arg(:actor_id))
+              ) do
+      description "Whether the user may read the linked GitHub advisory again: a POC, or assigned to it."
+      public? true
+      argument :actor_id, :uuid, allow_nil?: true
+      argument :actor_role, :atom, allow_nil?: true
+    end
+
+    # The content freeze: case content may change while the case is triaged
+    # and while it is in :draft or :review, or in :approved by a POC, so late
+    # detail lands without a reopen. From :publishing on the record is MITRE's
+    # and an amendment reopens.
+    calculate :content_editable,
+              :boolean,
+              expr(
+                state in [:submitted, :triage, :draft, :review] or
+                  (state == :approved and
+                     (not is_nil(^arg(:actor_role)) and ^arg(:actor_role) == :poc))
+              ) do
+      description "Whether the content of the case may change now, for a user with the given role."
+      public? true
+      argument :actor_role, :atom, allow_nil?: true
+    end
+
     calculate :cve_id, :string, expr(cve_record.cve_id) do
       description "The assigned CVE ID, if any."
       public? true

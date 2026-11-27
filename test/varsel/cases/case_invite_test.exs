@@ -111,6 +111,41 @@ defmodule Varsel.Cases.CaseInviteTest do
                  actor: outsider
                )
     end
+
+    test "an assigned user without a role sees the invites but neither invites nor withdraws", %{
+      poc: poc,
+      case: case_record
+    } do
+      collaborator = Fixtures.register_user("invite_collaborator")
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: collaborator.id}, actor: poc)
+
+      invite =
+        Cases.invite_to_case!(
+          %{case_id: case_record.id, strategy: :github, username: "octocat"},
+          actor: poc
+        )
+
+      assert {:error, %Forbidden{}} =
+               Cases.invite_to_case(
+                 %{case_id: case_record.id, strategy: :hex, username: "alice"},
+                 actor: collaborator
+               )
+
+      assert [%{id: invite_id}] = Cases.list_case_invites!(actor: collaborator)
+      assert invite_id == invite.id
+      assert {:error, %Forbidden{}} = Cases.withdraw_case_invite(invite, actor: collaborator)
+    end
+
+    test "an assigned supporter invites", %{poc: poc, case: case_record} do
+      supporter = Fixtures.register_user("invite_supporter", :supporter)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      assert {:ok, _invite} =
+               Cases.invite_to_case(
+                 %{case_id: case_record.id, strategy: :github, username: "octocat"},
+                 actor: supporter
+               )
+    end
   end
 
   describe ":invite email" do

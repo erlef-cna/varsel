@@ -148,10 +148,26 @@ solver, and a policy whose checks can only forbid never *authorizes*, so the
 whole read filters to nothing — for everyone, including a POC.
 
 **Some questions cannot be answered before the write.** A create whose policy
-reaches through a relationship (`Comment.post` via `[:case, :assignments,
-:user]`) is `:unknown` at the strict step, since the row does not exist yet;
-no option fixes it. Ask about the parent instead — `Ash.can?({case_record,
-:read}, actor)` answers the same POC-or-assigned question, before the write.
+reaches through a relationship (`Comment.post` asks `exists(case,
+can_comment(...))`) is `:unknown` at the strict step, since the row does not
+exist yet; no option fixes it. Ask about the parent instead —
+`Ash.can?({case_record, :read}, actor)` answers the same question, before the
+write.
+
+**Who may do what on a case lives in calculations on `Case`:** `can_read`,
+`can_comment`, `can_propose`, `can_edit`, `can_triage`, `can_invite`,
+`can_refresh_advisory` and `content_editable`. Policies call them with
+`actor_id: ^actor(:id), actor_role: ^actor(:role)`, as `case.can_read(...)`
+from a child row. Change a rule in the calculation, never in a policy.
+
+- A create has no row, so its policy asks `exists(case, can_x(...))`.
+  `case.can_x(...)` stays `:unknown` there and refuses everyone.
+- Ash cannot see inside a calculation before the query, so a policy that only
+  calls one never refuses up front: `Ash.can?` says yes, and the action's hooks
+  run before the row check refuses. Put the strict part first. A write that
+  needs a role starts with `authorize_if actor_attribute_equals(:role, :poc)`
+  and `forbid_unless actor_attribute_equals(:role, :supporter)`. A create open
+  to users without a role gets its own strict `actor_present()` policy.
 
 **`authorize?: false` is banned in app code**, whatever the generic Ash rules
 below say. `AshCredo.Check.Warning.AuthorizeFalse` enforces it (`.credo.exs`

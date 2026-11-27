@@ -198,18 +198,30 @@ defmodule Varsel.Cases.Comment do
       authorize_if AshObanInteraction
     end
 
-    policy action([:read, :list_for_case, :post, :for_github_login]) do
+    policy action([:read, :list_for_case, :for_github_login]) do
       authorize_if signal_in(Signals, :identity_linked)
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      authorize_if expr(case.can_read(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
-    # Triage is a POC's job, or a supporter's on a case they work, and so is
-    # asking an agent to help with it.
+    # A create has no row to filter, so the case is asked through `exists`, and
+    # a missing actor is refused up front.
+    policy action([:post, :post_triage_recommendation]) do
+      access_type :strict
+      authorize_if actor_present()
+    end
+
+    policy action(:post) do
+      authorize_if signal_in(Signals, :identity_linked)
+
+      authorize_if expr(exists(case, can_comment(actor_id: ^actor(:id), actor_role: ^actor(:role))))
+    end
+
+    # Asking an agent to help with triage is triage.
     policy action(:post_triage_recommendation) do
       authorize_if actor_attribute_equals(:role, :poc)
       forbid_unless actor_attribute_equals(:role, :supporter)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+
+      authorize_if expr(exists(case, can_triage(actor_id: ^actor(:id), actor_role: ^actor(:role))))
     end
   end
 

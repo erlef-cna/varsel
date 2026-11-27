@@ -60,8 +60,7 @@ defmodule Varsel.Cases.CaseReport do
 
   policies do
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      authorize_if expr(case.can_read(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
     # The case's intake writes the first citation, and split and merge the
