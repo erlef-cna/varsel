@@ -107,8 +107,7 @@ defmodule Varsel.Cases.CaseAssignment do
 
     # Assigned users may see who else works the case; POCs see everything.
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      authorize_if expr(case.can_read(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
     # The invite claim runs as the user who just signed in. Their invite is

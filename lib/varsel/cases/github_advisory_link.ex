@@ -243,17 +243,13 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      authorize_if expr(case.can_read(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
     policy action([:link, :unlink, :pull, :push]) do
       authorize_if actor_attribute_equals(:role, :poc)
-
-      authorize_if expr(
-                     ^actor(:role) == :supporter and
-                       exists(case.assignments, user_id == ^actor(:id))
-                   )
+      forbid_unless actor_attribute_equals(:role, :supporter)
+      authorize_if expr(exists(case, can_edit(actor_id: ^actor(:id), actor_role: ^actor(:role))))
     end
 
     policy action(:add_collaborator) do
@@ -263,9 +259,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
     # Content freeze: the link and the case may only change while the case is
     # editable, or when a POC corrects an approved one.
     policy action([:link, :unlink, :pull, :link_attested]) do
-      authorize_if expr(case.state in [:submitted, :triage, :draft, :review])
-
-      authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
+      authorize_if expr(exists(case, content_editable(actor_role: ^actor(:role))))
     end
 
     policy action(:record) do
@@ -280,8 +274,7 @@ defmodule Varsel.Cases.GitHubAdvisoryLink do
     end
 
     policy action(:refresh) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      authorize_if expr(case.can_refresh_advisory(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
     policy action(:sync_comments) do

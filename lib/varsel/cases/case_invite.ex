@@ -29,6 +29,7 @@ defmodule Varsel.Cases.CaseInvite do
     notifiers: [Ash.Notifier.PubSub]
 
   alias AshOban.Checks.AshObanInteraction
+  alias Varsel.Accounts.Signals
   alias Varsel.Cases.Case
   alias Varsel.Cases.CaseInvite.Changes.DeliverInvite
   alias Varsel.Cases.CaseInvite.Changes.ResolveContact
@@ -189,20 +190,28 @@ defmodule Varsel.Cases.CaseInvite do
       authorize_if AshObanInteraction
     end
 
+    policy action_type(:read) do
+      authorize_if signal_in(Signals, :identity_linked)
+      authorize_if expr(case.can_read(actor_id: ^actor(:id), actor_role: ^actor(:role)))
+    end
+
     # A case that closes before acceptance withdraws its open invites, and the
     # reporter's own withdrawal is one such close.
-    policy action_type([:read, :destroy]) do
-      authorize_if signal_in(Varsel.Accounts.Signals, :identity_linked)
+    policy action_type(:destroy) do
+      authorize_if signal_in(Signals, :identity_linked)
       authorize_if signal_in(Varsel.Cases.Signals, :case_closed)
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      forbid_unless actor_attribute_equals(:role, :supporter)
+      authorize_if expr(case.can_invite(actor_id: ^actor(:id), actor_role: ^actor(:role)))
     end
 
     # Inviting stays with people, apart from those a report's intake named.
     policy action_type(:create) do
       authorize_if accessing_from(Case, :invites)
       authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      forbid_unless actor_attribute_equals(:role, :supporter)
+
+      authorize_if expr(exists(case, can_invite(actor_id: ^actor(:id), actor_role: ^actor(:role))))
     end
 
     policy action(:send_email) do

@@ -60,13 +60,18 @@ defmodule Varsel.Cases.CommentReaction do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      authorize_if expr(case.can_read(actor_id: ^actor(:id), actor_role: ^actor(:role)))
+    end
+
+    # A create has no row to filter, so the case is asked through `exists`, and
+    # a missing actor is refused up front.
+    policy action(:react) do
+      access_type :strict
+      authorize_if actor_present()
     end
 
     policy action(:react) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      authorize_if expr(exists(case, can_comment(actor_id: ^actor(:id), actor_role: ^actor(:role))))
     end
 
     policy action(:unreact) do

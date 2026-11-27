@@ -106,6 +106,72 @@ defmodule Varsel.Cases.CaseTest do
     end
   end
 
+  describe "access calculations" do
+    @access [
+      :can_read,
+      :can_comment,
+      :can_propose,
+      :can_edit,
+      :can_triage,
+      :can_invite,
+      :can_refresh_advisory
+    ]
+
+    defp access(case_record, actor) do
+      args = %{actor_id: actor && actor.id, actor_role: actor && actor.role}
+
+      case_record
+      |> Ash.load!(Enum.map(@access, &{&1, args}), authorize?: false)
+      |> Map.take(@access)
+    end
+
+    test "each calculation answers for each kind of user", %{
+      poc: poc,
+      supporter: supporter,
+      collaborator: collaborator
+    } do
+      case_record = Fixtures.open_case(poc)
+      other_supporter = Fixtures.register_user("calc_other_supporter", :supporter)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: collaborator.id}, actor: poc)
+
+      everything = Map.new(@access, &{&1, true})
+      nothing = Map.new(@access, &{&1, false})
+
+      assert access(case_record, poc) == everything
+      assert access(case_record, supporter) == everything
+
+      assert access(case_record, collaborator) ==
+               %{
+                 nothing
+                 | can_read: true,
+                   can_comment: true,
+                   can_propose: true,
+                   can_refresh_advisory: true
+               }
+
+      assert access(case_record, other_supporter) == nothing
+      assert access(case_record, nil) == nothing
+    end
+
+    test "content_editable follows the freeze", %{poc: poc, supporter: supporter} do
+      case_record = Fixtures.open_case(poc)
+      approved = poc |> Fixtures.open_case() |> Ash.Seed.update!(%{state: :approved})
+      published = poc |> Fixtures.open_case() |> Ash.Seed.update!(%{state: :published})
+
+      editable = fn record, actor ->
+        record
+        |> Ash.load!([content_editable: %{actor_role: actor.role}], authorize?: false)
+        |> Map.fetch!(:content_editable)
+      end
+
+      assert editable.(case_record, supporter)
+      assert editable.(approved, poc)
+      refute editable.(approved, supporter)
+      refute editable.(published, poc)
+    end
+  end
+
   describe "what each role may do to a case it is assigned to" do
     setup %{poc: poc, supporter: supporter, collaborator: collaborator} do
       case_record = Fixtures.open_case(poc)

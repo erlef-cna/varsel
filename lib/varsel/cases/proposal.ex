@@ -274,39 +274,38 @@ defmodule Varsel.Cases.Proposal do
       authorize_if AshStateMachine.Checks.ValidNextState
     end
 
-    # POCs and assigned supporters see a case's proposals; authors always see
-    # their own.
+    # Whoever may read the case sees its proposals; authors always see their
+    # own.
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      authorize_if expr(case.can_read(actor_id: ^actor(:id), actor_role: ^actor(:role)))
       authorize_if relates_to_actor_via(:author)
     end
 
     # Every create action is a propose variant (the generic :propose plus the
     # specialized propose_* actions), so gate them by type rather than naming
-    # each one.
+    # each one. A create has no row to filter, so the case is asked through
+    # `exists`, and a missing actor is refused up front.
     policy action_type(:create) do
-      authorize_if actor_attribute_equals(:role, :poc)
-      authorize_if relates_to_actor_via([:case, :assignments, :user])
+      access_type :strict
+      authorize_if actor_present()
+    end
+
+    policy action_type(:create) do
+      authorize_if expr(exists(case, can_propose(actor_id: ^actor(:id), actor_role: ^actor(:role))))
     end
 
     # Resolving someone else's proposal is a reviewer's act, so it needs a role
     # as well as an assignment — an unroled collaborator proposes and no more.
     policy action([:accept, :decline]) do
       authorize_if actor_attribute_equals(:role, :poc)
-
-      authorize_if expr(
-                     ^actor(:role) == :supporter and
-                       exists(case.assignments, user_id == ^actor(:id))
-                   )
+      forbid_unless actor_attribute_equals(:role, :supporter)
+      authorize_if expr(exists(case, can_edit(actor_id: ^actor(:id), actor_role: ^actor(:role))))
     end
 
     # Content freeze, mirroring the case and its child rows: a proposal applies
     # to content, so it may only be accepted while that content may change.
     policy action(:accept) do
-      authorize_if expr(case.state in [:submitted, :triage, :draft, :review])
-
-      authorize_if expr(case.state == :approved and ^actor(:role) == :poc)
+      authorize_if expr(exists(case, content_editable(actor_role: ^actor(:role))))
     end
 
     policy action(:withdraw) do
