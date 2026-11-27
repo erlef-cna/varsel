@@ -29,6 +29,8 @@ defmodule VarselWeb.CaseDetailLive do
   alias Varsel.Accounts.User.Role
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage
+  alias Varsel.Cases.Case.Tlp
+  alias Varsel.Cases.Case.Tlp.Label
   alias Varsel.Cases.CaseCredit
   alias Varsel.Cases.CaseImpact
   alias Varsel.Cases.CaseInvite.EmailStatus
@@ -170,7 +172,7 @@ defmodule VarselWeb.CaseDetailLive do
     {:noreply, assign_case(socket, socket.assigns.case_record)}
   end
 
-  def handle_event("edit_section", %{"section" => "summary" = section}, socket) do
+  def handle_event("edit_section", %{"section" => section}, socket) when section in ~w(summary disclosure) do
     socket = assign(socket, editing_section: section)
     {:noreply, assign_case(socket, socket.assigns.case_record)}
   end
@@ -630,7 +632,7 @@ defmodule VarselWeb.CaseDetailLive do
     display_case = if projection, do: projection.case, else: case_record
 
     content_form =
-      if mode in [:edit, :propose] and socket.assigns.editing_section == "summary" do
+      if mode in [:edit, :propose] and socket.assigns.editing_section in ~w(summary disclosure) do
         display_case
         |> AshPhoenix.Form.for_update(:edit, as: "form", actor: actor)
         |> to_form()
@@ -812,6 +814,15 @@ defmodule VarselWeb.CaseDetailLive do
 
   defp proposal_old_value(_case_record, _proposal), do: nil
 
+  defp proposal_tlp(case_record, %{operation: :set, target: :case, field_name: "tlp"} = proposal) do
+    case Ash.Type.cast_input(Tlp, proposal.proposed_value["value"], []) do
+      {:ok, %Tlp{} = new} -> {proposal_old_value(case_record, proposal), new}
+      _uncastable -> nil
+    end
+  end
+
+  defp proposal_tlp(_case_record, _proposal), do: nil
+
   defp proposal_target_row(case_record, %{target: :case}), do: case_record
 
   defp proposal_target_row(case_record, proposal) do
@@ -898,6 +909,16 @@ defmodule VarselWeb.CaseDetailLive do
             forced?={suggest_forced?(@case_record, @current_user)}
             class="lg:hidden"
           />
+          <div id="disclosure">
+            <.disclosure_section
+              case_record={@display_case}
+              raw_case_record={@case_record}
+              content_form={@editing_section == "disclosure" && @content_form}
+              mode={@mode}
+              current_user={@current_user}
+              can_resolve={can_edit?(@case_record, @current_user)}
+            />
+          </div>
           <div id="summary">
             <.content_section
               case_record={@display_case}
@@ -1161,10 +1182,13 @@ defmodule VarselWeb.CaseDetailLive do
     open = Enum.filter(proposals, &(&1.state == :open))
     counts = Enum.frequencies_by(open, &section_for_proposal/1)
 
+    disclosure = %{id: "disclosure", label: "Disclosure", status: nil}
+
     sections =
-      display_case
-      |> Readiness.sections()
-      |> Enum.map(&Map.put(&1, :suggestions, Map.get(counts, &1.id, 0)))
+      Enum.map(
+        [disclosure | Readiness.sections(display_case)],
+        &Map.put(&1, :suggestions, Map.get(counts, &1.id, 0))
+      )
 
     sections ++
       [%{id: "suggestions", label: "Suggestions", status: nil, suggestions: length(open)}]
@@ -1178,6 +1202,7 @@ defmodule VarselWeb.CaseDetailLive do
   defp section_for_proposal(%{target: :credit}), do: "credits"
   defp section_for_proposal(%{target: :weakness}), do: "weaknesses"
   defp section_for_proposal(%{target: :impact}), do: "impacts"
+  defp section_for_proposal(%{target: :case, field_name: "tlp"}), do: "disclosure"
   defp section_for_proposal(_case_field), do: "summary"
 
   defp open_proposals(case_record) do
@@ -1327,6 +1352,7 @@ defmodule VarselWeb.CaseDetailLive do
         proposal={proposal}
         old={format_proposal_value(proposal_old_value(@case_record, proposal))}
         new={format_proposal_value(proposal.proposed_value["value"])}
+        tlp={proposal_tlp(@case_record, proposal)}
         can_resolve={@can_resolve}
         own={proposal.author_id == @current_user.id}
         comments={Map.get(@comments, proposal.id, [])}
@@ -1485,6 +1511,53 @@ defmodule VarselWeb.CaseDetailLive do
       <.inline_suggestions
         case_record={@raw_case_record}
         section_id="summary"
+        current_user={@current_user}
+        can_resolve={@can_resolve}
+      />
+    </.panel>
+    """
+  end
+
+  defp disclosure_section(assigns) do
+    ~H"""
+    <.edit_mode_notice :if={@content_form} mode={@mode} />
+    <.panel editing?={!!@content_form}>
+      <:title>{if @content_form, do: "Disclosure — editing", else: "Disclosure"}</:title>
+      <:actions>
+        <button
+          :if={@mode != :view and !@content_form}
+          class="link link-hover text-primary"
+          phx-click="edit_section"
+          phx-value-section="disclosure"
+        >
+          Edit
+        </button>
+      </:actions>
+      <.form
+        :if={@content_form}
+        for={@content_form}
+        id="case-disclosure-form"
+        phx-change="validate"
+        phx-submit="save"
+      >
+        <.tlp_input field={@content_form[:tlp]} />
+        <.edit_actions mode={@mode} cancel="cancel_edit" />
+      </.form>
+
+      <div :if={!@content_form} id="case-disclosure">
+        <div class="flex items-start gap-3">
+          <.tlp_chip label={@case_record.tlp.label} caveat={@case_record.tlp.caveat} class="shrink-0" />
+          <p class="text-sm text-base-content/80">{Label.description(@case_record.tlp.label)}</p>
+        </div>
+        <div :if={@case_record.tlp.caveat} id="case-tlp-caveat" class="mt-2 text-sm">
+          <span class="font-semibold text-base-content/70">Caveat:</span>
+          <span class="whitespace-pre-wrap break-words">{@case_record.tlp.caveat}</span>
+        </div>
+      </div>
+
+      <.inline_suggestions
+        case_record={@raw_case_record}
+        section_id="disclosure"
         current_user={@current_user}
         can_resolve={@can_resolve}
       />

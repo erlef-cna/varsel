@@ -27,6 +27,8 @@ defmodule Varsel.Cases.CaseTest do
       assert case_record.state == :draft
       assert case_record.title == "SSH bug"
       assert case_record.discovery == :unknown
+      assert case_record.tlp.label == :red
+      assert case_record.tlp.caveat == nil
     end
 
     test "a supporter opens a case too", %{supporter: supporter} do

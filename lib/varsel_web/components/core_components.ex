@@ -38,6 +38,7 @@ defmodule VarselWeb.CoreComponents do
   alias Phoenix.HTML.FormField
   alias Phoenix.HTML.Safe
   alias Phoenix.LiveView.JS
+  alias Varsel.Cases.Case.Tlp.Label
 
   @doc """
   Renders flash notices.
@@ -1081,6 +1082,93 @@ defmodule VarselWeb.CoreComponents do
   defp severity_chip_class(:none), do: "text-[color:var(--sev-none)] bg-[color:var(--sev-none-tint)]"
 
   defp format_severity_score(score), do: :erlang.float_to_binary(score / 1, decimals: 1)
+
+  @doc """
+  Renders the TLP 2.0 marking of a case. The colours are the ones the TLP
+  standard fixes: coloured text on black, in both themes. A caveat adds a
+  `+CAVEAT` suffix.
+
+  With `info` (the default) the chip opens a card on hover and on keyboard
+  focus. The card shows the caveat, says what the label permits and when to
+  use it, and links to the CISA definitions. Pass `info={false}` where that
+  text is already next to the chip.
+  """
+  attr :label, :atom, required: true, values: Label.values()
+  attr :caveat, :string, default: nil
+  attr :info, :boolean, default: true
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  def tlp_chip(%{info: false} = assigns) do
+    ~H"""
+    <span class={[tlp_chip_class(@label), @class]} {@rest}>{tlp_chip_text(@label, @caveat)}</span>
+    """
+  end
+
+  def tlp_chip(assigns) do
+    ~H"""
+    <span class="tlp-info dropdown dropdown-hover align-middle">
+      <span
+        tabindex="0"
+        role="button"
+        aria-label={"#{tlp_chip_text(@label, @caveat)}: what this marking means"}
+        class={[tlp_chip_class(@label), "cursor-help", @class]}
+        {@rest}
+      >
+        {tlp_chip_text(@label, @caveat)}
+      </span>
+      <%!-- Spans only: the chip sits inside paragraphs such as the page eyebrow. --%>
+      <span
+        tabindex="0"
+        class={[
+          "tlp-card dropdown-content z-50 mt-1 block w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg",
+          "text-left text-sm font-normal normal-case tracking-normal text-base-content"
+        ]}
+      >
+        <.tlp_chip label={@label} caveat={@caveat} info={false} />
+        <span
+          :if={@caveat}
+          class="mt-2 block rounded-md bg-base-200 px-2 py-1.5"
+        >
+          <span class="block text-xs font-semibold text-base-content/60">Caveat</span>
+          <%!-- phx-no-format: pre-wrap would render the formatter's indentation --%>
+          <span class="block whitespace-pre-wrap break-words" phx-no-format>{@caveat}</span>
+        </span>
+        <span class="mt-2 block font-semibold">{Label.description(@label)}</span>
+        <span class="mt-1 block text-xs text-base-content/70">{Label.guidance(@label)}</span>
+        <span class="mt-2 flex gap-3 text-xs">
+          <a
+            href={Label.definitions_url()}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="link link-primary"
+          >
+            CISA definitions
+          </a>
+          <a
+            href={Label.user_guide_url()}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="link link-primary"
+          >
+            TLP 2.0 user guide
+          </a>
+        </span>
+      </span>
+    </span>
+    """
+  end
+
+  defp tlp_chip_text(label, nil), do: Label.label(label)
+  defp tlp_chip_text(label, _caveat), do: Label.label(label) <> " +CAVEAT"
+
+  defp tlp_chip_class(tlp) do
+    [
+      "tlp-chip inline-flex items-center rounded-[5px] px-[0.42rem] py-[0.09rem]",
+      "font-mono text-[0.67rem] font-bold whitespace-nowrap",
+      "tlp-#{tlp}"
+    ]
+  end
 
   @doc """
   Renders a table card's footer pager: "N per page · M total" on the left,

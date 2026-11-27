@@ -23,6 +23,7 @@ defmodule Varsel.Cases.Proposal.Build do
 
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.AffectedPackage.ProgramFile
+  alias Varsel.Cases.Case.Tlp
   alias Varsel.Cases.CaseCredit.Handle
   alias Varsel.Cases.Projection
   alias Varsel.Cases.Proposable
@@ -173,6 +174,8 @@ defmodule Varsel.Cases.Proposal.Build do
   defp comparable(%Handle{} = handle) do
     %{"strategy" => to_string(handle.strategy), "username" => to_string(handle.username)}
   end
+
+  defp comparable(%Tlp{label: label, caveat: caveat}), do: %{"label" => to_string(label), "caveat" => caveat || ""}
 
   defp comparable(nil), do: ""
   defp comparable(value) when is_list(value), do: Enum.map(value, &comparable/1)

@@ -34,6 +34,7 @@ defmodule Varsel.Cases.Proposable do
     :technical_analysis_md,
     :proof_of_concept_md,
     :discovery,
+    :tlp,
     :date_public,
     :timeline,
     :internal_notes,

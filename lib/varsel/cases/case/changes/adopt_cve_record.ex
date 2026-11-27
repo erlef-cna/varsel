@@ -20,6 +20,7 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecord do
 
   alias Varsel.CAPEC.AttackPattern
   alias Varsel.Cases.Case.Import
+  alias Varsel.Cases.Case.Tlp
   alias Varsel.CVE
   alias Varsel.CWE.Weakness
 
@@ -38,12 +39,18 @@ defmodule Varsel.Cases.Case.Changes.AdoptCveRecord do
         changeset
         |> Ash.Changeset.force_change_attribute(:cve_record_id, record.id)
         |> Ash.Changeset.force_change_attributes(Import.case_params(record.cve_json))
+        |> tlp(record)
         |> manage_children(Import.child_params(record.cve_json))
 
       {:error, error} ->
         Ash.Changeset.add_error(changeset, error)
     end
   end
+
+  defp tlp(changeset, %{state: state}) when state in [:published, :pending_update],
+    do: Ash.Changeset.force_change_attribute(changeset, :tlp, %Tlp{label: :clear})
+
+  defp tlp(changeset, _record), do: changeset
 
   # Each child goes in through its own `:add` action, so the validations and
   # policies that apply to a POC adding the row by hand apply here too.

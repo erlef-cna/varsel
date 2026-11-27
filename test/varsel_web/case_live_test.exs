@@ -11,6 +11,7 @@ defmodule VarselWeb.CaseLiveTest do
   alias Varsel.Cases
   alias Varsel.Cases.AffectedPackage.Preset
   alias Varsel.Cases.Case
+  alias Varsel.Cases.Case.Tlp
   alias Varsel.Fixtures
   alias Varsel.HexPm
   alias Varsel.Notifications
@@ -1651,6 +1652,90 @@ defmodule VarselWeb.CaseLiveTest do
       |> render_submit()
 
       assert lv |> element("#case-date-public time") |> render() =~ "2026-11-05 12:00:00 UTC"
+    end
+
+    test "the header and the disclosure panel show the TLP marking, and the panel changes it", %{
+      conn: conn,
+      poc: poc
+    } do
+      case_record = Fixtures.open_case(poc)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert has_element?(lv, "#case-tlp", "TLP:RED")
+      assert has_element?(lv, "#case-disclosure", "TLP:RED")
+      refute has_element?(lv, "#case-tlp-caveat")
+
+      lv
+      |> element(~s{button[phx-click=edit_section][phx-value-section=disclosure]})
+      |> render_click()
+
+      assert has_element?(lv, "#case-disclosure-form #form_tlp_label_red[checked]")
+
+      lv
+      |> form("#case-disclosure-form", %{
+        "form" => %{"tlp" => %{"label" => "amber_strict", "caveat" => "The security WG only."}}
+      })
+      |> render_submit()
+
+      assert %Tlp{label: :amber_strict, caveat: "The security WG only."} =
+               Ash.get!(Case, case_record.id, authorize?: false).tlp
+
+      assert lv |> element("#case-tlp") |> render() =~ "TLP:AMBER+STRICT +CAVEAT"
+      assert lv |> element("#case-tlp-caveat") |> render() =~ "The security WG only."
+    end
+
+    test "suggesting a caveat files one TLP suggestion with the label and the caveat", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      {:ok, lv, _html} = conn |> log_in(supporter) |> live(~p"/cases/#{case_record.id}")
+
+      lv |> element("#suggest-toggle input") |> render_click()
+
+      lv
+      |> element(~s{button[phx-click=edit_section][phx-value-section=disclosure]})
+      |> render_click()
+
+      lv
+      |> form("#case-disclosure-form", %{
+        "form" => %{"tlp" => %{"label" => "red", "caveat" => "Not the upstream vendor."}}
+      })
+      |> render_submit()
+
+      assert [proposal] = Cases.list_open_case_proposals!(case_record.id, actor: poc)
+      assert proposal.field_name == "tlp"
+
+      assert proposal.proposed_value == %{
+               "value" => %{"label" => "red", "caveat" => "Not the upstream vendor."}
+             }
+
+      assert has_element?(
+               lv,
+               "#disclosure #suggestion-#{proposal.id} .tlp-red",
+               "TLP:RED +CAVEAT"
+             )
+    end
+
+    test "a TLP suggestion renders in the disclosure panel", %{
+      conn: conn,
+      poc: poc,
+      supporter: supporter
+    } do
+      case_record = Fixtures.open_case(poc)
+      Cases.assign_case_user!(%{case_id: case_record.id, user_id: supporter.id}, actor: poc)
+
+      proposal =
+        Cases.propose_tlp!(%{case_id: case_record.id, value: %{label: :green}}, actor: supporter)
+
+      {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
+
+      assert has_element?(lv, "#disclosure #suggestion-#{proposal.id} .tlp-red", "TLP:RED")
+      assert has_element?(lv, "#disclosure #suggestion-#{proposal.id} .tlp-green", "TLP:GREEN")
     end
 
     test "markdown fields preview the rendered HTML and keep unsaved edits", %{
@@ -3886,7 +3971,7 @@ defmodule VarselWeb.CaseLiveTest do
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
       assert lv |> element("p.page-header-eyebrow") |> render() =~ "CVE-#{year}-55558"
-      refute has_element?(lv, ~s(p.page-header-eyebrow a))
+      refute has_element?(lv, ~s(p.page-header-eyebrow a[href^="/cves/"]))
     end
 
     test "a case with no CVE ID offers no link", %{conn: conn, poc: poc} do
@@ -3894,7 +3979,7 @@ defmodule VarselWeb.CaseLiveTest do
 
       {:ok, lv, _html} = conn |> log_in(poc) |> live(~p"/cases/#{case_record.id}")
 
-      refute has_element?(lv, ~s(p.page-header-eyebrow a))
+      refute has_element?(lv, ~s(p.page-header-eyebrow a[href^="/cves/"]))
     end
   end
 

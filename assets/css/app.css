@@ -281,6 +281,76 @@
   }
 }
 
+/* ---------------------------------------------------------- TLP chip tokens */
+/* TLP 2.0 fixes these colours as text on a black background. On the dark
+   page the black chip needs a line to stand off it. */
+:root {
+  --tlp-fill: #000000;
+  --tlp-line: transparent;
+  --tlp-red: #ff2b2b;
+  --tlp-amber: #ffc000;
+  --tlp-green: #33ff00;
+  --tlp-clear: #ffffff;
+}
+
+[data-theme="dark"] {
+  --tlp-line: #3a4a5c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --tlp-line: #3a4a5c;
+  }
+}
+
+.tlp-chip {
+  background-color: var(--tlp-fill);
+  border: 1px solid var(--tlp-line);
+}
+
+.tlp-red {
+  color: var(--tlp-red);
+}
+
+.tlp-amber,
+.tlp-amber_strict {
+  color: var(--tlp-amber);
+}
+
+.tlp-green {
+  color: var(--tlp-green);
+}
+
+.tlp-clear {
+  color: var(--tlp-clear);
+}
+
+.tlp-card {
+  max-width: calc(100vw - 2rem);
+}
+
+/* The TLP card anchors to its chip and flips to stay inside the viewport.
+   Each chip scopes the anchor name, so several chips on one page stay apart.
+   Browsers without anchor scoping keep daisyUI's dropdown placement. */
+@supports (anchor-scope: --tlp-chip) {
+  .tlp-info {
+    anchor-scope: --tlp-chip;
+  }
+
+  .tlp-info > [role="button"] {
+    anchor-name: --tlp-chip;
+  }
+
+  .tlp-info > .tlp-card {
+    position: fixed;
+    inset: auto;
+    margin: 0.25rem 0;
+    position-anchor: --tlp-chip;
+    position-area: bottom span-right;
+    position-try-fallbacks: flip-inline, flip-block, flip-block flip-inline;
+  }
+}
+
 /* Pipeline lane cards sit one elevation step ABOVE the lane panel (base-200)
    in BOTH themes. bg-base-100 only does that on light (white over grey); on
    dark base-100 is the page — the darkest surface — so cards would sink.

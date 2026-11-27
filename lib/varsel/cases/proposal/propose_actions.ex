@@ -176,6 +176,20 @@ defmodule Varsel.Cases.Proposal.ProposeActions do
       emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
     end
 
+    create :propose_tlp do
+      description """
+      Proposes setting the TLP 2.0 marking of the case: the label, and an
+      optional caveat with extra sharing limits. The proposal replaces both.
+      Leave out the caveat to propose a marking without one.
+      """
+
+      accept [:case_id, :reasoning]
+      argument :value, Varsel.Cases.Case.Tlp, allow_nil?: false
+      change {PackProposal, target: :case, operation: :set, field: :tlp}
+
+      emit Signals, :proposal_opened, values: [actor_id: actor(:id)]
+    end
+
     create :propose_metric do
       description """
       Proposes adding a CVSS v4.0 score (a CVSS:4.0/... vector) for one

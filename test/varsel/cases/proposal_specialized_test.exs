@@ -201,6 +201,21 @@ defmodule Varsel.Cases.ProposalSpecializedTest do
       assert [] = Cases.list_case_metrics!(query: [filter: [case_id: case_record.id]], actor: poc)
     end
 
+    test "propose_tlp applies to the case on accept", %{poc: poc, case: case_record} do
+      proposal =
+        Cases.propose_tlp!(
+          %{case_id: case_record.id, value: %{label: :amber, caveat: "The security WG only."}},
+          actor: poc
+        )
+
+      assert proposal.field_name == "tlp"
+
+      Cases.accept_case_proposal!(proposal, %{}, actor: poc)
+
+      assert %Varsel.Cases.Case.Tlp{label: :amber, caveat: "The security WG only."} =
+               Ash.get!(Cases.Case, case_record.id, authorize?: false).tlp
+    end
+
     test "propose_discovery rejects a bad enum at the argument layer", %{
       poc: poc,
       case: case_record

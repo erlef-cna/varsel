@@ -91,6 +91,7 @@ defmodule Varsel.Cases.Case do
   alias Varsel.Cases.Case.Discovery
   alias Varsel.Cases.Case.State
   alias Varsel.Cases.Case.TimelineEntry
+  alias Varsel.Cases.Case.Tlp
   alias Varsel.Cases.CaseMetric
   alias Varsel.Cases.Changes.AssignOpener
   alias Varsel.Cases.Signals
@@ -109,6 +110,7 @@ defmodule Varsel.Cases.Case do
     :technical_analysis_md,
     :proof_of_concept_md,
     :discovery,
+    :tlp,
     :date_public,
     :timeline,
     :internal_notes,
@@ -702,6 +704,7 @@ defmodule Varsel.Cases.Case do
 
       change transition_state(:published)
       change Varsel.Cases.Case.Changes.StampPublishedAt
+      change set_attribute(:tlp, %Tlp{label: :clear})
 
       emit Signals, :case_published,
         fields: [case_id: :id],
@@ -1256,6 +1259,17 @@ defmodule Varsel.Cases.Case do
       description "How the vulnerability was discovered (source.discovery)."
       allow_nil? false
       default :unknown
+      public? true
+    end
+
+    attribute :tlp, Tlp do
+      description """
+      The TLP 2.0 marking of the case: a label and an optional caveat. Every
+      case starts at TLP:RED. Publishing sets TLP:CLEAR and drops the caveat.
+      """
+
+      allow_nil? false
+      default %Tlp{label: :red}
       public? true
     end
 
