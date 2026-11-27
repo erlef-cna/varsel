@@ -104,6 +104,18 @@ defmodule Varsel.Cases.Signals do
       argument :actor_id, :uuid, description: "The user who proposed, when a user did."
     end
 
+    signal :case_shared do
+      description "A pre-disclosure list made a case visible to users: the case went on the list, or the users joined it."
+      argument :case_id, :uuid, allow_nil?: false
+
+      argument :user_ids, {:array, :uuid} do
+        description "The subscribers who now see the case."
+        allow_nil? false
+      end
+
+      argument :actor_id, :uuid, description: "The POC who shared the case or added the subscriber."
+    end
+
     signal :case_assigned do
       description "A user was granted access to a case they did not have."
       argument :case_id, :uuid, allow_nil?: false

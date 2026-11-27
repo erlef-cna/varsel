@@ -304,6 +304,7 @@ defmodule Varsel.Notifications.Notification do
       on :case_published, :notify_case_published, action: :fan_out, delivery: @delivery
       on :record_drifted, :notify_record_drifted, action: :fan_out, delivery: @delivery
       on :disclosure_overdue, :notify_disclosure_overdue, action: :fan_out, delivery: @delivery
+      on :case_shared, :notify_case_shared, action: :fan_out, delivery: @delivery
 
       on :planned_disclosure_changed, :resolve_disclosure_overdue,
         action: :resolve,

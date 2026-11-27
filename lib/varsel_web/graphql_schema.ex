@@ -12,7 +12,8 @@ defmodule VarselWeb.GraphqlSchema do
       Varsel.CAPEC,
       Varsel.Cases,
       Varsel.CVE,
-      Varsel.CWE
+      Varsel.CWE,
+      Varsel.Predisclosure
     ]
 
   import_types Absinthe.Plug.Types

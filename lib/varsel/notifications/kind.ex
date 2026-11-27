@@ -51,6 +51,10 @@ defmodule Varsel.Notifications.Kind do
         label: "Added to a case",
         description: "A user was granted access to a case."
       ],
+      case_shared: [
+        label: "Shared with you",
+        description: "A case was shared with you."
+      ],
       disclosure_overdue: [
         label: "Disclosure date passed",
         description: "The planned disclosure date of an unpublished case passed more than 8 hours ago."
@@ -61,7 +65,7 @@ defmodule Varsel.Notifications.Kind do
   Who a kind's notifications are fanned out to. `:reviewers` are the POCs
   assigned to the case.
   """
-  @spec audience(t()) :: :pocs | :reviewers | :assigned | :recipient | :mentioned
+  @spec audience(t()) :: :pocs | :reviewers | :assigned | :recipient | :mentioned | :subscribers
   def audience(:report_submitted), do: :pocs
   def audience(:review_requested), do: :reviewers
   def audience(:unassigned_review_requested), do: :pocs
@@ -72,6 +76,7 @@ defmodule Varsel.Notifications.Kind do
   def audience(:record_drifted), do: :reviewers
   def audience(:case_assigned), do: :recipient
   def audience(:disclosure_overdue), do: :assigned
+  def audience(:case_shared), do: :subscribers
 
   @doc """
   Whether a kind reaches a user who has not chosen for it. A review on a case

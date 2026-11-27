@@ -212,6 +212,58 @@ defmodule VarselWeb.GraphqlTest do
 
       assert body["data"]["setUserRole"]["result"]["role"] == "SUPPORTER"
     end
+
+    test "manages a pre-disclosure list and shares a case with it", %{conn: conn} do
+      poc = register_user("poc", :poc)
+      subscriber = register_user("subscriber")
+      case_record = open_case(poc)
+      conn = with_api_key(conn, poc)
+
+      created =
+        gql(
+          conn,
+          "mutation { createPredisclosureList(input: {name: \"Distributors\"}) { result { id name } errors { message } } }"
+        )
+
+      assert %{"id" => list_id, "name" => "Distributors"} =
+               created["data"]["createPredisclosureList"]["result"]
+
+      subscribed =
+        gql(
+          conn,
+          "mutation($input: SubscribeToPredisclosureListInput!) { subscribeToPredisclosureList(input: $input) { result { id } errors { message } } }",
+          %{"input" => %{"listId" => list_id, "userId" => subscriber.id}}
+        )
+
+      assert %{"id" => _id} = subscribed["data"]["subscribeToPredisclosureList"]["result"]
+
+      shared =
+        gql(
+          conn,
+          "mutation($id: ID!, $input: SetCasePredisclosureListsInput!) { setCasePredisclosureLists(id: $id, input: $input) { result { id } errors { message } } }",
+          %{"id" => case_record.id, "input" => %{"listIds" => [list_id]}}
+        )
+
+      assert shared["data"]["setCasePredisclosureLists"]["result"]["id"] == case_record.id
+
+      listed = gql(conn, "{ listPredisclosureLists { name subscriberCount caseCount } }")
+
+      assert listed["data"]["listPredisclosureLists"] == [
+               %{"name" => "Distributors", "subscriberCount" => 1, "caseCount" => 1}
+             ]
+    end
+
+    test "a supporter cannot create a pre-disclosure list", %{conn: base} do
+      supporter = register_user("supporter", :supporter)
+
+      body =
+        base
+        |> with_api_key(supporter)
+        |> gql("mutation { createPredisclosureList(input: {name: \"Mine\"}) { result { id } errors { message } } }")
+
+      assert body["data"]["createPredisclosureList"]["result"] == nil
+      assert [_error | _rest] = body["data"]["createPredisclosureList"]["errors"]
+    end
   end
 
   describe "OAuth-token authenticated POC" do

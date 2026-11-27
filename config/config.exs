@@ -250,7 +250,8 @@ config :varsel,
     Varsel.Cases,
     Varsel.Accounts,
     Varsel.GitHub,
-    Varsel.Notifications
+    Varsel.Notifications,
+    Varsel.Predisclosure
   ]
 
 import_config "#{config_env()}.exs"

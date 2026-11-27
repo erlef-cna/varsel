@@ -254,6 +254,12 @@ defmodule VarselWeb.Layouts do
           <li :if={Varsel.Accounts.can_list_users?(@current_user)} class="shrink-0">
             <.nav_link href={~p"/users"} current_path={@current_path}>Users</.nav_link>
           </li>
+          <li
+            :if={Ash.can?({Varsel.Predisclosure.PredisclosureList, :read}, @current_user)}
+            class="shrink-0"
+          >
+            <.nav_link href={~p"/predisclosure-lists"} current_path={@current_path}>Lists</.nav_link>
+          </li>
         </ul>
 
         <div class="shrink-0 flex items-center gap-2">
@@ -329,6 +335,9 @@ defmodule VarselWeb.Layouts do
               <li :if={Varsel.Accounts.can_list_users?(@current_user)}>
                 <.more_link href={~p"/users"} current_path={@current_path}>Users</.more_link>
               </li>
+              <li :if={Ash.can?({Varsel.Predisclosure.PredisclosureList, :read}, @current_user)}>
+                <.more_link href={~p"/predisclosure-lists"} current_path={@current_path}>Lists</.more_link>
+              </li>
             </ul>
           </div>
         </div>
@@ -359,6 +368,7 @@ defmodule VarselWeb.Layouts do
     "/common-weaknesses",
     "/cases",
     "/users",
+    "/predisclosure-lists",
     "/settings/tokens",
     "/settings/notifications",
     "/notifications"
